@@ -281,7 +281,10 @@ class DataHandler:
                             threshold = current_time - pd.Timedelta(seconds=self.config['forget_window'])
                             self.ohlcv_2h = self.ohlcv_2h[self.ohlcv_2h.index.get_level_values('timestamp') >= threshold]
                     async with self.orderbook_lock:
-                        self.orderbook = self.orderbook[self.orderbook['timestamp'] >= time.time() - self.config['forget_window']]
+                        if not self.orderbook.empty and 'timestamp' in self.orderbook.columns:
+                            self.orderbook = self.orderbook[
+                                self.orderbook['timestamp'] >= time.time() - self.config['forget_window']
+                            ]
                     async with self.ohlcv_lock:
                         for symbol in list(self.processed_timestamps.keys()):
                             if symbol not in self.usdt_pairs:
