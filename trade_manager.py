@@ -253,14 +253,14 @@ class TradeManager:
                 prediction = model(X_tensor).squeeze().cpu().numpy()
             long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol)
             if position['side'] == 'buy' and prediction < short_threshold:
-                logger.info(f"Сигнал xLSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}")
-                await self.close_position(symbol, current_price, "xLSTM Exit Signal")
+                logger.info(f"Сигнал CNN-LSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}")
+                await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
             elif position['side'] == 'sell' and prediction > long_threshold:
-                logger.info(f"Сигнал xLSTM для выхода из шорта для {symbol}: предсказание={prediction:.4f}, порог={long_threshold:.2f}")
-                await self.close_position(symbol, current_price, "xLSTM Exit Signal")
+                logger.info(f"Сигнал CNN-LSTM для выхода из шорта для {symbol}: предсказание={prediction:.4f}, порог={long_threshold:.2f}")
+                await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
             torch.cuda.empty_cache()
         except Exception as e:
-            logger.error(f"Ошибка проверки сигнала xLSTM для {symbol}: {e}")
+            logger.error(f"Ошибка проверки сигнала CNN-LSTM для {symbol}: {e}")
             torch.cuda.empty_cache()
 
     async def monitor_performance(self):
@@ -381,7 +381,7 @@ class TradeManager:
             elif prediction < short_threshold:
                 signal = 'sell'
             if signal:
-                logger.info(f"Сигнал xLSTM для {symbol}: {signal} (предсказание: {prediction:.4f}, пороги: {long_threshold:.2f}/{short_threshold:.2f})")
+                logger.info(f"Сигнал CNN-LSTM для {symbol}: {signal} (предсказание: {prediction:.4f}, пороги: {long_threshold:.2f}/{short_threshold:.2f})")
                 ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
                 if not ema_condition_met:
                     logger.info(f"Условия EMA не выполнены для {symbol}, сигнал отклонен")
