@@ -24,16 +24,19 @@ CONFIG_SCHEMA = {
     "required": [
         'exchange', 'timeframe', 'secondary_timeframe', 'ws_url', 'private_ws_url', 'backup_ws_urls',
         'max_concurrent_requests', 'max_subscriptions_per_connection', 'ws_rate_limit',
-        'ws_reconnect_interval', 'leverage', 'min_risk_per_trade', 'max_risk_per_trade',
+        'ws_reconnect_interval', 'max_reconnect_attempts', 'latency_log_interval', 'load_threshold',
+        'leverage', 'min_risk_per_trade', 'max_risk_per_trade',
         'max_positions', 'check_interval', 'data_cleanup_interval', 'base_probability_threshold',
-        'trailing_stop_percentage', 'retrain_threshold', 'retrain_volatility_threshold',
+        'trailing_stop_percentage', 'trailing_stop_coeff', 'trailing_stop_multiplier', 'tp_multiplier', 'sl_multiplier',
+        'kelly_win_prob', 'min_sharpe_ratio', 'retrain_threshold', 'retrain_volatility_threshold',
         'performance_window', 'forget_window', 'min_data_length', 'lstm_timesteps',
         'lstm_batch_size', 'ema30_period', 'ema100_period', 'ema200_period',
-        'atr_period_default', 'model_save_path', 'cache_dir', 'log_dir',
-        'ray_num_cpus', 'max_recovery_attempts', 'n_splits', 'optimization_interval',
-        'shap_cache_duration', 'retrain_interval', 'volatility_threshold',
-        'ema_crossover_lookback', 'pullback_period', 'pullback_volatility_coeff',
-        'ws_queue_size', 'ws_min_process_rate', 'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
+        'atr_period_default', 'rsi_window', 'macd_window_slow', 'macd_window_fast', 'macd_window_sign', 'adx_window',
+        'volume_profile_update_interval', 'model_save_path', 'cache_dir', 'log_dir',
+        'ray_num_cpus', 'max_recovery_attempts', 'n_splits', 'optimization_interval', 'shap_cache_duration',
+        'retrain_interval', 'volatility_threshold', 'ema_crossover_lookback', 'pullback_period',
+        'pullback_volatility_coeff', 'min_liquidity', 'ws_queue_size', 'ws_min_process_rate',
+        'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
     ],
     "properties": {
         "exchange": {"type": "string"},
@@ -46,6 +49,9 @@ CONFIG_SCHEMA = {
         "max_subscriptions_per_connection": {"type": "integer", "minimum": 1},
         "ws_rate_limit": {"type": "integer", "minimum": 1},
         "ws_reconnect_interval": {"type": "integer", "minimum": 1},
+        "max_reconnect_attempts": {"type": "integer", "minimum": 1},
+        "latency_log_interval": {"type": "integer", "minimum": 1},
+        "load_threshold": {"type": "number", "minimum": 0},
         "leverage": {"type": "integer", "minimum": 1},
         "min_risk_per_trade": {"type": "number", "minimum": 0},
         "max_risk_per_trade": {"type": "number", "minimum": 0},
@@ -53,6 +59,11 @@ CONFIG_SCHEMA = {
         "check_interval": {"type": "integer", "minimum": 1},
         "data_cleanup_interval": {"type": "integer", "minimum": 1},
         "base_probability_threshold": {"type": "number", "minimum": 0},
+        "trailing_stop_multiplier": {"type": "number", "minimum": 0},
+        "tp_multiplier": {"type": "number", "minimum": 0},
+        "sl_multiplier": {"type": "number", "minimum": 0},
+        "kelly_win_prob": {"type": "number", "minimum": 0},
+        "min_sharpe_ratio": {"type": "number", "minimum": 0},
         "trailing_stop_percentage": {"type": "number", "minimum": 0},
         "trailing_stop_coeff": {"type": "number", "minimum": 0},
         "retrain_threshold": {"type": "number", "minimum": 0},
@@ -66,6 +77,12 @@ CONFIG_SCHEMA = {
         "ema100_period": {"type": "integer", "minimum": 1},
         "ema200_period": {"type": "integer", "minimum": 1},
         "atr_period_default": {"type": "integer", "minimum": 1},
+        "rsi_window": {"type": "integer", "minimum": 1},
+        "macd_window_slow": {"type": "integer", "minimum": 1},
+        "macd_window_fast": {"type": "integer", "minimum": 1},
+        "macd_window_sign": {"type": "integer", "minimum": 1},
+        "adx_window": {"type": "integer", "minimum": 1},
+        "volume_profile_update_interval": {"type": "integer", "minimum": 1},
         "model_save_path": {"type": "string"},
         "cache_dir": {"type": "string"},
         "log_dir": {"type": "string"},
@@ -79,6 +96,7 @@ CONFIG_SCHEMA = {
         "ema_crossover_lookback": {"type": "integer", "minimum": 1},
         "pullback_period": {"type": "integer", "minimum": 1},
         "pullback_volatility_coeff": {"type": "number", "minimum": 0},
+        "min_liquidity": {"type": "integer", "minimum": 1},
         "ws_queue_size": {"type": "integer", "minimum": 1},
         "ws_min_process_rate": {"type": "integer", "minimum": 1},
         "disk_buffer_size": {"type": "integer", "minimum": 1},
@@ -173,7 +191,7 @@ async def main():
             logger.warning("GPU недоступен, используется только CPU")
         available_cpus = psutil.cpu_count(logical=True)
         cpu_load = psutil.cpu_percent(interval=1)
-        ray_num_cpus = 4
+        ray_num_cpus = config.get('ray_num_cpus', 4)
         available_memory = psutil.virtual_memory().available / (1024 ** 3)
         ray_memory = max(2, min(available_memory * 0.5, 8))
         ray.init(
