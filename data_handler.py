@@ -148,8 +148,8 @@ class DataHandler:
                 market['type'] == 'future'
             ):
                 orderbook = await self.fetch_orderbook(symbol)
-                bid_volume = sum([bid[1] for bid in orderbook.get('bids', [])[:5]]) if orderbook.get('bids') else False
-                ask_volume = sum([ask[1] for ask in orderbook.get('asks', [])[:5]]) if orderbook.get('asks') else False
+                bid_volume = sum([bid[1] for bid in orderbook.get('bids', [])[:5]]) if orderbook.get('bids') else 0
+                ask_volume = sum([ask[1] for ask in orderbook.get('asks', [])[:5]]) if orderbook.get('asks') else 0
                 if min(bid_volume, ask_volume) > 10000:
                     liquid_pairs.append(symbol)
         return liquid_pairs
