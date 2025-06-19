@@ -159,7 +159,11 @@ class ModelBuilder:
         return df.tail(self.config['min_data_length'])
 
     async def prepare_lstm_features(self, symbol, indicators):
-        df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+        ohlcv = self.data_handler.ohlcv
+        if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+            df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+        else:
+            df = None
         if check_dataframe_empty(df, f"prepare_lstm_features {symbol}"):
             return np.array([])
         df = await self.preprocess(df.droplevel('symbol'), symbol)
@@ -230,7 +234,11 @@ class ModelBuilder:
         mean_pred = float(np.mean(hist))
         std_pred = float(np.std(hist))
         sharpe = await self.trade_manager.get_sharpe_ratio(symbol)
-        df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+        ohlcv = self.data_handler.ohlcv
+        if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+            df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+        else:
+            df = None
         volatility = df['close'].pct_change().std() if df is not None and not df.empty else 0.02
         last_vol = self.trade_manager.last_volatility.get(symbol, volatility)
         vol_change = abs(volatility - last_vol) / max(last_vol, 0.01)

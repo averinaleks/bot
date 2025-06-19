@@ -23,7 +23,11 @@ class ParameterOptimizer:
     async def optimize(self, symbol):
         # Оптимизация гиперпараметров для символа
         try:
-            df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+            ohlcv = self.data_handler.ohlcv
+            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+            else:
+                df = None
             if check_dataframe_empty(df, f"optimize {symbol}"):
                 logger.warning(f"Нет данных для оптимизации {symbol}")
                 return self.best_params_by_symbol[symbol] or self.config
