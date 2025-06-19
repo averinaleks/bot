@@ -1,0 +1,57 @@
+services:
+  trading_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trading_bot-trading-bot:latest
+    container_name: trading_bot
+    environment:
+      # Переменные окружения для CUDA и Python
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONUNBUFFERED=1
+      # Переменные окружения для приложения
+      - BYBIT_API_KEY=${BYBIT_API_KEY}
+      - BYBIT_API_SECRET=${BYBIT_API_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - CACHE_DIR=/app/cache
+      - LOG_DIR=/app/logs
+      - MODEL_SAVE_PATH=/app/models
+      - CONFIG_PATH=/app/config.json
+    volumes:
+      # Монтируем директории и конфигурационный файл
+      - ./logs:/app/logs
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./config.json:/app/config.json
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      - trading_bot_default
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    shm_size: '8gb'
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      # Улучшенный healthcheck: проверяет наличие процесса Python и загрузку CPU
+      test: ["CMD-SHELL", "pgrep python3.12 && python3.12 -c 'import psutil; exit(0 if psutil.cpu_percent() < 90 else 1)'"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+networks:
+  trading_bot_default:
+    driver: bridge

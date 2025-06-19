@@ -1,0 +1,26 @@
+numpy>=1.26.4
+pandas>=2.2.2
+torch==2.7.1
+torchvision==0.22.1
+ccxt>=4.3.85
+python-telegram-bot>=20.7
+aiohttp>=3.9.5
+websockets>=12.0
+ta>=0.11.0
+scikit-learn>=1.5.1
+optuna>=3.6.1
+optuna-integration[botorch]>=3.6.0
+psutil>=6.0.0
+python-dotenv>=1.0.1
+joblib>=1.4.2
+imbalanced-learn>=0.12.3
+statsmodels>=0.14.2
+scipy>=1.13.1
+shap>=0.46.0
+tenacity>=8.5.0
+pyarrow>=16.1.0
+jsonschema>=4.22.0
+plotly>=5.22.0
+numba>=0.60.0
+ray>=2.34.0
+--extra-index-url https://download.pytorch.org/whl/cu128
