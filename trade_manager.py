@@ -1,0 +1,430 @@
+import asyncio
+import pandas as pd
+import numpy as np
+from tenacity import retry, wait_exponential, stop_after_attempt
+from utils import logger, check_dataframe_empty, TelegramLogger
+import ccxt.async_support as ccxt_async
+import torch
+import joblib
+import os
+import time
+from typing import Dict, Optional, List
+import psutil
+import shutil
+
+class TradeManager:
+    def __init__(self, config: dict, data_handler, model_builder, telegram_bot, chat_id):
+        self.config = config
+        self.data_handler = data_handler
+        self.model_builder = model_builder
+        self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
+        self.positions = pd.DataFrame(columns=[
+            'symbol', 'side', 'size', 'entry_price', 'tp_multiplier',
+            'sl_multiplier', 'highest_price', 'lowest_price'
+        ], index=pd.MultiIndex.from_arrays([[], []], names=['symbol', 'timestamp']))
+        self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
+        self.position_lock = asyncio.Lock()
+        self.returns_lock = asyncio.Lock()
+        self.exchange = data_handler.exchange
+        self.max_positions = config.get('max_positions', 5)
+        self.leverage = config.get('leverage', 10)
+        self.min_risk_per_trade = config.get('min_risk_per_trade', 0.01)
+        self.max_risk_per_trade = config.get('max_risk_per_trade', 0.05)
+        self.check_interval = config.get('check_interval', 60)
+        self.performance_window = config.get('performance_window', 86400)
+        self.state_file = os.path.join(config['cache_dir'], 'trade_manager_state.pkl')
+        self.last_save_time = time.time()
+        self.save_interval = 900
+        self.positions_changed = False
+        self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
+        self.load_state()
+
+    def save_state(self):
+        if not self.positions_changed or (time.time() - self.last_save_time < self.save_interval):
+            return
+        try:
+            disk_usage = shutil.disk_usage(self.config['cache_dir'])
+            if disk_usage.free / (1024 ** 3) < 0.5:
+                logger.warning(f"Недостаточно места для сохранения состояния: {disk_usage.free / (1024 ** 3):.2f} ГБ")
+                return
+            state = {
+                'positions': self.positions.to_dict(),
+                'returns_by_symbol': self.returns_by_symbol
+            }
+            with open(self.state_file, 'wb') as f:
+                joblib.dump(state, f)
+            self.last_save_time = time.time()
+            self.positions_changed = False
+            logger.info("Состояние TradeManager сохранено")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения состояния: {e}")
+
+    def load_state(self):
+        try:
+            if os.path.exists(self.state_file):
+                with open(self.state_file, 'rb') as f:
+                    state = joblib.load(f)
+                self.positions = pd.DataFrame(state['positions'])
+                self.returns_by_symbol = state['returns_by_symbol']
+                logger.info("Состояние TradeManager загружено")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки состояния: {e}")
+
+    @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
+    async def place_order(self, symbol: str, side: str, size: float, price: float, params: Dict = {}) -> Optional[Dict]:
+        async with self.position_lock:
+            try:
+                order_type = params.get('type', 'market')
+                order = await self.exchange.create_order(symbol, order_type, side, size, price, params)
+                logger.info(f"Ордер размещён: {symbol}, {side}, size={size}, price={price}, type={order_type}")
+                await self.telegram_logger.send_telegram_message(
+                    f"✅ Ордер: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
+                )
+                return order
+            except Exception as e:
+                logger.error(f"Ошибка размещения ордера для {symbol}: {e}")
+                await self.telegram_logger.send_telegram_message(f"❌ Ошибка ордера {symbol}: {e}")
+                return None
+
+    async def calculate_position_size(self, symbol: str, price: float, atr: float) -> float:
+        try:
+            if price <= 0 or atr <= 0:
+                logger.warning(f"Некорректные входные данные для {symbol}: price={price}, atr={atr}")
+                return 0.0
+            account = await self.exchange.fetch_balance()
+            equity = float(account['total'].get('USDT', 0))
+            if equity <= 0:
+                logger.warning(f"Недостаточно средств на счете для {symbol}")
+                await self.telegram_logger.send_telegram_message(f"⚠️ Недостаточно средств на счете для {symbol}: equity={equity}")
+                return 0.0
+            risk_per_trade = min(self.max_risk_per_trade, max(self.min_risk_per_trade, self.config.get('risk_per_trade', self.min_risk_per_trade)))
+            risk_amount = equity * risk_per_trade
+            stop_loss_distance = atr * self.config['sl_multiplier']
+            if stop_loss_distance <= 0:
+                logger.warning(f"Некорректное значение stop_loss_distance для {symbol}")
+                return 0.0
+            position_size = risk_amount / (stop_loss_distance * self.leverage)
+            position_size = min(position_size, equity * self.leverage / price * 0.1)
+            logger.info(f"Размер позиции для {symbol}: {position_size:.4f} (риск: {risk_amount:.2f} USDT, ATR: {atr:.2f})")
+            return position_size
+        except Exception as e:
+            logger.error(f"Ошибка расчета размера позиции для {symbol}: {e}")
+            return 0.0
+
+    async def open_position(self, symbol: str, side: str, price: float, params: Dict):
+        async with self.position_lock:
+            try:
+                if len(self.positions) >= self.max_positions:
+                    logger.warning(f"Достигнуто максимальное количество позиций: {self.max_positions}")
+                    return
+                if symbol in self.positions.index.get_level_values('symbol'):
+                    logger.warning(f"Позиция для {symbol} уже открыта")
+                    return
+                indicators = self.data_handler.indicators.get(symbol)
+                if not indicators or not indicators.atr.iloc[-1]:
+                    logger.warning(f"Нет данных ATR для {symbol}")
+                    return
+                atr = indicators.atr.iloc[-1]
+                size = await self.calculate_position_size(symbol, price, atr)
+                if size <= 0:
+                    logger.warning(f"Недостаточный размер позиции для {symbol}")
+                    return
+                order = await self.place_order(symbol, side, size, price, {'leverage': self.leverage})
+                if order:
+                    new_position = {
+                        'symbol': symbol,
+                        'side': side,
+                        'size': size,
+                        'entry_price': price,
+                        'tp_multiplier': params.get('tp_multiplier', self.config['tp_multiplier']),
+                        'sl_multiplier': params.get('sl_multiplier', self.config['sl_multiplier']),
+                        'highest_price': price if side == 'buy' else float('inf'),
+                        'lowest_price': price if side == 'sell' else 0.0
+                    }
+                    new_position_df = pd.DataFrame([new_position], index=pd.MultiIndex.from_tuples([(symbol, pd.Timestamp.now())], names=['symbol', 'timestamp']))
+                    self.positions = pd.concat([self.positions, new_position_df], ignore_index=False)
+                    self.positions_changed = True
+                    self.save_state()
+                    logger.info(f"Позиция открыта: {symbol}, {side}, size={size}, entry={price}")
+                    await self.telegram_logger.send_telegram_message(
+                        f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка открытия позиции для {symbol}: {e}")
+                await self.telegram_logger.send_telegram_message(f"❌ Ошибка открытия позиции {symbol}: {e}")
+
+    async def close_position(self, symbol: str, exit_price: float, reason: str = "Manual"):
+        async with self.position_lock:
+            async with self.returns_lock:
+                try:
+                    position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                    if position.empty:
+                        logger.warning(f"Позиция для {symbol} не найдена")
+                        return
+                    position = position.iloc[0]
+                    side = 'sell' if position['side'] == 'buy' else 'buy'
+                    order = await self.place_order(symbol, side, position['size'], exit_price)
+                    if order:
+                        profit = (exit_price - position['entry_price']) * position['size'] if position['side'] == 'buy' else (position['entry_price'] - exit_price) * position['size']
+                        profit *= self.leverage
+                        self.returns_by_symbol[symbol].append((pd.Timestamp.now(tz='UTC').timestamp(), profit))
+                        self.positions = self.positions.drop(symbol, level='symbol')
+                        self.positions_changed = True
+                        self.save_state()
+                        logger.info(f"Позиция закрыта: {symbol}, profit={profit:.2f}, reason={reason}")
+                        await self.telegram_logger.send_telegram_message(
+                            f"📉 Позиция закрыта: {symbol} profit={profit:.2f} USDT ({reason})"
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка закрытия позиции для {symbol}: {e}")
+                    await self.telegram_logger.send_telegram_message(f"❌ Ошибка закрытия позиции {symbol}: {e}")
+
+    async def check_trailing_stop(self, symbol: str, current_price: float):
+        async with self.position_lock:
+            try:
+                position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                if position.empty:
+                    logger.warning(f"Позиция для {symbol} не найдена")
+                    return
+                position = position.iloc[0]
+                indicators = self.data_handler.indicators.get(symbol)
+                if not indicators or not indicators.atr.iloc[-1]:
+                    logger.warning(f"Нет данных ATR для {symbol}")
+                    return
+                atr = indicators.atr.iloc[-1]
+                trailing_stop_distance = atr * self.config.get('trailing_stop_multiplier', 1.0)
+                if position['side'] == 'buy':
+                    new_highest = max(position['highest_price'], current_price)
+                    self.positions.loc[(symbol, slice(None)), 'highest_price'] = new_highest
+                    trailing_stop_price = new_highest - trailing_stop_distance
+                    if current_price <= trailing_stop_price:
+                        await self.close_position(symbol, current_price, "Trailing Stop")
+                else:
+                    new_lowest = min(position['lowest_price'], current_price)
+                    self.positions.loc[(symbol, slice(None)), 'lowest_price'] = new_lowest
+                    trailing_stop_price = new_lowest + trailing_stop_distance
+                    if current_price >= trailing_stop_price:
+                        await self.close_position(symbol, current_price, "Trailing Stop")
+            except Exception as e:
+                logger.error(f"Ошибка проверки трейлинг-стопа для {symbol}: {e}")
+
+    async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
+        async with self.position_lock:
+            try:
+                position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                if position.empty:
+                    return
+                position = position.iloc[0]
+                indicators = self.data_handler.indicators.get(symbol)
+                if not indicators or not indicators.atr.iloc[-1]:
+                    return
+                atr = indicators.atr.iloc[-1]
+                stop_loss = position['entry_price'] * (1 - position['sl_multiplier'] * atr / position['entry_price']) if position['side'] == 'buy' else position['entry_price'] * (1 + position['sl_multiplier'] * atr / position['entry_price'])
+                take_profit = position['entry_price'] * (1 + position['tp_multiplier'] * atr / position['entry_price']) if position['side'] == 'buy' else position['entry_price'] * (1 - position['tp_multiplier'] * atr / position['entry_price'])
+                if position['side'] == 'buy' and current_price <= stop_loss:
+                    await self.close_position(symbol, current_price, "Stop Loss")
+                elif position['side'] == 'sell' and current_price >= stop_loss:
+                    await self.close_position(symbol, current_price, "Stop Loss")
+                elif position['side'] == 'buy' and current_price >= take_profit:
+                    await self.close_position(symbol, current_price, "Take Profit")
+                elif position['side'] == 'sell' and current_price <= take_profit:
+                    await self.close_position(symbol, current_price, "Take Profit")
+            except Exception as e:
+                logger.error(f"Ошибка проверки SL/TP для {symbol}: {e}")
+
+    async def check_lstm_exit_signal(self, symbol: str, current_price: float):
+        try:
+            model = self.model_builder.lstm_models.get(symbol)
+            if not model:
+                logger.debug(f"Модель для {symbol} не найдена")
+                return
+            position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+            if position.empty:
+                return
+            position = position.iloc[0]
+            indicators = self.data_handler.indicators.get(symbol)
+            if not indicators or check_dataframe_empty(indicators.df, f"check_lstm_exit_signal {symbol}"):
+                return
+            features = await self.model_builder.prepare_lstm_features(symbol, indicators)
+            if len(features) < self.config['lstm_timesteps']:
+                return
+            X = np.array([features[-self.config['lstm_timesteps']:]])
+            X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
+            model.eval()
+            with torch.no_grad():
+                prediction = model(X_tensor).squeeze().cpu().numpy()
+            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol)
+            if position['side'] == 'buy' and prediction < short_threshold:
+                logger.info(f"Сигнал xLSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}")
+                await self.close_position(symbol, current_price, "xLSTM Exit Signal")
+            elif position['side'] == 'sell' and prediction > long_threshold:
+                logger.info(f"Сигнал xLSTM для выхода из шорта для {symbol}: предсказание={prediction:.4f}, порог={long_threshold:.2f}")
+                await self.close_position(symbol, current_price, "xLSTM Exit Signal")
+            torch.cuda.empty_cache()
+        except Exception as e:
+            logger.error(f"Ошибка проверки сигнала xLSTM для {symbol}: {e}")
+            torch.cuda.empty_cache()
+
+    async def monitor_performance(self):
+        while True:
+            try:
+                async with self.returns_lock:
+                    current_time = pd.Timestamp.now(tz='UTC').timestamp()
+                    for symbol in self.returns_by_symbol:
+                        returns = [r for t, r in self.returns_by_symbol[symbol] if current_time - t <= self.performance_window]
+                        self.returns_by_symbol[symbol] = [(t, r) for t, r in self.returns_by_symbol[symbol] if current_time - t <= self.performance_window]
+                        if returns:
+                            sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
+                            logger.info(f"Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}")
+                            df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+                            if df is not None and not df.empty:
+                                volatility = df['close'].pct_change().std()
+                                volatility_change = abs(volatility - self.last_volatility.get(symbol, 0.0)) / max(self.last_volatility.get(symbol, 0.01), 0.01)
+                                self.last_volatility[symbol] = volatility
+                                if sharpe_ratio < self.config.get('min_sharpe_ratio', 0.5) or volatility_change > 0.5:
+                                    logger.info(f"Инициировано переобучение для {symbol}: Sharpe={sharpe_ratio:.2f}, Изменение волатильности={volatility_change:.2f}")
+                                    await self.model_builder.retrain_symbol(symbol)
+                                    await self.telegram_logger.send_telegram_message(
+                                        f"🔄 Переобучение для {symbol}: Sharpe={sharpe_ratio:.2f}, Волатильность={volatility_change:.2f}"
+                                    )
+                            if sharpe_ratio < self.config.get('min_sharpe_ratio', 0.5):
+                                logger.warning(f"Низкий Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}")
+                                await self.telegram_logger.send_telegram_message(f"⚠️ Низкий Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}")
+                await asyncio.sleep(self.performance_window / 10)
+            except Exception as e:
+                logger.error(f"Ошибка мониторинга производительности: {e}")
+                await asyncio.sleep(60)
+
+    async def manage_positions(self):
+        while True:
+            try:
+                for symbol in self.positions.index.get_level_values('symbol').unique():
+                    df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+                    if check_dataframe_empty(df, f"manage_positions {symbol}"):
+                        continue
+                    current_price = df['close'].iloc[-1]
+                    await self.check_trailing_stop(symbol, current_price)
+                    await self.check_stop_loss_take_profit(symbol, current_price)
+                    await self.check_lstm_exit_signal(symbol, current_price)
+                await asyncio.sleep(self.check_interval)
+            except Exception as e:
+                logger.error(f"Ошибка управления позициями: {e}")
+                await asyncio.sleep(60)
+
+    async def evaluate_ema_condition(self, symbol: str, signal: str) -> bool:
+        try:
+            df_2h = self.data_handler.ohlcv_2h.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv_2h.index.get_level_values('symbol') else None
+            indicators_2h = self.data_handler.indicators_2h.get(symbol)
+            if check_dataframe_empty(df_2h, f"evaluate_ema_condition {symbol}") or not indicators_2h:
+                logger.warning(f"Нет данных или индикаторов для {symbol} на 2h таймфрейме")
+                return False
+            ema30 = indicators_2h.ema30
+            ema100 = indicators_2h.ema100
+            close = df_2h['close']
+            timestamps = df_2h.index.get_level_values('timestamp')
+            lookback_period = pd.Timedelta(seconds=self.config['ema_crossover_lookback'])
+            recent_data = df_2h[timestamps >= timestamps[-1] - lookback_period]
+            if len(recent_data) < 2:
+                logger.debug(f"Недостаточно данных для проверки пересечения EMA для {symbol}")
+                return False
+            ema30_recent = ema30[-len(recent_data):]
+            ema100_recent = ema100[-len(recent_data):]
+            crossover_long = (ema30_recent.iloc[-2] <= ema100_recent.iloc[-2]) and (ema30_recent.iloc[-1] > ema100_recent.iloc[-1])
+            crossover_short = (ema30_recent.iloc[-2] >= ema100_recent.iloc[-2]) and (ema30_recent.iloc[-1] < ema100_recent.iloc[-1])
+            if (signal == 'buy' and not crossover_long) or (signal == 'sell' and not crossover_short):
+                logger.debug(f"Пересечение EMA не подтверждено для {symbol}, signal={signal}")
+                return False
+            pullback_period = pd.Timedelta(seconds=self.config['pullback_period'])
+            pullback_data = df_2h[timestamps >= timestamps[-1] - pullback_period]
+            volatility = close.pct_change().std() if not close.empty else 0.02
+            pullback_threshold = ema30.iloc[-1] * self.config['pullback_volatility_coeff'] * volatility
+            pullback_zone_high = ema30.iloc[-1] + pullback_threshold
+            pullback_zone_low = ema30.iloc[-1] - pullback_threshold
+            pullback_occurred = False
+            for i in range(len(pullback_data)):
+                price = pullback_data['close'].iloc[i]
+                if pullback_zone_low <= price <= pullback_zone_high:
+                    pullback_occurred = True
+                    break
+            if not pullback_occurred:
+                logger.debug(f"Откат к EMA30 не произошел для {symbol}, signal={signal}")
+                return False
+            current_price = close.iloc[-1]
+            if (signal == 'buy' and current_price <= ema30.iloc[-1]) or (signal == 'sell' and current_price >= ema30.iloc[-1]):
+                logger.debug(f"Цена не закрепилась для {symbol}, signal={signal}")
+                return False
+            logger.info(f"Условия EMA выполнены для {symbol}, signal={signal}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка проверки условий EMA для {symbol}: {e}")
+            return False
+
+    async def evaluate_signal(self, symbol: str):
+        try:
+            model = self.model_builder.lstm_models.get(symbol)
+            if not model:
+                logger.warning(f"Модель для {symbol} не найдена")
+                return None
+            indicators = self.data_handler.indicators.get(symbol)
+            if not indicators or check_dataframe_empty(indicators.df, f"evaluate_signal {symbol}"):
+                return None
+            features = await self.model_builder.prepare_lstm_features(symbol, indicators)
+            if len(features) < self.config['lstm_timesteps']:
+                return None
+            X = np.array([features[-self.config['lstm_timesteps']:]])
+            X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
+            model.eval()
+            with torch.no_grad():
+                prediction = model(X_tensor).squeeze().cpu().numpy()
+            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol)
+            signal = None
+            if prediction > long_threshold:
+                signal = 'buy'
+            elif prediction < short_threshold:
+                signal = 'sell'
+            if signal:
+                logger.info(f"Сигнал xLSTM для {symbol}: {signal} (предсказание: {prediction:.4f}, пороги: {long_threshold:.2f}/{short_threshold:.2f})")
+                ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
+                if not ema_condition_met:
+                    logger.info(f"Условия EMA не выполнены для {symbol}, сигнал отклонен")
+                    return None
+                logger.info(f"Все условия выполнены для {symbol}, подтвержден сигнал: {signal}")
+            torch.cuda.empty_cache()
+            return signal
+        except Exception as e:
+            logger.error(f"Ошибка оценки сигнала для {symbol}: {e}")
+            torch.cuda.empty_cache()
+            return None
+
+    async def run(self):
+        try:
+            tasks = [
+                self.monitor_performance(),
+                self.manage_positions(),
+            ]
+            for symbol in self.data_handler.usdt_pairs:
+                tasks.append(self.process_symbol(symbol))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Ошибка в задаче {tasks[i].__name__}: {result}")
+                    await self.telegram_logger.send_telegram_message(f"❌ Ошибка в задаче {tasks[i].__name__}: {result}")
+        except Exception as e:
+            logger.error(f"Критичная ошибка в TradeManager: {e}")
+            await self.telegram_logger.send_telegram_message(f"❌ Критическая ошибка TradeManager: {e}")
+
+    async def process_symbol(self, symbol: str):
+        while True:
+            try:
+                signal = await self.evaluate_signal(symbol)
+                if signal and symbol not in self.positions.index.get_level_values('symbol'):
+                    df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False)
+                    if check_dataframe_empty(df, f"process_symbol {symbol}"):
+                        continue
+                    current_price = df['close'].iloc[-1]
+                    params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                    await self.open_position(symbol, signal, current_price, params)
+                await asyncio.sleep(self.config['check_interval'] / len(self.data_handler.usdt_pairs))
+            except Exception as e:
+                logger.error(f"Ошибка обработки {symbol}: {e}")
+                await asyncio.sleep(60)
