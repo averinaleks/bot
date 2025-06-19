@@ -4,12 +4,14 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 import joblib
 import os
 import time
 import asyncio
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 from collections import deque
+import ray
 
 
 class CNNLSTM(nn.Module):
@@ -46,6 +48,56 @@ class CNNLSTM(nn.Module):
         return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
 
+@ray.remote(num_gpus=1)
+def _train_lstm_remote(X, y, batch_size):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
+    val_size = max(1, int(0.1 * len(dataset)))
+    train_size = len(dataset) - val_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCELoss()
+    model.to(device)
+    best_loss = float('inf')
+    epochs_no_improve = 0
+    max_epochs = 20
+    patience = 3
+    for _ in range(max_epochs):
+        model.train()
+        for batch_X, batch_y in train_loader:
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
+            optimizer.zero_grad()
+            outputs = model(batch_X).squeeze()
+            loss = criterion(outputs, batch_y) + model.l2_regularization()
+            loss.backward()
+            optimizer.step()
+        model.eval()
+        val_loss = 0.0
+        preds = []
+        labels = []
+        with torch.no_grad():
+            for val_X, val_y in val_loader:
+                val_X = val_X.to(device)
+                val_y = val_y.to(device)
+                outputs = model(val_X).squeeze()
+                preds.extend(outputs.cpu().numpy())
+                labels.extend(val_y.cpu().numpy())
+                val_loss += criterion(outputs, val_y).item()
+        val_loss /= len(val_loader)
+        if val_loss + 1e-4 < best_loss:
+            best_loss = val_loss
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= patience:
+                break
+    return model.state_dict(), preds, labels
+
+
 class ModelBuilder:
     """Simplified model builder used for training LSTM models."""
 
@@ -62,6 +114,7 @@ class ModelBuilder:
         self.save_interval = 900
         self.scalers = {}
         self.prediction_history = {}
+        self.calibrators = {}
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -141,46 +194,13 @@ class ModelBuilder:
             return
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
         y = (features[self.config['lstm_timesteps']:, 0] > features[:-self.config['lstm_timesteps'], 0]).astype(np.float32)
-        dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
-        val_size = max(1, int(0.1 * len(dataset)))
-        train_size = len(dataset) - val_size
-        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-        train_loader = DataLoader(train_dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
-        val_loader = DataLoader(val_dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
+        model_state, val_preds, val_labels = await _train_lstm_remote.remote(X, y, self.config['lstm_batch_size'])
         model = CNNLSTM(X.shape[2], 64, 2, 0.2)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        criterion = nn.BCELoss()
+        model.load_state_dict(model_state)
         model.to(self.device)
-        best_loss = float('inf')
-        epochs_no_improve = 0
-        max_epochs = 20
-        patience = 3
-        for epoch in range(max_epochs):
-            model.train()
-            for batch_X, batch_y in train_loader:
-                batch_X = batch_X.to(self.device)
-                batch_y = batch_y.to(self.device)
-                optimizer.zero_grad()
-                outputs = model(batch_X).squeeze()
-                loss = criterion(outputs, batch_y) + model.l2_regularization()
-                loss.backward()
-                optimizer.step()
-            model.eval()
-            val_loss = 0.0
-            with torch.no_grad():
-                for val_X, val_y in val_loader:
-                    val_X = val_X.to(self.device)
-                    val_y = val_y.to(self.device)
-                    outputs = model(val_X).squeeze()
-                    val_loss += criterion(outputs, val_y).item()
-            val_loss /= len(val_loader)
-            if val_loss + 1e-4 < best_loss:
-                best_loss = val_loss
-                epochs_no_improve = 0
-            else:
-                epochs_no_improve += 1
-                if epochs_no_improve >= patience:
-                    break
+        calibrator = LogisticRegression()
+        calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
+        self.calibrators[symbol] = calibrator
         self.lstm_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
@@ -209,6 +229,12 @@ class ModelBuilder:
             return base_long, base_short
         mean_pred = float(np.mean(hist))
         std_pred = float(np.std(hist))
-        long_thr = np.clip(mean_pred + std_pred / 2, base_long, 0.9)
-        short_thr = np.clip(mean_pred - std_pred / 2, 0.1, base_short)
+        sharpe = await self.trade_manager.get_sharpe_ratio(symbol)
+        df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+        volatility = df['close'].pct_change().std() if df is not None and not df.empty else 0.02
+        last_vol = self.trade_manager.last_volatility.get(symbol, volatility)
+        vol_change = abs(volatility - last_vol) / max(last_vol, 0.01)
+        adj = sharpe * 0.05 - vol_change * 0.05
+        long_thr = np.clip(mean_pred + std_pred / 2 + adj, base_long, 0.9)
+        short_thr = np.clip(mean_pred - std_pred / 2 - adj, 0.1, base_short)
         return long_thr, short_thr

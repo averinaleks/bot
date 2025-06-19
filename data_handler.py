@@ -20,6 +20,7 @@ import os
 from queue import Queue
 import pickle
 import psutil
+import ray
 
 class IndicatorsCache:
     def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = 'primary'):
@@ -47,6 +48,11 @@ class IndicatorsCache:
         except Exception as e:
             logger.error(f"Ошибка расчета индикаторов ({timeframe}): {e}")
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = self.volume_profile = None
+
+
+@ray.remote(num_cpus=1)
+def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe: str):
+    return IndicatorsCache(df, config, volatility, timeframe)
 
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
         try:
@@ -82,6 +88,9 @@ class DataHandler:
         self.orderbook_lock = asyncio.Lock()
         self.cleanup_lock = asyncio.Lock()
         self.ws_rate_timestamps = []
+        self.process_rate_timestamps = []
+        self.ws_min_process_rate = config.get('ws_min_process_rate', 30)
+        self.process_rate_window = 1
         self.cleanup_task = None
         self.ws_queue = asyncio.PriorityQueue(maxsize=config.get('ws_queue_size', 10000))
         self.disk_buffer = Queue(maxsize=config.get('disk_buffer_size', 10000))
@@ -245,12 +254,14 @@ class DataHandler:
             if timeframe == 'primary':
                 async with self.ohlcv_lock:
                     if cache_key not in self.indicators_cache:
-                        self.indicators_cache[cache_key] = IndicatorsCache(df.droplevel('symbol'), self.config, volatility, timeframe='primary')
+                        obj = await calc_indicators.remote(df.droplevel('symbol'), self.config, volatility, 'primary')
+                        self.indicators_cache[cache_key] = await ray.get(obj)
                     self.indicators[symbol] = self.indicators_cache[cache_key]
             else:
                 async with self.ohlcv_2h_lock:
                     if cache_key not in self.indicators_cache_2h:
-                        self.indicators_cache_2h[cache_key] = IndicatorsCache(df.droplevel('symbol'), self.config, volatility, timeframe='secondary')
+                        obj = await calc_indicators.remote(df.droplevel('symbol'), self.config, volatility, 'secondary')
+                        self.indicators_cache_2h[cache_key] = await ray.get(obj)
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except Exception as e:
@@ -311,11 +322,16 @@ class DataHandler:
         cpu_load = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         memory_load = memory.percent
+        current_rate = len(self.process_rate_timestamps) / self.process_rate_window if self.process_rate_timestamps else self.ws_min_process_rate
         if cpu_load > self.load_threshold * 100 or memory_load > self.load_threshold * 100:
             new_max = max(10, self.max_subscriptions // 2)
             logger.warning(f"Высокая нагрузка (CPU: {cpu_load}%, Memory: {memory_load}%), уменьшение подписок до {new_max}")
             self.max_subscriptions = new_max
-        elif cpu_load < self.load_threshold * 50 and memory_load < self.load_threshold * 50:
+        elif current_rate < self.ws_min_process_rate:
+            new_max = max(10, int(self.max_subscriptions * 0.8))
+            logger.warning(f"Низкая скорость обработки ({current_rate:.2f}/s), уменьшение подписок до {new_max}")
+            self.max_subscriptions = new_max
+        elif cpu_load < self.load_threshold * 50 and memory_load < self.load_threshold * 50 and current_rate > self.ws_min_process_rate * 1.5:
             new_max = min(100, self.max_subscriptions * 2)
             logger.info(f"Низкая нагрузка, увеличение подписок до {new_max}")
             self.max_subscriptions = new_max
@@ -499,6 +515,11 @@ class DataHandler:
         while True:
             try:
                 priority, (symbols, message, timeframe) = await self.ws_queue.get()
+                now = time.time()
+                self.process_rate_timestamps.append(now)
+                self.process_rate_timestamps = [t for t in self.process_rate_timestamps if now - t < self.process_rate_window]
+                if len(self.process_rate_timestamps) > self.ws_min_process_rate and (len(self.process_rate_timestamps) / self.process_rate_window) < self.ws_min_process_rate:
+                    await self.adjust_subscriptions()
                 data = json.loads(message)
                 if not isinstance(data, dict) or 'data' not in data or not isinstance(data['data'], dict) or 'k' not in data['data']:
                     logger.debug(f"Error in message data['data'] for {symbols}: {message}")
@@ -565,7 +586,8 @@ class DataHandler:
                     logger.error(f"Ошибка обработки данных для {symbol}: {e}")
                     continue
                 if time.time() - last_latency_log > self.latency_log_interval:
-                    logger.info(f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек")
+                    rate = len(self.process_rate_timestamps) / self.process_rate_window
+                    logger.info(f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек, скорость обработки: {rate:.2f}/с")
                     last_latency_log = time.time()
             except Exception as e:
                 logger.error(f"Ошибка обработки очереди WebSocket: {e}")

@@ -53,6 +53,13 @@ class TradeManager:
         base_risk *= max(0.5, min(2.0, vol_coeff))
         return min(self.max_risk_per_trade, max(self.min_risk_per_trade, base_risk))
 
+    async def get_sharpe_ratio(self, symbol: str) -> float:
+        async with self.returns_lock:
+            returns = [r for t, r in self.returns_by_symbol.get(symbol, []) if time.time() - t <= self.performance_window]
+        if not returns:
+            return 0.0
+        return np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
+
     def save_state(self):
         if not self.positions_changed or (time.time() - self.last_save_time < self.save_interval):
             return
@@ -268,6 +275,9 @@ class TradeManager:
             model.eval()
             with torch.no_grad():
                 prediction = model(X_tensor).squeeze().cpu().numpy()
+            calibrator = self.model_builder.calibrators.get(symbol)
+            if calibrator is not None:
+                prediction = calibrator.predict_proba([[prediction]])[0, 1]
             long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol, prediction)
             if position['side'] == 'buy' and prediction < short_threshold:
                 logger.info(f"Сигнал CNN-LSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}")
@@ -391,6 +401,9 @@ class TradeManager:
             model.eval()
             with torch.no_grad():
                 prediction = model(X_tensor).squeeze().cpu().numpy()
+            calibrator = self.model_builder.calibrators.get(symbol)
+            if calibrator is not None:
+                prediction = calibrator.predict_proba([[prediction]])[0, 1]
             long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol, prediction)
             signal = None
             if prediction > long_threshold:

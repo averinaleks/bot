@@ -33,7 +33,7 @@ CONFIG_SCHEMA = {
         'ray_num_cpus', 'max_recovery_attempts', 'n_splits', 'optimization_interval',
         'shap_cache_duration', 'retrain_interval', 'volatility_threshold',
         'ema_crossover_lookback', 'pullback_period', 'pullback_volatility_coeff',
-        'ws_queue_size', 'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
+        'ws_queue_size', 'ws_min_process_rate', 'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
     ],
     "properties": {
         "exchange": {"type": "string"},
@@ -80,6 +80,7 @@ CONFIG_SCHEMA = {
         "pullback_period": {"type": "integer", "minimum": 1},
         "pullback_volatility_coeff": {"type": "number", "minimum": 0},
         "ws_queue_size": {"type": "integer", "minimum": 1},
+        "ws_min_process_rate": {"type": "integer", "minimum": 1},
         "disk_buffer_size": {"type": "integer", "minimum": 1},
         "prediction_history_size": {"type": "integer", "minimum": 1},
         "optuna_trials": {"type": "integer", "minimum": 1}
