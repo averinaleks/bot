@@ -11,17 +11,27 @@ import asyncio
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 
 
-class xLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout, l2_lambda=1e-5):
+class CNNLSTM(nn.Module):
+    """Neural network that combines 1D convolution and LSTM layers."""
+
+    def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.l2_lambda = l2_lambda
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        padding = kernel_size // 2
+        self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
+        self.relu = nn.ReLU()
+        self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
         self.fc = nn.Linear(hidden_size, 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        # x shape: (batch, seq_len, features)
+        x = x.permute(0, 2, 1)  # (batch, features, seq_len)
+        x = self.conv(x)
+        x = self.relu(x)
+        x = x.permute(0, 2, 1)  # (batch, seq_len, channels)
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         out, _ = self.lstm(x, (h0, c0))
@@ -74,7 +84,7 @@ class ModelBuilder:
                     state = joblib.load(f)
                 self.scalers = state.get('scalers', {})
                 for symbol, sd in state.get('lstm_models', {}).items():
-                    model = xLSTM(self.config['lstm_timesteps'], 64, 2, 0.2)
+                    model = CNNLSTM(self.config['lstm_timesteps'], 64, 2, 0.2)
                     model.load_state_dict(sd)
                     model.to(self.device)
                     self.lstm_models[symbol] = model
@@ -118,7 +128,7 @@ class ModelBuilder:
         y = (features[self.config['lstm_timesteps']:, 0] > features[:-self.config['lstm_timesteps'], 0]).astype(np.float32)
         dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
         loader = DataLoader(dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
-        model = xLSTM(X.shape[2], 64, 2, 0.2)
+        model = CNNLSTM(X.shape[2], 64, 2, 0.2)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         criterion = nn.BCELoss()
         model.to(self.device)
@@ -136,7 +146,7 @@ class ModelBuilder:
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         torch.cuda.empty_cache()
-        logger.info(f"Модель xLSTM обучена для {symbol}")
+        logger.info(f"Модель CNN-LSTM обучена для {symbol}")
 
     async def train(self):
         self.load_state()
