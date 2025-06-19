@@ -268,7 +268,7 @@ class TradeManager:
             model.eval()
             with torch.no_grad():
                 prediction = model(X_tensor).squeeze().cpu().numpy()
-            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol)
+            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol, prediction)
             if position['side'] == 'buy' and prediction < short_threshold:
                 logger.info(f"Сигнал CNN-LSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}")
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
@@ -391,7 +391,7 @@ class TradeManager:
             model.eval()
             with torch.no_grad():
                 prediction = model(X_tensor).squeeze().cpu().numpy()
-            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol)
+            long_threshold, short_threshold = await self.model_builder.adjust_thresholds(symbol, prediction)
             signal = None
             if prediction > long_threshold:
                 signal = 'buy'

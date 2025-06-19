@@ -18,6 +18,7 @@ class ParameterOptimizer:
         self.last_atr_update = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.atr_update_interval = 5  # Обновление ATR каждые 5 свечей
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}  # Для отслеживания изменений волатильности
+        self.max_trials = config.get('optuna_trials', 20)
 
     async def optimize(self, symbol):
         # Оптимизация гиперпараметров для символа
@@ -37,7 +38,7 @@ class ParameterOptimizer:
                 return self.best_params_by_symbol[symbol] or self.config
             # Использование TPESampler с multivariate=True для учета корреляций
             study = optuna.create_study(direction='maximize', sampler=TPESampler(n_startup_trials=10, multivariate=True))
-            study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=50)  # Уменьшено число испытаний для скорости
+            study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=self.max_trials)
             best_params = study.best_params
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")

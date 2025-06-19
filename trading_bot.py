@@ -32,7 +32,8 @@ CONFIG_SCHEMA = {
         'atr_period_default', 'model_save_path', 'cache_dir', 'log_dir',
         'ray_num_cpus', 'max_recovery_attempts', 'n_splits', 'optimization_interval',
         'shap_cache_duration', 'retrain_interval', 'volatility_threshold',
-        'ema_crossover_lookback', 'pullback_period', 'pullback_volatility_coeff'
+        'ema_crossover_lookback', 'pullback_period', 'pullback_volatility_coeff',
+        'ws_queue_size', 'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
     ],
     "properties": {
         "exchange": {"type": "string"},
@@ -77,7 +78,11 @@ CONFIG_SCHEMA = {
         "volatility_threshold": {"type": "number", "minimum": 0},
         "ema_crossover_lookback": {"type": "integer", "minimum": 1},
         "pullback_period": {"type": "integer", "minimum": 1},
-        "pullback_volatility_coeff": {"type": "number", "minimum": 0}
+        "pullback_volatility_coeff": {"type": "number", "minimum": 0},
+        "ws_queue_size": {"type": "integer", "minimum": 1},
+        "disk_buffer_size": {"type": "integer", "minimum": 1},
+        "prediction_history_size": {"type": "integer", "minimum": 1},
+        "optuna_trials": {"type": "integer", "minimum": 1}
     }
 }
 
@@ -189,8 +194,8 @@ async def main():
         await check_library_versions(telegram_bot, chat_id)
 
         exchange_config = {
-            'apiKey': os.getenv('API_KEY'),
-            'secret': os.getenv('API_SECRET'),
+            'apiKey': os.getenv('BYBIT_API_KEY'),
+            'secret': os.getenv('BYBIT_API_SECRET'),
             'enableRateLimit': True,
             'asyncio_loop': asyncio.get_event_loop()
         }
