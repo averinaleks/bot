@@ -165,8 +165,12 @@ class DataHandler:
             time_diffs = df.index.to_series().diff().dt.total_seconds()
             max_gap = pd.Timedelta(timeframe).total_seconds() * 2
             if time_diffs.max() > max_gap:
-                logger.warning(f"Обнаружен значительный разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут")
-                await self.telegram_logger.send_telegram_message(f⚠️ Разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут")
+                logger.warning(
+                    f"Обнаружен значительный разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                )
+                await self.telegram_logger.send_telegram_message(
+                    f"⚠️ Разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                )
                 return symbol, pd.DataFrame()
             df = df.interpolate(method='time', limit_direction='both')
             self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
