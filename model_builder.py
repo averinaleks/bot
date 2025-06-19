@@ -142,7 +142,9 @@ class ModelBuilder:
                     state = joblib.load(f)
                 self.scalers = state.get('scalers', {})
                 for symbol, sd in state.get('lstm_models', {}).items():
-                    model = CNNLSTM(self.config['lstm_timesteps'], 64, 2, 0.2)
+                    scaler = self.scalers.get(symbol)
+                    input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
+                    model = CNNLSTM(input_size, 64, 2, 0.2)
                     model.load_state_dict(sd)
                     model.to(self.device)
                     self.lstm_models[symbol] = model
