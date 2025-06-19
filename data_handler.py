@@ -5,7 +5,13 @@ import pandas as pd
 import numpy as np
 import ccxt.async_support as ccxt_async
 import websockets
-from utils import logger, check_dataframe_empty, HistoricalDataCache, filter_outliers_zscore
+from utils import (
+    logger,
+    check_dataframe_empty,
+    HistoricalDataCache,
+    filter_outliers_zscore,
+    TelegramLogger,
+)
 from tenacity import retry, wait_exponential, stop_after_attempt
 from typing import List, Dict, Optional
 import ta
@@ -13,6 +19,8 @@ import os
 from queue import Queue
 import numba
 from numba import prange
+import pickle
+import psutil
 
 class IndicatorsCache:
     def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = 'primary'):

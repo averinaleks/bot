@@ -33,6 +33,7 @@ class TradeManager:
         self.check_interval = config.get('check_interval', 60)
         self.performance_window = config.get('performance_window', 86400)
         self.state_file = os.path.join(config['cache_dir'], 'trade_manager_state.pkl')
+        self.returns_file = os.path.join(config['cache_dir'], 'trade_manager_returns.pkl')
         self.last_save_time = time.time()
         self.save_interval = 900
         self.positions_changed = False
@@ -47,12 +48,9 @@ class TradeManager:
             if disk_usage.free / (1024 ** 3) < 0.5:
                 logger.warning(f"Недостаточно места для сохранения состояния: {disk_usage.free / (1024 ** 3):.2f} ГБ")
                 return
-            state = {
-                'positions': self.positions.to_dict(),
-                'returns_by_symbol': self.returns_by_symbol
-            }
-            with open(self.state_file, 'wb') as f:
-                joblib.dump(state, f)
+            self.positions.to_pickle(self.state_file)
+            with open(self.returns_file, 'wb') as f:
+                joblib.dump(self.returns_by_symbol, f)
             self.last_save_time = time.time()
             self.positions_changed = False
             logger.info("Состояние TradeManager сохранено")
@@ -62,10 +60,10 @@ class TradeManager:
     def load_state(self):
         try:
             if os.path.exists(self.state_file):
-                with open(self.state_file, 'rb') as f:
-                    state = joblib.load(f)
-                self.positions = pd.DataFrame(state['positions'])
-                self.returns_by_symbol = state['returns_by_symbol']
+                self.positions = pd.read_pickle(self.state_file)
+            if os.path.exists(self.returns_file):
+                with open(self.returns_file, 'rb') as f:
+                    self.returns_by_symbol = joblib.load(f)
                 logger.info("Состояние TradeManager загружено")
         except Exception as e:
             logger.error(f"Ошибка загрузки состояния: {e}")

@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 import time
+import asyncio
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 
 
