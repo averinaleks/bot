@@ -115,7 +115,11 @@ class TradeManager:
                 logger.warning(f"Недостаточно средств на счете для {symbol}")
                 await self.telegram_logger.send_telegram_message(f"⚠️ Недостаточно средств на счете для {symbol}: equity={equity}")
                 return 0.0
-            df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+            ohlcv = self.data_handler.ohlcv
+            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+            else:
+                df = None
             volatility = df['close'].pct_change().std() if df is not None and not df.empty else self.config.get('volatility_threshold', 0.02)
             risk_per_trade = await self.compute_risk_per_trade(symbol, volatility)
             risk_amount = equity * risk_per_trade
@@ -137,7 +141,7 @@ class TradeManager:
                 if len(self.positions) >= self.max_positions:
                     logger.warning(f"Достигнуто максимальное количество позиций: {self.max_positions}")
                     return
-                if symbol in self.positions.index.get_level_values('symbol'):
+                if 'symbol' in self.positions.index.names and symbol in self.positions.index.get_level_values('symbol'):
                     logger.warning(f"Позиция для {symbol} уже открыта")
                     return
                 indicators = self.data_handler.indicators.get(symbol)
@@ -178,7 +182,10 @@ class TradeManager:
         async with self.position_lock:
             async with self.returns_lock:
                 try:
-                    position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                    if 'symbol' in self.positions.index.names:
+                        position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                    else:
+                        position = pd.DataFrame()
                     if position.empty:
                         logger.warning(f"Позиция для {symbol} не найдена")
                         return
@@ -204,7 +211,10 @@ class TradeManager:
     async def check_trailing_stop(self, symbol: str, current_price: float):
         async with self.position_lock:
             try:
-                position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                if 'symbol' in self.positions.index.names:
+                    position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                else:
+                    position = pd.DataFrame()
                 if position.empty:
                     logger.warning(f"Позиция для {symbol} не найдена")
                     return
@@ -233,7 +243,10 @@ class TradeManager:
     async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
         async with self.position_lock:
             try:
-                position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                if 'symbol' in self.positions.index.names:
+                    position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+                else:
+                    position = pd.DataFrame()
                 if position.empty:
                     return
                 position = position.iloc[0]
@@ -260,7 +273,10 @@ class TradeManager:
             if not model:
                 logger.debug(f"Модель для {symbol} не найдена")
                 return
-            position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+            if 'symbol' in self.positions.index.names:
+                position = self.positions.loc[self.positions.index.get_level_values('symbol') == symbol]
+            else:
+                position = pd.DataFrame()
             if position.empty:
                 return
             position = position.iloc[0]
@@ -301,7 +317,11 @@ class TradeManager:
                         if returns:
                             sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
                             logger.info(f"Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}")
-                            df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+                            ohlcv = self.data_handler.ohlcv
+                            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+                            else:
+                                df = None
                             if df is not None and not df.empty:
                                 volatility = df['close'].pct_change().std()
                                 volatility_change = abs(volatility - self.last_volatility.get(symbol, 0.0)) / max(self.last_volatility.get(symbol, 0.01), 0.01)
@@ -323,8 +343,15 @@ class TradeManager:
     async def manage_positions(self):
         while True:
             try:
-                for symbol in self.positions.index.get_level_values('symbol').unique():
-                    df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+                symbols = []
+                if 'symbol' in self.positions.index.names:
+                    symbols = self.positions.index.get_level_values('symbol').unique()
+                for symbol in symbols:
+                    ohlcv = self.data_handler.ohlcv
+                    if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                        df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+                    else:
+                        df = None
                     if check_dataframe_empty(df, f"manage_positions {symbol}"):
                         continue
                     current_price = df['close'].iloc[-1]
@@ -338,7 +365,11 @@ class TradeManager:
 
     async def evaluate_ema_condition(self, symbol: str, signal: str) -> bool:
         try:
-            df_2h = self.data_handler.ohlcv_2h.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv_2h.index.get_level_values('symbol') else None
+            ohlcv_2h = self.data_handler.ohlcv_2h
+            if 'symbol' in ohlcv_2h.index.names and symbol in ohlcv_2h.index.get_level_values('symbol'):
+                df_2h = ohlcv_2h.xs(symbol, level='symbol', drop_level=False)
+            else:
+                df_2h = None
             indicators_2h = self.data_handler.indicators_2h.get(symbol)
             if check_dataframe_empty(df_2h, f"evaluate_ema_condition {symbol}") or not indicators_2h:
                 logger.warning(f"Нет данных или индикаторов для {symbol} на 2h таймфрейме")
@@ -445,8 +476,15 @@ class TradeManager:
         while True:
             try:
                 signal = await self.evaluate_signal(symbol)
-                if signal and symbol not in self.positions.index.get_level_values('symbol'):
-                    df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False)
+                condition = True
+                if 'symbol' in self.positions.index.names:
+                    condition = symbol not in self.positions.index.get_level_values('symbol')
+                if signal and condition:
+                    ohlcv = self.data_handler.ohlcv
+                    if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                        df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+                    else:
+                        df = None
                     if check_dataframe_empty(df, f"process_symbol {symbol}"):
                         continue
                     current_price = df['close'].iloc[-1]
