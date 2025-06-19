@@ -184,10 +184,10 @@ async def main():
         )
         logger.info(f"Ray инициализирован с {ray_num_cpus} CPU, {ray_memory:.2f} ГБ памяти, GPU: {gpu_available}")
 
-        telegram_token = os.getenv('TELEGRAM_TOKEN')
-        chat_id = os.getenv('CHAT_ID')
+        telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        chat_id = os.getenv('TELEGRAM_CHAT_ID')
         if not telegram_token or not chat_id:
-            logger.error("TELEGRAM_TOKEN или CHAT_ID не установлены")
+            logger.error("TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не установлены")
             return
         application = Application.builder().token(telegram_token).build()
         telegram_bot = application.bot
