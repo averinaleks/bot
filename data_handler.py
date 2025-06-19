@@ -11,14 +11,13 @@ from utils import (
     HistoricalDataCache,
     filter_outliers_zscore,
     TelegramLogger,
+    calculate_volume_profile as utils_volume_profile,
 )
 from tenacity import retry, wait_exponential, stop_after_attempt
 from typing import List, Dict, Optional
 import ta
 import os
 from queue import Queue
-import numba
-from numba import prange
 import pickle
 import psutil
 
@@ -49,16 +48,13 @@ class IndicatorsCache:
             logger.error(f"Ошибка расчета индикаторов ({timeframe}): {e}")
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = self.volume_profile = None
 
-    @numba.jit(nopython=True, parallel=True)
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
         try:
-            price_bins = np.linspace(df['low'].min(), df['high'].max(), num=50)
-            volume_hist = np.zeros(len(price_bins) - 1)
-            for i in prange(len(price_bins) - 1):
-                mask = (df['close'] >= price_bins[i]) & (df['close'] < price_bins[i + 1])
-                volume_hist[i] = df['volume'][mask].sum()
-            volume_hist = volume_hist / (volume_hist.sum() + 1e-6)
-            return pd.Series(volume_hist, index=price_bins[:-1])
+            prices = df['close'].to_numpy(dtype=np.float32)
+            volumes = df['volume'].to_numpy(dtype=np.float32)
+            vp = utils_volume_profile(prices, volumes, bins=50)
+            price_bins = np.linspace(prices.min(), prices.max(), num=len(vp))
+            return pd.Series(vp, index=price_bins)
         except Exception as e:
             logger.error(f"Ошибка расчета Volume Profile: {e}")
             return None
@@ -87,8 +83,8 @@ class DataHandler:
         self.cleanup_lock = asyncio.Lock()
         self.ws_rate_timestamps = []
         self.cleanup_task = None
-        self.ws_queue = asyncio.PriorityQueue(maxsize=10000)
-        self.disk_buffer = Queue(maxsize=10000)
+        self.ws_queue = asyncio.PriorityQueue(maxsize=config.get('ws_queue_size', 10000))
+        self.disk_buffer = Queue(maxsize=config.get('disk_buffer_size', 10000))
         self.buffer_dir = os.path.join(config['cache_dir'], 'ws_buffer')
         os.makedirs(self.buffer_dir, exist_ok=True)
         self.processed_timestamps = {}

@@ -47,5 +47,9 @@
     "pullback_period": 3600,
     "pullback_volatility_coeff": 1.0,
     "retrain_interval": 86400,
-    "min_liquidity": 1000000
+    "min_liquidity": 1000000,
+    "ws_queue_size": 10000,
+    "disk_buffer_size": 10000,
+    "prediction_history_size": 100,
+    "optuna_trials": 20
 }

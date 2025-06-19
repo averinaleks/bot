@@ -9,6 +9,7 @@ import os
 import time
 import asyncio
 from utils import logger, check_dataframe_empty, HistoricalDataCache
+from collections import deque
 
 
 class CNNLSTM(nn.Module):
@@ -60,6 +61,7 @@ class ModelBuilder:
         self.last_save_time = time.time()
         self.save_interval = 900
         self.scalers = {}
+        self.prediction_history = {}
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -197,6 +199,16 @@ class ModelBuilder:
                 logger.error(f"Ошибка цикла обучения: {e}")
                 await asyncio.sleep(60)
 
-    async def adjust_thresholds(self, symbol):
-        # Simplified threshold adjustment
-        return 0.6, 0.4
+    async def adjust_thresholds(self, symbol, prediction: float):
+        base_long = self.config.get('base_probability_threshold', 0.6)
+        base_short = 1 - base_long
+        history_size = self.config.get('prediction_history_size', 100)
+        hist = self.prediction_history.setdefault(symbol, deque(maxlen=history_size))
+        hist.append(float(prediction))
+        if len(hist) < 10:
+            return base_long, base_short
+        mean_pred = float(np.mean(hist))
+        std_pred = float(np.std(hist))
+        long_thr = np.clip(mean_pred + std_pred / 2, base_long, 0.9)
+        short_thr = np.clip(mean_pred - std_pred / 2, 0.1, base_short)
+        return long_thr, short_thr
