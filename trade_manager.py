@@ -40,6 +40,19 @@ class TradeManager:
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.load_state()
 
+    async def compute_risk_per_trade(self, symbol: str, volatility: float) -> float:
+        base_risk = self.config.get('risk_per_trade', self.min_risk_per_trade)
+        async with self.returns_lock:
+            returns = [r for t, r in self.returns_by_symbol.get(symbol, []) if time.time() - t <= self.performance_window]
+        sharpe = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 * 60 / self.performance_window) if returns else 0.0
+        if sharpe < 0:
+            base_risk *= 0.5
+        elif sharpe > 1:
+            base_risk *= 1.5
+        vol_coeff = volatility / self.config.get('volatility_threshold', 0.02)
+        base_risk *= max(0.5, min(2.0, vol_coeff))
+        return min(self.max_risk_per_trade, max(self.min_risk_per_trade, base_risk))
+
     def save_state(self):
         if not self.positions_changed or (time.time() - self.last_save_time < self.save_interval):
             return
@@ -95,7 +108,9 @@ class TradeManager:
                 logger.warning(f"Недостаточно средств на счете для {symbol}")
                 await self.telegram_logger.send_telegram_message(f"⚠️ Недостаточно средств на счете для {symbol}: equity={equity}")
                 return 0.0
-            risk_per_trade = min(self.max_risk_per_trade, max(self.min_risk_per_trade, self.config.get('risk_per_trade', self.min_risk_per_trade)))
+            df = self.data_handler.ohlcv.xs(symbol, level='symbol', drop_level=False) if symbol in self.data_handler.ohlcv.index.get_level_values('symbol') else None
+            volatility = df['close'].pct_change().std() if df is not None and not df.empty else self.config.get('volatility_threshold', 0.02)
+            risk_per_trade = await self.compute_risk_per_trade(symbol, volatility)
             risk_amount = equity * risk_per_trade
             stop_loss_distance = atr * self.config['sl_multiplier']
             if stop_loss_distance <= 0:
@@ -145,7 +160,8 @@ class TradeManager:
                     self.save_state()
                     logger.info(f"Позиция открыта: {symbol}, {side}, size={size}, entry={price}")
                     await self.telegram_logger.send_telegram_message(
-                        f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}"
+                        f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
+                        urgent=True
                     )
             except Exception as e:
                 logger.error(f"Ошибка открытия позиции для {symbol}: {e}")
@@ -171,7 +187,8 @@ class TradeManager:
                         self.save_state()
                         logger.info(f"Позиция закрыта: {symbol}, profit={profit:.2f}, reason={reason}")
                         await self.telegram_logger.send_telegram_message(
-                            f"📉 Позиция закрыта: {symbol} profit={profit:.2f} USDT ({reason})"
+                            f"📉 Позиция закрыта: {symbol} profit={profit:.2f} USDT ({reason})",
+                            urgent=True
                         )
                 except Exception as e:
                     logger.error(f"Ошибка закрытия позиции для {symbol}: {e}")

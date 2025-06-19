@@ -39,10 +39,10 @@ class TelegramLogger(logging.Handler):
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()
 
-    async def send_telegram_message(self, message):
+    async def send_telegram_message(self, message, urgent: bool = False):
         async with self.message_lock:
             try:
-                if time.time() - self.last_message_time >= self.message_interval:
+                if urgent or time.time() - self.last_message_time >= self.message_interval:
                     await self.bot.send_message(chat_id=self.chat_id, text=message[:4096])
                     self.last_message_time = time.time()
                 else:

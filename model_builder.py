@@ -23,6 +23,7 @@ class CNNLSTM(nn.Module):
         self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
         self.relu = nn.ReLU()
         self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.attn = nn.Linear(hidden_size, 1)
         self.fc = nn.Linear(hidden_size, 1)
         self.sigmoid = nn.Sigmoid()
 
@@ -35,7 +36,9 @@ class CNNLSTM(nn.Module):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         out, _ = self.lstm(x, (h0, c0))
-        out = self.fc(out[:, -1, :])
+        attn_weights = torch.softmax(self.attn(out), dim=1)
+        context = (out * attn_weights).sum(dim=1)
+        out = self.fc(context)
         return self.sigmoid(out)
 
     def l2_regularization(self):
@@ -107,12 +110,22 @@ class ModelBuilder:
         df = await self.preprocess(df.droplevel('symbol'), symbol)
         if check_dataframe_empty(df, f"prepare_lstm_features {symbol}"):
             return np.array([])
+        features_df = df[['close', 'open', 'high', 'low', 'volume']].copy()
+        features_df['funding'] = self.data_handler.funding_rates.get(symbol, 0.0)
+        features_df['open_interest'] = self.data_handler.open_interest.get(symbol, 0.0)
+        features_df['ema30'] = indicators.ema30[-len(df):].values
+        features_df['ema100'] = indicators.ema100[-len(df):].values
+        features_df['ema200'] = indicators.ema200[-len(df):].values
+        features_df['rsi'] = indicators.rsi[-len(df):].values
+        features_df['adx'] = indicators.adx[-len(df):].values
+        features_df['macd'] = indicators.macd[-len(df):].values
+        features_df['atr'] = indicators.atr[-len(df):].values
         scaler = self.scalers.get(symbol)
         if scaler is None:
             scaler = StandardScaler()
-            scaler.fit(df[['close']])
+            scaler.fit(features_df)
             self.scalers[symbol] = scaler
-        features = scaler.transform(df[['close']])
+        features = scaler.transform(features_df)
         return features.astype(np.float32)
 
     async def retrain_symbol(self, symbol):
@@ -127,14 +140,22 @@ class ModelBuilder:
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
         y = (features[self.config['lstm_timesteps']:, 0] > features[:-self.config['lstm_timesteps'], 0]).astype(np.float32)
         dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
-        loader = DataLoader(dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
+        val_size = max(1, int(0.1 * len(dataset)))
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+        train_loader = DataLoader(train_dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
+        val_loader = DataLoader(val_dataset, batch_size=self.config['lstm_batch_size'], shuffle=False)
         model = CNNLSTM(X.shape[2], 64, 2, 0.2)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         criterion = nn.BCELoss()
         model.to(self.device)
-        model.train()
-        for epoch in range(5):
-            for batch_X, batch_y in loader:
+        best_loss = float('inf')
+        epochs_no_improve = 0
+        max_epochs = 20
+        patience = 3
+        for epoch in range(max_epochs):
+            model.train()
+            for batch_X, batch_y in train_loader:
                 batch_X = batch_X.to(self.device)
                 batch_y = batch_y.to(self.device)
                 optimizer.zero_grad()
@@ -142,6 +163,22 @@ class ModelBuilder:
                 loss = criterion(outputs, batch_y) + model.l2_regularization()
                 loss.backward()
                 optimizer.step()
+            model.eval()
+            val_loss = 0.0
+            with torch.no_grad():
+                for val_X, val_y in val_loader:
+                    val_X = val_X.to(self.device)
+                    val_y = val_y.to(self.device)
+                    outputs = model(val_X).squeeze()
+                    val_loss += criterion(outputs, val_y).item()
+            val_loss /= len(val_loader)
+            if val_loss + 1e-4 < best_loss:
+                best_loss = val_loss
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    break
         self.lstm_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
