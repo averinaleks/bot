@@ -13,7 +13,9 @@ from data_handler import DataHandler
 from model_builder import ModelBuilder
 from trade_manager import TradeManager
 from optimizer import ParameterOptimizer
-from utils import logger, TelegramLogger
+from utils import logger, TelegramLogger, check_dataframe_empty
+import pandas as pd
+import numpy as np
 import importlib.metadata
 import shutil
 
