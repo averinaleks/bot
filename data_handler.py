@@ -147,11 +147,7 @@ class DataHandler:
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
         pair_volumes = []
         for symbol, market in markets.items():
-            if (
-                market['active']
-                and symbol.endswith('USDT')
-                and market['type'] == 'future'
-            ):
+            if market.get('active') and symbol.endswith('USDT'):
                 try:
                     ticker = await self.exchange.fetch_ticker(symbol)
                     volume = float(ticker.get('quoteVolume') or 0)
