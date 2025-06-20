@@ -289,8 +289,8 @@ class TradeManager:
             X = np.array([features[-self.config['lstm_timesteps']:]])
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
             model.eval()
-            with torch.no_grad():
-                prediction = model(X_tensor).squeeze().cpu().numpy()
+            with torch.no_grad(), torch.cuda.amp.autocast():
+                prediction = model(X_tensor).squeeze().float().cpu().numpy()
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = calibrator.predict_proba([[prediction]])[0, 1]
@@ -301,10 +301,8 @@ class TradeManager:
             elif position['side'] == 'sell' and prediction > long_threshold:
                 logger.info(f"Сигнал CNN-LSTM для выхода из шорта для {symbol}: предсказание={prediction:.4f}, порог={long_threshold:.2f}")
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
-            torch.cuda.empty_cache()
         except Exception as e:
             logger.error(f"Ошибка проверки сигнала CNN-LSTM для {symbol}: {e}")
-            torch.cuda.empty_cache()
 
     async def monitor_performance(self):
         while True:
@@ -430,8 +428,8 @@ class TradeManager:
             X = np.array([features[-self.config['lstm_timesteps']:]])
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
             model.eval()
-            with torch.no_grad():
-                prediction = model(X_tensor).squeeze().cpu().numpy()
+            with torch.no_grad(), torch.cuda.amp.autocast():
+                prediction = model(X_tensor).squeeze().float().cpu().numpy()
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = calibrator.predict_proba([[prediction]])[0, 1]
@@ -448,11 +446,9 @@ class TradeManager:
                     logger.info(f"Условия EMA не выполнены для {symbol}, сигнал отклонен")
                     return None
                 logger.info(f"Все условия выполнены для {symbol}, подтвержден сигнал: {signal}")
-            torch.cuda.empty_cache()
             return signal
         except Exception as e:
             logger.error(f"Ошибка оценки сигнала для {symbol}: {e}")
-            torch.cuda.empty_cache()
             return None
 
     async def run(self):
