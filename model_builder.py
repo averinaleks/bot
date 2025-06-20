@@ -5,10 +5,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss
+from sklearn.calibration import calibration_curve
 import joblib
 import os
 import time
 import asyncio
+import shap
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 from collections import deque
 import ray
@@ -115,6 +118,9 @@ class ModelBuilder:
         self.scalers = {}
         self.prediction_history = {}
         self.calibrators = {}
+        self.calibration_metrics = {}
+        self.shap_cache_times = {}
+        self.shap_cache_duration = config.get('shap_cache_duration', 86400)
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -207,11 +213,20 @@ class ModelBuilder:
         calibrator = LogisticRegression()
         calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
         self.calibrators[symbol] = calibrator
+        brier = brier_score_loss(val_labels, val_preds)
+        prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
+        self.calibration_metrics[symbol] = {
+            'brier_score': float(brier),
+            'prob_true': prob_true.tolist(),
+            'prob_pred': prob_pred.tolist()
+        }
         self.lstm_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
-        torch.cuda.empty_cache()
-        logger.info(f"Модель CNN-LSTM обучена для {symbol}")
+        await self.compute_shap_values(symbol, model, X)
+        logger.info(f"Модель CNN-LSTM обучена для {symbol}, Brier={brier:.4f}")
+        await self.data_handler.telegram_logger.send_telegram_message(
+            f"🎯 {symbol} обучен. Brier={brier:.4f}")
 
     async def train(self):
         self.load_state()
@@ -248,3 +263,28 @@ class ModelBuilder:
         long_thr = np.clip(mean_pred + std_pred / 2 + adj, base_long, 0.9)
         short_thr = np.clip(mean_pred - std_pred / 2 - adj, 0.1, base_short)
         return long_thr, short_thr
+
+    async def compute_shap_values(self, symbol, model, X):
+        try:
+            cache_file = os.path.join(self.cache.cache_dir, f"shap_{symbol}.pkl")
+            last_time = self.shap_cache_times.get(symbol, 0)
+            if time.time() - last_time < self.shap_cache_duration:
+                return
+            sample = torch.tensor(X[:50], dtype=torch.float32, device=self.device)
+            explainer = shap.DeepExplainer(model, sample)
+            values = explainer.shap_values(sample)
+            joblib.dump(values, cache_file)
+            mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
+            feature_names = [
+                'close', 'open', 'high', 'low', 'volume', 'funding',
+                'open_interest', 'ema30', 'ema100', 'ema200', 'rsi',
+                'adx', 'macd', 'atr'
+            ]
+            top_idx = np.argsort(mean_abs)[-3:][::-1]
+            top_feats = {feature_names[i]: float(mean_abs[i]) for i in top_idx}
+            self.shap_cache_times[symbol] = time.time()
+            logger.info(f"SHAP значения для {symbol}: {top_feats}")
+            await self.data_handler.telegram_logger.send_telegram_message(
+                f"🔍 SHAP {symbol}: {top_feats}")
+        except Exception as e:
+            logger.error(f"Ошибка вычисления SHAP для {symbol}: {e}")
