@@ -37,6 +37,7 @@ CONFIG_SCHEMA = {
         'retrain_interval', 'volatility_threshold', 'ema_crossover_lookback', 'pullback_period',
         'pullback_volatility_coeff', 'min_liquidity', 'ws_queue_size', 'ws_min_process_rate',
         'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
+        ,'return_threshold', 'skip_adx_threshold', 'loss_streak_threshold', 'backtest_interval'
     ],
     "properties": {
         "exchange": {"type": "string"},
@@ -101,7 +102,11 @@ CONFIG_SCHEMA = {
         "ws_min_process_rate": {"type": "integer", "minimum": 1},
         "disk_buffer_size": {"type": "integer", "minimum": 1},
         "prediction_history_size": {"type": "integer", "minimum": 1},
-        "optuna_trials": {"type": "integer", "minimum": 1}
+        "optuna_trials": {"type": "integer", "minimum": 1},
+        "return_threshold": {"type": "number", "minimum": 0},
+        "skip_adx_threshold": {"type": "number", "minimum": 0},
+        "loss_streak_threshold": {"type": "integer", "minimum": 1},
+        "backtest_interval": {"type": "integer", "minimum": 1}
     }
 }
 
@@ -263,7 +268,8 @@ async def main():
             trade_manager.run(),
             optimize_parameters_periodically(parameter_optimizer, telegram_bot, chat_id, shutdown_event, interval=config['optimization_interval'] // 2),  # Уменьшен интервал
             monitor_resources(telegram_bot, chat_id),
-            monitor_model_performance(model_builder, telegram_bot, chat_id, shutdown_event, interval=3600)  # Новый мониторинг производительности
+            monitor_model_performance(model_builder, telegram_bot, chat_id, shutdown_event, interval=3600),  # Новый мониторинг производительности
+            periodic_backtest(model_builder, telegram_bot, chat_id, shutdown_event, interval=config.get('backtest_interval', 604800))
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i, result in enumerate(results):
@@ -335,6 +341,23 @@ async def monitor_model_performance(model_builder, telegram_bot, chat_id, shutdo
     except Exception as e:
         logger.error(f"Ошибка мониторинга производительности моделей: {e}")
         await TelegramLogger(telegram_bot, chat_id).send_telegram_message(f"Ошибка мониторинга моделей: {e}")
+
+async def periodic_backtest(model_builder, telegram_bot, chat_id, shutdown_event: asyncio.Event, interval: int = 604800):
+    try:
+        while not shutdown_event.is_set():
+            for symbol in model_builder.data_handler.usdt_pairs:
+                model = model_builder.lstm_models.get(symbol)
+                indicators = model_builder.data_handler.indicators.get(symbol)
+                if not model or not indicators:
+                    continue
+                features, df = await model_builder.prepare_lstm_features(symbol, indicators, return_df=True)
+                sharpe = await model_builder.backtest_symbol(symbol, model, df, features)
+                logger.info(f"Бэктест для {symbol}: Sharpe={sharpe:.2f}")
+                await TelegramLogger(telegram_bot, chat_id).send_telegram_message(f"Бэктест {symbol}: Sharpe={sharpe:.2f}")
+            await asyncio.sleep(interval)
+    except Exception as e:
+        logger.error(f"Ошибка периодического бэктеста: {e}")
+        await TelegramLogger(telegram_bot, chat_id).send_telegram_message(f"Ошибка бэктеста: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

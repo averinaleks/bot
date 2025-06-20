@@ -64,4 +64,8 @@
     "disk_buffer_size": 10000,
     "prediction_history_size": 100,
     "optuna_trials": 20
+    ,"return_threshold": 0.001
+    ,"skip_adx_threshold": 20
+    ,"loss_streak_threshold": 2
+    ,"backtest_interval": 604800
 }

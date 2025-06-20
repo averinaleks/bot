@@ -25,6 +25,7 @@ class CNNLSTM(nn.Module):
         padding = kernel_size // 2
         self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
         self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
         self.attn = nn.Linear(hidden_size, 1)
         self.fc = nn.Linear(hidden_size, 1)
@@ -35,13 +36,14 @@ class CNNLSTM(nn.Module):
         x = x.permute(0, 2, 1)  # (batch, features, seq_len)
         x = self.conv(x)
         x = self.relu(x)
+        x = self.dropout(x)
         x = x.permute(0, 2, 1)  # (batch, seq_len, channels)
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         out, _ = self.lstm(x, (h0, c0))
         attn_weights = torch.softmax(self.attn(out), dim=1)
         context = (out * attn_weights).sum(dim=1)
-        out = self.fc(context)
+        out = self.fc(self.dropout(context))
         return self.sigmoid(out)
 
     def l2_regularization(self):
@@ -54,7 +56,11 @@ def _train_lstm_remote(X, y, batch_size):
     dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
     val_size = max(1, int(0.1 * len(dataset)))
     train_size = len(dataset) - val_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    indices = list(range(len(dataset)))
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+    train_dataset = torch.utils.data.Subset(dataset, train_indices)
+    val_dataset = torch.utils.data.Subset(dataset, val_indices)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     model = CNNLSTM(X.shape[2], 64, 2, 0.2)
@@ -160,17 +166,43 @@ class ModelBuilder:
         df = df.sort_index().interpolate(method='time', limit_direction='both')
         return df.tail(self.config['min_data_length'])
 
-    async def prepare_lstm_features(self, symbol, indicators):
+    async def backtest_symbol(self, symbol: str, model, df: pd.DataFrame, features: np.ndarray) -> float:
+        try:
+            timesteps = self.config['lstm_timesteps']
+            if len(features) <= timesteps + 1:
+                return 0.0
+            returns = []
+            for i in range(timesteps, len(features) - 1):
+                X = torch.tensor([features[i - timesteps:i]], dtype=torch.float32, device=self.device)
+                model.eval()
+                with torch.no_grad():
+                    pred = model(X).squeeze().cpu().item()
+                if pred > 0.6:
+                    ret = (df['close'].iloc[i + 1] - df['close'].iloc[i]) / df['close'].iloc[i]
+                    returns.append(ret)
+                elif pred < 0.4:
+                    ret = (df['close'].iloc[i] - df['close'].iloc[i + 1]) / df['close'].iloc[i]
+                    returns.append(ret)
+            if not returns:
+                return 0.0
+            returns = np.array(returns, dtype=np.float32)
+            sharpe = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(len(returns))
+            return float(sharpe)
+        except Exception as e:
+            logger.error(f"Ошибка бэктеста для {symbol}: {e}")
+            return 0.0
+
+    async def prepare_lstm_features(self, symbol, indicators, return_df: bool = False):
         ohlcv = self.data_handler.ohlcv
         if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
             df = ohlcv.xs(symbol, level='symbol', drop_level=False)
         else:
             df = None
         if check_dataframe_empty(df, f"prepare_lstm_features {symbol}"):
-            return np.array([])
+            return (np.array([]), pd.DataFrame()) if return_df else np.array([])
         df = await self.preprocess(df.droplevel('symbol'), symbol)
         if check_dataframe_empty(df, f"prepare_lstm_features {symbol}"):
-            return np.array([])
+            return (np.array([]), pd.DataFrame()) if return_df else np.array([])
         features_df = df[['close', 'open', 'high', 'low', 'volume']].copy()
         features_df['funding'] = self.data_handler.funding_rates.get(symbol, 0.0)
         features_df['open_interest'] = self.data_handler.open_interest.get(symbol, 0.0)
@@ -187,6 +219,8 @@ class ModelBuilder:
             scaler.fit(features_df)
             self.scalers[symbol] = scaler
         features = scaler.transform(features_df)
+        if return_df:
+            return features.astype(np.float32), df
         return features.astype(np.float32)
 
     async def retrain_symbol(self, symbol):
@@ -194,12 +228,15 @@ class ModelBuilder:
         if not indicators:
             logger.warning(f"Нет индикаторов для {symbol}")
             return
-        features = await self.prepare_lstm_features(symbol, indicators)
+        features, df = await self.prepare_lstm_features(symbol, indicators, return_df=True)
         if len(features) < self.config['lstm_timesteps'] * 2:
             logger.warning(f"Недостаточно данных для обучения {symbol}")
             return
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
-        y = (features[self.config['lstm_timesteps']:, 0] > features[:-self.config['lstm_timesteps'], 0]).astype(np.float32)
+        closes = df['close'].values
+        ret = (closes[self.config['lstm_timesteps']:] - closes[:-self.config['lstm_timesteps']]) / closes[:-self.config['lstm_timesteps']]
+        threshold = self.config.get('return_threshold', 0.0)
+        y = (ret > threshold).astype(np.float32)
         model_state, val_preds, val_labels = await _train_lstm_remote.remote(X, y, self.config['lstm_batch_size'])
         model = CNNLSTM(X.shape[2], 64, 2, 0.2)
         model.load_state_dict(model_state)
@@ -208,6 +245,10 @@ class ModelBuilder:
         calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
         self.calibrators[symbol] = calibrator
         self.lstm_models[symbol] = model
+        sharpe = await self.backtest_symbol(symbol, model, df, features)
+        logger.info(f"Результаты бэктеста {symbol}: Sharpe={sharpe:.2f}")
+        if sharpe < self.config.get('min_sharpe_ratio', 0.5):
+            logger.warning(f"Низкий Sharpe Ratio на бэктесте для {symbol}: {sharpe:.2f}")
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         torch.cuda.empty_cache()

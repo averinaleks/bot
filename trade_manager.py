@@ -38,6 +38,7 @@ class TradeManager:
         self.save_interval = 900
         self.positions_changed = False
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
+        self.loss_streak = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.load_state()
 
     async def compute_risk_per_trade(self, symbol: str, volatility: float) -> float:
@@ -52,6 +53,20 @@ class TradeManager:
         vol_coeff = volatility / self.config.get('volatility_threshold', 0.02)
         base_risk *= max(0.5, min(2.0, vol_coeff))
         return min(self.max_risk_per_trade, max(self.min_risk_per_trade, base_risk))
+
+    async def should_skip_trade(self, symbol: str) -> bool:
+        try:
+            indicators = self.data_handler.indicators.get(symbol)
+            if not indicators:
+                return False
+            adx = indicators.adx.iloc[-1] if hasattr(indicators, 'adx') else 50
+            if self.loss_streak.get(symbol, 0) >= self.config.get('loss_streak_threshold', 2) and adx < self.config.get('skip_adx_threshold', 20):
+                logger.info(f"Пропуск сигнала для {symbol}: серия убытков {self.loss_streak[symbol]}, ADX={adx:.1f}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка проверки условий пропуска сделки для {symbol}: {e}")
+            return False
 
     async def get_sharpe_ratio(self, symbol: str) -> float:
         async with self.returns_lock:
@@ -196,6 +211,10 @@ class TradeManager:
                         profit = (exit_price - position['entry_price']) * position['size'] if position['side'] == 'buy' else (position['entry_price'] - exit_price) * position['size']
                         profit *= self.leverage
                         self.returns_by_symbol[symbol].append((pd.Timestamp.now(tz='UTC').timestamp(), profit))
+                        if profit < 0:
+                            self.loss_streak[symbol] = self.loss_streak.get(symbol, 0) + 1
+                        else:
+                            self.loss_streak[symbol] = 0
                         self.positions = self.positions.drop(symbol, level='symbol')
                         self.positions_changed = True
                         self.save_state()
@@ -479,7 +498,7 @@ class TradeManager:
                 condition = True
                 if 'symbol' in self.positions.index.names:
                     condition = symbol not in self.positions.index.get_level_values('symbol')
-                if signal and condition:
+                if signal and condition and not await self.should_skip_trade(symbol):
                     ohlcv = self.data_handler.ohlcv
                     if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
                         df = ohlcv.xs(symbol, level='symbol', drop_level=False)
