@@ -227,6 +227,13 @@ class ModelBuilder:
 
     async def adjust_thresholds(self, symbol, prediction: float):
         base_long = self.config.get('base_probability_threshold', 0.6)
+        adjust_step = self.config.get('threshold_adjustment', 0.05)
+        loss_streak = await self.trade_manager.get_loss_streak(symbol)
+        win_streak = await self.trade_manager.get_win_streak(symbol)
+        if loss_streak >= self.config.get('loss_streak_threshold', 3):
+            base_long = min(base_long + adjust_step, 0.9)
+        elif win_streak >= self.config.get('win_streak_threshold', 3):
+            base_long = max(base_long - adjust_step, 0.5)
         base_short = 1 - base_long
         history_size = self.config.get('prediction_history_size', 100)
         hist = self.prediction_history.setdefault(symbol, deque(maxlen=history_size))

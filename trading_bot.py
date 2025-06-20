@@ -36,7 +36,8 @@ CONFIG_SCHEMA = {
         'ray_num_cpus', 'max_recovery_attempts', 'n_splits', 'optimization_interval', 'shap_cache_duration',
         'retrain_interval', 'volatility_threshold', 'ema_crossover_lookback', 'pullback_period',
         'pullback_volatility_coeff', 'min_liquidity', 'ws_queue_size', 'ws_min_process_rate',
-        'disk_buffer_size', 'prediction_history_size', 'optuna_trials'
+        'disk_buffer_size', 'prediction_history_size', 'optuna_trials',
+        'loss_streak_threshold', 'win_streak_threshold', 'threshold_adjustment'
     ],
     "properties": {
         "exchange": {"type": "string"},
@@ -101,7 +102,10 @@ CONFIG_SCHEMA = {
         "ws_min_process_rate": {"type": "integer", "minimum": 1},
         "disk_buffer_size": {"type": "integer", "minimum": 1},
         "prediction_history_size": {"type": "integer", "minimum": 1},
-        "optuna_trials": {"type": "integer", "minimum": 1}
+        "optuna_trials": {"type": "integer", "minimum": 1},
+        "loss_streak_threshold": {"type": "integer", "minimum": 1},
+        "win_streak_threshold": {"type": "integer", "minimum": 1},
+        "threshold_adjustment": {"type": "number", "minimum": 0}
     }
 }
 
