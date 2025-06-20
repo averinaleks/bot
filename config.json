@@ -66,5 +66,7 @@
     "optuna_trials": 20,
     "loss_streak_threshold": 3,
     "win_streak_threshold": 3,
-    "threshold_adjustment": 0.05
+    "threshold_adjustment": 0.05,
+    "target_change_threshold": 0.001,
+    "backtest_interval": 604800
 }
