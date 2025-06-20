@@ -28,6 +28,7 @@ class CNNLSTM(nn.Module):
         padding = kernel_size // 2
         self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
         self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
         self.attn = nn.Linear(hidden_size, 1)
         self.fc = nn.Linear(hidden_size, 1)
@@ -38,12 +39,14 @@ class CNNLSTM(nn.Module):
         x = x.permute(0, 2, 1)  # (batch, features, seq_len)
         x = self.conv(x)
         x = self.relu(x)
+        x = self.dropout(x)
         x = x.permute(0, 2, 1)  # (batch, seq_len, channels)
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
         out, _ = self.lstm(x, (h0, c0))
         attn_weights = torch.softmax(self.attn(out), dim=1)
         context = (out * attn_weights).sum(dim=1)
+        context = self.dropout(context)
         out = self.fc(context)
         return self.sigmoid(out)
 
@@ -54,10 +57,11 @@ class CNNLSTM(nn.Module):
 @ray.remote(num_gpus=1)
 def _train_lstm_remote(X, y, batch_size):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
-    val_size = max(1, int(0.1 * len(dataset)))
-    train_size = len(dataset) - val_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    y_tensor = torch.tensor(y, dtype=torch.float32)
+    val_size = max(1, int(0.1 * len(X_tensor)))
+    train_dataset = TensorDataset(X_tensor[:-val_size], y_tensor[:-val_size])
+    val_dataset = TensorDataset(X_tensor[-val_size:], y_tensor[-val_size:])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     model = CNNLSTM(X.shape[2], 64, 2, 0.2)
@@ -121,6 +125,7 @@ class ModelBuilder:
         self.calibration_metrics = {}
         self.shap_cache_times = {}
         self.shap_cache_duration = config.get('shap_cache_duration', 86400)
+        self.last_backtest_time = 0
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -205,7 +210,11 @@ class ModelBuilder:
             logger.warning(f"Недостаточно данных для обучения {symbol}")
             return
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
-        y = (features[self.config['lstm_timesteps']:, 0] > features[:-self.config['lstm_timesteps'], 0]).astype(np.float32)
+        price_now = features[:-self.config['lstm_timesteps'], 0]
+        future_price = features[self.config['lstm_timesteps']:, 0]
+        pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
+        thr = self.config.get('target_change_threshold', 0.001)
+        y = (pct_change > thr).astype(np.float32)
         model_state, val_preds, val_labels = await _train_lstm_remote.remote(X, y, self.config['lstm_batch_size'])
         model = CNNLSTM(X.shape[2], 64, 2, 0.2)
         model.load_state_dict(model_state)
@@ -295,3 +304,52 @@ class ModelBuilder:
                 f"🔍 SHAP {symbol}: {top_feats}")
         except Exception as e:
             logger.error(f"Ошибка вычисления SHAP для {symbol}: {e}")
+
+    async def simple_backtest(self, symbol):
+        try:
+            model = self.lstm_models.get(symbol)
+            indicators = self.data_handler.indicators.get(symbol)
+            ohlcv = self.data_handler.ohlcv
+            if not model or not indicators:
+                return None
+            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+            else:
+                return None
+            features = await self.prepare_lstm_features(symbol, indicators)
+            if len(features) < self.config['lstm_timesteps'] * 2:
+                return None
+            X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
+            X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device)
+            model.eval()
+            with torch.no_grad():
+                preds = model(X_tensor).squeeze().cpu().numpy()
+            thr = self.config.get('base_probability_threshold', 0.6)
+            returns = []
+            for i, p in enumerate(preds):
+                price_now = features[i + self.config['lstm_timesteps'] - 1, 0]
+                next_price = features[i + self.config['lstm_timesteps'], 0]
+                ret = 0.0
+                if p > thr:
+                    ret = (next_price - price_now) / price_now
+                elif p < 1 - thr:
+                    ret = (price_now - next_price) / price_now
+                if ret != 0.0:
+                    returns.append(ret)
+            if not returns:
+                return None
+            returns = np.array(returns)
+            sharpe = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 / pd.Timedelta(self.config['timeframe']).total_seconds())
+            return float(sharpe)
+        except Exception as e:
+            logger.error(f"Ошибка бектеста {symbol}: {e}")
+            return None
+
+    async def backtest_all(self):
+        results = {}
+        for symbol in self.data_handler.usdt_pairs:
+            sharpe = await self.simple_backtest(symbol)
+            if sharpe is not None:
+                results[symbol] = sharpe
+        self.last_backtest_time = time.time()
+        return results

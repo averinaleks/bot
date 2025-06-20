@@ -64,6 +64,12 @@ class ParameterOptimizer:
                 return False
             if not (0.1 <= params['base_probability_threshold'] <= 0.9):
                 return False
+            if not (2 <= params.get('loss_streak_threshold', 2) <= 5):
+                return False
+            if not (2 <= params.get('win_streak_threshold', 2) <= 5):
+                return False
+            if not (0.01 <= params.get('threshold_adjustment', 0.05) <= 0.1):
+                return False
             return True
         except Exception as e:
             logger.error(f"Ошибка валидации параметров: {e}")
@@ -78,6 +84,9 @@ class ParameterOptimizer:
             atr_period = trial.suggest_int('atr_period', 5, 20)
             lstm_weight = trial.suggest_float('lstm_weight', 0.3, 0.7)
             base_probability_threshold = trial.suggest_float('base_probability_threshold', 0.6, 0.9)
+            loss_streak_threshold = trial.suggest_int('loss_streak_threshold', 2, 5)
+            win_streak_threshold = trial.suggest_int('win_streak_threshold', 2, 5)
+            threshold_adjustment = trial.suggest_float('threshold_adjustment', 0.01, 0.1)
             tp_multiplier = trial.suggest_float('tp_multiplier', 1.5, 3.0)
             sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 1.5)
             trailing_stop_coeff = trial.suggest_float('trailing_stop_coeff', 0.02, 0.1)

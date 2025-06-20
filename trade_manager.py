@@ -444,6 +444,19 @@ class TradeManager:
             indicators = self.data_handler.indicators.get(symbol)
             if not indicators or check_dataframe_empty(indicators.df, f"evaluate_signal {symbol}"):
                 return None
+            ohlcv = self.data_handler.ohlcv
+            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
+                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+            else:
+                df = None
+            if df is not None and not df.empty:
+                volatility = df['close'].pct_change().std()
+            else:
+                volatility = self.config.get('volatility_threshold', 0.02)
+            loss_streak = await self.get_loss_streak(symbol)
+            if indicators.adx.iloc[-1] < 20 and volatility > self.config.get('volatility_threshold', 0.02) and loss_streak >= 2:
+                logger.info(f"Пропуск сигнала для {symbol}: низкий тренд и серия убытков")
+                return None
             features = await self.model_builder.prepare_lstm_features(symbol, indicators)
             if len(features) < self.config['lstm_timesteps']:
                 return None
