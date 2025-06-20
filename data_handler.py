@@ -145,19 +145,23 @@ class DataHandler:
             await self.telegram_logger.send_telegram_message(f"Ошибка загрузки данных: {e}")
 
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
-        liquid_pairs = []
+        pair_volumes = []
         for symbol, market in markets.items():
             if (
-                market['active'] and
-                symbol.endswith('USDT') and
-                market['type'] == 'future'
+                market['active']
+                and symbol.endswith('USDT')
+                and market['type'] == 'future'
             ):
-                orderbook = await self.fetch_orderbook(symbol)
-                bid_volume = sum([bid[1] for bid in orderbook.get('bids', [])[:5]]) if orderbook.get('bids') else 0
-                ask_volume = sum([ask[1] for ask in orderbook.get('asks', [])[:5]]) if orderbook.get('asks') else 0
-                if min(bid_volume, ask_volume) > 10000:
-                    liquid_pairs.append(symbol)
-        return liquid_pairs
+                try:
+                    ticker = await self.exchange.fetch_ticker(symbol)
+                    volume = float(ticker.get('quoteVolume') or 0)
+                except Exception as e:
+                    logger.error(f"Ошибка получения тикера для {symbol}: {e}")
+                    volume = 0.0
+                pair_volumes.append((symbol, volume))
+        pair_volumes.sort(key=lambda x: x[1], reverse=True)
+        top_limit = self.config.get('max_subscriptions_per_connection', 50)
+        return [s for s, _ in pair_volumes[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = '') -> tuple:
