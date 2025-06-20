@@ -49,11 +49,6 @@ class IndicatorsCache:
             logger.error(f"Ошибка расчета индикаторов ({timeframe}): {e}")
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = self.volume_profile = None
 
-
-@ray.remote(num_cpus=1)
-def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe: str):
-    return IndicatorsCache(df, config, volatility, timeframe)
-
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
         try:
             prices = df['close'].to_numpy(dtype=np.float32)
@@ -64,6 +59,11 @@ def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe
         except Exception as e:
             logger.error(f"Ошибка расчета Volume Profile: {e}")
             return None
+
+
+@ray.remote(num_cpus=1)
+def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe: str):
+    return IndicatorsCache(df, config, volatility, timeframe)
 
 class DataHandler:
     def __init__(self, config: dict, exchange: ccxt_async.bybit, telegram_bot, chat_id):
