@@ -60,6 +60,28 @@ class TradeManager:
             return 0.0
         return np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
 
+    async def get_loss_streak(self, symbol: str) -> int:
+        async with self.returns_lock:
+            returns = [r for _, r in self.returns_by_symbol.get(symbol, [])]
+        count = 0
+        for r in reversed(returns):
+            if r < 0:
+                count += 1
+            else:
+                break
+        return count
+
+    async def get_win_streak(self, symbol: str) -> int:
+        async with self.returns_lock:
+            returns = [r for _, r in self.returns_by_symbol.get(symbol, [])]
+        count = 0
+        for r in reversed(returns):
+            if r > 0:
+                count += 1
+            else:
+                break
+        return count
+
     def save_state(self):
         if not self.positions_changed or (time.time() - self.last_save_time < self.save_interval):
             return

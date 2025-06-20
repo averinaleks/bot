@@ -63,5 +63,8 @@
     "ws_min_process_rate": 30,
     "disk_buffer_size": 10000,
     "prediction_history_size": 100,
-    "optuna_trials": 20
+    "optuna_trials": 20,
+    "loss_streak_threshold": 3,
+    "win_streak_threshold": 3,
+    "threshold_adjustment": 0.05
 }
