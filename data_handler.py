@@ -109,6 +109,8 @@ class DataHandler:
         self.restart_attempts = 0
         self.max_restart_attempts = 20
         self.max_subscriptions = config.get('max_subscriptions_per_connection', 50)
+        # Number of symbols to subscribe per WebSocket batch
+        self.ws_subscription_batch_size = config.get('ws_subscription_batch_size', 30)
         self.active_subscriptions = 0
         self.load_threshold = 0.8
         self.ws_pool = {}
@@ -371,9 +373,16 @@ class DataHandler:
             self.max_subscriptions = new_max
 
     async def subscribe_to_klines(self, symbols: List[str]):
+        """Subscribe to kline streams for multiple symbols.
+
+        The ``symbols`` list is divided into chunks of
+        ``ws_subscription_batch_size`` and each chunk is handled by a
+        dedicated WebSocket connection.
+        """
         try:
             self.cleanup_task = asyncio.create_task(self.cleanup_old_data())
-            chunk_size = self.max_subscriptions
+            # Divide symbols into batches for subscription
+            chunk_size = self.ws_subscription_batch_size
             tasks = []
             for i in range(0, len(symbols), chunk_size):
                 chunk = symbols[i:i + chunk_size]
@@ -417,6 +426,11 @@ class DataHandler:
         return symbol
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = 'primary'):
+        """Subscribe to kline data for a chunk of symbols.
+
+        Subscriptions are sent in batches defined by ``ws_subscription_batch_size``
+        to avoid sending too many requests at once.
+        """
         reconnect_attempts = 0
         max_reconnect_attempts = self.config.get('max_reconnect_attempts', 10)
         urls = [ws_url] + self.backup_ws_urls
@@ -439,20 +453,23 @@ class DataHandler:
                 else:
                     ws = self.ws_pool[current_url].pop(0)
                 logger.info(f"Подключение к WebSocket {current_url} для {len(symbols)} символов ({timeframe})")
-                subscription_tasks = []
                 start_time = time.time()
-                for symbol in symbols:
-                    current_time = time.time()
-                    self.ws_rate_timestamps.append(current_time)
-                    self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
-                    if len(self.ws_rate_timestamps) > self.config['ws_rate_limit']:
-                        logger.warning("Превышен лимит подписок WebSocket, ожидание")
-                        await asyncio.sleep(1)
-                    subscription_tasks.append(ws.send(json.dumps({
-                        "op": "subscribe",
-                        "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"]
-                    })))
-                await asyncio.gather(*subscription_tasks)
+                batch_size = self.ws_subscription_batch_size
+                for i in range(0, len(symbols), batch_size):
+                    batch = symbols[i:i + batch_size]
+                    subscription_tasks = []
+                    for symbol in batch:
+                        current_time = time.time()
+                        self.ws_rate_timestamps.append(current_time)
+                        self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
+                        if len(self.ws_rate_timestamps) > self.config['ws_rate_limit']:
+                            logger.warning("Превышен лимит подписок WebSocket, ожидание")
+                            await asyncio.sleep(1)
+                        subscription_tasks.append(ws.send(json.dumps({
+                            "op": "subscribe",
+                            "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"]
+                        })))
+                    await asyncio.gather(*subscription_tasks)
                 reconnect_attempts = 0
                 current_url_index = 0
                 self.restart_attempts = 0

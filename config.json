@@ -9,6 +9,7 @@
     ],
     "max_concurrent_requests": 10,
     "max_subscriptions_per_connection": 50,
+    "ws_subscription_batch_size": 30,
     "ws_rate_limit": 20,
     "ws_reconnect_interval": 5,
     "max_reconnect_attempts": 10,
