@@ -3,8 +3,6 @@ import os
 import pickle
 import pandas as pd
 import numpy as np
-from telegram.ext import Application
-import torch
 import asyncio
 import time
 from scipy.stats import zscore
@@ -157,7 +155,6 @@ class HistoricalDataCache:
 
     def _aggressive_clean(self):
         try:
-            current_time = time.time()
             files = [(f, os.path.getmtime(os.path.join(self.cache_dir, f)))
                      for f in os.listdir(self.cache_dir) if os.path.isfile(os.path.join(self.cache_dir, f))]
             if not files:

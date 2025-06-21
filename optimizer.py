@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import optuna
-import ray
 import asyncio
 import time
 from utils import logger, check_dataframe_empty
@@ -82,14 +81,6 @@ class ParameterOptimizer:
             ema100_period = trial.suggest_int('ema100_period', 50, 200)
             ema200_period = trial.suggest_int('ema200_period', 100, 300)
             atr_period = trial.suggest_int('atr_period', 5, 20)
-            lstm_weight = trial.suggest_float('lstm_weight', 0.3, 0.7)
-            base_probability_threshold = trial.suggest_float('base_probability_threshold', 0.6, 0.9)
-            loss_streak_threshold = trial.suggest_int('loss_streak_threshold', 2, 5)
-            win_streak_threshold = trial.suggest_int('win_streak_threshold', 2, 5)
-            threshold_adjustment = trial.suggest_float('threshold_adjustment', 0.01, 0.1)
-            tp_multiplier = trial.suggest_float('tp_multiplier', 1.5, 3.0)
-            sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 1.5)
-            trailing_stop_coeff = trial.suggest_float('trailing_stop_coeff', 0.02, 0.1)
             n_splits = 5
             train_size = int(0.6 * len(df))
             test_size = int(0.2 * len(df))
@@ -99,7 +90,6 @@ class ParameterOptimizer:
                 end = start + train_size + test_size
                 if end > len(df):
                     break
-                train_df = df.iloc[start:start + train_size].droplevel('symbol')
                 test_df = df.iloc[start + train_size:end].droplevel('symbol')
                 from data_handler import IndicatorsCache
                 # Обновление ATR при необходимости
@@ -129,7 +119,6 @@ class ParameterOptimizer:
                     prev_close = test_df['close'].iloc[j-1]
                     ema30 = indicators.ema30.iloc[j]
                     ema100 = indicators.ema100.iloc[j]
-                    atr = indicators.atr.iloc[j]
                     volume_profile = indicators.volume_profile.iloc[-1] if indicators.volume_profile is not None else 0.0
                     signal = 0
                     if ema30 > ema100 and close > ema30 and volume_profile > 0.02:
