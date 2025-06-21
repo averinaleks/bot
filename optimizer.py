@@ -29,30 +29,30 @@ class ParameterOptimizer:
                 df = None
             if check_dataframe_empty(df, f"optimize {symbol}"):
                 logger.warning(f"Нет данных для оптимизации {symbol}")
-                return self.best_params_by_symbol[symbol] or self.config
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             volatility = df['close'].pct_change().std() if not df.empty else 0.02
             # Проверка значительного изменения волатильности
             volatility_change = abs(volatility - self.last_volatility.get(symbol, 0.0)) / max(self.last_volatility.get(symbol, 0.01), 0.01)
             self.last_volatility[symbol] = volatility
             optimization_interval = self.base_optimization_interval / (1 + volatility / self.volatility_threshold)
             optimization_interval = max(1800, min(self.base_optimization_interval * 2, optimization_interval))  # Минимум 30 минут
-            if time.time() - self.last_optimization[symbol] < optimization_interval and volatility_change < 0.5:
-                logger.info(f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization[symbol]):.0f} секунд")
-                return self.best_params_by_symbol[symbol] or self.config
+            if time.time() - self.last_optimization.get(symbol, 0) < optimization_interval and volatility_change < 0.5:
+                logger.info(f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд")
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             # Использование TPESampler с multivariate=True для учета корреляций
             study = optuna.create_study(direction='maximize', sampler=TPESampler(n_startup_trials=10, multivariate=True))
             study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=self.max_trials)
             best_params = study.best_params
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")
-                return self.best_params_by_symbol[symbol] or self.config
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             self.best_params_by_symbol[symbol] = best_params
             self.last_optimization[symbol] = time.time()
             logger.info(f"Оптимизация для {symbol} завершена, лучшие параметры: {best_params}")
             return best_params
         except Exception as e:
             logger.error(f"Ошибка оптимизации для {symbol}: {e}")
-            return self.best_params_by_symbol[symbol] or self.config
+            return self.best_params_by_symbol.get(symbol, {}) or self.config
 
     def validate_params(self, params):
         # Валидация оптимизированных параметров
