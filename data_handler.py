@@ -271,7 +271,7 @@ class DataHandler:
                         obj_ref = calc_indicators.remote(
                             df.droplevel('symbol'), self.config, volatility, 'primary'
                         )
-                        self.indicators_cache[cache_key] = await ray.get(obj_ref)
+                        self.indicators_cache[cache_key] = ray.get(obj_ref)
                     self.indicators[symbol] = self.indicators_cache[cache_key]
             else:
                 async with self.ohlcv_2h_lock:
@@ -279,7 +279,7 @@ class DataHandler:
                         obj_ref = calc_indicators.remote(
                             df.droplevel('symbol'), self.config, volatility, 'secondary'
                         )
-                        self.indicators_cache_2h[cache_key] = await ray.get(obj_ref)
+                        self.indicators_cache_2h[cache_key] = ray.get(obj_ref)
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except Exception as e:
