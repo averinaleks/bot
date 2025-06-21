@@ -74,6 +74,14 @@ def check_dataframe_empty(df, context=""):
         logger.error(f"Ошибка проверки DataFrame в контексте {context}: {e}")
         return False
 
+def sanitize_symbol(symbol: str) -> str:
+    """Sanitize symbol string for safe filesystem usage."""
+    try:
+        return symbol.replace('/', '_').replace(':', '_')
+    except Exception as e:
+        logger.error(f"Ошибка sanitize_symbol для {symbol}: {e}")
+        return symbol
+
 def filter_outliers_zscore(df, column='close', threshold=3.0):
     try:
         if len(df[column].dropna()) < 3:
@@ -174,11 +182,12 @@ class HistoricalDataCache:
 
     def save_cached_data(self, symbol, timeframe, data):
         try:
+            safe_symbol = sanitize_symbol(symbol)
             if not self._check_disk_space():
                 logger.error(f"Невозможно кэшировать {symbol}_{timeframe}: нехватка места на диске")
                 return
-            filename = os.path.join(self.cache_dir, f"{symbol}_{timeframe}.pkl.gz")
-            temp_filename = os.path.join(self.cache_dir, f"temp_{symbol}_{timeframe}.pkl")
+            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
+            temp_filename = os.path.join(self.cache_dir, f"temp_{safe_symbol}_{timeframe}.pkl")
             start_time = time.time()
             with open(temp_filename, 'wb') as f:
                 pickle.dump(data, f)
@@ -205,7 +214,8 @@ class HistoricalDataCache:
 
     def load_cached_data(self, symbol, timeframe):
         try:
-            filename = os.path.join(self.cache_dir, f"{symbol}_{timeframe}.pkl.gz")
+            safe_symbol = sanitize_symbol(symbol)
+            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
                     logger.info(f"Кэш для {symbol}_{timeframe} устарел, удаление")
@@ -219,7 +229,7 @@ class HistoricalDataCache:
                     logger.warning(f"Высокая задержка чтения gzip для {symbol}_{timeframe}: {elapsed_time:.2f} сек")
                 logger.info(f"Данные загружены из кэша (gzip): {filename}")
                 return data
-            old_filename = os.path.join(self.cache_dir, f"{symbol}_{timeframe}.pkl")
+            old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
             if os.path.exists(old_filename):
                 logger.info(f"Обнаружен старый кэш для {symbol}_{timeframe}, конвертация в gzip")
                 with open(old_filename, 'rb') as f:
