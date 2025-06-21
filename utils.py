@@ -97,23 +97,27 @@ def filter_outliers_zscore(df, column='close', threshold=3.0):
         return df
 
 @jit(nopython=True, parallel=True)
+def _calculate_volume_profile(prices, volumes, bins=50):
+    if len(prices) != len(volumes) or len(prices) < 2:
+        return np.zeros(bins)
+    min_price = np.min(prices)
+    max_price = np.max(prices)
+    if min_price == max_price:
+        return np.zeros(bins)
+    bin_edges = np.linspace(min_price, max_price, bins + 1)
+    volume_profile = np.zeros(bins)
+    for i in prange(len(prices)):
+        bin_idx = np.searchsorted(bin_edges, prices[i], side='right') - 1
+        if 0 <= bin_idx < bins:
+            volume_profile[bin_idx] += volumes[i]
+    return volume_profile / (np.sum(volume_profile) + 1e-6)
+
+
 def calculate_volume_profile(prices, volumes, bins=50):
     try:
-        if len(prices) != len(volumes) or len(prices) < 2:
-            return np.zeros(bins)
-        min_price = np.min(prices)
-        max_price = np.max(prices)
-        if min_price == max_price:
-            return np.zeros(bins)
-        bin_edges = np.linspace(min_price, max_price, bins + 1)
-        volume_profile = np.zeros(bins)
-        for i in prange(len(prices)):
-            bin_idx = np.searchsorted(bin_edges, prices[i], side='right') - 1
-            if 0 <= bin_idx < bins:
-                volume_profile[bin_idx] += volumes[i]
-        return volume_profile / (np.sum(volume_profile) + 1e-6)
-    except Exception as e:
-        logger.error(f"Ошибка вычисления профиля объема: {e}")
+        return _calculate_volume_profile(prices, volumes, bins)
+    except Exception as exc:
+        logger.error(f"Ошибка вычисления профиля объема: {exc}")
         return np.zeros(bins)
 
 class HistoricalDataCache:
