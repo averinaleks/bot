@@ -10,6 +10,7 @@ import gzip
 import psutil
 import shutil
 from numba import jit, prange
+import httpx
 
 logger = logging.getLogger('TradingBot')
 logger.setLevel(logging.INFO)
@@ -39,14 +40,24 @@ class TelegramLogger(logging.Handler):
 
     async def send_telegram_message(self, message, urgent: bool = False):
         async with self.message_lock:
-            try:
-                if urgent or time.time() - self.last_message_time >= self.message_interval:
+            if not urgent and time.time() - self.last_message_time < self.message_interval:
+                logger.debug(f"Сообщение Telegram пропущено из-за интервала: {message[:100]}...")
+                return
+
+            for attempt in range(3):
+                try:
                     await self.bot.send_message(chat_id=self.chat_id, text=message[:4096])
                     self.last_message_time = time.time()
-                else:
-                    logger.debug(f"Сообщение Telegram пропущено из-за интервала: {message[:100]}...")
-            except Exception as e:
-                logger.error(f"Ошибка отправки сообщения Telegram: {e}")
+                    break
+                except httpx.ConnectError as e:
+                    logger.warning(
+                        f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/3"
+                    )
+                    if attempt < 2:
+                        await asyncio.sleep(5)
+                except Exception as e:
+                    logger.error(f"Ошибка отправки сообщения Telegram: {e}")
+                    break
 
     def emit(self, record):
         try:
