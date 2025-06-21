@@ -34,7 +34,11 @@ class IndicatorsCache:
                 self.ema30 = ta.trend.ema_indicator(df['close'], window=config['ema30_period'], fillna=True)
                 self.ema100 = ta.trend.ema_indicator(df['close'], window=config['ema100_period'], fillna=True)
                 self.ema200 = ta.trend.ema_indicator(df['close'], window=config['ema200_period'], fillna=True)
-                self.atr = ta.volatility.atr(df['high'], df['low'], df['close'], window=config['atr_period_default'], fillna=True)
+                # Используем average_true_range из ta.volatility
+                self.atr = ta.volatility.average_true_range(
+                    df['high'], df['low'], df['close'],
+                    window=config['atr_period_default'], fillna=True
+                )
                 self.rsi = ta.momentum.rsi(df['close'], window=14, fillna=True)
                 self.adx = ta.trend.adx(df['high'], df['low'], df['close'], window=14, fillna=True)
                 self.macd = ta.trend.macd_diff(df['close'], window_slow=26, window_fast=12, window_sign=9, fillna=True)
@@ -195,7 +199,8 @@ class DataHandler:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_funding_rate(self, symbol: str) -> float:
         try:
-            funding = await self.exchange.fetch_funding_rate(symbol)
+            futures_symbol = self.fix_symbol(symbol)
+            funding = await self.exchange.fetch_funding_rate(futures_symbol)
             rate = float(funding.get('fundingRate', 0.0))
             async with self.funding_lock:
                 self.funding_rates[symbol] = rate
@@ -207,7 +212,8 @@ class DataHandler:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_open_interest(self, symbol: str) -> float:
         try:
-            oi = await self.exchange.fetch_open_interest(symbol)
+            futures_symbol = self.fix_symbol(symbol)
+            oi = await self.exchange.fetch_open_interest(futures_symbol)
             interest = float(oi.get('openInterest', 0.0))
             async with self.oi_lock:
                 self.open_interest[symbol] = interest
@@ -262,14 +268,18 @@ class DataHandler:
             if timeframe == 'primary':
                 async with self.ohlcv_lock:
                     if cache_key not in self.indicators_cache:
-                        obj = await calc_indicators.remote(df.droplevel('symbol'), self.config, volatility, 'primary')
-                        self.indicators_cache[cache_key] = await ray.get(obj)
+                        obj_ref = calc_indicators.remote(
+                            df.droplevel('symbol'), self.config, volatility, 'primary'
+                        )
+                        self.indicators_cache[cache_key] = await ray.get(obj_ref)
                     self.indicators[symbol] = self.indicators_cache[cache_key]
             else:
                 async with self.ohlcv_2h_lock:
                     if cache_key not in self.indicators_cache_2h:
-                        obj = await calc_indicators.remote(df.droplevel('symbol'), self.config, volatility, 'secondary')
-                        self.indicators_cache_2h[cache_key] = await ray.get(obj)
+                        obj_ref = calc_indicators.remote(
+                            df.droplevel('symbol'), self.config, volatility, 'secondary'
+                        )
+                        self.indicators_cache_2h[cache_key] = await ray.get(obj_ref)
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except Exception as e:
