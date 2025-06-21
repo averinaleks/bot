@@ -204,7 +204,8 @@ class DataHandler:
             df = df.set_index("timestamp")
             for col in ["open", "high", "low", "close", "volume"]:
                 df[col] = df[col].astype(np.float32)
-            df = filter_outliers_zscore(df, "close")
+            if len(df) >= 3:
+                df = filter_outliers_zscore(df, "close")
             if df["close"].isna().sum() / len(df) > 0.05:
                 logger.warning(
                     f"Слишком много пропусков в данных для {symbol} ({timeframe}) (>5%), использование forward-fill"
@@ -768,7 +769,8 @@ class DataHandler:
                                 }
                             ]
                         )
-                        df = filter_outliers_zscore(df, "close")
+                        if len(df) >= 3:
+                            df = filter_outliers_zscore(df, "close")
                         if df.empty:
                             logger.warning(f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии")
                             continue
