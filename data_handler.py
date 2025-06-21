@@ -124,21 +124,28 @@ class DataHandler:
             self.usdt_pairs = await self.select_liquid_pairs(markets)
             logger.info(f"Найдено {len(self.usdt_pairs)} USDT-пар с высокой ликвидностью")
             tasks = []
+            history_limit = self.config.get('min_data_length', 200)
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
                 bid_volume = sum([bid[1] for bid in orderbook.get('bids', [])[:5]]) if orderbook.get('bids') else 0
                 ask_volume = sum([ask[1] for ask in orderbook.get('asks', [])[:5]]) if orderbook.get('asks') else 0
                 liquidity = min(bid_volume, ask_volume)
                 self.symbol_priority[symbol] = -liquidity
-                tasks.append(self.fetch_ohlcv_single(symbol, self.config['timeframe'], cache_prefix=''))
-                tasks.append(self.fetch_ohlcv_single(symbol, self.config['secondary_timeframe'], cache_prefix='2h_'))
+                tasks.append(self.fetch_ohlcv_history(symbol, self.config['timeframe'], history_limit, cache_prefix=''))
+                tasks.append(self.fetch_ohlcv_history(symbol, self.config['secondary_timeframe'], history_limit, cache_prefix='2h_'))
                 tasks.append(self.fetch_funding_rate(symbol))
                 tasks.append(self.fetch_open_interest(symbol))
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, result in enumerate(results):
-                if isinstance(result, tuple) and len(result) == 2:  # Результаты fetch_ohlcv_single
+                if isinstance(result, tuple) and len(result) == 2:
                     symbol, df = result
-                    timeframe = self.config['timeframe'] if i % 2 == 0 else self.config['secondary_timeframe']
+                    mod = i % 4
+                    if mod == 0:
+                        timeframe = self.config['timeframe']
+                    elif mod == 1:
+                        timeframe = self.config['secondary_timeframe']
+                    else:
+                        continue
                     if not check_dataframe_empty(df, f"load_initial {symbol} {timeframe}"):
                         df['symbol'] = symbol
                         df = df.set_index(['symbol', df.index])
@@ -212,6 +219,37 @@ class DataHandler:
             return symbol, pd.DataFrame(df)
         except Exception as e:
             logger.error(f"Ошибка получения OHLCV для {symbol} ({timeframe}): {e}")
+            return symbol, pd.DataFrame()
+
+    async def fetch_ohlcv_history(self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = '') -> tuple:
+        """Fetch extended OHLCV history by performing multiple requests."""
+        try:
+            all_data = []
+            timeframe_ms = int(pd.Timedelta(timeframe).total_seconds() * 1000)
+            since = None
+            remaining = total_limit
+            # bybit allows up to 1000 candles per request, default to 200 on errors
+            per_request = min(1000, total_limit)
+            while remaining > 0:
+                limit = min(per_request, remaining)
+                ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit, since=since)
+                if not ohlcv:
+                    break
+                df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+                df = df.set_index('timestamp')
+                all_data.append(df)
+                remaining -= len(df)
+                if len(df) < limit:
+                    break
+                since = int(df.index[0].timestamp() * 1000) - timeframe_ms * limit
+            if not all_data:
+                return symbol, pd.DataFrame()
+            df = pd.concat(all_data).sort_index().drop_duplicates()
+            self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
+            return symbol, pd.DataFrame(df)
+        except Exception as e:
+            logger.error(f"Ошибка получения расширенной истории OHLCV для {symbol} ({timeframe}): {e}")
             return symbol, pd.DataFrame()
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))

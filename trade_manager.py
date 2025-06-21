@@ -437,7 +437,7 @@ class TradeManager:
         try:
             model = self.model_builder.lstm_models.get(symbol)
             if not model:
-                logger.warning(f"Модель для {symbol} не найдена")
+                logger.debug(f"Модель для {symbol} еще не обучена")
                 return None
             indicators = self.data_handler.indicators.get(symbol)
             if not indicators or check_dataframe_empty(indicators.df, f"evaluate_signal {symbol}"):
@@ -503,6 +503,9 @@ class TradeManager:
             await self.telegram_logger.send_telegram_message(f"❌ Критическая ошибка TradeManager: {e}")
 
     async def process_symbol(self, symbol: str):
+        while symbol not in self.model_builder.lstm_models:
+            logger.debug(f"Ожидание модели для {symbol}")
+            await asyncio.sleep(30)
         while True:
             try:
                 signal = await self.evaluate_signal(symbol)
