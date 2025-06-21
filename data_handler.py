@@ -483,7 +483,8 @@ class DataHandler:
                             break
                         try:
                             data = json.loads(message)
-                            symbol = data.get('data', {}).get('k', {}).get('s', '')
+                            topic = data.get('topic', '')
+                            symbol = topic.split('.')[-1] if isinstance(topic, str) else ''
                             priority = self.symbol_priority.get(symbol, 0)
                             try:
                                 await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
@@ -557,70 +558,89 @@ class DataHandler:
                 if len(self.process_rate_timestamps) > self.ws_min_process_rate and (len(self.process_rate_timestamps) / self.process_rate_window) < self.ws_min_process_rate:
                     await self.adjust_subscriptions()
                 data = json.loads(message)
-                if not isinstance(data, dict) or 'data' not in data or not isinstance(data['data'], dict) or 'k' not in data['data']:
-                    logger.debug(f"Error in message data['data'] for {symbols}: {message}")
+                if not isinstance(data, dict) or 'topic' not in data or 'data' not in data or not isinstance(data['data'], list):
+                    logger.debug(f"Error in message format for {symbols}: {message}")
                     continue
-                kline = data['data']['k']
-                required_fields = ['s', 't', 'o', 'h', 'l', 'c', 'v']
-                if not all(field in kline for field in required_fields):
-                    logger.warning(f"Invalid kline data ({timeframe}): {kline}")
+                topic = data.get('topic', '')
+                symbol = topic.split('.')[-1] if isinstance(topic, str) else ''
+                if not symbol:
+                    logger.debug(f"Symbol not found in topic for message: {message}")
                     continue
-                try:
-                    kline_timestamp = pd.to_datetime(int(kline['t']), unit='ms', utc=True)
-                    symbol = str(kline['s'])
-                    open_price = float(kline['o'])
-                    high_price = float(kline['h'])
-                    low_price = float(kline['l'])
-                    close_price = float(kline['c'])
-                    volume = float(kline['v'])
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Ошибка формата данных свечи для {symbol} ({timeframe}): {e}")
-                    continue
-                timestamp_dict = self.processed_timestamps if timeframe == 'primary' else self.processed_timestamps_2h
-                lock = self.ohlcv_lock if timeframe == 'primary' else self.ohlcv_2h_lock
-                async with lock:
-                    if symbol not in timestamp_dict:
-                        timestamp_dict[symbol] = set()
-                    if kline['t'] in timestamp_dict[symbol]:
-                        logger.debug(f"Дубликат сообщения для {symbol} ({timeframe}) с временной меткой {kline_timestamp}")
+                for entry in data['data']:
+                    required_fields = ['start', 'open', 'high', 'low', 'close', 'volume']
+                    if not all(field in entry for field in required_fields):
+                        logger.warning(f"Invalid kline data ({timeframe}): {entry}")
                         continue
-                    timestamp_dict[symbol].add(kline['t'])
-                    if len(timestamp_dict[symbol]) > 1000:
-                        timestamp_dict[symbol] = set(list(timestamp_dict[symbol])[-500:])
-                current_time = pd.Timestamp.now(tz='UTC')
-                if (current_time - kline_timestamp).total_seconds() > 5:
-                    logger.warning(f"Получены устаревшие данные для {symbol} ({timeframe}): {kline_timestamp}")
-                    continue
-                try:
-                    df = pd.DataFrame([{
-                        'timestamp': kline_timestamp,
-                        'open': np.float32(open_price),
-                        'high': np.float32(high_price),
-                        'low': np.float32(low_price),
-                        'close': np.float32(close_price),
-                        'volume': np.float32(volume)
-                    }])
-                    df = filter_outliers_zscore(df, 'close')
-                    if df.empty:
-                        logger.warning(f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии")
+                    try:
+                        kline_timestamp = pd.to_datetime(int(entry['start']), unit='ms', utc=True)
+                        open_price = float(entry['open'])
+                        high_price = float(entry['high'])
+                        low_price = float(entry['low'])
+                        close_price = float(entry['close'])
+                        volume = float(entry['volume'])
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Ошибка формата данных свечи для {symbol} ({timeframe}): {e}")
                         continue
-                    df['symbol'] = symbol
-                    df = df.set_index(['symbol', 'timestamp'])
-                    time_diffs = df.index.get_level_values('timestamp').to_series().diff().dt.total_seconds()
-                    max_gap = pd.Timedelta(self.config['timeframe' if timeframe == 'primary' else 'secondary_timeframe']).total_seconds() * 2
-                    if time_diffs.max() > max_gap:
-                        logger.warning(f"Обнаружен разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут")
-                        await self.telegram_logger.send_telegram_message(f"⚠️ Разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут")
-                    await self.synchronize_and_update(
-                        symbol, df,
-                        self.funding_rates.get(symbol, 0.0),
-                        self.open_interest.get(symbol, 0.0),
-                        {'imbalance': 0.0, 'timestamp': time.time()},
-                        timeframe=timeframe
-                    )
-                except Exception as e:
-                    logger.error(f"Ошибка обработки данных для {symbol}: {e}")
-                    continue
+                    timestamp_dict = self.processed_timestamps if timeframe == 'primary' else self.processed_timestamps_2h
+                    lock = self.ohlcv_lock if timeframe == 'primary' else self.ohlcv_2h_lock
+                    async with lock:
+                        if symbol not in timestamp_dict:
+                            timestamp_dict[symbol] = set()
+                        if entry['start'] in timestamp_dict[symbol]:
+                            logger.debug(
+                                f"Дубликат сообщения для {symbol} ({timeframe}) с временной меткой {kline_timestamp}"
+                            )
+                            continue
+                        timestamp_dict[symbol].add(entry['start'])
+                        if len(timestamp_dict[symbol]) > 1000:
+                            timestamp_dict[symbol] = set(list(timestamp_dict[symbol])[-500:])
+                    current_time = pd.Timestamp.now(tz='UTC')
+                    if (current_time - kline_timestamp).total_seconds() > 5:
+                        logger.warning(
+                            f"Получены устаревшие данные для {symbol} ({timeframe}): {kline_timestamp}"
+                        )
+                        continue
+                    try:
+                        df = pd.DataFrame([
+                            {
+                                'timestamp': kline_timestamp,
+                                'open': np.float32(open_price),
+                                'high': np.float32(high_price),
+                                'low': np.float32(low_price),
+                                'close': np.float32(close_price),
+                                'volume': np.float32(volume)
+                            }
+                        ])
+                        df = filter_outliers_zscore(df, 'close')
+                        if df.empty:
+                            logger.warning(
+                                f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии"
+                            )
+                            continue
+                        df['symbol'] = symbol
+                        df = df.set_index(['symbol', 'timestamp'])
+                        time_diffs = df.index.get_level_values('timestamp').to_series().diff().dt.total_seconds()
+                        max_gap = pd.Timedelta(
+                            self.config['timeframe' if timeframe == 'primary' else 'secondary_timeframe']
+                        ).total_seconds() * 2
+                        if time_diffs.max() > max_gap:
+                            logger.warning(
+                                f"Обнаружен разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                            )
+                            await self.telegram_logger.send_telegram_message(
+                                f"⚠️ Разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                            )
+                        await self.synchronize_and_update(
+                            symbol,
+                            df,
+                            self.funding_rates.get(symbol, 0.0),
+                            self.open_interest.get(symbol, 0.0),
+                            {'imbalance': 0.0, 'timestamp': time.time()},
+                            timeframe=timeframe,
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка обработки данных для {symbol}: {e}")
+                        continue
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
                     logger.info(f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек, скорость обработки: {rate:.2f}/с")
