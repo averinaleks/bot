@@ -196,8 +196,6 @@ async def main():
         gpu_available = torch.cuda.is_available()
         if not gpu_available:
             logger.warning("GPU недоступен, используется только CPU")
-        available_cpus = psutil.cpu_count(logical=True)
-        cpu_load = psutil.cpu_percent(interval=1)
         ray_num_cpus = config.get('ray_num_cpus', 4)
         available_memory = psutil.virtual_memory().available / (1024 ** 3)
         ray_memory = max(2, min(available_memory * 0.5, 8))

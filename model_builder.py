@@ -312,9 +312,7 @@ class ModelBuilder:
             ohlcv = self.data_handler.ohlcv
             if not model or not indicators:
                 return None
-            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
-                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
-            else:
+            if 'symbol' not in ohlcv.index.names or symbol not in ohlcv.index.get_level_values('symbol'):
                 return None
             features = await self.prepare_lstm_features(symbol, indicators)
             if len(features) < self.config['lstm_timesteps'] * 2:

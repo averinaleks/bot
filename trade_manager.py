@@ -3,13 +3,11 @@ import pandas as pd
 import numpy as np
 from tenacity import retry, wait_exponential, stop_after_attempt
 from utils import logger, check_dataframe_empty, TelegramLogger
-import ccxt.async_support as ccxt_async
 import torch
 import joblib
 import os
 import time
-from typing import Dict, Optional, List
-import psutil
+from typing import Dict, Optional
 import shutil
 
 class TradeManager:

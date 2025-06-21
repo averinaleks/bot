@@ -13,8 +13,8 @@ from utils import (
     TelegramLogger,
     calculate_volume_profile as utils_volume_profile,
 )
-from tenacity import retry, wait_exponential, stop_after_attempt
-from typing import List, Dict, Optional
+from tenacity import retry, wait_exponential
+from typing import List, Dict
 import ta
 import os
 from queue import Queue
@@ -416,7 +416,7 @@ class DataHandler:
                     self.ws_rate_timestamps.append(current_time)
                     self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
                     if len(self.ws_rate_timestamps) > self.config['ws_rate_limit']:
-                        logger.warning(f"Превышен лимит подписок WebSocket, ожидание")
+                        logger.warning("Превышен лимит подписок WebSocket, ожидание")
                         await asyncio.sleep(1)
                     subscription_tasks.append(ws.send(json.dumps({
                         'method': 'SUBSCRIBE',
@@ -472,10 +472,10 @@ class DataHandler:
                             try:
                                 await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
                             except asyncio.TimeoutError:
-                                logger.warning(f"Очередь WebSocket переполнена, сохранение в дисковый буфер")
+                                logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
                                 await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
                         except asyncio.TimeoutError:
-                            logger.warning(f"Очередь WebSocket переполнена, сохранение в дисковый буфер")
+                            logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
                             await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
                             continue
                     except asyncio.TimeoutError:
