@@ -149,18 +149,31 @@ class DataHandler:
             await self.telegram_logger.send_telegram_message(f"Ошибка загрузки данных: {e}")
 
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
+        """Return top liquid USDT futures pairs only.
+
+        Filters out spot markets by selecting symbols that contain a colon
+        (``:``) or explicitly end with ``":USDT"``. Volume ranking and
+        the configured top limit remain unchanged.
+        """
+
         pair_volumes = []
         for symbol, market in markets.items():
-            if market.get('active') and symbol.endswith('USDT'):
+            # Only consider active USDT-margined futures symbols
+            if (
+                market.get("active")
+                and symbol.endswith("USDT")
+                and (":" in symbol or symbol.endswith(":USDT"))
+            ):
                 try:
                     ticker = await self.exchange.fetch_ticker(symbol)
-                    volume = float(ticker.get('quoteVolume') or 0)
+                    volume = float(ticker.get("quoteVolume") or 0)
                 except Exception as e:
                     logger.error(f"Ошибка получения тикера для {symbol}: {e}")
                     volume = 0.0
                 pair_volumes.append((symbol, volume))
+
         pair_volumes.sort(key=lambda x: x[1], reverse=True)
-        top_limit = self.config.get('max_subscriptions_per_connection', 50)
+        top_limit = self.config.get("max_subscriptions_per_connection", 50)
         return [s for s, _ in pair_volumes[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
