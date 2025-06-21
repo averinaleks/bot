@@ -108,9 +108,12 @@ class DataHandler:
         self.latency_log_interval = 3600
         self.restart_attempts = 0
         self.max_restart_attempts = 20
-        self.max_subscriptions = config.get('max_subscriptions_per_connection', 50)
-        # Number of symbols to subscribe per WebSocket batch
-        self.ws_subscription_batch_size = config.get('ws_subscription_batch_size', 30)
+        # Maximum number of symbols to work with overall
+        self.max_symbols = config.get('max_symbols', 50)
+        # Start with the configured limit for dynamic adjustments
+        self.max_subscriptions = self.max_symbols
+        # Number of symbols to subscribe per WebSocket connection
+        self.ws_subscription_batch_size = config.get('max_subscriptions_per_connection', 30)
         self.active_subscriptions = 0
         self.load_threshold = 0.8
         self.ws_pool = {}
@@ -175,7 +178,7 @@ class DataHandler:
                 pair_volumes.append((symbol, volume))
 
         pair_volumes.sort(key=lambda x: x[1], reverse=True)
-        top_limit = self.config.get("max_subscriptions_per_connection", 50)
+        top_limit = self.config.get("max_symbols", 50)
         return [s for s, _ in pair_volumes[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -376,7 +379,7 @@ class DataHandler:
         """Subscribe to kline streams for multiple symbols.
 
         The ``symbols`` list is divided into chunks of
-        ``ws_subscription_batch_size`` and each chunk is handled by a
+        ``max_subscriptions_per_connection`` and each chunk is handled by a
         dedicated WebSocket connection.
         """
         try:
@@ -428,7 +431,7 @@ class DataHandler:
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = 'primary'):
         """Subscribe to kline data for a chunk of symbols.
 
-        Subscriptions are sent in batches defined by ``ws_subscription_batch_size``
+        Subscriptions are sent in batches defined by ``max_subscriptions_per_connection``
         to avoid sending too many requests at once.
         """
         reconnect_attempts = 0
