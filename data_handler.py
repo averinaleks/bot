@@ -238,10 +238,18 @@ class DataHandler:
                 return
             if timeframe == 'primary':
                 async with self.ohlcv_lock:
-                    self.ohlcv = pd.concat([self.ohlcv.drop(symbol, level='symbol', errors='ignore'), df], ignore_index=False).sort_index()
+                    if isinstance(self.ohlcv.index, pd.MultiIndex):
+                        base = self.ohlcv.drop(symbol, level='symbol', errors='ignore')
+                    else:
+                        base = self.ohlcv
+                    self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
             else:
                 async with self.ohlcv_2h_lock:
-                    self.ohlcv_2h = pd.concat([self.ohlcv_2h.drop(symbol, level='symbol', errors='ignore'), df], ignore_index=False).sort_index()
+                    if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
+                        base = self.ohlcv_2h.drop(symbol, level='symbol', errors='ignore')
+                    else:
+                        base = self.ohlcv_2h
+                    self.ohlcv_2h = pd.concat([base, df], ignore_index=False).sort_index()
             async with self.funding_lock:
                 self.funding_rates[symbol] = funding_rate
             async with self.oi_lock:
@@ -385,8 +393,7 @@ class DataHandler:
                         current_url,
                         ping_interval=20,
                         ping_timeout=30,
-                        extra_headers={'Connection': 'keep-alive'},
-                        timeout=connection_timeout
+                        open_timeout=connection_timeout
                     )
                     self.ws_pool[current_url].append(ws)
                 else:
