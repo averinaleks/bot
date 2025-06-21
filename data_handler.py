@@ -436,9 +436,8 @@ class DataHandler:
                         logger.warning("Превышен лимит подписок WebSocket, ожидание")
                         await asyncio.sleep(1)
                     subscription_tasks.append(ws.send(json.dumps({
-                        'method': 'SUBSCRIBE',
-                        'params': [f"kline.{selected_timeframe}.{self.fix_symbol(symbol).lower()}"],
-                        'id': 1
+                        "op": "subscribe",
+                        "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"]
                     })))
                 await asyncio.gather(*subscription_tasks)
                 reconnect_attempts = 0
@@ -450,7 +449,7 @@ class DataHandler:
                 for _ in range(3):
                     try:
                         response = await asyncio.wait_for(ws.recv(), timeout=5)
-                        if json.loads(response).get('result') == 'ok':
+                        if json.loads(response).get('success') is True:
                             subscribed = True
                             break
                     except asyncio.TimeoutError:
