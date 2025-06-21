@@ -384,7 +384,25 @@ class DataHandler:
                 await asyncio.sleep(60)
 
     def fix_symbol(self, symbol: str) -> str:
-        return symbol.replace('/', '').replace('USDT', 'USDT:USDT')
+        """Normalize symbol for Bybit futures requests.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol in one of the supported formats, e.g. ``BTC/USDT`` or
+            ``BTC/USDT:USDT``.
+
+        Returns
+        -------
+        str
+            Symbol formatted as ``BTCUSDT:USDT``. If the input already
+            contains ``:USDT`` it will not be duplicated.
+        """
+
+        base, *suffix = symbol.split(":", 1)
+        base = base.replace("/", "")
+        quote = suffix[0] if suffix else "USDT"
+        return f"{base}:{quote}"
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = 'primary'):
         reconnect_attempts = 0
