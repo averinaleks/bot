@@ -487,16 +487,17 @@ class TradeManager:
     async def run(self):
         try:
             tasks = [
-                self.monitor_performance(),
-                self.manage_positions(),
+                asyncio.create_task(self.monitor_performance(), name="monitor_performance"),
+                asyncio.create_task(self.manage_positions(), name="manage_positions"),
             ]
             for symbol in self.data_handler.usdt_pairs:
-                tasks.append(self.process_symbol(symbol))
+                task_name = f"process_symbol_{symbol}"
+                tasks.append(asyncio.create_task(self.process_symbol(symbol), name=task_name))
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
+            for task, result in zip(tasks, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Ошибка в задаче {tasks[i].__name__}: {result}")
-                    await self.telegram_logger.send_telegram_message(f"❌ Ошибка в задаче {tasks[i].__name__}: {result}")
+                    logger.error(f"Ошибка в задаче {task.get_name()}: {result}")
+                    await self.telegram_logger.send_telegram_message(f"❌ Ошибка в задаче {task.get_name()}: {result}")
         except Exception as e:
             logger.error(f"Критичная ошибка в TradeManager: {e}")
             await self.telegram_logger.send_telegram_message(f"❌ Критическая ошибка TradeManager: {e}")
