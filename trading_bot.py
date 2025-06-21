@@ -341,7 +341,7 @@ async def monitor_model_performance(model_builder, telegram_bot, chat_id, shutdo
                 if not indicators:
                     continue
                 volatility = indicators.volatility
-                volatility_change = abs(volatility - model_builder.last_volatility.get(symbol, 0.0)) / max(model_builder.last_volatility.get(symbol, 0.01), 0.01)
+                volatility_change = abs(volatility - model_builder.trade_manager.last_volatility.get(symbol, 0.0)) / max(model_builder.trade_manager.last_volatility.get(symbol, 0.01), 0.01)
                 returns = model_builder.trade_manager.returns_by_symbol.get(symbol, [])
                 current_time = pd.Timestamp.now(tz='UTC').timestamp()
                 recent_returns = [r for t, r in returns if current_time - t <= model_builder.config['performance_window']]
