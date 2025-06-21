@@ -42,7 +42,7 @@ class ParameterOptimizer:
             # Использование TPESampler с multivariate=True для учета корреляций
             study = optuna.create_study(direction='maximize', sampler=TPESampler(n_startup_trials=10, multivariate=True))
             study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=self.max_trials)
-            best_params = study.best_params
+            best_params = {**self.config, **study.best_params}
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
@@ -57,18 +57,30 @@ class ParameterOptimizer:
     def validate_params(self, params):
         # Валидация оптимизированных параметров
         try:
-            if params['ema30_period'] >= params['ema100_period'] or params['ema100_period'] >= params['ema200_period']:
+            ema30 = params.get('ema30_period', self.config.get('ema30_period'))
+            ema100 = params.get('ema100_period', self.config.get('ema100_period'))
+            ema200 = params.get('ema200_period', self.config.get('ema200_period'))
+            if ema30 >= ema100 or ema100 >= ema200:
                 return False
-            if params['tp_multiplier'] < params['sl_multiplier']:
+
+            tp_mult = params.get('tp_multiplier', self.config.get('tp_multiplier'))
+            sl_mult = params.get('sl_multiplier', self.config.get('sl_multiplier'))
+            if tp_mult < sl_mult:
                 return False
-            if not (0.1 <= params['base_probability_threshold'] <= 0.9):
+
+            base_prob = params.get('base_probability_threshold', self.config.get('base_probability_threshold'))
+            if not (0.1 <= base_prob <= 0.9):
                 return False
-            if not (2 <= params.get('loss_streak_threshold', 2) <= 5):
+
+            if not (2 <= params.get('loss_streak_threshold', self.config.get('loss_streak_threshold', 2)) <= 5):
                 return False
-            if not (2 <= params.get('win_streak_threshold', 2) <= 5):
+
+            if not (2 <= params.get('win_streak_threshold', self.config.get('win_streak_threshold', 2)) <= 5):
                 return False
-            if not (0.01 <= params.get('threshold_adjustment', 0.05) <= 0.1):
+
+            if not (0.01 <= params.get('threshold_adjustment', self.config.get('threshold_adjustment', 0.05)) <= 0.1):
                 return False
+
             return True
         except Exception as e:
             logger.error(f"Ошибка валидации параметров: {e}")
@@ -81,6 +93,8 @@ class ParameterOptimizer:
             ema100_period = trial.suggest_int('ema100_period', 50, 200)
             ema200_period = trial.suggest_int('ema200_period', 100, 300)
             atr_period = trial.suggest_int('atr_period', 5, 20)
+            tp_multiplier = trial.suggest_float('tp_multiplier', 1.0, 3.0)
+            sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 2.0)
             n_splits = 5
             train_size = int(0.6 * len(df))
             test_size = int(0.2 * len(df))
