@@ -159,8 +159,6 @@ async def main():
     exchange = None
     application = None
     telegram_logger = None
-    restart_attempts = 0
-    max_restart_attempts = 3
     try:
         config_path = os.getenv('CONFIG_PATH', '/app/config.json')
         if not os.path.exists(config_path):
@@ -275,21 +273,15 @@ async def main():
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"Ошибка в задаче {tasks[i].__name__}: {result}")
-                await telegram_logger.send_telegram_message(f"❌ Ошибка в задаче {tasks[i].__name__}: {result}")
-                restart_attempts += 1
-                if restart_attempts < max_restart_attempts:
-                    logger.info(f"Попытка перезапуска {restart_attempts}/{max_restart_attempts}")
-                    await asyncio.sleep(60)
-                    return await main()
-                else:
-                    logger.critical("Превышено максимальное количество попыток перезапуска")
-                    await telegram_logger.send_telegram_message("❌ Критическая ошибка: превышено число перезапусков")
-                    raise result
+                await telegram_logger.send_telegram_message(
+                    f"❌ Ошибка в задаче {tasks[i].__name__}: {result}")
+                raise result
 
     except Exception as e:
         logger.error(f"Критическая ошибка в main: {e}")
         if telegram_bot and chat_id:
             await telegram_logger.send_telegram_message(f"Критическая ошибка: {e}")
+        raise
     finally:
         if application:
             await application.shutdown()
@@ -355,5 +347,20 @@ async def run_backtests_periodically(model_builder, telegram_bot, chat_id, shutd
         logger.error(f"Ошибка бектеста: {e}")
         await TelegramLogger(telegram_bot, chat_id).send_telegram_message(f"Ошибка бектеста: {e}")
 
+async def run_bot():
+    restart_attempts = 0
+    max_restart_attempts = 3
+    while True:
+        try:
+            await main()
+            break
+        except Exception as e:
+            restart_attempts += 1
+            if restart_attempts >= max_restart_attempts:
+                logger.critical("Превышено максимальное количество попыток перезапуска")
+                raise
+            logger.info(f"Попытка перезапуска {restart_attempts}/{max_restart_attempts}")
+            await asyncio.sleep(60)
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(run_bot())
