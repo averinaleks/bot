@@ -22,41 +22,43 @@ import pickle
 import psutil
 import ray
 
+
 class IndicatorsCache:
-    def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = 'primary'):
+    def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = "primary"):
         self.df = df
         self.config = config
         self.volatility = volatility
         self.last_volume_profile_update = 0
         self.volume_profile_update_interval = 5
         try:
-            if timeframe == 'primary':
-                self.ema30 = ta.trend.ema_indicator(df['close'], window=config['ema30_period'], fillna=True)
-                self.ema100 = ta.trend.ema_indicator(df['close'], window=config['ema100_period'], fillna=True)
-                self.ema200 = ta.trend.ema_indicator(df['close'], window=config['ema200_period'], fillna=True)
+            if timeframe == "primary":
+                self.ema30 = ta.trend.ema_indicator(df["close"], window=config["ema30_period"], fillna=True)
+                self.ema100 = ta.trend.ema_indicator(df["close"], window=config["ema100_period"], fillna=True)
+                self.ema200 = ta.trend.ema_indicator(df["close"], window=config["ema200_period"], fillna=True)
                 # Используем average_true_range из ta.volatility
                 self.atr = ta.volatility.average_true_range(
-                    df['high'], df['low'], df['close'],
-                    window=config['atr_period_default'], fillna=True
+                    df["high"], df["low"], df["close"], window=config["atr_period_default"], fillna=True
                 )
-                self.rsi = ta.momentum.rsi(df['close'], window=14, fillna=True)
-                self.adx = ta.trend.adx(df['high'], df['low'], df['close'], window=14, fillna=True)
-                self.macd = ta.trend.macd_diff(df['close'], window_slow=26, window_fast=12, window_sign=9, fillna=True)
-            elif timeframe == 'secondary':
-                self.ema30 = ta.trend.ema_indicator(df['close'], window=config['ema30_period'], fillna=True)
-                self.ema100 = ta.trend.ema_indicator(df['close'], window=config['ema100_period'], fillna=True)
+                self.rsi = ta.momentum.rsi(df["close"], window=14, fillna=True)
+                self.adx = ta.trend.adx(df["high"], df["low"], df["close"], window=14, fillna=True)
+                self.macd = ta.trend.macd_diff(df["close"], window_slow=26, window_fast=12, window_sign=9, fillna=True)
+            elif timeframe == "secondary":
+                self.ema30 = ta.trend.ema_indicator(df["close"], window=config["ema30_period"], fillna=True)
+                self.ema100 = ta.trend.ema_indicator(df["close"], window=config["ema100_period"], fillna=True)
             self.volume_profile = None
             if len(df) - self.last_volume_profile_update >= self.volume_profile_update_interval:
                 self.volume_profile = self.calculate_volume_profile(df)
                 self.last_volume_profile_update = len(df)
         except Exception as e:
             logger.error(f"Ошибка расчета индикаторов ({timeframe}): {e}")
-            self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = self.volume_profile = None
+            self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = (
+                self.volume_profile
+            ) = None
 
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
         try:
-            prices = df['close'].to_numpy(dtype=np.float32)
-            volumes = df['volume'].to_numpy(dtype=np.float32)
+            prices = df["close"].to_numpy(dtype=np.float32)
+            volumes = df["volume"].to_numpy(dtype=np.float32)
             vp = utils_volume_profile(prices, volumes, bins=50)
             price_bins = np.linspace(prices.min(), prices.max(), num=len(vp))
             return pd.Series(vp, index=price_bins)
@@ -69,12 +71,13 @@ class IndicatorsCache:
 def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe: str):
     return IndicatorsCache(df, config, volatility, timeframe)
 
+
 class DataHandler:
     def __init__(self, config: dict, exchange: ccxt_async.bybit, telegram_bot, chat_id):
         self.config = config
         self.exchange = exchange
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
-        self.cache = HistoricalDataCache(config['cache_dir'])
+        self.cache = HistoricalDataCache(config["cache_dir"])
         self.ohlcv = pd.DataFrame()
         self.ohlcv_2h = pd.DataFrame()
         self.funding_rates = {}
@@ -93,27 +96,27 @@ class DataHandler:
         self.cleanup_lock = asyncio.Lock()
         self.ws_rate_timestamps = []
         self.process_rate_timestamps = []
-        self.ws_min_process_rate = config.get('ws_min_process_rate', 30)
+        self.ws_min_process_rate = config.get("ws_min_process_rate", 30)
         self.process_rate_window = 1
         self.cleanup_task = None
-        self.ws_queue = asyncio.PriorityQueue(maxsize=config.get('ws_queue_size', 10000))
-        self.disk_buffer = Queue(maxsize=config.get('disk_buffer_size', 10000))
-        self.buffer_dir = os.path.join(config['cache_dir'], 'ws_buffer')
+        self.ws_queue = asyncio.PriorityQueue(maxsize=config.get("ws_queue_size", 10000))
+        self.disk_buffer = Queue(maxsize=config.get("disk_buffer_size", 10000))
+        self.buffer_dir = os.path.join(config["cache_dir"], "ws_buffer")
         os.makedirs(self.buffer_dir, exist_ok=True)
         self.processed_timestamps = {}
         self.processed_timestamps_2h = {}
         self.symbol_priority = {}
-        self.backup_ws_urls = config.get('backup_ws_urls', [])
+        self.backup_ws_urls = config.get("backup_ws_urls", [])
         self.ws_latency = {}
         self.latency_log_interval = 3600
         self.restart_attempts = 0
         self.max_restart_attempts = 20
         # Maximum number of symbols to work with overall
-        self.max_symbols = config.get('max_symbols', 50)
+        self.max_symbols = config.get("max_symbols", 50)
         # Start with the configured limit for dynamic adjustments
         self.max_subscriptions = self.max_symbols
         # Number of symbols to subscribe per WebSocket connection
-        self.ws_subscription_batch_size = config.get('max_subscriptions_per_connection', 30)
+        self.ws_subscription_batch_size = config.get("max_subscriptions_per_connection", 30)
         self.active_subscriptions = 0
         self.load_threshold = 0.8
         self.ws_pool = {}
@@ -124,15 +127,19 @@ class DataHandler:
             self.usdt_pairs = await self.select_liquid_pairs(markets)
             logger.info(f"Найдено {len(self.usdt_pairs)} USDT-пар с высокой ликвидностью")
             tasks = []
-            history_limit = self.config.get('min_data_length', 200)
+            history_limit = self.config.get("min_data_length", 200)
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
-                bid_volume = sum([bid[1] for bid in orderbook.get('bids', [])[:5]]) if orderbook.get('bids') else 0
-                ask_volume = sum([ask[1] for ask in orderbook.get('asks', [])[:5]]) if orderbook.get('asks') else 0
+                bid_volume = sum([bid[1] for bid in orderbook.get("bids", [])[:5]]) if orderbook.get("bids") else 0
+                ask_volume = sum([ask[1] for ask in orderbook.get("asks", [])[:5]]) if orderbook.get("asks") else 0
                 liquidity = min(bid_volume, ask_volume)
                 self.symbol_priority[symbol] = -liquidity
-                tasks.append(self.fetch_ohlcv_history(symbol, self.config['timeframe'], history_limit, cache_prefix=''))
-                tasks.append(self.fetch_ohlcv_history(symbol, self.config['secondary_timeframe'], history_limit, cache_prefix='2h_'))
+                tasks.append(self.fetch_ohlcv_history(symbol, self.config["timeframe"], history_limit, cache_prefix=""))
+                tasks.append(
+                    self.fetch_ohlcv_history(
+                        symbol, self.config["secondary_timeframe"], history_limit, cache_prefix="2h_"
+                    )
+                )
                 tasks.append(self.fetch_funding_rate(symbol))
                 tasks.append(self.fetch_open_interest(symbol))
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -141,20 +148,21 @@ class DataHandler:
                     symbol, df = result
                     mod = i % 4
                     if mod == 0:
-                        timeframe = self.config['timeframe']
+                        timeframe = self.config["timeframe"]
                     elif mod == 1:
-                        timeframe = self.config['secondary_timeframe']
+                        timeframe = self.config["secondary_timeframe"]
                     else:
                         continue
                     if not check_dataframe_empty(df, f"load_initial {symbol} {timeframe}"):
-                        df['symbol'] = symbol
-                        df = df.set_index(['symbol', df.index])
+                        df["symbol"] = symbol
+                        df = df.set_index(["symbol", df.index])
                         await self.synchronize_and_update(
-                            symbol, df,
+                            symbol,
+                            df,
                             self.funding_rates.get(symbol, 0.0),
                             self.open_interest.get(symbol, 0.0),
-                            {'imbalance': 0.0, 'timestamp': time.time()},
-                            timeframe='primary' if timeframe == self.config['timeframe'] else 'secondary'
+                            {"imbalance": 0.0, "timestamp": time.time()},
+                            timeframe="primary" if timeframe == self.config["timeframe"] else "secondary",
                         )
         except Exception as e:
             logger.error(f"Ошибка загрузки начальных данных: {e}")
@@ -171,11 +179,7 @@ class DataHandler:
         pair_volumes = []
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols
-            if (
-                market.get("active")
-                and symbol.endswith("USDT")
-                and (":" in symbol or symbol.endswith(":USDT"))
-            ):
+            if market.get("active") and symbol.endswith("USDT") and (":" in symbol or symbol.endswith(":USDT")):
                 try:
                     ticker = await self.exchange.fetch_ticker(symbol)
                     volume = float(ticker.get("quoteVolume") or 0)
@@ -189,21 +193,23 @@ class DataHandler:
         return [s for s, _ in pair_volumes[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = '') -> tuple:
+    async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = "") -> tuple:
         try:
             ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             if not ohlcv or len(ohlcv) < limit * 0.8:
                 logger.warning(f"Неполные данные OHLCV для {symbol} ({timeframe}), получено {len(ohlcv)} из {limit}")
                 return symbol, pd.DataFrame()
-            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-            df = df.set_index('timestamp')
-            for col in ['open', 'high', 'low', 'close', 'volume']:
+            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            df = df.set_index("timestamp")
+            for col in ["open", "high", "low", "close", "volume"]:
                 df[col] = df[col].astype(np.float32)
-            df = filter_outliers_zscore(df, 'close')
-            if df['close'].isna().sum() / len(df) > 0.05:
-                logger.warning(f"Слишком много пропусков в данных для {symbol} ({timeframe}) (>5%), использование forward-fill")
-                df = df.fillna(method='ffill')
+            df = filter_outliers_zscore(df, "close")
+            if df["close"].isna().sum() / len(df) > 0.05:
+                logger.warning(
+                    f"Слишком много пропусков в данных для {symbol} ({timeframe}) (>5%), использование forward-fill"
+                )
+                df = df.fillna(method="ffill")
             time_diffs = df.index.to_series().diff().dt.total_seconds()
             max_gap = pd.Timedelta(timeframe).total_seconds() * 2
             if time_diffs.max() > max_gap:
@@ -214,14 +220,14 @@ class DataHandler:
                     f"⚠️ Разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
                 )
                 return symbol, pd.DataFrame()
-            df = df.interpolate(method='time', limit_direction='both')
+            df = df.interpolate(method="time", limit_direction="both")
             self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
         except Exception as e:
             logger.error(f"Ошибка получения OHLCV для {symbol} ({timeframe}): {e}")
             return symbol, pd.DataFrame()
 
-    async def fetch_ohlcv_history(self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = '') -> tuple:
+    async def fetch_ohlcv_history(self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = "") -> tuple:
         """Fetch extended OHLCV history by performing multiple requests."""
         try:
             all_data = []
@@ -235,9 +241,9 @@ class DataHandler:
                 ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit, since=since)
                 if not ohlcv:
                     break
-                df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-                df = df.set_index('timestamp')
+                df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+                df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+                df = df.set_index("timestamp")
                 all_data.append(df)
                 remaining -= len(df)
                 if len(df) < limit:
@@ -257,7 +263,7 @@ class DataHandler:
         try:
             futures_symbol = self.fix_symbol(symbol)
             funding = await self.exchange.fetch_funding_rate(futures_symbol)
-            rate = float(funding.get('fundingRate', 0.0))
+            rate = float(funding.get("fundingRate", 0.0))
             async with self.funding_lock:
                 self.funding_rates[symbol] = rate
             return rate
@@ -270,7 +276,7 @@ class DataHandler:
         try:
             futures_symbol = self.fix_symbol(symbol)
             oi = await self.exchange.fetch_open_interest(futures_symbol)
-            interest = float(oi.get('openInterest', 0.0))
+            interest = float(oi.get("openInterest", 0.0))
             async with self.oi_lock:
                 self.open_interest[symbol] = interest
             return interest
@@ -282,33 +288,41 @@ class DataHandler:
     async def fetch_orderbook(self, symbol: str) -> Dict:
         try:
             orderbook = await self.exchange.fetch_order_book(symbol, limit=10)
-            if not orderbook['bids'] or not orderbook['asks']:
+            if not orderbook["bids"] or not orderbook["asks"]:
                 logger.warning(f"Пустая книга ордеров для {symbol}, повторная попытка")
                 raise Exception("Пустой ордербук")
             return orderbook
         except Exception as e:
             logger.error(f"Ошибка получения книги ордеров для {symbol}: {e}")
-            return {'bids': [], 'asks': []}
+            return {"bids": [], "asks": []}
 
-    async def synchronize_and_update(self, symbol: str, df: pd.DataFrame, funding_rate: float, open_interest: float, orderbook: dict, timeframe: str = 'primary'):
+    async def synchronize_and_update(
+        self,
+        symbol: str,
+        df: pd.DataFrame,
+        funding_rate: float,
+        open_interest: float,
+        orderbook: dict,
+        timeframe: str = "primary",
+    ):
         try:
             if check_dataframe_empty(df, f"synchronize_and_update {symbol} {timeframe}"):
                 logger.warning(f"Пустой DataFrame для {symbol} ({timeframe}), пропуск синхронизации")
                 return
-            if df['close'].isna().any() or (df['close'] <= 0).any():
+            if df["close"].isna().any() or (df["close"] <= 0).any():
                 logger.warning(f"Некорректные данные для {symbol} ({timeframe}), пропуск")
                 return
-            if timeframe == 'primary':
+            if timeframe == "primary":
                 async with self.ohlcv_lock:
                     if isinstance(self.ohlcv.index, pd.MultiIndex):
-                        base = self.ohlcv.drop(symbol, level='symbol', errors='ignore')
+                        base = self.ohlcv.drop(symbol, level="symbol", errors="ignore")
                     else:
                         base = self.ohlcv
                     self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
             else:
                 async with self.ohlcv_2h_lock:
                     if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
-                        base = self.ohlcv_2h.drop(symbol, level='symbol', errors='ignore')
+                        base = self.ohlcv_2h.drop(symbol, level="symbol", errors="ignore")
                     else:
                         base = self.ohlcv_2h
                     self.ohlcv_2h = pd.concat([base, df], ignore_index=False).sort_index()
@@ -317,24 +331,20 @@ class DataHandler:
             async with self.oi_lock:
                 self.open_interest[symbol] = open_interest
             async with self.orderbook_lock:
-                orderbook_df = pd.DataFrame([orderbook | {'symbol': symbol, 'timestamp': time.time()}])
+                orderbook_df = pd.DataFrame([orderbook | {"symbol": symbol, "timestamp": time.time()}])
                 self.orderbook = pd.concat([self.orderbook, orderbook_df], ignore_index=False)
-            volatility = df['close'].pct_change().std() if not df.empty else 0.02
+            volatility = df["close"].pct_change().std() if not df.empty else 0.02
             cache_key = f"{symbol}_{timeframe}"
-            if timeframe == 'primary':
+            if timeframe == "primary":
                 async with self.ohlcv_lock:
                     if cache_key not in self.indicators_cache:
-                        obj_ref = calc_indicators.remote(
-                            df.droplevel('symbol'), self.config, volatility, 'primary'
-                        )
+                        obj_ref = calc_indicators.remote(df.droplevel("symbol"), self.config, volatility, "primary")
                         self.indicators_cache[cache_key] = ray.get(obj_ref)
                     self.indicators[symbol] = self.indicators_cache[cache_key]
             else:
                 async with self.ohlcv_2h_lock:
                     if cache_key not in self.indicators_cache_2h:
-                        obj_ref = calc_indicators.remote(
-                            df.droplevel('symbol'), self.config, volatility, 'secondary'
-                        )
+                        obj_ref = calc_indicators.remote(df.droplevel("symbol"), self.config, volatility, "secondary")
                         self.indicators_cache_2h[cache_key] = ray.get(obj_ref)
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
@@ -345,19 +355,21 @@ class DataHandler:
         while True:
             try:
                 async with self.cleanup_lock:
-                    current_time = pd.Timestamp.now(tz='UTC')
+                    current_time = pd.Timestamp.now(tz="UTC")
                     async with self.ohlcv_lock:
                         if not self.ohlcv.empty:
-                            threshold = current_time - pd.Timedelta(seconds=self.config['forget_window'])
-                            self.ohlcv = self.ohlcv[self.ohlcv.index.get_level_values('timestamp') >= threshold]
+                            threshold = current_time - pd.Timedelta(seconds=self.config["forget_window"])
+                            self.ohlcv = self.ohlcv[self.ohlcv.index.get_level_values("timestamp") >= threshold]
                     async with self.ohlcv_2h_lock:
                         if not self.ohlcv_2h.empty:
-                            threshold = current_time - pd.Timedelta(seconds=self.config['forget_window'])
-                            self.ohlcv_2h = self.ohlcv_2h[self.ohlcv_2h.index.get_level_values('timestamp') >= threshold]
+                            threshold = current_time - pd.Timedelta(seconds=self.config["forget_window"])
+                            self.ohlcv_2h = self.ohlcv_2h[
+                                self.ohlcv_2h.index.get_level_values("timestamp") >= threshold
+                            ]
                     async with self.orderbook_lock:
-                        if not self.orderbook.empty and 'timestamp' in self.orderbook.columns:
+                        if not self.orderbook.empty and "timestamp" in self.orderbook.columns:
                             self.orderbook = self.orderbook[
-                                self.orderbook['timestamp'] >= time.time() - self.config['forget_window']
+                                self.orderbook["timestamp"] >= time.time() - self.config["forget_window"]
                             ]
                     async with self.ohlcv_lock:
                         for symbol in list(self.processed_timestamps.keys()):
@@ -368,7 +380,7 @@ class DataHandler:
                             if symbol not in self.usdt_pairs:
                                 del self.processed_timestamps_2h[symbol]
                     logger.info("Старые данные очищены")
-                await asyncio.sleep(self.config['data_cleanup_interval'] * 2)
+                await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
             except Exception as e:
                 logger.error(f"Ошибка очистки данных: {e}")
                 await asyncio.sleep(60)
@@ -376,7 +388,7 @@ class DataHandler:
     async def save_to_disk_buffer(self, priority, item):
         try:
             filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.pkl")
-            with open(filename, 'wb') as f:
+            with open(filename, "wb") as f:
                 pickle.dump((priority, item), f)
             self.disk_buffer.put(filename)
             logger.info(f"Сообщение сохранено в дисковый буфер: {filename}")
@@ -387,7 +399,7 @@ class DataHandler:
         while not self.disk_buffer.empty():
             try:
                 filename = self.disk_buffer.get()
-                with open(filename, 'rb') as f:
+                with open(filename, "rb") as f:
                     priority, item = pickle.load(f)
                 await self.ws_queue.put((priority, item))
                 os.remove(filename)
@@ -399,16 +411,26 @@ class DataHandler:
         cpu_load = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         memory_load = memory.percent
-        current_rate = len(self.process_rate_timestamps) / self.process_rate_window if self.process_rate_timestamps else self.ws_min_process_rate
+        current_rate = (
+            len(self.process_rate_timestamps) / self.process_rate_window
+            if self.process_rate_timestamps
+            else self.ws_min_process_rate
+        )
         if cpu_load > self.load_threshold * 100 or memory_load > self.load_threshold * 100:
             new_max = max(10, self.max_subscriptions // 2)
-            logger.warning(f"Высокая нагрузка (CPU: {cpu_load}%, Memory: {memory_load}%), уменьшение подписок до {new_max}")
+            logger.warning(
+                f"Высокая нагрузка (CPU: {cpu_load}%, Memory: {memory_load}%), уменьшение подписок до {new_max}"
+            )
             self.max_subscriptions = new_max
         elif current_rate < self.ws_min_process_rate:
             new_max = max(10, int(self.max_subscriptions * 0.8))
             logger.warning(f"Низкая скорость обработки ({current_rate:.2f}/s), уменьшение подписок до {new_max}")
             self.max_subscriptions = new_max
-        elif cpu_load < self.load_threshold * 50 and memory_load < self.load_threshold * 50 and current_rate > self.ws_min_process_rate * 1.5:
+        elif (
+            cpu_load < self.load_threshold * 50
+            and memory_load < self.load_threshold * 50
+            and current_rate > self.ws_min_process_rate * 1.5
+        ):
             new_max = min(100, self.max_subscriptions * 2)
             logger.info(f"Низкая нагрузка, увеличение подписок до {new_max}")
             self.max_subscriptions = new_max
@@ -426,9 +448,17 @@ class DataHandler:
             chunk_size = self.ws_subscription_batch_size
             tasks = []
             for i in range(0, len(symbols), chunk_size):
-                chunk = symbols[i:i + chunk_size]
-                tasks.append(self._subscribe_chunk(chunk, self.config['ws_url'], self.config['ws_reconnect_interval'], timeframe='primary'))
-                tasks.append(self._subscribe_chunk(chunk, self.config['ws_url'], self.config['ws_reconnect_interval'], timeframe='secondary'))
+                chunk = symbols[i : i + chunk_size]
+                tasks.append(
+                    self._subscribe_chunk(
+                        chunk, self.config["ws_url"], self.config["ws_reconnect_interval"], timeframe="primary"
+                    )
+                )
+                tasks.append(
+                    self._subscribe_chunk(
+                        chunk, self.config["ws_url"], self.config["ws_reconnect_interval"], timeframe="secondary"
+                    )
+                )
             tasks.append(self._process_ws_queue())
             tasks.append(self.load_from_disk_buffer())
             tasks.append(self.monitor_load())
@@ -466,17 +496,17 @@ class DataHandler:
             return f"{symbol}:USDT"
         return symbol
 
-    async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = 'primary'):
+    async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
         """Subscribe to kline data for a chunk of symbols.
 
         Subscriptions are sent in batches defined by ``max_subscriptions_per_connection``
         to avoid sending too many requests at once.
         """
         reconnect_attempts = 0
-        max_reconnect_attempts = self.config.get('max_reconnect_attempts', 10)
+        max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
         urls = [ws_url] + self.backup_ws_urls
         current_url_index = 0
-        selected_timeframe = self.config['timeframe'] if timeframe == 'primary' else self.config['secondary_timeframe']
+        selected_timeframe = self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
         while True:
             current_url = urls[current_url_index % len(urls)]
             ws = None
@@ -485,10 +515,7 @@ class DataHandler:
                     self.ws_pool[current_url] = []
                 if not self.ws_pool[current_url]:
                     ws = await websockets.connect(
-                        current_url,
-                        ping_interval=20,
-                        ping_timeout=30,
-                        open_timeout=connection_timeout
+                        current_url, ping_interval=20, ping_timeout=30, open_timeout=connection_timeout
                     )
                     self.ws_pool[current_url].append(ws)
                 else:
@@ -497,37 +524,62 @@ class DataHandler:
                 start_time = time.time()
                 batch_size = self.ws_subscription_batch_size
                 for i in range(0, len(symbols), batch_size):
-                    batch = symbols[i:i + batch_size]
+                    batch = symbols[i : i + batch_size]
                     subscription_tasks = []
                     for symbol in batch:
                         current_time = time.time()
                         self.ws_rate_timestamps.append(current_time)
                         self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
-                        if len(self.ws_rate_timestamps) > self.config['ws_rate_limit']:
+                        if len(self.ws_rate_timestamps) > self.config["ws_rate_limit"]:
                             logger.warning("Превышен лимит подписок WebSocket, ожидание")
                             await asyncio.sleep(1)
-                        subscription_tasks.append(ws.send(json.dumps({
-                            "op": "subscribe",
-                            "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"]
-                        })))
+                        subscription_tasks.append(
+                            ws.send(
+                                json.dumps(
+                                    {
+                                        "op": "subscribe",
+                                        "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"],
+                                    }
+                                )
+                            )
+                        )
                     await asyncio.gather(*subscription_tasks)
                 reconnect_attempts = 0
                 current_url_index = 0
                 self.restart_attempts = 0
                 self.active_subscriptions += len(symbols)
                 # Проверка успешной подписки
-                subscribed = False
-                for _ in range(3):
+                # Wait for confirmation messages for each subscription
+                confirmations_needed = len(symbols)
+                confirmations = 0
+                startup_messages = []
+                start_confirm = time.time()
+                while confirmations < confirmations_needed and time.time() - start_confirm < confirmations_needed * 5:
                     try:
                         response = await asyncio.wait_for(ws.recv(), timeout=5)
-                        if json.loads(response).get('success') is True:
-                            subscribed = True
-                            break
+                        data = json.loads(response)
+                        if isinstance(data, dict) and data.get("success") is True:
+                            confirmations += 1
+                            continue
+                        startup_messages.append(response)
                     except asyncio.TimeoutError:
                         continue
-                if not subscribed:
+                if confirmations < confirmations_needed:
                     logger.warning(f"Не удалось подтвердить подписку для {symbols} ({timeframe}), повторная попытка")
                     raise Exception("Подписка не подтверждена")
+                for message in startup_messages:
+                    try:
+                        data = json.loads(message)
+                        topic = data.get("topic", "")
+                        symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
+                        priority = self.symbol_priority.get(symbol, 0)
+                        try:
+                            await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
+                        except asyncio.TimeoutError:
+                            logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
+                            await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                    except Exception:
+                        continue
                 while True:
                     try:
                         message = await asyncio.wait_for(ws.recv(), timeout=connection_timeout)
@@ -536,26 +588,34 @@ class DataHandler:
                             self.ws_latency[symbol] = latency
                         if latency > 5:
                             logger.warning(f"Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек")
-                            await self.telegram_logger.send_telegram_message(f"⚠️ Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек")
+                            await self.telegram_logger.send_telegram_message(
+                                f"⚠️ Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
+                            )
                             for symbol in symbols:
-                                symbol_df = await self.fetch_ohlcv_single(symbol, selected_timeframe, limit=1, cache_prefix='2h_' if timeframe == 'secondary' else '')
+                                symbol_df = await self.fetch_ohlcv_single(
+                                    symbol,
+                                    selected_timeframe,
+                                    limit=1,
+                                    cache_prefix="2h_" if timeframe == "secondary" else "",
+                                )
                                 if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
                                     _, df = symbol_df
                                     if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
-                                        df['symbol'] = symbol
-                                        df = df.set_index(['symbol', df.index])
+                                        df["symbol"] = symbol
+                                        df = df.set_index(["symbol", df.index])
                                         await self.synchronize_and_update(
-                                            symbol, df,
+                                            symbol,
+                                            df,
                                             self.funding_rates.get(symbol, 0.0),
                                             self.open_interest.get(symbol, 0.0),
-                                            {'imbalance': 0.0, 'timestamp': time.time()},
-                                            timeframe=timeframe
+                                            {"imbalance": 0.0, "timestamp": time.time()},
+                                            timeframe=timeframe,
                                         )
                             break
                         try:
                             data = json.loads(message)
-                            topic = data.get('topic', '')
-                            symbol = topic.split('.')[-1] if isinstance(topic, str) else ''
+                            topic = data.get("topic", "")
+                            symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                             priority = self.symbol_priority.get(symbol, 0)
                             try:
                                 await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
@@ -579,16 +639,24 @@ class DataHandler:
             except Exception as e:
                 reconnect_attempts += 1
                 current_url_index += 1
-                delay = min(2 ** reconnect_attempts, 60)
-                logger.error(f"Ошибка WebSocket {current_url} для {symbols} ({timeframe}), попытка {reconnect_attempts}/{max_reconnect_attempts}, ожидание {delay} секунд: {e}")
+                delay = min(2**reconnect_attempts, 60)
+                logger.error(
+                    f"Ошибка WebSocket {current_url} для {symbols} ({timeframe}), попытка {reconnect_attempts}/{max_reconnect_attempts}, ожидание {delay} секунд: {e}"
+                )
                 await asyncio.sleep(delay)
                 if reconnect_attempts >= max_reconnect_attempts:
                     self.restart_attempts += 1
                     if self.restart_attempts >= self.max_restart_attempts:
-                        logger.critical(f"Превышено максимальное количество перезапусков WebSocket для {symbols} ({timeframe})")
-                        await self.telegram_logger.send_telegram_message(f"Критическая ошибка: Не удалось восстановить WebSocket для {symbols} ({timeframe})")
+                        logger.critical(
+                            f"Превышено максимальное количество перезапусков WebSocket для {symbols} ({timeframe})"
+                        )
+                        await self.telegram_logger.send_telegram_message(
+                            f"Критическая ошибка: Не удалось восстановить WebSocket для {symbols} ({timeframe})"
+                        )
                         break
-                    logger.info(f"Автоматический перезапуск WebSocket для {symbols} ({timeframe}), попытка {self.restart_attempts}/{self.max_restart_attempts}")
+                    logger.info(
+                        f"Автоматический перезапуск WebSocket для {symbols} ({timeframe}), попытка {self.restart_attempts}/{self.max_restart_attempts}"
+                    )
                     reconnect_attempts = 0
                     current_url_index = 0
                     await asyncio.sleep(60)
@@ -596,18 +664,24 @@ class DataHandler:
                     logger.info(f"Попытка загрузки данных через REST API для {symbols} ({timeframe})")
                     for symbol in symbols:
                         try:
-                            symbol_df = await self.fetch_ohlcv_single(symbol, selected_timeframe, limit=1, cache_prefix='2h_' if timeframe == 'secondary' else '')
+                            symbol_df = await self.fetch_ohlcv_single(
+                                symbol,
+                                selected_timeframe,
+                                limit=1,
+                                cache_prefix="2h_" if timeframe == "secondary" else "",
+                            )
                             if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
                                 _, df = symbol_df
                                 if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
-                                    df['symbol'] = symbol
-                                    df = df.set_index(['symbol', df.index])
+                                    df["symbol"] = symbol
+                                    df = df.set_index(["symbol", df.index])
                                     await self.synchronize_and_update(
-                                        symbol, df,
+                                        symbol,
+                                        df,
                                         self.funding_rates.get(symbol, 0.0),
                                         self.open_interest.get(symbol, 0.0),
-                                        {'imbalance': 0.0, 'timestamp': time.time()},
-                                        timeframe=timeframe
+                                        {"imbalance": 0.0, "timestamp": time.time()},
+                                        timeframe=timeframe,
                                     )
                         except Exception as rest_e:
                             logger.error(f"Ошибка REST API для {symbol} ({timeframe}): {rest_e}")
@@ -625,75 +699,88 @@ class DataHandler:
                 priority, (symbols, message, timeframe) = await self.ws_queue.get()
                 now = time.time()
                 self.process_rate_timestamps.append(now)
-                self.process_rate_timestamps = [t for t in self.process_rate_timestamps if now - t < self.process_rate_window]
-                if len(self.process_rate_timestamps) > self.ws_min_process_rate and (len(self.process_rate_timestamps) / self.process_rate_window) < self.ws_min_process_rate:
+                self.process_rate_timestamps = [
+                    t for t in self.process_rate_timestamps if now - t < self.process_rate_window
+                ]
+                if (
+                    len(self.process_rate_timestamps) > self.ws_min_process_rate
+                    and (len(self.process_rate_timestamps) / self.process_rate_window) < self.ws_min_process_rate
+                ):
                     await self.adjust_subscriptions()
                 data = json.loads(message)
-                if not isinstance(data, dict) or 'topic' not in data or 'data' not in data or not isinstance(data['data'], list):
+                if (
+                    not isinstance(data, dict)
+                    or "topic" not in data
+                    or "data" not in data
+                    or not isinstance(data["data"], list)
+                ):
                     logger.debug(f"Error in message format for {symbols}: {message}")
                     continue
-                topic = data.get('topic', '')
-                symbol = topic.split('.')[-1] if isinstance(topic, str) else ''
+                topic = data.get("topic", "")
+                symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                 if not symbol:
                     logger.debug(f"Symbol not found in topic for message: {message}")
                     continue
-                for entry in data['data']:
-                    required_fields = ['start', 'open', 'high', 'low', 'close', 'volume']
+                for entry in data["data"]:
+                    required_fields = ["start", "open", "high", "low", "close", "volume"]
                     if not all(field in entry for field in required_fields):
                         logger.warning(f"Invalid kline data ({timeframe}): {entry}")
                         continue
                     try:
-                        kline_timestamp = pd.to_datetime(int(entry['start']), unit='ms', utc=True)
-                        open_price = float(entry['open'])
-                        high_price = float(entry['high'])
-                        low_price = float(entry['low'])
-                        close_price = float(entry['close'])
-                        volume = float(entry['volume'])
+                        kline_timestamp = pd.to_datetime(int(entry["start"]), unit="ms", utc=True)
+                        open_price = float(entry["open"])
+                        high_price = float(entry["high"])
+                        low_price = float(entry["low"])
+                        close_price = float(entry["close"])
+                        volume = float(entry["volume"])
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Ошибка формата данных свечи для {symbol} ({timeframe}): {e}")
                         continue
-                    timestamp_dict = self.processed_timestamps if timeframe == 'primary' else self.processed_timestamps_2h
-                    lock = self.ohlcv_lock if timeframe == 'primary' else self.ohlcv_2h_lock
+                    timestamp_dict = (
+                        self.processed_timestamps if timeframe == "primary" else self.processed_timestamps_2h
+                    )
+                    lock = self.ohlcv_lock if timeframe == "primary" else self.ohlcv_2h_lock
                     async with lock:
                         if symbol not in timestamp_dict:
                             timestamp_dict[symbol] = set()
-                        if entry['start'] in timestamp_dict[symbol]:
+                        if entry["start"] in timestamp_dict[symbol]:
                             logger.debug(
                                 f"Дубликат сообщения для {symbol} ({timeframe}) с временной меткой {kline_timestamp}"
                             )
                             continue
-                        timestamp_dict[symbol].add(entry['start'])
+                        timestamp_dict[symbol].add(entry["start"])
                         if len(timestamp_dict[symbol]) > 1000:
                             timestamp_dict[symbol] = set(list(timestamp_dict[symbol])[-500:])
-                    current_time = pd.Timestamp.now(tz='UTC')
+                    current_time = pd.Timestamp.now(tz="UTC")
                     if (current_time - kline_timestamp).total_seconds() > 5:
-                        logger.warning(
-                            f"Получены устаревшие данные для {symbol} ({timeframe}): {kline_timestamp}"
-                        )
+                        logger.warning(f"Получены устаревшие данные для {symbol} ({timeframe}): {kline_timestamp}")
                         continue
                     try:
-                        df = pd.DataFrame([
-                            {
-                                'timestamp': kline_timestamp,
-                                'open': np.float32(open_price),
-                                'high': np.float32(high_price),
-                                'low': np.float32(low_price),
-                                'close': np.float32(close_price),
-                                'volume': np.float32(volume)
-                            }
-                        ])
-                        df = filter_outliers_zscore(df, 'close')
+                        df = pd.DataFrame(
+                            [
+                                {
+                                    "timestamp": kline_timestamp,
+                                    "open": np.float32(open_price),
+                                    "high": np.float32(high_price),
+                                    "low": np.float32(low_price),
+                                    "close": np.float32(close_price),
+                                    "volume": np.float32(volume),
+                                }
+                            ]
+                        )
+                        df = filter_outliers_zscore(df, "close")
                         if df.empty:
-                            logger.warning(
-                                f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии"
-                            )
+                            logger.warning(f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии")
                             continue
-                        df['symbol'] = symbol
-                        df = df.set_index(['symbol', 'timestamp'])
-                        time_diffs = df.index.get_level_values('timestamp').to_series().diff().dt.total_seconds()
-                        max_gap = pd.Timedelta(
-                            self.config['timeframe' if timeframe == 'primary' else 'secondary_timeframe']
-                        ).total_seconds() * 2
+                        df["symbol"] = symbol
+                        df = df.set_index(["symbol", "timestamp"])
+                        time_diffs = df.index.get_level_values("timestamp").to_series().diff().dt.total_seconds()
+                        max_gap = (
+                            pd.Timedelta(
+                                self.config["timeframe" if timeframe == "primary" else "secondary_timeframe"]
+                            ).total_seconds()
+                            * 2
+                        )
                         if time_diffs.max() > max_gap:
                             logger.warning(
                                 f"Обнаружен разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
@@ -706,7 +793,7 @@ class DataHandler:
                             df,
                             self.funding_rates.get(symbol, 0.0),
                             self.open_interest.get(symbol, 0.0),
-                            {'imbalance': 0.0, 'timestamp': time.time()},
+                            {"imbalance": 0.0, "timestamp": time.time()},
                             timeframe=timeframe,
                         )
                     except Exception as e:
@@ -714,7 +801,9 @@ class DataHandler:
                         continue
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
-                    logger.info(f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек, скорость обработки: {rate:.2f}/с")
+                    logger.info(
+                        f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек, скорость обработки: {rate:.2f}/с"
+                    )
                     last_latency_log = time.time()
             except Exception as e:
                 logger.error(f"Ошибка обработки очереди WebSocket: {e}")
