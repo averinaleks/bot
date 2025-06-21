@@ -261,20 +261,43 @@ async def main():
             loop.add_signal_handler(sig, lambda: asyncio.create_task(handle_shutdown(loop)))
 
         tasks = [
-            data_handler.subscribe_to_klines(data_handler.usdt_pairs),
-            model_builder.train(),
-            trade_manager.run(),
-            optimize_parameters_periodically(parameter_optimizer, telegram_bot, chat_id, shutdown_event, interval=config['optimization_interval'] // 2),  # Уменьшен интервал
-            monitor_resources(telegram_bot, chat_id),
-            monitor_model_performance(model_builder, telegram_bot, chat_id, shutdown_event, interval=3600),
-            run_backtests_periodically(model_builder, telegram_bot, chat_id, shutdown_event, interval=config.get('backtest_interval', 604800))
+            asyncio.create_task(data_handler.subscribe_to_klines(data_handler.usdt_pairs), name="subscribe_to_klines"),
+            asyncio.create_task(model_builder.train(), name="train_models"),
+            asyncio.create_task(trade_manager.run(), name="trade_manager_run"),
+            asyncio.create_task(
+                optimize_parameters_periodically(
+                    parameter_optimizer,
+                    telegram_bot,
+                    chat_id,
+                    shutdown_event,
+                    interval=config['optimization_interval'] // 2,
+                ),
+                name="optimize_parameters",
+            ),
+            asyncio.create_task(monitor_resources(telegram_bot, chat_id), name="monitor_resources"),
+            asyncio.create_task(
+                monitor_model_performance(
+                    model_builder, telegram_bot, chat_id, shutdown_event, interval=3600
+                ),
+                name="monitor_model_performance",
+            ),
+            asyncio.create_task(
+                run_backtests_periodically(
+                    model_builder,
+                    telegram_bot,
+                    chat_id,
+                    shutdown_event,
+                    interval=config.get('backtest_interval', 604800),
+                ),
+                name="run_backtests",
+            ),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i, result in enumerate(results):
+        for task, result in zip(tasks, results):
             if isinstance(result, Exception):
-                logger.error(f"Ошибка в задаче {tasks[i].__name__}: {result}")
+                logger.error(f"Ошибка в задаче {task.get_name()}: {result}")
                 await telegram_logger.send_telegram_message(
-                    f"❌ Ошибка в задаче {tasks[i].__name__}: {result}")
+                    f"❌ Ошибка в задаче {task.get_name()}: {result}")
                 raise result
 
     except Exception as e:
