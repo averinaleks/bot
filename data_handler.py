@@ -395,14 +395,13 @@ class DataHandler:
         Returns
         -------
         str
-            Symbol formatted as ``BTCUSDT:USDT``. If the input already
+            Symbol formatted as ``BTC/USDT:USDT``. If the input already
             contains ``:USDT`` it will not be duplicated.
         """
 
-        base, *suffix = symbol.split(":", 1)
-        base = base.replace("/", "")
-        quote = suffix[0] if suffix else "USDT"
-        return f"{base}:{quote}"
+        if symbol.endswith("/USDT"):
+            return f"{symbol}:USDT"
+        return symbol
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = 'primary'):
         reconnect_attempts = 0
