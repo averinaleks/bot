@@ -296,6 +296,9 @@ async def main():
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for task, result in zip(tasks, results):
+            if isinstance(result, asyncio.CancelledError):
+                logger.info(f"Задача {task.get_name()} отменена")
+                continue
             if isinstance(result, Exception):
                 logger.error(f"Ошибка в задаче {task.get_name()}: {result}")
                 await telegram_logger.send_telegram_message(
