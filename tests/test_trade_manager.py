@@ -109,3 +109,30 @@ def test_open_position_places_tp_sl_orders():
     assert order['tp'] == pytest.approx(102.0)
     assert order['sl'] == pytest.approx(99.0)
 
+
+def test_trailing_stop_to_breakeven():
+    dh = DummyDataHandler()
+    cfg = make_config()
+    cfg.update({
+        'trailing_stop_percentage': 1.0,
+        'trailing_stop_coeff': 0.0,
+        'trailing_stop_multiplier': 1.0,
+    })
+    tm = TradeManager(cfg, dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+        await tm.check_trailing_stop('BTCUSDT', 101)
+
+    import asyncio
+    asyncio.run(run())
+
+    assert len(dh.exchange.orders) >= 2
+    assert tm.positions.iloc[0]['breakeven_triggered'] is True
+    assert tm.positions.iloc[0]['size'] < dh.exchange.orders[0]['amount']
+
