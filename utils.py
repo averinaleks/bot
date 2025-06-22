@@ -49,16 +49,7 @@ class TelegramLogger(logging.Handler):
             TelegramLogger._queue = asyncio.Queue()
             TelegramLogger._bot = bot
             TelegramLogger._stop_event = asyncio.Event()
-        self._start_worker_if_possible()
-
-    def _start_worker_if_possible(self):
-        if TelegramLogger._worker_task is not None:
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        TelegramLogger._worker_task = loop.create_task(self._worker())
+            TelegramLogger._worker_task = asyncio.create_task(self._worker())
 
     async def _worker(self):
         assert TelegramLogger._queue is not None
@@ -111,7 +102,6 @@ class TelegramLogger(logging.Handler):
                         return
 
     async def send_telegram_message(self, message, urgent: bool = False):
-        self._start_worker_if_possible()
         msg = message[:512]
         await TelegramLogger._queue.put((self.chat_id, msg, urgent))
 
