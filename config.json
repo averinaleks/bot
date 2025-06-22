@@ -9,7 +9,7 @@
     ],
     "max_concurrent_requests": 10,
     "max_symbols": 50,
-    "max_subscriptions_per_connection": 30,
+    "max_subscriptions_per_connection": 15,
     "ws_rate_limit": 20,
     "ws_reconnect_interval": 5,
     "max_reconnect_attempts": 10,
