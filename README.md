@@ -53,6 +53,8 @@
 ## Model training
 
 `ModelBuilder` автоматически обучает и переобучает нейросетевую модель CNN‑LSTM.
+Для организации процесса можно выбрать ML-фреймворк: `pytorch` (по умолчанию), `lightning` или `keras`.
+Тип указывается параметром `nn_framework` в `config.json`.
 Для каждого актива формируются признаки из OHLCV‑данных и технических
 индикаторов. Метка `1` присваивается, если через
 `lstm_timesteps` баров цена выросла больше, чем на значение
@@ -74,8 +76,8 @@ python trading_bot.py
 
 ### RL agents
 
-Модуль `RLAgent` может обучать модели как с помощью `stable-baselines3`, так и через `Ray RLlib`.
-Выберите подходящий движок параметром `rl_framework` в `config.json` (`stable_baselines3` или `rllib`).
+Модуль `RLAgent` может обучать модели с помощью `stable-baselines3`, `Ray RLlib` или фреймворка `Catalyst` от Яндекса.
+Выберите подходящий движок параметром `rl_framework` в `config.json` (`stable_baselines3`, `rllib` или `catalyst`).
 Алгоритм указывается опцией `rl_model` (`PPO` или `DQN`), продолжительность обучения — `rl_timesteps`.
 
 Периодическое переобучение задаётся параметром `retrain_interval` в
@@ -139,6 +141,9 @@ The test suite relies on the following packages:
 - ray
 - stable-baselines3
 - mlflow
+- pytorch-lightning
+- tensorflow
+- catalyst
 - pytest
 
 GPU libraries such as CUDA-enabled torch or numba may be required for some tests.

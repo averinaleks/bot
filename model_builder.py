@@ -121,8 +121,107 @@ class Net(nn.Module):
         return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
 
+def _train_model_keras(X, y, batch_size, model_type):
+    import tensorflow as tf
+    from tensorflow import keras
+
+    inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
+    if model_type == "mlp":
+        x = keras.layers.Flatten()(inputs)
+        x = keras.layers.Dense(128, activation="relu")(x)
+        x = keras.layers.Dropout(0.2)(x)
+        x = keras.layers.Dense(64, activation="relu")(x)
+    else:
+        x = keras.layers.Conv1D(32, 3, padding="same", activation="relu")(inputs)
+        x = keras.layers.Dropout(0.2)(x)
+        if model_type == "gru":
+            x = keras.layers.GRU(64, return_sequences=True)(x)
+        else:
+            x = keras.layers.LSTM(64, return_sequences=True)(x)
+        attn = keras.layers.Dense(1, activation="softmax")(x)
+        x = keras.layers.Multiply()([x, attn])
+        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+    outputs = keras.layers.Dense(1, activation="sigmoid")(x)
+    model = keras.Model(inputs, outputs)
+    model.compile(optimizer="adam", loss="binary_crossentropy")
+    val_split = 0.1
+    model.fit(X, y, batch_size=batch_size, epochs=20, verbose=0, validation_split=val_split)
+    val_start = int((1 - val_split) * len(X))
+    val_preds = model.predict(X[val_start:]).reshape(-1)
+    val_labels = y[val_start:]
+    return model.get_weights(), val_preds.tolist(), val_labels.tolist()
+
+
+def _train_model_lightning(X, y, batch_size, model_type):
+    import pytorch_lightning as pl
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    y_tensor = torch.tensor(y, dtype=torch.float32)
+    val_size = max(1, int(0.1 * len(X_tensor)))
+    train_ds = TensorDataset(X_tensor[:-val_size], y_tensor[:-val_size])
+    val_ds = TensorDataset(X_tensor[-val_size:], y_tensor[-val_size:])
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    if model_type == "mlp":
+        input_dim = X.shape[1] * X.shape[2]
+        net = Net(input_dim)
+    elif model_type == "gru":
+        net = CNNGRU(X.shape[2], 64, 2, 0.2)
+    else:
+        net = CNNLSTM(X.shape[2], 64, 2, 0.2)
+
+    class LightningWrapper(pl.LightningModule):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+            self.criterion = nn.BCELoss()
+
+        def forward(self, x):
+            return self.model(x)
+
+        def training_step(self, batch, batch_idx):
+            x, y = batch
+            if model_type == "mlp":
+                x = x.view(x.size(0), -1)
+            y_hat = self(x).squeeze()
+            loss = self.criterion(y_hat, y) + self.model.l2_regularization()
+            return loss
+
+        def validation_step(self, batch, batch_idx):
+            x, y = batch
+            if model_type == "mlp":
+                x = x.view(x.size(0), -1)
+            y_hat = self(x).squeeze()
+            loss = self.criterion(y_hat, y)
+            self.log("val_loss", loss, prog_bar=True)
+
+        def configure_optimizers(self):
+            return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+    wrapper = LightningWrapper(net)
+    trainer = pl.Trainer(max_epochs=20, logger=False, enable_checkpointing=False, devices=1 if torch.cuda.is_available() else None)
+    trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    wrapper.eval()
+    preds = []
+    labels = []
+    with torch.no_grad():
+        for val_x, val_y in val_loader:
+            val_x = val_x.to(device)
+            if model_type == "mlp":
+                val_x = val_x.view(val_x.size(0), -1)
+            out = wrapper(val_x).squeeze()
+            preds.extend(out.cpu().numpy())
+            labels.extend(val_y.numpy())
+    return net.state_dict(), preds, labels
+
+
 @ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
-def _train_model_remote(X, y, batch_size, model_type="cnn_lstm"):
+def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pytorch"):
+    if framework in {"keras", "tensorflow"}:
+        return _train_model_keras(X, y, batch_size, model_type)
+    if framework == "lightning":
+        return _train_model_lightning(X, y, batch_size, model_type)
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
@@ -190,6 +289,7 @@ class ModelBuilder:
         self.data_handler = data_handler
         self.trade_manager = trade_manager
         self.model_type = config.get('model_type', 'cnn_lstm')
+        self.nn_framework = config.get('nn_framework', 'pytorch').lower()
         self.lstm_models = {}
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.cache = HistoricalDataCache(config['cache_dir'])
@@ -212,8 +312,12 @@ class ModelBuilder:
         if time.time() - self.last_save_time < self.save_interval:
             return
         try:
+            if self.nn_framework == 'pytorch':
+                models_state = {k: v.state_dict() for k, v in self.lstm_models.items()}
+            else:
+                models_state = {k: v.get_weights() for k, v in self.lstm_models.items()}
             state = {
-                'lstm_models': {k: v.state_dict() for k, v in self.lstm_models.items()},
+                'lstm_models': models_state,
                 'scalers': self.scalers,
                 'last_retrain_time': self.last_retrain_time,
             }
@@ -230,19 +334,45 @@ class ModelBuilder:
                 with open(self.state_file, 'rb') as f:
                     state = joblib.load(f)
                 self.scalers = state.get('scalers', {})
-                for symbol, sd in state.get('lstm_models', {}).items():
-                    scaler = self.scalers.get(symbol)
-                    input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
-                    mt = self.model_type
-                    if mt == 'mlp':
-                        model = Net(input_size * self.config['lstm_timesteps'])
-                    elif mt == 'gru':
-                        model = CNNGRU(input_size, 64, 2, 0.2)
-                    else:
-                        model = CNNLSTM(input_size, 64, 2, 0.2)
-                    model.load_state_dict(sd)
-                    model.to(self.device)
-                    self.lstm_models[symbol] = model
+                if self.nn_framework == 'pytorch':
+                    for symbol, sd in state.get('lstm_models', {}).items():
+                        scaler = self.scalers.get(symbol)
+                        input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
+                        mt = self.model_type
+                        if mt == 'mlp':
+                            model = Net(input_size * self.config['lstm_timesteps'])
+                        elif mt == 'gru':
+                            model = CNNGRU(input_size, 64, 2, 0.2)
+                        else:
+                            model = CNNLSTM(input_size, 64, 2, 0.2)
+                        model.load_state_dict(sd)
+                        model.to(self.device)
+                        self.lstm_models[symbol] = model
+                else:
+                    from tensorflow import keras
+                    for symbol, weights in state.get('lstm_models', {}).items():
+                        scaler = self.scalers.get(symbol)
+                        input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
+                        if self.model_type == 'mlp':
+                            inputs = keras.Input(shape=(input_size * self.config['lstm_timesteps'],))
+                            x = keras.layers.Dense(128, activation='relu')(inputs)
+                            x = keras.layers.Dropout(0.2)(x)
+                            x = keras.layers.Dense(64, activation='relu')(x)
+                        else:
+                            inputs = keras.Input(shape=(self.config['lstm_timesteps'], input_size))
+                            x = keras.layers.Conv1D(32, 3, padding='same', activation='relu')(inputs)
+                            x = keras.layers.Dropout(0.2)(x)
+                            if self.model_type == 'gru':
+                                x = keras.layers.GRU(64, return_sequences=True)(x)
+                            else:
+                                x = keras.layers.LSTM(64, return_sequences=True)(x)
+                            attn = keras.layers.Dense(1, activation='softmax')(x)
+                            x = keras.layers.Multiply()([x, attn])
+                            x = keras.layers.Lambda(lambda t: keras.backend.sum(t, axis=1))(x)
+                        outputs = keras.layers.Dense(1, activation='sigmoid')(x)
+                        model = keras.Model(inputs, outputs)
+                        model.set_weights(weights)
+                        self.lstm_models[symbol] = model
                 self.last_retrain_time = state.get('last_retrain_time', self.last_retrain_time)
                 logger.info("Состояние ModelBuilder загружено")
         except Exception as e:
@@ -318,16 +448,43 @@ class ModelBuilder:
         thr = self.config.get('target_change_threshold', 0.001)
         y = (pct_change > thr).astype(np.float32)
         model_state, val_preds, val_labels = await _train_model_remote.remote(
-            X, y, self.config['lstm_batch_size'], self.model_type
+            X, y, self.config['lstm_batch_size'], self.model_type, self.nn_framework
         )
-        if self.model_type == 'mlp':
-            model = Net(X.shape[1] * X.shape[2])
-        elif self.model_type == 'gru':
-            model = CNNGRU(X.shape[2], 64, 2, 0.2)
+        if self.nn_framework in {'keras', 'tensorflow'}:
+            import tensorflow as tf
+            from tensorflow import keras
+
+            def build_model():
+                inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
+                if self.model_type == 'mlp':
+                    x = keras.layers.Flatten()(inputs)
+                    x = keras.layers.Dense(128, activation='relu')(x)
+                    x = keras.layers.Dropout(0.2)(x)
+                    x = keras.layers.Dense(64, activation='relu')(x)
+                else:
+                    x = keras.layers.Conv1D(32, 3, padding='same', activation='relu')(inputs)
+                    x = keras.layers.Dropout(0.2)(x)
+                    if self.model_type == 'gru':
+                        x = keras.layers.GRU(64, return_sequences=True)(x)
+                    else:
+                        x = keras.layers.LSTM(64, return_sequences=True)(x)
+                    attn = keras.layers.Dense(1, activation='softmax')(x)
+                    x = keras.layers.Multiply()([x, attn])
+                    x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                outputs = keras.layers.Dense(1, activation='sigmoid')(x)
+                return keras.Model(inputs, outputs)
+
+            model = build_model()
+            model.set_weights(model_state)
         else:
-            model = CNNLSTM(X.shape[2], 64, 2, 0.2)
-        model.load_state_dict(model_state)
-        model.to(self.device)
+            if self.model_type == 'mlp':
+                model = Net(X.shape[1] * X.shape[2])
+            elif self.model_type == 'gru':
+                model = CNNGRU(X.shape[2], 64, 2, 0.2)
+            else:
+                model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+            model.load_state_dict(model_state)
+            model.to(self.device)
         calibrator = LogisticRegression()
         calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
         self.calibrators[symbol] = calibrator
@@ -347,7 +504,10 @@ class ModelBuilder:
                     "target_change_threshold": self.config.get("target_change_threshold", 0.001)
                 })
                 mlflow.log_metric("brier_score", float(brier))
-                mlflow.pytorch.log_model(model, "model")
+                if self.nn_framework in {"keras", "tensorflow"}:
+                    mlflow.tensorflow.log_model(model, "model")
+                else:
+                    mlflow.pytorch.log_model(model, "model")
         self.lstm_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
@@ -401,6 +561,8 @@ class ModelBuilder:
 
     async def compute_shap_values(self, symbol, model, X):
         try:
+            if self.nn_framework != 'pytorch':
+                return
             cache_file = os.path.join(self.cache.cache_dir, f"shap_{symbol}.pkl")
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
@@ -452,14 +614,17 @@ class ModelBuilder:
             if len(features) < self.config['lstm_timesteps'] * 2:
                 return None
             X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
-            X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device)
-            model.eval()
-            with torch.no_grad():
-                if self.model_type == 'mlp':
-                    X_in = X_tensor.view(X_tensor.size(0), -1)
-                else:
-                    X_in = X_tensor
-                preds = model(X_in).squeeze().cpu().numpy()
+            if self.nn_framework in {'keras', 'tensorflow'}:
+                preds = model.predict(X).reshape(-1)
+            else:
+                X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device)
+                model.eval()
+                with torch.no_grad():
+                    if self.model_type == 'mlp':
+                        X_in = X_tensor.view(X_tensor.size(0), -1)
+                    else:
+                        X_in = X_tensor
+                    preds = model(X_in).squeeze().cpu().numpy()
             thr = self.config.get('base_probability_threshold', 0.6)
             returns = []
             for i, p in enumerate(preds):
@@ -594,6 +759,27 @@ class RLAgent:
                 self.models[symbol] = trainer
             except Exception as e:
                 logger.error(f"Ошибка RLlib-обучения {symbol}: {e}")
+                return
+        elif framework == "catalyst":
+            try:
+                from catalyst import dl
+                dataset = torch.utils.data.TensorDataset(
+                    torch.tensor(features_df.values, dtype=torch.float32)
+                )
+                loader = torch.utils.data.DataLoader(dataset, batch_size=32)
+
+                model = torch.nn.Linear(features_df.shape[1], 1)
+
+                class Runner(dl.Runner):
+                    def predict_batch(self, batch):
+                        x = batch[0]
+                        return model(x)
+
+                runner = Runner()
+                runner.train(model=model, loaders={"train": loader}, num_epochs=max(1, timesteps // 1000))
+                self.models[symbol] = model
+            except Exception as e:
+                logger.error(f"Ошибка Catalyst-обучения {symbol}: {e}")
                 return
         else:
             env = DummyVecEnv([lambda: TradingEnv(features_df)])
