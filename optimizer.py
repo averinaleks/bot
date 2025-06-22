@@ -19,6 +19,16 @@ class ParameterOptimizer:
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}  # Для отслеживания изменений волатильности
         self.max_trials = config.get('optuna_trials', 20)
 
+    def get_opt_interval(self, symbol: str, volatility: float) -> float:
+        """Return optimization interval for a symbol based on its volatility."""
+        try:
+            interval = self.base_optimization_interval / (1 + volatility / self.volatility_threshold)
+            interval = max(1800, min(self.base_optimization_interval * 2, interval))
+            return interval
+        except Exception as e:
+            logger.error(f"Ошибка расчёта интервала оптимизации для {symbol}: {e}")
+            return self.base_optimization_interval
+
     async def optimize(self, symbol):
         # Оптимизация гиперпараметров для символа
         try:
