@@ -478,7 +478,7 @@ class DataHandler:
                 await asyncio.sleep(60)
 
     def fix_symbol(self, symbol: str) -> str:
-        """Normalize symbol for Bybit futures requests.
+        """Normalize symbol for Bybit futures REST requests.
 
         Parameters
         ----------
@@ -496,6 +496,15 @@ class DataHandler:
         if symbol.endswith("/USDT"):
             return f"{symbol}:USDT"
         return symbol
+
+    def fix_ws_symbol(self, symbol: str) -> str:
+        """Convert symbol to the format required by Bybit WebSocket.
+
+        Removes any slashes and the ``:USDT`` suffix so that
+        ``BTC/USDT:USDT`` becomes ``BTCUSDT``.
+        """
+
+        return symbol.replace("/", "").replace(":USDT", "")
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
         """Subscribe to kline data for a chunk of symbols.
@@ -516,7 +525,10 @@ class DataHandler:
                     self.ws_pool[current_url] = []
                 if not self.ws_pool[current_url]:
                     ws = await websockets.connect(
-                        current_url, ping_interval=20, ping_timeout=30, open_timeout=connection_timeout
+                        current_url,
+                        ping_interval=20,
+                        ping_timeout=30,
+                        open_timeout=max(connection_timeout, 10),
                     )
                     self.ws_pool[current_url].append(ws)
                 else:
@@ -537,11 +549,12 @@ class DataHandler:
                             self.ws_rate_timestamps = [
                                 t for t in self.ws_rate_timestamps if current_time - t < 1
                             ]
+                        ws_symbol = self.fix_ws_symbol(symbol)
                         await ws.send(
                             json.dumps(
                                 {
                                     "op": "subscribe",
-                                    "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"],
+                                    "args": [f"kline.{selected_timeframe}.{ws_symbol}"],
                                 }
                             )
                         )
