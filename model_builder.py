@@ -306,11 +306,17 @@ class ModelBuilder:
                 return
             sample = torch.tensor(X[:50], dtype=torch.float32, device=self.device)
             was_training = model.training
-            model.train()
-            explainer = shap.DeepExplainer(model, sample)
-            values = explainer.shap_values(sample)
+            current_device = next(model.parameters()).device
+
+            # Move model and sample to CPU for SHAP to avoid CuDNN RNN limitation
+            model_cpu = model.to('cpu')
+            sample_cpu = sample.to('cpu')
+            model_cpu.train()
+            explainer = shap.DeepExplainer(model_cpu, sample_cpu)
+            values = explainer.shap_values(sample_cpu)
             if not was_training:
-                model.eval()
+                model_cpu.eval()
+            model.to(current_device)
             joblib.dump(values, cache_file)
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
