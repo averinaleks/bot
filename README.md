@@ -88,13 +88,52 @@ python trading_bot.py
 MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ```
 
-## Запуск тестов
+## Running tests
 
-Для выполнения тестов необходимо установить все зависимости из `requirements.txt`:
+Install runtime and development dependencies:
 
 ```bash
 pip install -r requirements.txt
-pytest
 ```
 
-Некоторые тесты используют опциональные пакеты вроде `stable_baselines3`. В среде без GPU их можно не устанавливать или подменить заглушками, отключив тем самым требование GPU.
+The `requirements.txt` file already includes test-only packages such as
+`pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
+is required.
+
+The test suite relies on the following packages:
+
+- numpy
+- pandas
+- torch
+- torchvision
+- ccxt
+- python-telegram-bot
+- aiohttp
+- websockets
+- ta
+- scikit-learn
+- optuna
+- psutil
+- python-dotenv
+- joblib
+- imbalanced-learn
+- statsmodels
+- scipy
+- shap
+- tenacity
+- pyarrow
+- jsonschema
+- plotly
+- numba
+- ray
+- stable-baselines3
+- mlflow
+- pytest
+
+GPU libraries such as CUDA-enabled torch or numba may be required for some tests.
+
+Run all tests with:
+
+```bash
+pytest
+```
