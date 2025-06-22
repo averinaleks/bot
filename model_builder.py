@@ -59,8 +59,70 @@ class CNNLSTM(nn.Module):
         return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
 
+class CNNGRU(nn.Module):
+    """Conv1D + GRU variant."""
+
+    def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.l2_lambda = l2_lambda
+        padding = kernel_size // 2
+        self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.gru = nn.GRU(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.attn = nn.Linear(hidden_size, 1)
+        self.fc = nn.Linear(hidden_size, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)
+        x = self.conv(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = x.permute(0, 2, 1)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
+        out, _ = self.gru(x, h0)
+        attn_weights = torch.softmax(self.attn(out), dim=1)
+        context = (out * attn_weights).sum(dim=1)
+        context = self.dropout(context)
+        out = self.fc(context)
+        return self.sigmoid(out)
+
+    def l2_regularization(self):
+        return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+
+
+class Net(nn.Module):
+    """Simple multilayer perceptron."""
+
+    def __init__(self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5):
+        super().__init__()
+        self.l2_lambda = l2_lambda
+        self.fc1 = nn.Linear(input_size, hidden_sizes[0])
+        self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
+        self.fc3 = nn.Linear(hidden_sizes[1], 1)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc3(x)
+        return self.sigmoid(x)
+
+    def l2_regularization(self):
+        return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+
+
 @ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
-def _train_lstm_remote(X, y, batch_size):
+def _train_model_remote(X, y, batch_size, model_type="cnn_lstm"):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
@@ -69,7 +131,13 @@ def _train_lstm_remote(X, y, batch_size):
     val_dataset = TensorDataset(X_tensor[-val_size:], y_tensor[-val_size:])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+    if model_type == "mlp":
+        input_dim = X.shape[1] * X.shape[2]
+        model = Net(input_dim)
+    elif model_type == "gru":
+        model = CNNGRU(X.shape[2], 64, 2, 0.2)
+    else:
+        model = CNNLSTM(X.shape[2], 64, 2, 0.2)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCELoss()
     model.to(device)
@@ -81,6 +149,8 @@ def _train_lstm_remote(X, y, batch_size):
         model.train()
         for batch_X, batch_y in train_loader:
             batch_X = batch_X.to(device)
+            if model_type == "mlp":
+                batch_X = batch_X.view(batch_X.size(0), -1)
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
             outputs = model(batch_X).squeeze()
@@ -94,6 +164,8 @@ def _train_lstm_remote(X, y, batch_size):
         with torch.no_grad():
             for val_X, val_y in val_loader:
                 val_X = val_X.to(device)
+                if model_type == "mlp":
+                    val_X = val_X.view(val_X.size(0), -1)
                 val_y = val_y.to(device)
                 outputs = model(val_X).squeeze()
                 preds.extend(outputs.cpu().numpy())
@@ -117,6 +189,7 @@ class ModelBuilder:
         self.config = config
         self.data_handler = data_handler
         self.trade_manager = trade_manager
+        self.model_type = config.get('model_type', 'cnn_lstm')
         self.lstm_models = {}
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.cache = HistoricalDataCache(config['cache_dir'])
@@ -160,7 +233,13 @@ class ModelBuilder:
                 for symbol, sd in state.get('lstm_models', {}).items():
                     scaler = self.scalers.get(symbol)
                     input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
-                    model = CNNLSTM(input_size, 64, 2, 0.2)
+                    mt = self.model_type
+                    if mt == 'mlp':
+                        model = Net(input_size * self.config['lstm_timesteps'])
+                    elif mt == 'gru':
+                        model = CNNGRU(input_size, 64, 2, 0.2)
+                    else:
+                        model = CNNLSTM(input_size, 64, 2, 0.2)
                     model.load_state_dict(sd)
                     model.to(self.device)
                     self.lstm_models[symbol] = model
@@ -238,8 +317,15 @@ class ModelBuilder:
         pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
         thr = self.config.get('target_change_threshold', 0.001)
         y = (pct_change > thr).astype(np.float32)
-        model_state, val_preds, val_labels = await _train_lstm_remote.remote(X, y, self.config['lstm_batch_size'])
-        model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+        model_state, val_preds, val_labels = await _train_model_remote.remote(
+            X, y, self.config['lstm_batch_size'], self.model_type
+        )
+        if self.model_type == 'mlp':
+            model = Net(X.shape[1] * X.shape[2])
+        elif self.model_type == 'gru':
+            model = CNNGRU(X.shape[2], 64, 2, 0.2)
+        else:
+            model = CNNLSTM(X.shape[2], 64, 2, 0.2)
         model.load_state_dict(model_state)
         model.to(self.device)
         calibrator = LogisticRegression()
@@ -266,7 +352,7 @@ class ModelBuilder:
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         await self.compute_shap_values(symbol, model, X)
-        logger.info(f"Модель CNN-LSTM обучена для {symbol}, Brier={brier:.4f}")
+        logger.info(f"Модель {self.model_type} обучена для {symbol}, Brier={brier:.4f}")
         await self.data_handler.telegram_logger.send_telegram_message(
             f"🎯 {symbol} обучен. Brier={brier:.4f}")
 
@@ -320,6 +406,8 @@ class ModelBuilder:
             if time.time() - last_time < self.shap_cache_duration:
                 return
             sample = torch.tensor(X[:50], dtype=torch.float32, device=self.device)
+            if self.model_type == 'mlp':
+                sample = sample.view(sample.size(0), -1)
             was_training = model.training
             current_device = next(model.parameters()).device
 
@@ -367,7 +455,11 @@ class ModelBuilder:
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device)
             model.eval()
             with torch.no_grad():
-                preds = model(X_tensor).squeeze().cpu().numpy()
+                if self.model_type == 'mlp':
+                    X_in = X_tensor.view(X_tensor.size(0), -1)
+                else:
+                    X_in = X_tensor
+                preds = model(X_in).squeeze().cpu().numpy()
             thr = self.config.get('base_probability_threshold', 0.6)
             returns = []
             for i, p in enumerate(preds):
