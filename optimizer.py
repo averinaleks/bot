@@ -8,6 +8,8 @@ import ray
 from utils import logger, check_dataframe_empty
 from optuna.samplers import TPESampler
 from optuna.integration.mlflow import MLflowCallback
+from sklearn.model_selection import GridSearchCV
+from sklearn.base import BaseEstimator
 
 
 @ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
@@ -93,6 +95,7 @@ class ParameterOptimizer:
         self.max_trials = config.get('optuna_trials', 20)
         self.mlflow_enabled = config.get('mlflow_enabled', False)
         self.mlflow_tracking_uri = config.get('mlflow_tracking_uri', 'mlruns')
+        self.enable_grid_search = config.get('enable_grid_search', False)
 
     def get_opt_interval(self, symbol: str, volatility: float) -> float:
         """Return optimization interval for a symbol based on its volatility."""
@@ -153,6 +156,11 @@ class ParameterOptimizer:
                 for cb in callbacks:
                     cb(study, trial)
             best_params = {**self.config, **study.best_params}
+            if self.enable_grid_search:
+                try:
+                    best_params = self._grid_search(df, symbol, best_params)
+                except Exception as e:
+                    logger.error(f"Ошибка GridSearchCV для {symbol}: {e}")
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
@@ -221,6 +229,44 @@ class ParameterOptimizer:
         except Exception as e:
             logger.error(f"Ошибка в objective для {symbol}: {e}")
             return _objective_remote.remote(pd.DataFrame(), symbol, 0, 0, 0, 0, self.config.get('timeframe', '1m'))
+
+    def _grid_search(self, df, symbol, base_params):
+        """Refine best parameters using GridSearchCV for reliability."""
+        class _Estimator(BaseEstimator):
+            def __init__(self, df, symbol, timeframe):
+                self.df = df
+                self.symbol = symbol
+                self.timeframe = timeframe
+
+            def fit(self, X=None, y=None):
+                self.score_ = ray.get(
+                    _objective_remote.remote(
+                        self.df,
+                        self.symbol,
+                        self.ema30_period,
+                        self.ema100_period,
+                        self.ema200_period,
+                        self.atr_period_default,
+                        self.timeframe,
+                    )
+                )
+                return self
+
+            def score(self, X=None, y=None):
+                return self.score_
+
+        estimator = _Estimator(df, symbol, self.config['timeframe'])
+        param_grid = {
+            'ema30_period': [max(10, base_params['ema30_period'] - 5), base_params['ema30_period'], min(50, base_params['ema30_period'] + 5)],
+            'ema100_period': [max(50, base_params['ema100_period'] - 20), base_params['ema100_period'], min(200, base_params['ema100_period'] + 20)],
+            'ema200_period': [max(100, base_params['ema200_period'] - 20), base_params['ema200_period'], min(300, base_params['ema200_period'] + 20)],
+            'atr_period_default': [max(5, base_params['atr_period_default'] - 2), base_params['atr_period_default'], min(20, base_params['atr_period_default'] + 2)],
+        }
+        gs = GridSearchCV(estimator, param_grid, cv=[(slice(None), slice(None))])
+        dummy_X = np.zeros((1, 1))
+        dummy_y = np.zeros(1)
+        gs.fit(dummy_X, dummy_y)
+        return {**base_params, **gs.best_params_}
 
     async def optimize_all(self):
         # Оптимизация для всех символов
