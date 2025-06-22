@@ -526,7 +526,6 @@ class DataHandler:
                 batch_size = self.ws_subscription_batch_size
                 for i in range(0, len(symbols), batch_size):
                     batch = symbols[i : i + batch_size]
-                    subscription_tasks = []
                     for symbol in batch:
                         current_time = time.time()
                         self.ws_rate_timestamps.append(current_time)
@@ -534,17 +533,20 @@ class DataHandler:
                         if len(self.ws_rate_timestamps) > self.config["ws_rate_limit"]:
                             logger.warning("Превышен лимит подписок WebSocket, ожидание")
                             await asyncio.sleep(1)
-                        subscription_tasks.append(
-                            ws.send(
-                                json.dumps(
-                                    {
-                                        "op": "subscribe",
-                                        "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"],
-                                    }
-                                )
+                            # очистка устаревших отметок после ожидания
+                            self.ws_rate_timestamps = [
+                                t for t in self.ws_rate_timestamps if current_time - t < 1
+                            ]
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "op": "subscribe",
+                                    "args": [f"kline.{selected_timeframe}.{self.fix_symbol(symbol)}"],
+                                }
                             )
                         )
-                    await asyncio.gather(*subscription_tasks)
+                        # небольшая задержка, чтобы не превышать лимит отправки
+                        await asyncio.sleep(max(0, 1 / self.config["ws_rate_limit"]))
                 reconnect_attempts = 0
                 current_url_index = 0
                 self.restart_attempts = 0
