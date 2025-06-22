@@ -309,7 +309,7 @@ class TradeManager:
             X = np.array([features[-self.config['lstm_timesteps']:]])
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
             model.eval()
-            with torch.no_grad(), torch.cuda.amp.autocast():
+            with torch.no_grad(), torch.amp.autocast('cuda'):
                 prediction = model(X_tensor).squeeze().float().cpu().numpy()
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
@@ -461,7 +461,7 @@ class TradeManager:
             X = np.array([features[-self.config['lstm_timesteps']:]])
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.model_builder.device)
             model.eval()
-            with torch.no_grad(), torch.cuda.amp.autocast():
+            with torch.no_grad(), torch.amp.autocast('cuda'):
                 prediction = model(X_tensor).squeeze().float().cpu().numpy()
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
