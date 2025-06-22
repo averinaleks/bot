@@ -22,7 +22,8 @@ class TradeManager:
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
         self.positions = pd.DataFrame(columns=[
             'symbol', 'side', 'size', 'entry_price', 'tp_multiplier',
-            'sl_multiplier', 'highest_price', 'lowest_price'
+            'sl_multiplier', 'highest_price', 'lowest_price',
+            'breakeven_triggered'
         ], index=pd.MultiIndex.from_arrays([[], []], names=['symbol', 'timestamp']))
         self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
@@ -208,7 +209,8 @@ class TradeManager:
                     'tp_multiplier': tp_mult,
                     'sl_multiplier': sl_mult,
                     'highest_price': price if side == 'buy' else float('inf'),
-                    'lowest_price': price if side == 'sell' else 0.0
+                    'lowest_price': price if side == 'sell' else 0.0,
+                    'breakeven_triggered': False
                 }
                 new_position_df = pd.DataFrame([new_position], index=pd.MultiIndex.from_tuples([(symbol, pd.Timestamp.now())], names=['symbol', 'timestamp']))
                 async with self.position_lock:
@@ -271,6 +273,36 @@ class TradeManager:
                     return
                 atr = indicators.atr.iloc[-1]
                 trailing_stop_distance = atr * self.config.get('trailing_stop_multiplier', 1.0)
+
+                profit_pct = (
+                    (current_price - position['entry_price']) / position['entry_price'] * 100
+                    if position['side'] == 'buy'
+                    else (position['entry_price'] - current_price) / position['entry_price'] * 100
+                )
+                profit_atr = (
+                    current_price - position['entry_price'] if position['side'] == 'buy'
+                    else position['entry_price'] - current_price
+                )
+
+                trigger_pct = self.config.get('trailing_stop_percentage', 1.0)
+                trigger_atr = self.config.get('trailing_stop_coeff', 1.0) * atr
+
+                if not position['breakeven_triggered'] and (
+                    profit_pct >= trigger_pct or profit_atr >= trigger_atr
+                ):
+                    close_size = position['size'] * 0.5
+                    side = 'sell' if position['side'] == 'buy' else 'buy'
+                    await self.place_order(symbol, side, close_size, current_price)
+                    remaining_size = position['size'] - close_size
+                    self.positions.loc[(symbol, slice(None)), 'size'] = remaining_size
+                    self.positions.loc[(symbol, slice(None)), 'sl_multiplier'] = 0.0
+                    self.positions.loc[(symbol, slice(None)), 'breakeven_triggered'] = True
+                    self.positions_changed = True
+                    self.save_state()
+                    await self.telegram_logger.send_telegram_message(
+                        f"🏁 {symbol} переведена в безубыток, фиксирована часть прибыли"
+                    )
+
                 if position['side'] == 'buy':
                     new_highest = max(position['highest_price'], current_price)
                     self.positions.loc[(symbol, slice(None)), 'highest_price'] = new_highest
