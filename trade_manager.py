@@ -11,10 +11,11 @@ from typing import Dict, Optional
 import shutil
 
 class TradeManager:
-    def __init__(self, config: dict, data_handler, model_builder, telegram_bot, chat_id):
+    def __init__(self, config: dict, data_handler, model_builder, telegram_bot, chat_id, rl_agent=None):
         self.config = config
         self.data_handler = data_handler
         self.model_builder = model_builder
+        self.rl_agent = rl_agent
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
         self.positions = pd.DataFrame(columns=[
             'symbol', 'side', 'size', 'entry_price', 'tp_multiplier',
@@ -472,6 +473,14 @@ class TradeManager:
                 signal = 'buy'
             elif prediction < short_threshold:
                 signal = 'sell'
+
+            rl_signal = None
+            if self.rl_agent and symbol in self.rl_agent.models:
+                rl_feat = features[-1]
+                rl_signal = self.rl_agent.predict(symbol, rl_feat)
+                if rl_signal:
+                    logger.info(f"Сигнал RL для {symbol}: {rl_signal}")
+
             if signal:
                 logger.info(f"Сигнал CNN-LSTM для {symbol}: {signal} (предсказание: {prediction:.4f}, пороги: {long_threshold:.2f}/{short_threshold:.2f})")
                 ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
@@ -479,7 +488,19 @@ class TradeManager:
                     logger.info(f"Условия EMA не выполнены для {symbol}, сигнал отклонен")
                     return None
                 logger.info(f"Все условия выполнены для {symbol}, подтвержден сигнал: {signal}")
-            return signal
+
+            if signal and rl_signal:
+                if signal == rl_signal:
+                    return signal
+                logger.info(f"Разногласие сигналов для {symbol}: CNN-LSTM {signal}, RL {rl_signal}")
+                return None
+            if signal:
+                return signal
+            if rl_signal:
+                ema_condition_met = await self.evaluate_ema_condition(symbol, rl_signal)
+                if ema_condition_met:
+                    return rl_signal
+            return None
         except Exception as e:
             logger.error(f"Ошибка оценки сигнала для {symbol}: {e}")
             return None

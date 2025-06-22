@@ -13,6 +13,7 @@ from data_handler import DataHandler
 from model_builder import ModelBuilder
 from trade_manager import TradeManager
 from optimizer import ParameterOptimizer
+from model_builder import RLAgent
 from utils import logger, TelegramLogger, check_dataframe_empty
 import pandas as pd
 import numpy as np
@@ -226,8 +227,10 @@ async def main():
         exchange = ccxt_async.bybit(exchange_config)
 
         data_handler = DataHandler(config, exchange, telegram_bot, chat_id)
-        trade_manager = TradeManager(config, data_handler, None, telegram_bot, chat_id)
+        rl_agent = RLAgent(config, data_handler, None)
+        trade_manager = TradeManager(config, data_handler, None, telegram_bot, chat_id, rl_agent)
         model_builder = ModelBuilder(config, data_handler, trade_manager)
+        rl_agent.model_builder = model_builder
         trade_manager.model_builder = model_builder
         parameter_optimizer = ParameterOptimizer(config, data_handler)
         data_handler.parameter_optimizer = parameter_optimizer
@@ -265,6 +268,7 @@ async def main():
         tasks = [
             asyncio.create_task(data_handler.subscribe_to_klines(data_handler.usdt_pairs), name="subscribe_to_klines"),
             asyncio.create_task(model_builder.train(), name="train_models"),
+            asyncio.create_task(rl_agent.train(), name="train_rl"),
             asyncio.create_task(trade_manager.run(), name="trade_manager_run"),
             asyncio.create_task(
                 optimize_parameters_periodically(

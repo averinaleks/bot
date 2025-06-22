@@ -69,5 +69,7 @@
     "win_streak_threshold": 3,
     "threshold_adjustment": 0.05,
     "target_change_threshold": 0.001,
-    "backtest_interval": 604800
+    "backtest_interval": 604800,
+    "rl_model": "PPO",
+    "rl_timesteps": 10000
 }

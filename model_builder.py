@@ -15,6 +15,10 @@ import shap
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 from collections import deque
 import ray
+import gym
+from gym import spaces
+from stable_baselines3 import PPO, DQN
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 
 class CNNLSTM(nn.Module):
@@ -379,3 +383,108 @@ class ModelBuilder:
                 results[symbol] = sharpe
         self.last_backtest_time = time.time()
         return results
+
+
+class TradingEnv(gym.Env):
+    """Simple trading environment for offline training."""
+
+    def __init__(self, df: pd.DataFrame):
+        self.df = df.reset_index(drop=True)
+        self.current_step = 0
+        self.action_space = spaces.Discrete(3)  # hold, buy, sell
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(df.shape[1],),
+            dtype=np.float32,
+        )
+
+    def reset(self):
+        self.current_step = 0
+        return self._get_obs()
+
+    def _get_obs(self):
+        return self.df.iloc[self.current_step].to_numpy(dtype=np.float32)
+
+    def step(self, action):
+        done = False
+        reward = 0.0
+        if self.current_step < len(self.df) - 1:
+            price_diff = (
+                self.df["close"].iloc[self.current_step + 1]
+                - self.df["close"].iloc[self.current_step]
+            )
+            if action == 1:  # buy
+                reward = price_diff
+            elif action == 2:  # sell
+                reward = -price_diff
+        self.current_step += 1
+        if self.current_step >= len(self.df) - 1:
+            done = True
+        obs = self._get_obs()
+        return obs, float(reward), done, {}
+
+
+class RLAgent:
+    def __init__(self, config, data_handler, model_builder):
+        self.config = config
+        self.data_handler = data_handler
+        self.model_builder = model_builder
+        self.models = {}
+
+    async def _prepare_features(self, symbol: str, indicators) -> pd.DataFrame:
+        ohlcv = self.data_handler.ohlcv
+        if "symbol" in ohlcv.index.names and symbol in ohlcv.index.get_level_values("symbol"):
+            df = ohlcv.xs(symbol, level="symbol", drop_level=False)
+        else:
+            df = None
+        if check_dataframe_empty(df, f"rl_features {symbol}"):
+            return pd.DataFrame()
+        df = await self.model_builder.preprocess(df.droplevel("symbol"), symbol)
+        if check_dataframe_empty(df, f"rl_features {symbol}"):
+            return pd.DataFrame()
+        features_df = df[["close", "open", "high", "low", "volume"]].copy()
+        features_df["funding"] = self.data_handler.funding_rates.get(symbol, 0.0)
+        features_df["open_interest"] = self.data_handler.open_interest.get(symbol, 0.0)
+        features_df["ema30"] = indicators.ema30[-len(df) :].values
+        features_df["ema100"] = indicators.ema100[-len(df) :].values
+        features_df["ema200"] = indicators.ema200[-len(df) :].values
+        features_df["rsi"] = indicators.rsi[-len(df) :].values
+        features_df["adx"] = indicators.adx[-len(df) :].values
+        features_df["macd"] = indicators.macd[-len(df) :].values
+        features_df["atr"] = indicators.atr[-len(df) :].values
+        return features_df.reset_index(drop=True)
+
+    async def train_symbol(self, symbol: str):
+        indicators = self.data_handler.indicators.get(symbol)
+        if not indicators:
+            logger.warning(f"Нет индикаторов для RL-обучения {symbol}")
+            return
+        features_df = await self._prepare_features(symbol, indicators)
+        if check_dataframe_empty(features_df, f"rl_train {symbol}") or len(features_df) < 2:
+            return
+        env = DummyVecEnv([lambda: TradingEnv(features_df)])
+        algo = self.config.get("rl_model", "PPO").upper()
+        if algo == "DQN":
+            model = DQN("MlpPolicy", env, verbose=0)
+        else:
+            model = PPO("MlpPolicy", env, verbose=0)
+        timesteps = self.config.get("rl_timesteps", 10000)
+        model.learn(total_timesteps=timesteps)
+        self.models[symbol] = model
+        logger.info(f"RL-модель обучена для {symbol}")
+
+    async def train(self):
+        for symbol in self.data_handler.usdt_pairs:
+            await self.train_symbol(symbol)
+
+    def predict(self, symbol: str, obs: np.ndarray):
+        model = self.models.get(symbol)
+        if model is None:
+            return None
+        action, _ = model.predict(obs, deterministic=True)
+        if int(action) == 1:
+            return "buy"
+        if int(action) == 2:
+            return "sell"
+        return None
