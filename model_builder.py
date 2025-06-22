@@ -316,7 +316,10 @@ class ModelBuilder:
             model_cpu = model.to('cpu')
             sample_cpu = sample.to('cpu')
             model_cpu.train()
-            explainer = shap.DeepExplainer(model_cpu, sample_cpu)
+            # DeepExplainer does not fully support LSTM layers and may
+            # produce inconsistent sums. GradientExplainer is more
+            # reliable for sequence models, so use it instead.
+            explainer = shap.GradientExplainer(model_cpu, sample_cpu)
             values = explainer.shap_values(sample_cpu)
             if not was_training:
                 model_cpu.eval()
