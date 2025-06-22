@@ -11,6 +11,7 @@ import psutil
 import shutil
 from numba import jit, prange
 import httpx
+from telegram.error import RetryAfter
 
 logger = logging.getLogger('TradingBot')
 logger.setLevel(logging.INFO)
@@ -30,6 +31,11 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 class TelegramLogger(logging.Handler):
+    _queue: asyncio.Queue | None = None
+    _worker_task: asyncio.Task | None = None
+    _worker_lock = asyncio.Lock()
+    _bot = None
+
     def __init__(self, bot, chat_id, level=logging.NOTSET):
         super().__init__(level)
         self.bot = bot
@@ -38,26 +44,49 @@ class TelegramLogger(logging.Handler):
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()
 
-    async def send_telegram_message(self, message, urgent: bool = False):
+        if TelegramLogger._queue is None:
+            TelegramLogger._queue = asyncio.Queue()
+            TelegramLogger._bot = bot
+            TelegramLogger._worker_task = asyncio.create_task(self._worker())
+
+    async def _worker(self):
+        while True:
+            chat_id, text, urgent = await TelegramLogger._queue.get()
+            await self._send(text, chat_id, urgent)
+            TelegramLogger._queue.task_done()
+            await asyncio.sleep(1)
+
+    async def _send(self, message: str, chat_id: int | str, urgent: bool):
         async with self.message_lock:
             if not urgent and time.time() - self.last_message_time < self.message_interval:
                 logger.debug(f"Сообщение Telegram пропущено из-за интервала: {message[:100]}...")
                 return
 
-            for attempt in range(3):
-                try:
-                    await self.bot.send_message(chat_id=self.chat_id, text=message[:4096])
-                    self.last_message_time = time.time()
-                    break
-                except httpx.ConnectError as e:
-                    logger.warning(
-                        f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/3"
-                    )
-                    if attempt < 2:
-                        await asyncio.sleep(5)
-                except Exception as e:
-                    logger.error(f"Ошибка отправки сообщения Telegram: {e}")
-                    break
+            parts = [message[i:i + 500] for i in range(0, len(message), 500)]
+            for part in parts:
+                delay = 1
+                for attempt in range(5):
+                    try:
+                        await TelegramLogger._bot.send_message(chat_id=chat_id, text=part)
+                        self.last_message_time = time.time()
+                        break
+                    except RetryAfter as e:
+                        wait_time = getattr(e, 'retry_after', delay)
+                        logger.warning(f"Flood control: ожидание {wait_time}с")
+                        await asyncio.sleep(wait_time)
+                        delay = min(delay * 2, 60)
+                    except httpx.ConnectError as e:
+                        logger.warning(f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/5")
+                        if attempt < 4:
+                            await asyncio.sleep(delay)
+                            delay = min(delay * 2, 60)
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки сообщения Telegram: {e}")
+                        return
+
+    async def send_telegram_message(self, message, urgent: bool = False):
+        msg = message[:512]
+        await TelegramLogger._queue.put((self.chat_id, msg, urgent))
 
     def emit(self, record):
         try:
