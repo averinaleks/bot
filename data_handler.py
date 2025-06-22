@@ -22,6 +22,57 @@ import pickle
 import psutil
 import ray
 
+try:
+    from numba import cuda  # type: ignore
+    GPU_AVAILABLE = hasattr(cuda, "is_available") and cuda.is_available()
+except Exception:  # pragma: no cover - numba without cuda support
+    cuda = None  # type: ignore
+    GPU_AVAILABLE = False
+
+
+def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
+    """Compute EMA using GPU if available, otherwise CPU."""
+    values = np.asarray(values, dtype=np.float64)
+    alpha = (1 / window) if wilder else 2 / (window + 1)
+    if cuda is not None and GPU_AVAILABLE:
+        values_dev = cuda.to_device(values)
+        result_dev = cuda.device_array_like(values)
+
+        @cuda.jit
+        def _ema_kernel(v, a, out):
+            if cuda.threadIdx.x == 0 and cuda.blockIdx.x == 0:
+                out[0] = v[0]
+                for i in range(1, v.size):
+                    out[i] = a * v[i] + (1 - a) * out[i - 1]
+
+        _ema_kernel[1, 1](values_dev, alpha, result_dev)
+        return result_dev.copy_to_host()
+
+    result = np.empty_like(values)
+    result[0] = values[0]
+    for i in range(1, len(values)):
+        result[i] = alpha * values[i] + (1 - alpha) * result[i - 1]
+    return result
+
+
+def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int) -> np.ndarray:
+    """Compute ATR using Wilder's smoothing with optional GPU acceleration."""
+    high = np.asarray(high, dtype=np.float64)
+    low = np.asarray(low, dtype=np.float64)
+    close = np.asarray(close, dtype=np.float64)
+    prev_close = np.concatenate(([close[0]], close[:-1]))
+    tr1 = high - low
+    tr2 = np.abs(high - prev_close)
+    tr3 = np.abs(low - prev_close)
+    tr = np.maximum(np.maximum(tr1, tr2), tr3)
+
+    atr = np.zeros_like(tr)
+    if len(tr) >= window:
+        atr[window - 1] = tr[:window].mean()
+        for i in range(window, len(tr)):
+            atr[i] = (atr[i - 1] * (window - 1) + tr[i]) / float(window)
+    return atr
+
 
 class IndicatorsCache:
     def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = "primary"):
@@ -32,19 +83,22 @@ class IndicatorsCache:
         self.volume_profile_update_interval = 5
         try:
             if timeframe == "primary":
-                self.ema30 = ta.trend.ema_indicator(df["close"], window=config["ema30_period"], fillna=True)
-                self.ema100 = ta.trend.ema_indicator(df["close"], window=config["ema100_period"], fillna=True)
-                self.ema200 = ta.trend.ema_indicator(df["close"], window=config["ema200_period"], fillna=True)
-                # Используем average_true_range из ta.volatility
-                self.atr = ta.volatility.average_true_range(
-                    df["high"], df["low"], df["close"], window=config["atr_period_default"], fillna=True
+                close_np = df["close"].to_numpy()
+                high_np = df["high"].to_numpy()
+                low_np = df["low"].to_numpy()
+                self.ema30 = pd.Series(ema_fast(close_np, config["ema30_period"]), index=df.index)
+                self.ema100 = pd.Series(ema_fast(close_np, config["ema100_period"]), index=df.index)
+                self.ema200 = pd.Series(ema_fast(close_np, config["ema200_period"]), index=df.index)
+                self.atr = pd.Series(
+                    atr_fast(high_np, low_np, close_np, config["atr_period_default"]), index=df.index
                 )
                 self.rsi = ta.momentum.rsi(df["close"], window=14, fillna=True)
                 self.adx = ta.trend.adx(df["high"], df["low"], df["close"], window=14, fillna=True)
                 self.macd = ta.trend.macd_diff(df["close"], window_slow=26, window_fast=12, window_sign=9, fillna=True)
             elif timeframe == "secondary":
-                self.ema30 = ta.trend.ema_indicator(df["close"], window=config["ema30_period"], fillna=True)
-                self.ema100 = ta.trend.ema_indicator(df["close"], window=config["ema100_period"], fillna=True)
+                close_np = df["close"].to_numpy()
+                self.ema30 = pd.Series(ema_fast(close_np, config["ema30_period"]), index=df.index)
+                self.ema100 = pd.Series(ema_fast(close_np, config["ema100_period"]), index=df.index)
             self.volume_profile = None
             if len(df) - self.last_volume_profile_update >= self.volume_profile_update_interval:
                 self.volume_profile = self.calculate_volume_profile(df)

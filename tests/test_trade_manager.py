@@ -22,6 +22,32 @@ async def _cde(*a, **kw):
 utils.check_dataframe_empty = _cde
 sys.modules['utils'] = utils
 
+tenacity_mod = types.ModuleType('tenacity')
+tenacity_mod.retry = lambda *a, **k: (lambda f: f)
+tenacity_mod.wait_exponential = lambda *a, **k: None
+tenacity_mod.stop_after_attempt = lambda *a, **k: None
+sys.modules['tenacity'] = tenacity_mod
+scipy_mod = types.ModuleType('scipy')
+stats_mod = types.ModuleType('scipy.stats')
+stats_mod.zscore = lambda a, axis=0: (a - a.mean()) / a.std()
+scipy_mod.__version__ = "1.0"
+scipy_mod.stats = stats_mod
+sys.modules.setdefault('scipy', scipy_mod)
+sys.modules.setdefault('scipy.stats', stats_mod)
+sys.modules.setdefault('httpx', types.ModuleType('httpx'))
+telegram_error_mod = types.ModuleType('telegram.error')
+telegram_error_mod.RetryAfter = Exception
+sys.modules.setdefault('telegram', types.ModuleType('telegram'))
+sys.modules.setdefault('telegram.error', telegram_error_mod)
+psutil_mod = types.ModuleType('psutil')
+psutil_mod.cpu_percent = lambda interval=1: 0
+psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
+sys.modules.setdefault('psutil', psutil_mod)
+joblib_mod = types.ModuleType('joblib')
+joblib_mod.dump = lambda *a, **k: None
+joblib_mod.load = lambda *a, **k: {}
+sys.modules.setdefault('joblib', joblib_mod)
+
 import utils
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
