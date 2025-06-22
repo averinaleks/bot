@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import numpy as np
 import ccxt.async_support as ccxt_async
+import ccxt.pro as ccxtpro
 import websockets
 from utils import (
     logger,
@@ -127,9 +128,10 @@ def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe
 
 
 class DataHandler:
-    def __init__(self, config: dict, exchange: ccxt_async.bybit, telegram_bot, chat_id):
+    def __init__(self, config: dict, exchange: ccxt_async.bybit, telegram_bot, chat_id, pro_exchange: ccxtpro.bybit | None = None):
         self.config = config
         self.exchange = exchange
+        self.pro_exchange = pro_exchange
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
         self.cache = HistoricalDataCache(config["cache_dir"])
         self.ohlcv = pd.DataFrame()
@@ -499,25 +501,34 @@ class DataHandler:
         """
         try:
             self.cleanup_task = asyncio.create_task(self.cleanup_old_data())
-            # Divide symbols into batches for subscription
-            chunk_size = self.ws_subscription_batch_size
-            tasks = []
-            for i in range(0, len(symbols), chunk_size):
-                chunk = symbols[i : i + chunk_size]
-                tasks.append(
-                    self._subscribe_chunk(
-                        chunk, self.config["ws_url"], self.config["ws_reconnect_interval"], timeframe="primary"
+            if self.pro_exchange:
+                await self._subscribe_with_ccxtpro(symbols)
+            else:
+                # Divide symbols into batches for subscription
+                chunk_size = self.ws_subscription_batch_size
+                tasks = []
+                for i in range(0, len(symbols), chunk_size):
+                    chunk = symbols[i : i + chunk_size]
+                    tasks.append(
+                        self._subscribe_chunk(
+                            chunk,
+                            self.config["ws_url"],
+                            self.config["ws_reconnect_interval"],
+                            timeframe="primary",
+                        )
                     )
-                )
-                tasks.append(
-                    self._subscribe_chunk(
-                        chunk, self.config["ws_url"], self.config["ws_reconnect_interval"], timeframe="secondary"
+                    tasks.append(
+                        self._subscribe_chunk(
+                            chunk,
+                            self.config["ws_url"],
+                            self.config["ws_reconnect_interval"],
+                            timeframe="secondary",
+                        )
                     )
-                )
-            tasks.append(self._process_ws_queue())
-            tasks.append(self.load_from_disk_buffer())
-            tasks.append(self.monitor_load())
-            await asyncio.gather(*tasks, return_exceptions=True)
+                tasks.append(self._process_ws_queue())
+                tasks.append(self.load_from_disk_buffer())
+                tasks.append(self.monitor_load())
+                await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
             logger.error(f"Ошибка подписки на WebSocket: {e}")
             await self.telegram_logger.send_telegram_message(f"Ошибка WebSocket: {e}")
@@ -559,6 +570,67 @@ class DataHandler:
         """
 
         return symbol.replace("/", "").replace(":USDT", "")
+
+    async def _subscribe_symbol_ccxtpro(self, symbol: str, timeframe: str, label: str):
+        """Watch OHLCV updates for a single symbol using CCXT Pro with automatic reconnection."""
+        reconnect_attempts = 0
+        max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
+        while True:
+            try:
+                ohlcv = await self.pro_exchange.watch_ohlcv(symbol, timeframe)
+                if not ohlcv:
+                    continue
+                last = ohlcv[-1]
+                kline_timestamp = pd.to_datetime(int(last[0]), unit="ms", utc=True)
+                df = pd.DataFrame([
+                    {
+                        "timestamp": kline_timestamp,
+                        "open": np.float32(last[1]),
+                        "high": np.float32(last[2]),
+                        "low": np.float32(last[3]),
+                        "close": np.float32(last[4]),
+                        "volume": np.float32(last[5]),
+                    }
+                ])
+                df["symbol"] = symbol
+                df = df.set_index(["symbol", "timestamp"])
+                await self.synchronize_and_update(
+                    symbol,
+                    df,
+                    self.funding_rates.get(symbol, 0.0),
+                    self.open_interest.get(symbol, 0.0),
+                    {"imbalance": 0.0, "timestamp": time.time()},
+                    timeframe=label,
+                )
+                reconnect_attempts = 0
+            except Exception as e:
+                reconnect_attempts += 1
+                delay = min(2**reconnect_attempts, 60)
+                logger.error(
+                    f"Ошибка CCXT Pro для {symbol} ({label}), попытка {reconnect_attempts}/{max_reconnect_attempts}, ожидание {delay} секунд: {e}"
+                )
+                await asyncio.sleep(delay)
+                if reconnect_attempts >= max_reconnect_attempts:
+                    logger.error(
+                        f"Не удалось восстановить подписку CCXT Pro для {symbol} ({label})"
+                    )
+                    break
+
+    async def _subscribe_with_ccxtpro(self, symbols: List[str]):
+        tasks = []
+        for symbol in symbols:
+            tasks.append(
+                self._subscribe_symbol_ccxtpro(
+                    symbol, self.config["timeframe"], "primary"
+                )
+            )
+            tasks.append(
+                self._subscribe_symbol_ccxtpro(
+                    symbol, self.config["secondary_timeframe"], "secondary"
+                )
+            )
+        tasks.append(self.monitor_load())
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
         """Subscribe to kline data for a chunk of symbols.
