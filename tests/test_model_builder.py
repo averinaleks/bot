@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 import types
 import pytest
+import importlib.util
+
+if importlib.util.find_spec('torch') is None:
+    pytest.skip('torch not available', allow_module_level=True)
 
 # Provide dummy stable_baselines3 if missing
 if "stable_baselines3" not in sys.modules:
