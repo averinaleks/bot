@@ -24,7 +24,7 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
 import model_builder
-from model_builder import ModelBuilder, _train_lstm_remote
+from model_builder import ModelBuilder, _train_model_remote
 
 class DummyIndicators:
     def __init__(self, length):
@@ -53,6 +53,7 @@ def create_model_builder(df):
         "min_data_length": len(df),
         "lstm_timesteps": 2,
         "lstm_batch_size": 2,
+        "model_type": "cnn_lstm",
     }
     data_handler = DummyDataHandler(df)
     trade_manager = DummyTradeManager()
@@ -80,11 +81,13 @@ def test_prepare_lstm_features_shape():
     assert isinstance(features, np.ndarray)
     assert features.shape == (len(df), 14)
 
-@pytest.mark.asyncio
-def test_train_lstm_remote_returns_state_and_predictions():
+@pytest.mark.parametrize("model_type", ["cnn_lstm", "mlp"])
+def test_train_model_remote_returns_state_and_predictions(model_type):
     X = np.random.rand(20, 3, 2).astype(np.float32)
     y = (np.random.rand(20) > 0.5).astype(np.float32)
-    state, preds, labels = _train_lstm_remote._function(X, y, batch_size=2)
+    state, preds, labels = _train_model_remote._function(
+        X, y, batch_size=2, model_type=model_type
+    )
     assert isinstance(state, dict)
     assert len(preds) == len(labels)
     assert isinstance(preds, list)
