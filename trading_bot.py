@@ -2,49 +2,36 @@ import os
 import time
 import requests
 
-DEFAULT_DATA_HANDLER_URL = 'http://data_handler:8000'
-DEFAULT_MODEL_BUILDER_URL = 'http://model_builder:8001'
-DEFAULT_TRADE_MANAGER_URL = 'http://trade_manager:8002'
-DEFAULT_SYMBOL = 'TEST'
-DEFAULT_INTERVAL = 5.0
-
-
-def _load_env():
-    """Return runtime configuration from environment variables."""
-    return {
-        'data_handler_url': os.getenv('DATA_HANDLER_URL', DEFAULT_DATA_HANDLER_URL),
-        'model_builder_url': os.getenv('MODEL_BUILDER_URL', DEFAULT_MODEL_BUILDER_URL),
-        'trade_manager_url': os.getenv('TRADE_MANAGER_URL', DEFAULT_TRADE_MANAGER_URL),
-        'symbol': os.getenv('SYMBOL', DEFAULT_SYMBOL),
-        'interval': float(os.getenv('INTERVAL', str(DEFAULT_INTERVAL))),
-    }
+DATA_HANDLER_URL = os.getenv('DATA_HANDLER_URL', 'http://data_handler:8000')
+MODEL_BUILDER_URL = os.getenv('MODEL_BUILDER_URL', 'http://model_builder:8001')
+TRADE_MANAGER_URL = os.getenv('TRADE_MANAGER_URL', 'http://trade_manager:8002')
+SYMBOL = os.getenv('SYMBOL', 'TEST')
+INTERVAL = float(os.getenv('INTERVAL', '5'))
 
 
 def run_once():
-    env = _load_env()
-    price_resp = requests.get(f"{env['data_handler_url']}/price/{env['symbol']}", timeout=5)
+    price_resp = requests.get(f"{DATA_HANDLER_URL}/price/{SYMBOL}", timeout=5)
     price = price_resp.json().get('price', 0)
 
     model_resp = requests.post(
-        f"{env['model_builder_url']}/predict",
-        json={'symbol': env['symbol'], 'price': price},
+        f"{MODEL_BUILDER_URL}/predict",
+        json={'symbol': SYMBOL, 'price': price},
         timeout=5,
     )
     signal = model_resp.json().get('signal')
 
     if signal:
         requests.post(
-            f"{env['trade_manager_url']}/open_position",
-            json={'symbol': env['symbol'], 'side': signal, 'price': price},
+            f"{TRADE_MANAGER_URL}/open_position",
+            json={'symbol': SYMBOL, 'side': signal, 'price': price},
             timeout=5,
         )
 
 
 def main():
     while True:
-        env = _load_env()
         run_once()
-        time.sleep(env['interval'])
+        time.sleep(INTERVAL)
 
 
 if __name__ == '__main__':
