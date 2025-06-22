@@ -9,7 +9,6 @@ websockets>=12.0
 ta>=0.11.0
 scikit-learn>=1.5.1
 optuna>=3.6.1
-optuna-integration[botorch]>=3.6.0
 psutil>=6.0.0
 python-dotenv>=1.0.1
 joblib>=1.4.2
