@@ -328,6 +328,7 @@ async def optimize_parameters_periodically(parameter_optimizer, telegram_bot, ch
     # Периодическая оптимизация параметров с уменьшенным интервалом
     try:
         while not shutdown_event.is_set():
+            min_interval = interval
             for symbol in parameter_optimizer.data_handler.usdt_pairs:
                 logger.info(f"Оптимизация параметров для {symbol}")
                 best_params = await parameter_optimizer.optimize(symbol)
@@ -336,7 +337,11 @@ async def optimize_parameters_periodically(parameter_optimizer, telegram_bot, ch
                     await TelegramLogger(telegram_bot, chat_id).send_telegram_message(
                         f"Параметры оптимизированы для {symbol}: {best_params}"
                     )
-            await asyncio.sleep(interval)
+                indicators = parameter_optimizer.data_handler.indicators.get(symbol)
+                volatility = indicators.volatility if indicators else parameter_optimizer.volatility_threshold
+                symbol_interval = parameter_optimizer.get_opt_interval(symbol, volatility)
+                min_interval = min(min_interval, symbol_interval)
+            await asyncio.sleep(min_interval)
     except Exception as e:
         logger.error(f"Ошибка в периодической оптимизации: {e}")
         await TelegramLogger(telegram_bot, chat_id).send_telegram_message(f"Ошибка оптимизации: {e}")
