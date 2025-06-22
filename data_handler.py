@@ -881,3 +881,27 @@ class DataHandler:
                 await asyncio.sleep(2)
             finally:
                 self.ws_queue.task_done()
+
+# ----------------------------------------------------------------------
+# REST API for minimal integration testing
+# ----------------------------------------------------------------------
+from flask import Flask, jsonify
+
+api_app = Flask(__name__)
+PRICES = {"TEST": 100.0}
+
+
+@api_app.route("/price/<symbol>")
+def price(symbol: str):
+    price = PRICES.get(symbol, 0.0)
+    return jsonify({"price": price})
+
+
+@api_app.route("/ping")
+def ping():
+    return jsonify({"status": "ok"})
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    api_app.run(host="0.0.0.0", port=port)

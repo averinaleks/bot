@@ -605,3 +605,33 @@ class TradeManager:
             except Exception as e:
                 logger.error(f"Ошибка обработки {symbol}: {e}")
                 await asyncio.sleep(60)
+
+# ----------------------------------------------------------------------
+# REST API for minimal integration testing
+# ----------------------------------------------------------------------
+from flask import Flask, request, jsonify
+
+api_app = Flask(__name__)
+POSITIONS = []
+
+
+@api_app.route('/open_position', methods=['POST'])
+def open_position_route():
+    info = request.get_json(force=True)
+    POSITIONS.append(info)
+    return jsonify({'status': 'ok'})
+
+
+@api_app.route('/positions')
+def positions_route():
+    return jsonify({'positions': POSITIONS})
+
+
+@api_app.route('/ping')
+def ping():
+    return jsonify({'status': 'ok'})
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8002))
+    api_app.run(host='0.0.0.0', port=port)
