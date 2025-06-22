@@ -128,7 +128,7 @@ class TradeManager:
                 await self.telegram_logger.send_telegram_message(f"❌ Ошибка ордера {symbol}: {e}")
                 return None
 
-    async def calculate_position_size(self, symbol: str, price: float, atr: float) -> float:
+    async def calculate_position_size(self, symbol: str, price: float, atr: float, sl_multiplier: float) -> float:
         try:
             if price <= 0 or atr <= 0:
                 logger.warning(f"Некорректные входные данные для {symbol}: price={price}, atr={atr}")
@@ -147,7 +147,7 @@ class TradeManager:
             volatility = df['close'].pct_change().std() if df is not None and not df.empty else self.config.get('volatility_threshold', 0.02)
             risk_per_trade = await self.compute_risk_per_trade(symbol, volatility)
             risk_amount = equity * risk_per_trade
-            stop_loss_distance = atr * self.config['sl_multiplier']
+            stop_loss_distance = atr * sl_multiplier
             if stop_loss_distance <= 0:
                 logger.warning(f"Некорректное значение stop_loss_distance для {symbol}")
                 return 0.0
@@ -173,19 +173,29 @@ class TradeManager:
                     logger.warning(f"Нет данных ATR для {symbol}")
                     return
                 atr = indicators.atr.iloc[-1]
-                size = await self.calculate_position_size(symbol, price, atr)
+                sl_mult = params.get('sl_multiplier', self.config['sl_multiplier'])
+                tp_mult = params.get('tp_multiplier', self.config['tp_multiplier'])
+                size = await self.calculate_position_size(symbol, price, atr, sl_mult)
                 if size <= 0:
                     logger.warning(f"Недостаточный размер позиции для {symbol}")
                     return
-                order = await self.place_order(symbol, side, size, price, {'leverage': self.leverage})
+                stop_loss_price = price - sl_mult * atr if side == 'buy' else price + sl_mult * atr
+                take_profit_price = price + tp_mult * atr if side == 'buy' else price - tp_mult * atr
+                order_params = {
+                    'leverage': self.leverage,
+                    'stopLossPrice': stop_loss_price,
+                    'takeProfitPrice': take_profit_price,
+                    'tpslMode': 'full',
+                }
+                order = await self.place_order(symbol, side, size, price, order_params)
                 if order:
                     new_position = {
                         'symbol': symbol,
                         'side': side,
                         'size': size,
                         'entry_price': price,
-                        'tp_multiplier': params.get('tp_multiplier', self.config['tp_multiplier']),
-                        'sl_multiplier': params.get('sl_multiplier', self.config['sl_multiplier']),
+                        'tp_multiplier': tp_mult,
+                        'sl_multiplier': sl_mult,
                         'highest_price': price if side == 'buy' else float('inf'),
                         'lowest_price': price if side == 'sell' else 0.0
                     }
