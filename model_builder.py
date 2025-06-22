@@ -215,8 +215,7 @@ def _train_model_lightning(X, y, batch_size, model_type):
     return net.state_dict(), preds, labels
 
 
-@ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
-def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pytorch"):
+def _train_model_remote_func(X, y, batch_size, model_type="cnn_lstm", framework="pytorch"):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(X, y, batch_size, model_type)
     if framework == "lightning":
@@ -279,6 +278,10 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
             if epochs_no_improve >= patience:
                 break
     return model.state_dict(), preds, labels
+
+
+_train_model_remote = ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)(_train_model_remote_func)
+_train_model_remote._function = _train_model_remote_func
 
 
 class ModelBuilder:
