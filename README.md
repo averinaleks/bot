@@ -74,3 +74,14 @@ python trading_bot.py
 ```bash
 0 3 * * * cd /path/to/bot && /usr/bin/python trading_bot.py
 ```
+
+## Запуск тестов
+
+Для выполнения тестов необходимо установить все зависимости из `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
+Некоторые тесты используют опциональные пакеты вроде `stable_baselines3`. В среде без GPU их можно не устанавливать или подменить заглушками, отключив тем самым требование GPU.
