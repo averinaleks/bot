@@ -26,3 +26,5 @@ stable-baselines3>=2.3.2
 mlflow>=2.12.1
 --extra-index-url https://download.pytorch.org/whl/cu128
 pytest>=8.1.1
+flask>=3.0.2
+requests>=2.31.0

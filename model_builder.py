@@ -502,3 +502,28 @@ class RLAgent:
         if int(action) == 2:
             return "sell"
         return None
+
+# ----------------------------------------------------------------------
+# REST API for minimal integration testing
+# ----------------------------------------------------------------------
+from flask import Flask, request, jsonify
+
+api_app = Flask(__name__)
+
+
+@api_app.route('/predict', methods=['POST'])
+def predict_route():
+    data = request.get_json(force=True)
+    price = float(data.get('price', 0))
+    signal = 'buy' if price > 0 else None
+    return jsonify({'signal': signal})
+
+
+@api_app.route('/ping')
+def ping():
+    return jsonify({'status': 'ok'})
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8001))
+    api_app.run(host='0.0.0.0', port=port)
