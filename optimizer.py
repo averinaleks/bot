@@ -89,12 +89,16 @@ class ParameterOptimizer:
     def objective(self, trial, symbol, df):
         # Целевая функция для оптимизации
         try:
-            ema30_period = trial.suggest_int('ema30_period', 10, 50)
-            ema100_period = trial.suggest_int('ema100_period', 50, 200)
-            ema200_period = trial.suggest_int('ema200_period', 100, 300)
+            ema_periods = [
+                trial.suggest_int('ema30_period', 10, 50),
+                trial.suggest_int('ema100_period', 50, 200),
+                trial.suggest_int('ema200_period', 100, 300),
+            ]
+            ema_periods.sort()
+            ema30_period, ema100_period, ema200_period = ema_periods
             atr_period = trial.suggest_int('atr_period', 5, 20)
-            tp_multiplier = trial.suggest_float('tp_multiplier', 1.0, 3.0)
             sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 2.0)
+            tp_multiplier = trial.suggest_float('tp_multiplier', sl_multiplier, 3.0)
             n_splits = 5
             train_size = int(0.6 * len(df))
             test_size = int(0.2 * len(df))
@@ -133,7 +137,13 @@ class ParameterOptimizer:
                     prev_close = test_df['close'].iloc[j-1]
                     ema30 = indicators.ema30.iloc[j]
                     ema100 = indicators.ema100.iloc[j]
-                    volume_profile = indicators.volume_profile.iloc[-1] if indicators.volume_profile is not None else 0.0
+                    if indicators.volume_profile is not None and not indicators.volume_profile.empty:
+                        price_bins = indicators.volume_profile.index.to_numpy()
+                        idx = np.searchsorted(price_bins, close)
+                        idx = np.clip(idx, 0, len(price_bins) - 1)
+                        volume_profile = indicators.volume_profile.iloc[idx]
+                    else:
+                        volume_profile = 0.0
                     signal = 0
                     if ema30 > ema100 and close > ema30 and volume_profile > 0.02:
                         signal = 1
