@@ -96,7 +96,7 @@ class ParameterOptimizer:
             ]
             ema_periods.sort()
             ema30_period, ema100_period, ema200_period = ema_periods
-            atr_period = trial.suggest_int('atr_period', 5, 20)
+            atr_period_default = trial.suggest_int('atr_period_default', 5, 20)
             sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 2.0)
             tp_multiplier = trial.suggest_float('tp_multiplier', sl_multiplier, 3.0)
             n_splits = 5
@@ -117,7 +117,7 @@ class ParameterOptimizer:
                         'ema30_period': ema30_period,
                         'ema100_period': ema100_period,
                         'ema200_period': ema200_period,
-                        'atr_period_default': atr_period
+                        'atr_period_default': atr_period_default
                     }, test_df['close'].pct_change().std())
                     self.last_atr_update[symbol] = current_candle_count
                 else:
@@ -127,7 +127,7 @@ class ParameterOptimizer:
                             'ema30_period': ema30_period,
                             'ema100_period': ema100_period,
                             'ema200_period': ema200_period,
-                            'atr_period_default': atr_period
+                            'atr_period_default': atr_period_default
                         }, test_df['close'].pct_change().std())
                 if not indicators or check_dataframe_empty(indicators.df, f"objective {symbol}"):
                     return 0.0
