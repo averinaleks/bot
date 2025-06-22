@@ -58,7 +58,7 @@ class CNNLSTM(nn.Module):
         return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
 
-@ray.remote(num_gpus=1)
+@ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
 def _train_lstm_remote(X, y, batch_size):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_tensor = torch.tensor(X, dtype=torch.float32)
