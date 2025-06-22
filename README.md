@@ -2,6 +2,9 @@
 
 Этот репозиторий содержит пример торгового бота на Python. Для запуска необходимы файлы `config.json` и `.env` с ключами API.
 
+
+**Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
+
 ## Быстрый старт
 
 1. Установите зависимости:
