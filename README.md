@@ -68,6 +68,12 @@
 python trading_bot.py
 ```
 
+### RL agents
+
+Модуль `RLAgent` может обучать модели как с помощью `stable-baselines3`, так и через `Ray RLlib`.
+Выберите подходящий движок параметром `rl_framework` в `config.json` (`stable_baselines3` или `rllib`).
+Алгоритм указывается опцией `rl_model` (`PPO` или `DQN`), продолжительность обучения — `rl_timesteps`.
+
 Периодическое переобучение задаётся параметром `retrain_interval` в
 `config.json`. Можно запускать бота по расписанию (например, через `cron`) для
 регулярного обновления моделей:
