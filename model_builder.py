@@ -477,15 +477,40 @@ class RLAgent:
         features_df = await self._prepare_features(symbol, indicators)
         if check_dataframe_empty(features_df, f"rl_train {symbol}") or len(features_df) < 2:
             return
-        env = DummyVecEnv([lambda: TradingEnv(features_df)])
         algo = self.config.get("rl_model", "PPO").upper()
-        if algo == "DQN":
-            model = DQN("MlpPolicy", env, verbose=0)
-        else:
-            model = PPO("MlpPolicy", env, verbose=0)
+        framework = self.config.get("rl_framework", "stable_baselines3").lower()
         timesteps = self.config.get("rl_timesteps", 10000)
-        model.learn(total_timesteps=timesteps)
-        self.models[symbol] = model
+        if framework == "rllib":
+            try:
+                if algo == "DQN":
+                    from ray.rllib.algorithms.dqn import DQNConfig
+                    cfg = (
+                        DQNConfig()
+                        .environment(lambda _: TradingEnv(features_df))
+                        .rollouts(num_rollout_workers=0)
+                    )
+                else:
+                    from ray.rllib.algorithms.ppo import PPOConfig
+                    cfg = (
+                        PPOConfig()
+                        .environment(lambda _: TradingEnv(features_df))
+                        .rollouts(num_rollout_workers=0)
+                    )
+                trainer = cfg.build()
+                for _ in range(max(1, timesteps // 1000)):
+                    trainer.train()
+                self.models[symbol] = trainer
+            except Exception as e:
+                logger.error(f"Ошибка RLlib-обучения {symbol}: {e}")
+                return
+        else:
+            env = DummyVecEnv([lambda: TradingEnv(features_df)])
+            if algo == "DQN":
+                model = DQN("MlpPolicy", env, verbose=0)
+            else:
+                model = PPO("MlpPolicy", env, verbose=0)
+            model.learn(total_timesteps=timesteps)
+            self.models[symbol] = model
         logger.info(f"RL-модель обучена для {symbol}")
 
     async def train(self):
@@ -496,7 +521,11 @@ class RLAgent:
         model = self.models.get(symbol)
         if model is None:
             return None
-        action, _ = model.predict(obs, deterministic=True)
+        framework = self.config.get("rl_framework", "stable_baselines3").lower()
+        if framework == "rllib":
+            action = model.compute_single_action(obs)[0]
+        else:
+            action, _ = model.predict(obs, deterministic=True)
         if int(action) == 1:
             return "buy"
         if int(action) == 2:
