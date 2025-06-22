@@ -3,9 +3,81 @@ import numpy as np
 import optuna
 import asyncio
 import time
+import torch
+import ray
 from utils import logger, check_dataframe_empty
 from optuna.samplers import TPESampler
 from optuna.integration.mlflow import MLflowCallback
+
+
+@ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
+def _objective_remote(df, symbol, ema30_period, ema100_period, ema200_period,
+                      atr_period_default, timeframe):
+    """Heavy part of objective executed remotely."""
+    try:
+        from data_handler import IndicatorsCache
+        n_splits = 5
+        train_size = int(0.6 * len(df))
+        test_size = int(0.2 * len(df))
+        sharpe_ratios = []
+        last_atr_update = 0
+        atr_update_interval = 5
+        for i in range(n_splits):
+            start = i * test_size
+            end = start + train_size + test_size
+            if end > len(df):
+                break
+            test_df = df.iloc[start + train_size:end].droplevel('symbol')
+            current_candle_count = len(test_df)
+            if current_candle_count - last_atr_update >= atr_update_interval:
+                indicators = IndicatorsCache(test_df, {
+                    'ema30_period': ema30_period,
+                    'ema100_period': ema100_period,
+                    'ema200_period': ema200_period,
+                    'atr_period_default': atr_period_default
+                }, test_df['close'].pct_change().std())
+                last_atr_update = current_candle_count
+            else:
+                indicators = IndicatorsCache(test_df, {
+                    'ema30_period': ema30_period,
+                    'ema100_period': ema100_period,
+                    'ema200_period': ema200_period,
+                    'atr_period_default': atr_period_default
+                }, test_df['close'].pct_change().std())
+            if not indicators or check_dataframe_empty(indicators.df, f"objective {symbol}"):
+                return 0.0
+            returns = []
+            for j in range(1, len(test_df)):
+                close = test_df['close'].iloc[j]
+                prev_close = test_df['close'].iloc[j-1]
+                ema30 = indicators.ema30.iloc[j]
+                ema100 = indicators.ema100.iloc[j]
+                if indicators.volume_profile is not None and not indicators.volume_profile.empty:
+                    price_bins = indicators.volume_profile.index.to_numpy()
+                    idx = np.searchsorted(price_bins, close)
+                    idx = np.clip(idx, 0, len(price_bins) - 1)
+                    volume_profile = indicators.volume_profile.iloc[idx]
+                else:
+                    volume_profile = 0.0
+                signal = 0
+                if ema30 > ema100 and close > ema30 and volume_profile > 0.02:
+                    signal = 1
+                elif ema30 < ema100 and close < ema30 and volume_profile > 0.02:
+                    signal = -1
+                if signal != 0:
+                    ret = (close - prev_close) / prev_close * signal
+                    returns.append(ret)
+            if not returns:
+                return 0.0
+            returns = np.array(returns, dtype=np.float32)
+            sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(
+                365 * 24 * 60 / pd.Timedelta(timeframe).total_seconds())
+            if np.isfinite(sharpe_ratio):
+                sharpe_ratios.append(sharpe_ratio)
+        return float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0
+    except Exception as e:  # pragma: no cover - log and return
+        logger.error(f"Ошибка в _objective_remote для {symbol}: {e}")
+        return 0.0
 
 class ParameterOptimizer:
     def __init__(self, config, data_handler):
@@ -69,11 +141,17 @@ class ParameterOptimizer:
                         metric_name="sharpe_ratio"
                     )
                 )
-            study.optimize(
-                lambda trial: self.objective(trial, symbol, df),
-                n_trials=self.max_trials,
-                callbacks=callbacks
-            )
+            obj_refs = []
+            trials = []
+            for _ in range(self.max_trials):
+                trial = study.ask()
+                obj_refs.append(self.objective(trial, symbol, df))
+                trials.append(trial)
+            results = ray.get(obj_refs)
+            for trial, value in zip(trials, results):
+                study.tell(trial, value)
+                for cb in callbacks:
+                    cb(study, trial)
             best_params = {**self.config, **study.best_params}
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")
@@ -129,71 +207,20 @@ class ParameterOptimizer:
             ema_periods.sort()
             ema30_period, ema100_period, ema200_period = ema_periods
             atr_period_default = trial.suggest_int('atr_period_default', 5, 20)
-            sl_multiplier = trial.suggest_float('sl_multiplier', 0.5, 2.0)
-            tp_multiplier = trial.suggest_float('tp_multiplier', sl_multiplier, 3.0)
-            n_splits = 5
-            train_size = int(0.6 * len(df))
-            test_size = int(0.2 * len(df))
-            sharpe_ratios = []
-            for i in range(n_splits):
-                start = i * test_size
-                end = start + train_size + test_size
-                if end > len(df):
-                    break
-                test_df = df.iloc[start + train_size:end].droplevel('symbol')
-                from data_handler import IndicatorsCache
-                # Обновление ATR при необходимости
-                current_candle_count = len(test_df)
-                if current_candle_count - self.last_atr_update.get(symbol, 0) >= self.atr_update_interval:
-                    indicators = IndicatorsCache(test_df, {
-                        'ema30_period': ema30_period,
-                        'ema100_period': ema100_period,
-                        'ema200_period': ema200_period,
-                        'atr_period_default': atr_period_default
-                    }, test_df['close'].pct_change().std())
-                    self.last_atr_update[symbol] = current_candle_count
-                else:
-                    indicators = self.data_handler.indicators_cache.get(f"{symbol}_{self.config['timeframe']}")
-                    if not indicators:
-                        indicators = IndicatorsCache(test_df, {
-                            'ema30_period': ema30_period,
-                            'ema100_period': ema100_period,
-                            'ema200_period': ema200_period,
-                            'atr_period_default': atr_period_default
-                        }, test_df['close'].pct_change().std())
-                if not indicators or check_dataframe_empty(indicators.df, f"objective {symbol}"):
-                    return 0.0
-                returns = []
-                for j in range(1, len(test_df)):
-                    close = test_df['close'].iloc[j]
-                    prev_close = test_df['close'].iloc[j-1]
-                    ema30 = indicators.ema30.iloc[j]
-                    ema100 = indicators.ema100.iloc[j]
-                    if indicators.volume_profile is not None and not indicators.volume_profile.empty:
-                        price_bins = indicators.volume_profile.index.to_numpy()
-                        idx = np.searchsorted(price_bins, close)
-                        idx = np.clip(idx, 0, len(price_bins) - 1)
-                        volume_profile = indicators.volume_profile.iloc[idx]
-                    else:
-                        volume_profile = 0.0
-                    signal = 0
-                    if ema30 > ema100 and close > ema30 and volume_profile > 0.02:
-                        signal = 1
-                    elif ema30 < ema100 and close < ema30 and volume_profile > 0.02:
-                        signal = -1
-                    if signal != 0:
-                        ret = (close - prev_close) / prev_close * signal
-                        returns.append(ret)
-                if not returns:
-                    return 0.0
-                returns = np.array(returns, dtype=np.float32)
-                sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 / pd.Timedelta(self.config['timeframe']).total_seconds())
-                if np.isfinite(sharpe_ratio):
-                    sharpe_ratios.append(sharpe_ratio)
-            return np.mean(sharpe_ratios) if sharpe_ratios else 0.0
+            trial.suggest_float('sl_multiplier', 0.5, 2.0)
+            trial.suggest_float('tp_multiplier', 0.5, 3.0)
+            return _objective_remote.remote(
+                df,
+                symbol,
+                ema30_period,
+                ema100_period,
+                ema200_period,
+                atr_period_default,
+                self.config['timeframe'],
+            )
         except Exception as e:
             logger.error(f"Ошибка в objective для {symbol}: {e}")
-            return 0.0
+            return _objective_remote.remote(pd.DataFrame(), symbol, 0, 0, 0, 0, self.config.get('timeframe', '1m'))
 
     async def optimize_all(self):
         # Оптимизация для всех символов

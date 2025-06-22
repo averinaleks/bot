@@ -4,6 +4,13 @@ import pandas as pd
 import ta
 import types
 
+numba_mod = types.ModuleType('numba')
+numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
+numba_mod.jit = lambda *a, **k: (lambda f: f)
+numba_mod.prange = range
+sys.modules.setdefault('numba', numba_mod)
+sys.modules.setdefault('numba.cuda', numba_mod.cuda)
+
 ccxt_mod = types.ModuleType('ccxt')
 ccxt_mod.async_support = types.ModuleType('async_support')
 ccxt_mod.async_support.bybit = object

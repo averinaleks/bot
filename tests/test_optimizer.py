@@ -2,6 +2,13 @@ import os, sys; sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import pytest
 import types, sys, logging
 
+if 'torch' not in sys.modules:
+    torch = types.ModuleType('torch')
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    import importlib.machinery
+    torch.__spec__ = importlib.machinery.ModuleSpec('torch', None)
+    sys.modules['torch'] = torch
+
 utils = types.ModuleType('utils')
 utils.logger = logging.getLogger('test')
 async def _cde(*a, **kw):
