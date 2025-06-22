@@ -35,6 +35,7 @@ class TelegramLogger(logging.Handler):
     _worker_task: asyncio.Task | None = None
     _worker_lock = asyncio.Lock()
     _bot = None
+    _stop_event: asyncio.Event | None = None
 
     def __init__(self, bot, chat_id, level=logging.NOTSET):
         super().__init__(level)
@@ -47,11 +48,18 @@ class TelegramLogger(logging.Handler):
         if TelegramLogger._queue is None:
             TelegramLogger._queue = asyncio.Queue()
             TelegramLogger._bot = bot
+            TelegramLogger._stop_event = asyncio.Event()
             TelegramLogger._worker_task = asyncio.create_task(self._worker())
 
     async def _worker(self):
-        while True:
-            chat_id, text, urgent = await TelegramLogger._queue.get()
+        assert TelegramLogger._queue is not None
+        assert TelegramLogger._stop_event is not None
+        while not TelegramLogger._stop_event.is_set():
+            try:
+                item = await asyncio.wait_for(TelegramLogger._queue.get(), 1.0)
+            except asyncio.TimeoutError:
+                continue
+            chat_id, text, urgent = item
             await self._send(text, chat_id, urgent)
             TelegramLogger._queue.task_done()
             await asyncio.sleep(1)
@@ -76,12 +84,21 @@ class TelegramLogger(logging.Handler):
                         await asyncio.sleep(wait_time)
                         delay = min(delay * 2, 60)
                     except httpx.ConnectError as e:
-                        logger.warning(f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/5")
+                        logger.warning(
+                            f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/5"
+                        )
                         if attempt < 4:
                             await asyncio.sleep(delay)
                             delay = min(delay * 2, 60)
+                    except httpx.HTTPError as e:
+                        logger.error(f"HTTP ошибка Telegram: {e}")
+                        break
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as e:
-                        logger.error(f"Ошибка отправки сообщения Telegram: {e}")
+                        logger.exception(
+                            f"Ошибка отправки сообщения Telegram: {e}"
+                        )
                         return
 
     async def send_telegram_message(self, message, urgent: bool = False):
@@ -95,7 +112,22 @@ class TelegramLogger(logging.Handler):
         except Exception as e:
             logger.error(f"Ошибка в TelegramLogger: {e}")
 
-def check_dataframe_empty(df, context=""):
+    @classmethod
+    async def shutdown(cls):
+        if cls._stop_event is None:
+            return
+        cls._stop_event.set()
+        if cls._worker_task is not None:
+            cls._worker_task.cancel()
+            try:
+                await cls._worker_task
+            except asyncio.CancelledError:
+                pass
+            cls._worker_task = None
+        cls._queue = None
+        cls._stop_event = None
+
+def check_dataframe_empty(df, context: str = "") -> bool:
     try:
         if df is None:
             logger.warning(f"DataFrame является None в контексте: {context}")
@@ -105,34 +137,36 @@ def check_dataframe_empty(df, context=""):
                 logger.warning(f"DataFrame пуст в контексте: {context}")
                 return True
             if df.isna().all().all():
-                logger.warning(f"DataFrame содержит только NaN в контексте: {context}")
+                logger.warning(
+                    f"DataFrame содержит только NaN в контексте: {context}"
+                )
                 return True
         return False
-    except Exception as e:
+    except (KeyError, AttributeError, TypeError) as e:
         logger.error(f"Ошибка проверки DataFrame в контексте {context}: {e}")
-        return False
+        return True
 
 def sanitize_symbol(symbol: str) -> str:
     """Sanitize symbol string for safe filesystem usage."""
-    try:
-        return symbol.replace('/', '_').replace(':', '_')
-    except Exception as e:
-        logger.error(f"Ошибка sanitize_symbol для {symbol}: {e}")
-        return symbol
+    return symbol.replace('/', '_').replace(':', '_')
 
 def filter_outliers_zscore(df, column='close', threshold=3.0):
     try:
         if len(df[column].dropna()) < 3:
-            logger.warning(f"Недостаточно данных для z-оценки в {column}, возвращается исходный DataFrame")
+            logger.warning(
+                f"Недостаточно данных для z-оценки в {column}, возвращается исходный DataFrame"
+            )
             return df
         z_scores = zscore(df[column].dropna())
         volatility = df[column].pct_change().std()
         adjusted_threshold = threshold * (1 + volatility / 0.02)
         df_filtered = df[np.abs(z_scores) <= adjusted_threshold]
         if len(df_filtered) < len(df):
-            logger.info(f"Удалено {len(df) - len(df_filtered)} аномалий в {column} с z-оценкой, порог={adjusted_threshold:.2f}")
+            logger.info(
+                f"Удалено {len(df) - len(df_filtered)} аномалий в {column} с z-оценкой, порог={adjusted_threshold:.2f}"
+            )
         return df_filtered
-    except Exception as e:
+    except (KeyError, TypeError) as e:
         logger.error(f"Ошибка фильтрации аномалий в {column}: {e}")
         return df
 
@@ -156,7 +190,7 @@ def _calculate_volume_profile(prices, volumes, bins=50):
 def calculate_volume_profile(prices, volumes, bins=50):
     try:
         return _calculate_volume_profile(prices, volumes, bins)
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         logger.error(f"Ошибка вычисления профиля объема: {exc}")
         return np.zeros(bins)
 
@@ -199,8 +233,11 @@ class HistoricalDataCache:
 
     def _aggressive_clean(self):
         try:
-            files = [(f, os.path.getmtime(os.path.join(self.cache_dir, f)))
-                     for f in os.listdir(self.cache_dir) if os.path.isfile(os.path.join(self.cache_dir, f))]
+            files = [
+                (f, os.path.getmtime(os.path.join(self.cache_dir, f)))
+                for f in os.listdir(self.cache_dir)
+                if os.path.isfile(os.path.join(self.cache_dir, f))
+            ]
             if not files:
                 return
             files.sort(key=lambda x: x[1])
@@ -211,8 +248,10 @@ class HistoricalDataCache:
                 file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
                 os.remove(file_path)
                 self.current_cache_size_mb -= file_size_mb
-                logger.info(f"Удален файл кэша (агрессивная очистка): {file_name}, освобождено {file_size_mb:.2f} МБ")
-        except Exception as e:
+                logger.info(
+                    f"Удален файл кэша (агрессивная очистка): {file_name}, освобождено {file_size_mb:.2f} МБ"
+                )
+        except OSError as e:
             logger.error(f"Ошибка агрессивной очистки кэша: {e}")
 
     def _check_buffer_size(self):
