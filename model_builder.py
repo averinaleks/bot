@@ -206,7 +206,25 @@ class ModelBuilder:
             logger.warning(f"Нет индикаторов для {symbol}")
             return
         features = await self.prepare_lstm_features(symbol, indicators)
-        if len(features) < self.config['lstm_timesteps'] * 2:
+        required_len = self.config['lstm_timesteps'] * 2
+        if len(features) < required_len:
+            history_limit = max(self.config.get('min_data_length', required_len), required_len)
+            sym, df_add = await self.data_handler.fetch_ohlcv_history(
+                symbol, self.config['timeframe'], history_limit
+            )
+            if not check_dataframe_empty(df_add, f"retrain_symbol fetch {symbol}"):
+                df_add['symbol'] = sym
+                df_add = df_add.set_index(['symbol', df_add.index])
+                await self.data_handler.synchronize_and_update(
+                    sym,
+                    df_add,
+                    self.data_handler.funding_rates.get(sym, 0.0),
+                    self.data_handler.open_interest.get(sym, 0.0),
+                    {"imbalance": 0.0, "timestamp": time.time()},
+                )
+                indicators = self.data_handler.indicators.get(sym)
+                features = await self.prepare_lstm_features(sym, indicators)
+        if len(features) < required_len:
             logger.warning(f"Недостаточно данных для обучения {symbol}")
             return
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
