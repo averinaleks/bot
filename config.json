@@ -71,5 +71,7 @@
     "target_change_threshold": 0.001,
     "backtest_interval": 604800,
     "rl_model": "PPO",
-    "rl_timesteps": 10000
+    "rl_timesteps": 10000,
+    "mlflow_tracking_uri": "mlruns",
+    "mlflow_enabled": false
 }
