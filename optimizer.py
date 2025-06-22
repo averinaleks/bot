@@ -40,7 +40,14 @@ class ParameterOptimizer:
                 logger.info(f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд")
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
             # Использование TPESampler с multivariate=True для учета корреляций
-            study = optuna.create_study(direction='maximize', sampler=TPESampler(n_startup_trials=10, multivariate=True))
+            study = optuna.create_study(
+                direction='maximize',
+                sampler=TPESampler(
+                    n_startup_trials=10,
+                    multivariate=True,
+                    warn_independent_sampling=False
+                )
+            )
             study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=self.max_trials)
             best_params = {**self.config, **study.best_params}
             if not self.validate_params(best_params):
