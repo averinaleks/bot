@@ -117,8 +117,19 @@ class TradeManager:
         async with self.position_lock:
             try:
                 order_type = params.get('type', 'market')
-                order = await self.exchange.create_order(symbol, order_type, side, size, price, params)
-                logger.info(f"Ордер размещён: {symbol}, {side}, size={size}, price={price}, type={order_type}")
+                tp_price = params.pop('takeProfitPrice', None)
+                sl_price = params.pop('stopLossPrice', None)
+                if (tp_price is not None or sl_price is not None) and hasattr(self.exchange, 'create_order_with_take_profit_and_stop_loss'):
+                    order = await self.exchange.create_order_with_take_profit_and_stop_loss(
+                        symbol, order_type, side, size,
+                        price if order_type != 'market' else None,
+                        tp_price, sl_price, params
+                    )
+                else:
+                    order = await self.exchange.create_order(symbol, order_type, side, size, price, params)
+                logger.info(
+                    f"Ордер размещён: {symbol}, {side}, size={size}, price={price}, type={order_type}"
+                )
                 await self.telegram_logger.send_telegram_message(
                     f"✅ Ордер: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
                 )
@@ -160,8 +171,8 @@ class TradeManager:
             return 0.0
 
     async def open_position(self, symbol: str, side: str, price: float, params: Dict):
-        async with self.position_lock:
-            try:
+        try:
+            async with self.position_lock:
                 if len(self.positions) >= self.max_positions:
                     logger.warning(f"Достигнуто максимальное количество позиций: {self.max_positions}")
                     return
@@ -181,36 +192,37 @@ class TradeManager:
                     return
                 stop_loss_price = price - sl_mult * atr if side == 'buy' else price + sl_mult * atr
                 take_profit_price = price + tp_mult * atr if side == 'buy' else price - tp_mult * atr
-                order_params = {
-                    'leverage': self.leverage,
-                    'stopLossPrice': stop_loss_price,
-                    'takeProfitPrice': take_profit_price,
-                    'tpslMode': 'full',
+            order_params = {
+                'leverage': self.leverage,
+                'stopLossPrice': stop_loss_price,
+                'takeProfitPrice': take_profit_price,
+                'tpslMode': 'full',
+            }
+            order = await self.place_order(symbol, side, size, price, order_params)
+            if order:
+                new_position = {
+                    'symbol': symbol,
+                    'side': side,
+                    'size': size,
+                    'entry_price': price,
+                    'tp_multiplier': tp_mult,
+                    'sl_multiplier': sl_mult,
+                    'highest_price': price if side == 'buy' else float('inf'),
+                    'lowest_price': price if side == 'sell' else 0.0
                 }
-                order = await self.place_order(symbol, side, size, price, order_params)
-                if order:
-                    new_position = {
-                        'symbol': symbol,
-                        'side': side,
-                        'size': size,
-                        'entry_price': price,
-                        'tp_multiplier': tp_mult,
-                        'sl_multiplier': sl_mult,
-                        'highest_price': price if side == 'buy' else float('inf'),
-                        'lowest_price': price if side == 'sell' else 0.0
-                    }
-                    new_position_df = pd.DataFrame([new_position], index=pd.MultiIndex.from_tuples([(symbol, pd.Timestamp.now())], names=['symbol', 'timestamp']))
+                new_position_df = pd.DataFrame([new_position], index=pd.MultiIndex.from_tuples([(symbol, pd.Timestamp.now())], names=['symbol', 'timestamp']))
+                async with self.position_lock:
                     self.positions = pd.concat([self.positions, new_position_df], ignore_index=False)
                     self.positions_changed = True
                     self.save_state()
-                    logger.info(f"Позиция открыта: {symbol}, {side}, size={size}, entry={price}")
-                    await self.telegram_logger.send_telegram_message(
-                        f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
-                        urgent=True
-                    )
-            except Exception as e:
-                logger.error(f"Ошибка открытия позиции для {symbol}: {e}")
-                await self.telegram_logger.send_telegram_message(f"❌ Ошибка открытия позиции {symbol}: {e}")
+                logger.info(f"Позиция открыта: {symbol}, {side}, size={size}, entry={price}")
+                await self.telegram_logger.send_telegram_message(
+                    f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
+                    urgent=True
+                )
+        except Exception as e:
+            logger.error(f"Ошибка открытия позиции для {symbol}: {e}")
+            await self.telegram_logger.send_telegram_message(f"❌ Ошибка открытия позиции {symbol}: {e}")
 
     async def close_position(self, symbol: str, exit_price: float, reason: str = "Manual"):
         async with self.position_lock:
