@@ -13,8 +13,18 @@ class DummyTelegramLogger:
     async def send_telegram_message(self, *a, **kw):
         pass
 
-import utils
+utils = types.ModuleType('utils')
 utils.TelegramLogger = DummyTelegramLogger
+import logging
+utils.logger = logging.getLogger('test')
+async def _cde(*a, **kw):
+    return False
+utils.check_dataframe_empty = _cde
+sys.modules['utils'] = utils
+
+import utils
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from trade_manager import TradeManager
 
@@ -24,9 +34,14 @@ class DummyExchange:
     async def fetch_balance(self):
         return {'total': {'USDT': 1000}}
     async def create_order(self, symbol, type, side, amount, price, params):
-        self.orders.append({'symbol': symbol, 'type': type, 'side': side,
+        self.orders.append({'method': 'create_order', 'symbol': symbol, 'type': type, 'side': side,
                              'amount': amount, 'price': price, 'params': params})
         return {'id': '1'}
+    async def create_order_with_take_profit_and_stop_loss(self, symbol, type, side, amount, price, takeProfit, stopLoss, params):
+        self.orders.append({'method': 'create_order_with_tp_sl', 'symbol': symbol, 'type': type, 'side': side,
+                             'amount': amount, 'price': price, 'tp': takeProfit, 'sl': stopLoss,
+                             'params': params})
+        return {'id': '2'}
 
 class DummyIndicators:
     def __init__(self):
@@ -71,4 +86,26 @@ def test_position_calculations():
     take_profit_price = 100 + 2.5 * 1.0
     assert stop_loss_price == pytest.approx(98.5)
     assert take_profit_price == pytest.approx(102.5)
+
+
+def test_open_position_places_tp_sl_orders():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    import asyncio
+    asyncio.run(run())
+
+    assert dh.exchange.orders, 'no orders created'
+    order = dh.exchange.orders[0]
+    assert order['method'] == 'create_order_with_tp_sl'
+    assert order['tp'] == pytest.approx(102.0)
+    assert order['sl'] == pytest.approx(99.0)
 
