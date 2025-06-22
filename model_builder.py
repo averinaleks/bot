@@ -12,6 +12,7 @@ import os
 import time
 import asyncio
 import shap
+import mlflow
 from utils import logger, check_dataframe_empty, HistoricalDataCache
 from collections import deque
 import ray
@@ -251,6 +252,16 @@ class ModelBuilder:
             'prob_true': prob_true.tolist(),
             'prob_pred': prob_pred.tolist()
         }
+        if self.config.get("mlflow_enabled", False):
+            mlflow.set_tracking_uri(self.config.get("mlflow_tracking_uri", "mlruns"))
+            with mlflow.start_run(run_name=f"{symbol}_retrain"):
+                mlflow.log_params({
+                    "lstm_timesteps": self.config.get("lstm_timesteps"),
+                    "lstm_batch_size": self.config.get("lstm_batch_size"),
+                    "target_change_threshold": self.config.get("target_change_threshold", 0.001)
+                })
+                mlflow.log_metric("brier_score", float(brier))
+                mlflow.pytorch.log_model(model, "model")
         self.lstm_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()

@@ -5,6 +5,7 @@ import asyncio
 import time
 from utils import logger, check_dataframe_empty
 from optuna.samplers import TPESampler
+from optuna.integration.mlflow import MLflowCallback
 
 class ParameterOptimizer:
     def __init__(self, config, data_handler):
@@ -18,6 +19,8 @@ class ParameterOptimizer:
         self.atr_update_interval = 5  # Обновление ATR каждые 5 свечей
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}  # Для отслеживания изменений волатильности
         self.max_trials = config.get('optuna_trials', 20)
+        self.mlflow_enabled = config.get('mlflow_enabled', False)
+        self.mlflow_tracking_uri = config.get('mlflow_tracking_uri', 'mlruns')
 
     def get_opt_interval(self, symbol: str, volatility: float) -> float:
         """Return optimization interval for a symbol based on its volatility."""
@@ -58,7 +61,19 @@ class ParameterOptimizer:
                     warn_independent_sampling=False
                 )
             )
-            study.optimize(lambda trial: self.objective(trial, symbol, df), n_trials=self.max_trials)
+            callbacks = []
+            if self.mlflow_enabled:
+                callbacks.append(
+                    MLflowCallback(
+                        tracking_uri=self.mlflow_tracking_uri,
+                        metric_name="sharpe_ratio"
+                    )
+                )
+            study.optimize(
+                lambda trial: self.objective(trial, symbol, df),
+                n_trials=self.max_trials,
+                callbacks=callbacks
+            )
             best_params = {**self.config, **study.best_params}
             if not self.validate_params(best_params):
                 logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")

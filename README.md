@@ -76,6 +76,18 @@ python trading_bot.py
 0 3 * * * cd /path/to/bot && /usr/bin/python trading_bot.py
 ```
 
+## MLflow
+
+Если установить пакет `mlflow` и включить флаг `mlflow_enabled` в `config.json`,
+бот будет сохранять параметры и метрики обучения в указанное хранилище.
+По умолчанию используется локальная папка `mlruns`.
+
+Пример запуска с отслеживанием экспериментов:
+
+```bash
+MLFLOW_TRACKING_URI=mlruns python trading_bot.py
+```
+
 ## Запуск тестов
 
 Для выполнения тестов необходимо установить все зависимости из `requirements.txt`:
