@@ -107,6 +107,7 @@ The test suite relies on the following packages:
 - torch
 - torchvision
 - ccxt
+- ccxtpro
 - python-telegram-bot
 - aiohttp
 - websockets
