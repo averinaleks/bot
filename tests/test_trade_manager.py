@@ -96,7 +96,8 @@ class DummyIndicators:
 
 class DummyDataHandler:
     def __init__(self):
-        self.exchange = DummyExchange()
+        self.client = DummyExchange()
+        self.exchange = self.client
         self.usdt_pairs = ['BTCUSDT']
         idx = pd.MultiIndex.from_tuples([
             ('BTCUSDT', pd.Timestamp('2020-01-01'))
