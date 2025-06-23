@@ -296,8 +296,8 @@ class ParameterOptimizer:
             ema_periods.sort()
             ema30_period, ema100_period, ema200_period = ema_periods
             atr_period_default = trial.suggest_int("atr_period_default", 5, 20)
-            trial.suggest_float("sl_multiplier", 0.5, 2.0)
-            trial.suggest_float("tp_multiplier", 0.5, 3.0)
+            # Stop loss and take profit multipliers are now taken
+            # directly from the configuration and are not optimized.
             return _objective_remote.remote(
                 df,
                 symbol,
