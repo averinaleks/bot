@@ -144,7 +144,8 @@ class TradeManager:
             disk_usage = shutil.disk_usage(self.config["cache_dir"])
             if disk_usage.free / (1024**3) < 0.5:
                 logger.warning(
-                    f"Недостаточно места для сохранения состояния: {disk_usage.free / (1024 ** 3):.2f} ГБ"
+                    "Not enough space to persist state: "
+                    f"{disk_usage.free / (1024 ** 3):.2f} GB left"
                 )
                 return
             self.positions.to_pickle(self.state_file)
@@ -152,9 +153,9 @@ class TradeManager:
                 joblib.dump(self.returns_by_symbol, f)
             self.last_save_time = time.time()
             self.positions_changed = False
-            logger.info("Состояние TradeManager сохранено")
+            logger.info("TradeManager state saved")
         except Exception as e:
-            logger.error(f"Ошибка сохранения состояния: {e}")
+            logger.error(f"Failed to save state: {e}")
 
     def load_state(self):
         try:
@@ -163,9 +164,9 @@ class TradeManager:
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "rb") as f:
                     self.returns_by_symbol = joblib.load(f)
-                logger.info("Состояние TradeManager загружено")
+                logger.info("TradeManager state loaded")
         except Exception as e:
-            logger.error(f"Ошибка загрузки состояния: {e}")
+            logger.error(f"Failed to load state: {e}")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3)
@@ -198,16 +199,16 @@ class TradeManager:
                         symbol, order_type, side, size, price, params
                     )
                 logger.info(
-                    f"Ордер размещён: {symbol}, {side}, size={size}, price={price}, type={order_type}"
+                    f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
                 )
                 await self.telegram_logger.send_telegram_message(
-                    f"✅ Ордер: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
+                    f"✅ Order: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
                 )
                 return order
             except Exception as e:
-                logger.error(f"Ошибка размещения ордера для {symbol}: {e}")
+                logger.error(f"Failed to place order for {symbol}: {e}")
                 await self.telegram_logger.send_telegram_message(
-                    f"❌ Ошибка ордера {symbol}: {e}"
+                    f"❌ Order error {symbol}: {e}"
                 )
                 return None
 
@@ -217,15 +218,15 @@ class TradeManager:
         try:
             if price <= 0 or atr <= 0:
                 logger.warning(
-                    f"Некорректные входные данные для {symbol}: price={price}, atr={atr}"
+                    f"Invalid inputs for {symbol}: price={price}, atr={atr}"
                 )
                 return 0.0
             account = await self.exchange.fetch_balance()
             equity = float(account["total"].get("USDT", 0))
             if equity <= 0:
-                logger.warning(f"Недостаточно средств на счете для {symbol}")
+                logger.warning(f"Insufficient balance for {symbol}")
                 await self.telegram_logger.send_telegram_message(
-                    f"⚠️ Недостаточно средств на счете для {symbol}: equity={equity}"
+                    f"⚠️ Insufficient balance for {symbol}: equity={equity}"
                 )
                 return 0.0
             ohlcv = self.data_handler.ohlcv
@@ -245,16 +246,17 @@ class TradeManager:
             risk_amount = equity * risk_per_trade
             stop_loss_distance = atr * sl_multiplier
             if stop_loss_distance <= 0:
-                logger.warning(f"Некорректное значение stop_loss_distance для {symbol}")
+                logger.warning(f"Invalid stop_loss_distance for {symbol}")
                 return 0.0
             position_size = risk_amount / (stop_loss_distance * self.leverage)
             position_size = min(position_size, equity * self.leverage / price * 0.1)
             logger.info(
-                f"Размер позиции для {symbol}: {position_size:.4f} (риск: {risk_amount:.2f} USDT, ATR: {atr:.2f})"
+                f"Position size for {symbol}: {position_size:.4f} "
+                f"(risk {risk_amount:.2f} USDT, ATR {atr:.2f})"
             )
             return position_size
         except Exception as e:
-            logger.error(f"Ошибка расчета размера позиции для {symbol}: {e}")
+            logger.error(f"Failed to calculate position size for {symbol}: {e}")
             return 0.0
 
     async def open_position(self, symbol: str, side: str, price: float, params: Dict):
@@ -262,26 +264,26 @@ class TradeManager:
             async with self.position_lock:
                 if len(self.positions) >= self.max_positions:
                     logger.warning(
-                        f"Достигнуто максимальное количество позиций: {self.max_positions}"
+                        f"Maximum number of positions reached: {self.max_positions}"
                     )
                     return
                 if (
                     "symbol" in self.positions.index.names
                     and symbol in self.positions.index.get_level_values("symbol")
                 ):
-                    logger.warning(f"Позиция для {symbol} уже открыта")
+                    logger.warning(f"Position for {symbol} already open")
                     return
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
                     logger.warning(
-                        f"Нет данных ATR для {symbol}, повторная попытка загрузки"
+                        f"ATR data missing for {symbol}, retrying later"
                     )
                     return
                 sl_mult = params.get("sl_multiplier", self.config["sl_multiplier"])
                 tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
                 size = await self.calculate_position_size(symbol, price, atr, sl_mult)
                 if size <= 0:
-                    logger.warning(f"Недостаточный размер позиции для {symbol}")
+                    logger.warning(f"Position size too small for {symbol}")
                     return
                 stop_loss_price = (
                     price - sl_mult * atr if side == "buy" else price + sl_mult * atr
@@ -321,16 +323,16 @@ class TradeManager:
                     self.positions_changed = True
                     self.save_state()
                 logger.info(
-                    f"Позиция открыта: {symbol}, {side}, size={size}, entry={price}"
+                    f"Position opened: {symbol}, {side}, size={size}, entry={price}"
                 )
                 await self.telegram_logger.send_telegram_message(
-                    f"📈 Позиция открыта: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
+                    f"📈 Position opened: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
                     urgent=True,
                 )
         except Exception as e:
-            logger.error(f"Ошибка открытия позиции для {symbol}: {e}")
+            logger.error(f"Failed to open position for {symbol}: {e}")
             await self.telegram_logger.send_telegram_message(
-                f"❌ Ошибка открытия позиции {symbol}: {e}"
+                f"❌ Failed to open position {symbol}: {e}"
             )
 
     async def close_position(
@@ -346,7 +348,7 @@ class TradeManager:
                     else:
                         position = pd.DataFrame()
                     if position.empty:
-                        logger.warning(f"Позиция для {symbol} не найдена")
+                        logger.warning(f"Position for {symbol} not found")
                         return
                     position = position.iloc[0]
                     side = "sell" if position["side"] == "buy" else "buy"
@@ -368,16 +370,16 @@ class TradeManager:
                         self.positions_changed = True
                         self.save_state()
                         logger.info(
-                            f"Позиция закрыта: {symbol}, profit={profit:.2f}, reason={reason}"
+                            f"Position closed: {symbol}, profit={profit:.2f}, reason={reason}"
                         )
                         await self.telegram_logger.send_telegram_message(
-                            f"📉 Позиция закрыта: {symbol} profit={profit:.2f} USDT ({reason})",
+                            f"📉 Position closed: {symbol} profit={profit:.2f} USDT ({reason})",
                             urgent=True,
                         )
                 except Exception as e:
-                    logger.error(f"Ошибка закрытия позиции для {symbol}: {e}")
+                    logger.error(f"Failed to close position for {symbol}: {e}")
                     await self.telegram_logger.send_telegram_message(
-                        f"❌ Ошибка закрытия позиции {symbol}: {e}"
+                        f"❌ Failed to close position {symbol}: {e}"
                     )
 
     async def check_trailing_stop(self, symbol: str, current_price: float):
@@ -390,13 +392,13 @@ class TradeManager:
                 else:
                     position = pd.DataFrame()
                 if position.empty:
-                    logger.warning(f"Позиция для {symbol} не найдена")
+                    logger.warning(f"Position for {symbol} not found")
                     return
                 position = position.iloc[0]
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
                     logger.warning(
-                        f"Нет данных ATR для {symbol}, повторная попытка загрузки"
+                        f"ATR data missing for {symbol}, retrying later"
                     )
                     return
                 trailing_stop_distance = atr * self.config.get(
@@ -436,7 +438,7 @@ class TradeManager:
                     self.positions_changed = True
                     self.save_state()
                     await self.telegram_logger.send_telegram_message(
-                        f"🏁 {symbol} переведена в безубыток, фиксирована часть прибыли"
+                        f"🏁 {symbol} moved to breakeven, partial profits taken"
                     )
 
                 if position["side"] == "buy":
@@ -460,7 +462,7 @@ class TradeManager:
                             symbol, current_price, "Trailing Stop"
                         )
             except Exception as e:
-                logger.error(f"Ошибка проверки трейлинг-стопа для {symbol}: {e}")
+                logger.error(f"Failed trailing stop check for {symbol}: {e}")
 
     async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
         async with self.position_lock:
@@ -501,13 +503,13 @@ class TradeManager:
                 elif position["side"] == "sell" and current_price <= take_profit:
                     await self.close_position(symbol, current_price, "Take Profit")
             except Exception as e:
-                logger.error(f"Ошибка проверки SL/TP для {symbol}: {e}")
+                logger.error(f"Failed SL/TP check for {symbol}: {e}")
 
     async def check_lstm_exit_signal(self, symbol: str, current_price: float):
         try:
             model = self.model_builder.lstm_models.get(symbol)
             if not model:
-                logger.debug(f"Модель для {symbol} не найдена")
+                logger.debug(f"Model for {symbol} not found")
                 return
             if "symbol" in self.positions.index.names:
                 position = self.positions.loc[
@@ -544,16 +546,16 @@ class TradeManager:
             )
             if position["side"] == "buy" and prediction < short_threshold:
                 logger.info(
-                    f"Сигнал CNN-LSTM для выхода из лонга для {symbol}: предсказание={prediction:.4f}, порог={short_threshold:.2f}"
+                    f"CNN-LSTM exit long signal for {symbol}: pred={prediction:.4f}, threshold={short_threshold:.2f}"
                 )
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
             elif position["side"] == "sell" and prediction > long_threshold:
                 logger.info(
-                    f"Сигнал CNN-LSTM для выхода из шорта для {symbol}: предсказание={prediction:.4f}, порог={long_threshold:.2f}"
+                    f"CNN-LSTM exit short signal for {symbol}: pred={prediction:.4f}, threshold={long_threshold:.2f}"
                 )
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
         except Exception as e:
-            logger.error(f"Ошибка проверки сигнала CNN-LSTM для {symbol}: {e}")
+            logger.error(f"Failed to check CNN-LSTM signal for {symbol}: {e}")
 
     async def monitor_performance(self):
         while True:
@@ -578,7 +580,7 @@ class TradeManager:
                                 * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
                             )
                             logger.info(
-                                f"Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}"
+                                f"Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                             )
                             ohlcv = self.data_handler.ohlcv
                             if (
@@ -600,22 +602,22 @@ class TradeManager:
                                     or volatility_change > 0.5
                                 ):
                                     logger.info(
-                                        f"Инициировано переобучение для {symbol}: Sharpe={sharpe_ratio:.2f}, Изменение волатильности={volatility_change:.2f}"
+                                        f"Retraining triggered for {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility change={volatility_change:.2f}"
                                     )
                                     await self.model_builder.retrain_symbol(symbol)
                                     await self.telegram_logger.send_telegram_message(
-                                        f"🔄 Переобучение для {symbol}: Sharpe={sharpe_ratio:.2f}, Волатильность={volatility_change:.2f}"
+                                        f"🔄 Retraining {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility={volatility_change:.2f}"
                                     )
                             if sharpe_ratio < self.config.get("min_sharpe_ratio", 0.5):
                                 logger.warning(
-                                    f"Низкий Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}"
+                                    f"Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                                 )
                                 await self.telegram_logger.send_telegram_message(
-                                    f"⚠️ Низкий Sharpe Ratio для {symbol}: {sharpe_ratio:.2f}"
+                                    f"⚠️ Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                                 )
                 await asyncio.sleep(self.performance_window / 10)
             except Exception as e:
-                logger.error(f"Ошибка мониторинга производительности: {e}")
+                logger.error(f"Performance monitoring error: {e}")
                 await asyncio.sleep(60)
 
     async def manage_positions(self):
@@ -642,7 +644,7 @@ class TradeManager:
                     await self.check_lstm_exit_signal(symbol, current_price)
                 await asyncio.sleep(self.check_interval)
             except Exception as e:
-                logger.error(f"Ошибка управления позициями: {e}")
+                logger.error(f"Error managing positions: {e}")
                 await asyncio.sleep(60)
 
     async def evaluate_ema_condition(self, symbol: str, signal: str) -> bool:
@@ -659,7 +661,7 @@ class TradeManager:
             empty = await _check_df_async(df_2h, f"evaluate_ema_condition {symbol}")
             if empty or not indicators_2h:
                 logger.warning(
-                    f"Нет данных или индикаторов для {symbol} на 2h таймфрейме"
+                    f"No data or indicators for {symbol} on 2h timeframe"
                 )
                 return False
             ema30 = indicators_2h.ema30
@@ -672,7 +674,7 @@ class TradeManager:
             recent_data = df_2h[timestamps >= timestamps[-1] - lookback_period]
             if len(recent_data) < 2:
                 logger.debug(
-                    f"Недостаточно данных для проверки пересечения EMA для {symbol}"
+                    f"Not enough data to check EMA crossover for {symbol}"
                 )
                 return False
             ema30_recent = ema30[-len(recent_data) :]
@@ -687,7 +689,7 @@ class TradeManager:
                 signal == "sell" and not crossover_short
             ):
                 logger.debug(
-                    f"Пересечение EMA не подтверждено для {symbol}, signal={signal}"
+                    f"EMA crossover not confirmed for {symbol}, signal={signal}"
                 )
                 return False
             pullback_period = pd.Timedelta(seconds=self.config["pullback_period"])
@@ -706,26 +708,26 @@ class TradeManager:
                     break
             if not pullback_occurred:
                 logger.debug(
-                    f"Откат к EMA30 не произошел для {symbol}, signal={signal}"
+                    f"No pullback to EMA30 for {symbol}, signal={signal}"
                 )
                 return False
             current_price = close.iloc[-1]
             if (signal == "buy" and current_price <= ema30.iloc[-1]) or (
                 signal == "sell" and current_price >= ema30.iloc[-1]
             ):
-                logger.debug(f"Цена не закрепилась для {symbol}, signal={signal}")
+                logger.debug(f"Price not consolidated for {symbol}, signal={signal}")
                 return False
-            logger.info(f"Условия EMA выполнены для {symbol}, signal={signal}")
+            logger.info(f"EMA conditions satisfied for {symbol}, signal={signal}")
             return True
         except Exception as e:
-            logger.error(f"Ошибка проверки условий EMA для {symbol}: {e}")
+            logger.error(f"Failed to check EMA conditions for {symbol}: {e}")
             return False
 
     async def evaluate_signal(self, symbol: str):
         try:
             model = self.model_builder.lstm_models.get(symbol)
             if not model:
-                logger.debug(f"Модель для {symbol} еще не обучена")
+                logger.debug(f"Model for {symbol} not yet trained")
                 return None
             indicators = self.data_handler.indicators.get(symbol)
             empty = (
@@ -754,7 +756,7 @@ class TradeManager:
                 and loss_streak >= 2
             ):
                 logger.info(
-                    f"Пропуск сигнала для {symbol}: низкий тренд и серия убытков"
+                    f"Skipping signal for {symbol}: weak trend and loss streak"
                 )
                 return None
             features = await self.model_builder.prepare_lstm_features(
@@ -786,27 +788,27 @@ class TradeManager:
                 rl_feat = features[-1]
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
                 if rl_signal:
-                    logger.info(f"Сигнал RL для {symbol}: {rl_signal}")
+                    logger.info(f"RL signal for {symbol}: {rl_signal}")
 
             if signal:
                 logger.info(
-                    f"Сигнал CNN-LSTM для {symbol}: {signal} (предсказание: {prediction:.4f}, пороги: {long_threshold:.2f}/{short_threshold:.2f})"
+                    f"CNN-LSTM signal for {symbol}: {signal} (pred {prediction:.4f}, thresholds {long_threshold:.2f}/{short_threshold:.2f})"
                 )
                 ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
                 if not ema_condition_met:
                     logger.info(
-                        f"Условия EMA не выполнены для {symbol}, сигнал отклонен"
+                        f"EMA conditions not met for {symbol}, signal rejected"
                     )
                     return None
                 logger.info(
-                    f"Все условия выполнены для {symbol}, подтвержден сигнал: {signal}"
+                    f"All conditions met for {symbol}, confirmed signal: {signal}"
                 )
 
             if signal and rl_signal:
                 if signal == rl_signal:
                     return signal
                 logger.info(
-                    f"Разногласие сигналов для {symbol}: CNN-LSTM {signal}, RL {rl_signal}"
+                    f"Signal mismatch for {symbol}: CNN-LSTM {signal}, RL {rl_signal}"
                 )
                 return None
             if signal:
@@ -817,7 +819,7 @@ class TradeManager:
                     return rl_signal
             return None
         except Exception as e:
-            logger.error(f"Ошибка оценки сигнала для {symbol}: {e}")
+            logger.error(f"Failed to evaluate signal for {symbol}: {e}")
             return None
 
     async def run(self):
@@ -836,19 +838,19 @@ class TradeManager:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for task, result in zip(tasks, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Ошибка в задаче {task.get_name()}: {result}")
+                    logger.error(f"Task {task.get_name()} failed: {result}")
                     await self.telegram_logger.send_telegram_message(
-                        f"❌ Ошибка в задаче {task.get_name()}: {result}"
+                        f"❌ Task {task.get_name()} failed: {result}"
                     )
         except Exception as e:
-            logger.error(f"Критичная ошибка в TradeManager: {e}")
+            logger.error(f"Critical error in TradeManager: {e}")
             await self.telegram_logger.send_telegram_message(
-                f"❌ Критическая ошибка TradeManager: {e}"
+                f"❌ Critical TradeManager error: {e}"
             )
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.lstm_models:
-            logger.debug(f"Ожидание модели для {symbol}")
+            logger.debug(f"Waiting for model for {symbol}")
             await asyncio.sleep(30)
         while True:
             try:
@@ -879,7 +881,7 @@ class TradeManager:
                     self.config["check_interval"] / len(self.data_handler.usdt_pairs)
                 )
             except Exception as e:
-                logger.error(f"Ошибка обработки {symbol}: {e}")
+                logger.error(f"Error processing {symbol}: {e}")
                 await asyncio.sleep(60)
 
 
