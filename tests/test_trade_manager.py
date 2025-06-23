@@ -1,6 +1,10 @@
 import pandas as pd
 import pytest
-import sys, types
+import sys
+import types
+import logging
+import os
+from trade_manager import TradeManager
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')
@@ -15,7 +19,6 @@ class DummyTelegramLogger:
 
 utils = types.ModuleType('utils')
 utils.TelegramLogger = DummyTelegramLogger
-import logging
 utils.logger = logging.getLogger('test')
 async def _cde(*a, **kw):
     return False
@@ -48,11 +51,7 @@ joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
 
-import utils
-import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from trade_manager import TradeManager
 
 class DummyExchange:
     def __init__(self):

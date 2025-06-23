@@ -1,6 +1,12 @@
-import os, sys; sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import os
+import sys
+
 import pytest
-import types, sys, logging
+import types
+import logging
+from optimizer import ParameterOptimizer
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')
@@ -15,8 +21,6 @@ async def _cde(*a, **kw):
     return False
 utils.check_dataframe_empty = _cde
 sys.modules['utils'] = utils
-
-import types
 mlflow_mod = types.ModuleType('optuna.integration.mlflow')
 mlflow_mod.MLflowCallback = object
 sys.modules['optuna.integration.mlflow'] = mlflow_mod
@@ -42,8 +46,6 @@ psutil_mod = types.ModuleType('psutil')
 psutil_mod.cpu_percent = lambda interval=1: 0
 psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
 sys.modules.setdefault('psutil', psutil_mod)
-
-from optimizer import ParameterOptimizer
 
 class DummyDataHandler:
     def __init__(self):
