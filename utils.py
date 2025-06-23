@@ -14,6 +14,41 @@ from numba import jit, prange
 import httpx
 from telegram.error import RetryAfter
 
+
+async def handle_rate_limits(exchange) -> None:
+    """Sleep if Bybit rate limit is close to exhaustion."""
+    headers = getattr(exchange, "last_response_headers", {}) or {}
+    try:
+        remaining = int(headers.get("X-Bapi-Limit-Status", headers.get("x-bapi-limit-status", 0)))
+        reset_ts = int(headers.get("X-Bapi-Limit-Reset-Timestamp", headers.get("x-bapi-limit-reset-timestamp", 0)))
+    except ValueError:
+        return
+    if remaining and remaining <= 5:
+        wait_time = max(0.0, reset_ts / 1000 - time.time())
+        if wait_time > 0:
+            logger.info(f"Rate limit low ({remaining}), sleeping {wait_time:.2f}s")
+            await asyncio.sleep(wait_time)
+
+
+async def safe_api_call(exchange, method: str, *args, **kwargs):
+    """Call a ccxt method with retry and rate-limit handling."""
+    delay = 1.0
+    for attempt in range(5):
+        try:
+            result = await getattr(exchange, method)(*args, **kwargs)
+            await handle_rate_limits(exchange)
+            return result
+        except Exception as exc:
+            logger.error(f"Bybit API error in {method}: {exc}")
+            if "10002" in str(exc):
+                logger.error(
+                    "Request not authorized. Check server time sync and recv_window"
+                )
+            if attempt == 4:
+                raise
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 10)
+
 logger = logging.getLogger("TradingBot")
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

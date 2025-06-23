@@ -13,6 +13,7 @@ from utils import (
     filter_outliers_zscore,
     TelegramLogger,
     calculate_volume_profile as utils_volume_profile,
+    safe_api_call,
 )
 from tenacity import retry, wait_exponential
 from typing import List, Dict
@@ -225,7 +226,7 @@ class DataHandler:
 
     async def load_initial(self):
         try:
-            markets = await self.exchange.load_markets()
+            markets = await safe_api_call(self.exchange, "load_markets")
             self.usdt_pairs = await self.select_liquid_pairs(markets)
             logger.info(f"Найдено {len(self.usdt_pairs)} USDT-пар с высокой ликвидностью")
             tasks = []
@@ -283,7 +284,7 @@ class DataHandler:
             # Only consider active USDT-margined futures symbols
             if market.get("active") and symbol.endswith("USDT") and (":" in symbol or symbol.endswith(":USDT")):
                 try:
-                    ticker = await self.exchange.fetch_ticker(symbol)
+                    ticker = await safe_api_call(self.exchange, "fetch_ticker", symbol)
                     volume = float(ticker.get("quoteVolume") or 0)
                 except Exception as e:
                     logger.error(f"Ошибка получения тикера для {symbol}: {e}")
@@ -297,7 +298,13 @@ class DataHandler:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = "") -> tuple:
         try:
-            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            ohlcv = await safe_api_call(
+                self.exchange,
+                "fetch_ohlcv",
+                symbol,
+                timeframe,
+                limit=limit,
+            )
             if not ohlcv or len(ohlcv) < limit * 0.8:
                 logger.warning(f"Неполные данные OHLCV для {symbol} ({timeframe}), получено {len(ohlcv)} из {limit}")
                 return symbol, pd.DataFrame()
@@ -341,7 +348,14 @@ class DataHandler:
             per_request = min(1000, total_limit)
             while remaining > 0:
                 limit = min(per_request, remaining)
-                ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit, since=since)
+                ohlcv = await safe_api_call(
+                    self.exchange,
+                    "fetch_ohlcv",
+                    symbol,
+                    timeframe,
+                    limit=limit,
+                    since=since,
+                )
                 if not ohlcv:
                     break
                 df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
@@ -365,7 +379,11 @@ class DataHandler:
     async def fetch_funding_rate(self, symbol: str) -> float:
         try:
             futures_symbol = self.fix_symbol(symbol)
-            funding = await self.exchange.fetch_funding_rate(futures_symbol)
+            funding = await safe_api_call(
+                self.exchange,
+                "fetch_funding_rate",
+                futures_symbol,
+            )
             rate = float(funding.get("fundingRate", 0.0))
             async with self.funding_lock:
                 self.funding_rates[symbol] = rate
@@ -378,7 +396,11 @@ class DataHandler:
     async def fetch_open_interest(self, symbol: str) -> float:
         try:
             futures_symbol = self.fix_symbol(symbol)
-            oi = await self.exchange.fetch_open_interest(futures_symbol)
+            oi = await safe_api_call(
+                self.exchange,
+                "fetch_open_interest",
+                futures_symbol,
+            )
             interest = float(oi.get("openInterest", 0.0))
             async with self.oi_lock:
                 self.open_interest[symbol] = interest
@@ -390,7 +412,12 @@ class DataHandler:
     @retry(wait=wait_exponential(multiplier=1, min=2, max=5))
     async def fetch_orderbook(self, symbol: str) -> Dict:
         try:
-            orderbook = await self.exchange.fetch_order_book(symbol, limit=10)
+            orderbook = await safe_api_call(
+                self.exchange,
+                "fetch_order_book",
+                symbol,
+                limit=10,
+            )
             if not orderbook["bids"] or not orderbook["asks"]:
                 logger.warning(f"Пустая книга ордеров для {symbol}, повторная попытка")
                 raise Exception("Пустой ордербук")
