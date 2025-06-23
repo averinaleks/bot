@@ -30,5 +30,6 @@ tensorflow>=2.16.1
 catalyst==21.4
 --extra-index-url https://download.pytorch.org/whl/cu128
 pytest>=8.1.1
+pytest-asyncio>=1.0.0
 flask>=3.0.2
 requests>=2.31.0
