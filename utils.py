@@ -31,12 +31,22 @@ async def handle_rate_limits(exchange) -> None:
 
 
 async def safe_api_call(exchange, method: str, *args, **kwargs):
-    """Call a ccxt method with retry and rate-limit handling."""
+    """Call a ccxt method with retry, status and retCode verification."""
     delay = 1.0
     for attempt in range(5):
         try:
             result = await getattr(exchange, method)(*args, **kwargs)
             await handle_rate_limits(exchange)
+
+            status = getattr(exchange, "last_http_status", 200)
+            if status != 200:
+                raise RuntimeError(f"HTTP {status}")
+
+            if isinstance(result, dict):
+                ret_code = result.get("retCode") or result.get("ret_code")
+                if ret_code is not None and ret_code != 0:
+                    raise RuntimeError(f"retCode {ret_code}")
+
             return result
         except Exception as exc:
             logger.error(f"Bybit API error in {method}: {exc}")
