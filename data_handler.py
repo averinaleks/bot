@@ -188,6 +188,40 @@ class DataHandler:
         self.load_threshold = 0.8
         self.ws_pool = {}
 
+    async def get_atr(self, symbol: str) -> float:
+        """Return the latest ATR value for a symbol, recalculating if missing."""
+        indicators = self.indicators.get(symbol)
+        if indicators and getattr(indicators, "atr", None) is not None:
+            try:
+                value = float(indicators.atr.iloc[-1])
+                if value > 0:
+                    return value
+            except Exception:
+                pass
+        async with self.ohlcv_lock:
+            if (
+                "symbol" in self.ohlcv.index.names
+                and symbol in self.ohlcv.index.get_level_values("symbol")
+            ):
+                df = self.ohlcv.xs(symbol, level="symbol", drop_level=False)
+            else:
+                return 0.0
+        if df.empty:
+            return 0.0
+        try:
+            new_ind = IndicatorsCache(
+                df.droplevel("symbol"),
+                self.config,
+                df["close"].pct_change().std(),
+                "primary",
+            )
+            self.indicators[symbol] = new_ind
+            if new_ind.atr is not None and not new_ind.atr.empty:
+                return float(new_ind.atr.iloc[-1])
+        except Exception as e:
+            logger.error(f"Ошибка расчета ATR для {symbol}: {e}")
+        return 0.0
+
     async def load_initial(self):
         try:
             markets = await self.exchange.load_markets()
