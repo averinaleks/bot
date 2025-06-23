@@ -83,6 +83,10 @@ class DummyDataHandler:
         self.ohlcv = pd.DataFrame({'close': [100]}, index=idx)
         self.indicators = {'BTCUSDT': DummyIndicators()}
 
+    async def get_atr(self, symbol: str) -> float:
+        ind = self.indicators.get(symbol)
+        return float(ind.atr.iloc[-1]) if ind else 0.0
+
 def make_config():
     return {
         'cache_dir': '/tmp',

@@ -817,13 +817,46 @@ from flask import Flask, request, jsonify
 
 api_app = Flask(__name__)
 
+MODEL_FILE = os.environ.get("MODEL_FILE", "model.pkl")
+_model = None
+
+
+def _load_model() -> None:
+    global _model
+    if os.path.exists(MODEL_FILE):
+        try:
+            _model = joblib.load(MODEL_FILE)
+        except Exception as e:  # pragma: no cover - model may be corrupted
+            logger.error(f"Failed to load model: {e}")
+            _model = None
+
+
+@api_app.route("/train", methods=["POST"])
+def train_route():
+    data = request.get_json(force=True)
+    prices = np.array(data.get("prices", []), dtype=np.float32).reshape(-1, 1)
+    labels = np.array(data.get("labels", []), dtype=np.float32)
+    if len(prices) == 0 or len(prices) != len(labels):
+        return jsonify({"error": "invalid training data"}), 400
+    model = LogisticRegression()
+    model.fit(prices, labels)
+    joblib.dump(model, MODEL_FILE)
+    global _model
+    _model = model
+    return jsonify({"status": "trained"})
+
 
 @api_app.route('/predict', methods=['POST'])
 def predict_route():
     data = request.get_json(force=True)
     price = float(data.get('price', 0))
-    signal = 'buy' if price > 0 else None
-    return jsonify({'signal': signal})
+    if _model is None:
+        signal = 'buy' if price > 0 else None
+        prob = 1.0 if signal else 0.0
+    else:
+        prob = float(_model.predict_proba([[price]])[0, 1])
+        signal = 'buy' if prob >= 0.5 else 'sell'
+    return jsonify({'signal': signal, 'prob': prob})
 
 
 @api_app.route('/ping')
@@ -832,5 +865,6 @@ def ping():
 
 
 if __name__ == '__main__':
+    _load_model()
     port = int(os.environ.get('PORT', 8001))
     api_app.run(host='0.0.0.0', port=port)

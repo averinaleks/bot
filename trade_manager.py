@@ -271,11 +271,12 @@ class TradeManager:
                 ):
                     logger.warning(f"Позиция для {symbol} уже открыта")
                     return
-                indicators = self.data_handler.indicators.get(symbol)
-                if not indicators or not indicators.atr.iloc[-1]:
-                    logger.warning(f"Нет данных ATR для {symbol}")
+                atr = await self.data_handler.get_atr(symbol)
+                if atr <= 0:
+                    logger.warning(
+                        f"Нет данных ATR для {symbol}, повторная попытка загрузки"
+                    )
                     return
-                atr = indicators.atr.iloc[-1]
                 sl_mult = params.get("sl_multiplier", self.config["sl_multiplier"])
                 tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
                 size = await self.calculate_position_size(symbol, price, atr, sl_mult)
@@ -392,11 +393,12 @@ class TradeManager:
                     logger.warning(f"Позиция для {symbol} не найдена")
                     return
                 position = position.iloc[0]
-                indicators = self.data_handler.indicators.get(symbol)
-                if not indicators or not indicators.atr.iloc[-1]:
-                    logger.warning(f"Нет данных ATR для {symbol}")
+                atr = await self.data_handler.get_atr(symbol)
+                if atr <= 0:
+                    logger.warning(
+                        f"Нет данных ATR для {symbol}, повторная попытка загрузки"
+                    )
                     return
-                atr = indicators.atr.iloc[-1]
                 trailing_stop_distance = atr * self.config.get(
                     "trailing_stop_multiplier", 1.0
                 )
