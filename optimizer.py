@@ -6,18 +6,35 @@ import time
 import torch
 import ray
 from utils import logger, check_dataframe_empty
+import inspect
 from optuna.samplers import TPESampler
 from optuna.integration.mlflow import MLflowCallback
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
 
 
+async def _check_df_async(df, context: str = "") -> bool:
+    """Helper to handle possibly asynchronous check_dataframe_empty."""
+    result = check_dataframe_empty(df, context)
+    if inspect.isawaitable(result):
+        result = await result
+    return result
+
+
 @ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
-def _objective_remote(df, symbol, ema30_period, ema100_period, ema200_period,
-                      atr_period_default, timeframe):
+def _objective_remote(
+    df,
+    symbol,
+    ema30_period,
+    ema100_period,
+    ema200_period,
+    atr_period_default,
+    timeframe,
+):
     """Heavy part of objective executed remotely."""
     try:
         from data_handler import IndicatorsCache
+
         n_splits = 5
         train_size = int(0.6 * len(df))
         test_size = int(0.2 * len(df))
@@ -29,32 +46,44 @@ def _objective_remote(df, symbol, ema30_period, ema100_period, ema200_period,
             end = start + train_size + test_size
             if end > len(df):
                 break
-            test_df = df.iloc[start + train_size:end].droplevel('symbol')
+            test_df = df.iloc[start + train_size : end].droplevel("symbol")
             current_candle_count = len(test_df)
             if current_candle_count - last_atr_update >= atr_update_interval:
-                indicators = IndicatorsCache(test_df, {
-                    'ema30_period': ema30_period,
-                    'ema100_period': ema100_period,
-                    'ema200_period': ema200_period,
-                    'atr_period_default': atr_period_default
-                }, test_df['close'].pct_change().std())
+                indicators = IndicatorsCache(
+                    test_df,
+                    {
+                        "ema30_period": ema30_period,
+                        "ema100_period": ema100_period,
+                        "ema200_period": ema200_period,
+                        "atr_period_default": atr_period_default,
+                    },
+                    test_df["close"].pct_change().std(),
+                )
                 last_atr_update = current_candle_count
             else:
-                indicators = IndicatorsCache(test_df, {
-                    'ema30_period': ema30_period,
-                    'ema100_period': ema100_period,
-                    'ema200_period': ema200_period,
-                    'atr_period_default': atr_period_default
-                }, test_df['close'].pct_change().std())
-            if not indicators or check_dataframe_empty(indicators.df, f"objective {symbol}"):
+                indicators = IndicatorsCache(
+                    test_df,
+                    {
+                        "ema30_period": ema30_period,
+                        "ema100_period": ema100_period,
+                        "ema200_period": ema200_period,
+                        "atr_period_default": atr_period_default,
+                    },
+                    test_df["close"].pct_change().std(),
+                )
+            result = asyncio.run(_check_df_async(indicators.df, f"objective {symbol}"))
+            if not indicators or result:
                 return 0.0
             returns = []
             for j in range(1, len(test_df)):
-                close = test_df['close'].iloc[j]
-                prev_close = test_df['close'].iloc[j-1]
+                close = test_df["close"].iloc[j]
+                prev_close = test_df["close"].iloc[j - 1]
                 ema30 = indicators.ema30.iloc[j]
                 ema100 = indicators.ema100.iloc[j]
-                if indicators.volume_profile is not None and not indicators.volume_profile.empty:
+                if (
+                    indicators.volume_profile is not None
+                    and not indicators.volume_profile.empty
+                ):
                     price_bins = indicators.volume_profile.index.to_numpy()
                     idx = np.searchsorted(price_bins, close)
                     idx = np.clip(idx, 0, len(price_bins) - 1)
@@ -72,8 +101,11 @@ def _objective_remote(df, symbol, ema30_period, ema100_period, ema200_period,
             if not returns:
                 return 0.0
             returns = np.array(returns, dtype=np.float32)
-            sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(
-                365 * 24 * 60 / pd.Timedelta(timeframe).total_seconds())
+            sharpe_ratio = (
+                np.mean(returns)
+                / (np.std(returns) + 1e-6)
+                * np.sqrt(365 * 24 * 60 / pd.Timedelta(timeframe).total_seconds())
+            )
             if np.isfinite(sharpe_ratio):
                 sharpe_ratios.append(sharpe_ratio)
         return float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0
@@ -81,26 +113,33 @@ def _objective_remote(df, symbol, ema30_period, ema100_period, ema200_period,
         logger.error(f"Ошибка в _objective_remote для {symbol}: {e}")
         return 0.0
 
+
 class ParameterOptimizer:
     def __init__(self, config, data_handler):
         self.config = config
         self.data_handler = data_handler
-        self.base_optimization_interval = config.get('optimization_interval', 14400) // 2  # Уменьшен базовый интервал
+        self.base_optimization_interval = (
+            config.get("optimization_interval", 14400) // 2
+        )  # Уменьшен базовый интервал
         self.last_optimization = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.best_params_by_symbol = {symbol: {} for symbol in data_handler.usdt_pairs}
-        self.volatility_threshold = config.get('volatility_threshold', 0.02)
+        self.volatility_threshold = config.get("volatility_threshold", 0.02)
         self.last_atr_update = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.atr_update_interval = 5  # Обновление ATR каждые 5 свечей
-        self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}  # Для отслеживания изменений волатильности
-        self.max_trials = config.get('optuna_trials', 20)
-        self.mlflow_enabled = config.get('mlflow_enabled', False)
-        self.mlflow_tracking_uri = config.get('mlflow_tracking_uri', 'mlruns')
-        self.enable_grid_search = config.get('enable_grid_search', False)
+        self.last_volatility = {
+            symbol: 0.0 for symbol in data_handler.usdt_pairs
+        }  # Для отслеживания изменений волатильности
+        self.max_trials = config.get("optuna_trials", 20)
+        self.mlflow_enabled = config.get("mlflow_enabled", False)
+        self.mlflow_tracking_uri = config.get("mlflow_tracking_uri", "mlruns")
+        self.enable_grid_search = config.get("enable_grid_search", False)
 
     def get_opt_interval(self, symbol: str, volatility: float) -> float:
         """Return optimization interval for a symbol based on its volatility."""
         try:
-            interval = self.base_optimization_interval / (1 + volatility / self.volatility_threshold)
+            interval = self.base_optimization_interval / (
+                1 + volatility / self.volatility_threshold
+            )
             interval = max(1800, min(self.base_optimization_interval * 2, interval))
             return interval
         except Exception as e:
@@ -111,37 +150,53 @@ class ParameterOptimizer:
         # Оптимизация гиперпараметров для символа
         try:
             ohlcv = self.data_handler.ohlcv
-            if 'symbol' in ohlcv.index.names and symbol in ohlcv.index.get_level_values('symbol'):
-                df = ohlcv.xs(symbol, level='symbol', drop_level=False)
+            if (
+                "symbol" in ohlcv.index.names
+                and symbol in ohlcv.index.get_level_values("symbol")
+            ):
+                df = ohlcv.xs(symbol, level="symbol", drop_level=False)
             else:
                 df = None
-            if check_dataframe_empty(df, f"optimize {symbol}"):
+            empty = await _check_df_async(df, f"optimize {symbol}")
+            if empty:
                 logger.warning(f"Нет данных для оптимизации {symbol}")
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
-            volatility = df['close'].pct_change().std() if not df.empty else 0.02
+            volatility = df["close"].pct_change().std() if not df.empty else 0.02
             # Проверка значительного изменения волатильности
-            volatility_change = abs(volatility - self.last_volatility.get(symbol, 0.0)) / max(self.last_volatility.get(symbol, 0.01), 0.01)
+            volatility_change = abs(
+                volatility - self.last_volatility.get(symbol, 0.0)
+            ) / max(self.last_volatility.get(symbol, 0.01), 0.01)
             self.last_volatility[symbol] = volatility
-            optimization_interval = self.base_optimization_interval / (1 + volatility / self.volatility_threshold)
-            optimization_interval = max(1800, min(self.base_optimization_interval * 2, optimization_interval))  # Минимум 30 минут
-            if time.time() - self.last_optimization.get(symbol, 0) < optimization_interval and volatility_change < 0.5:
-                logger.info(f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд")
+            optimization_interval = self.base_optimization_interval / (
+                1 + volatility / self.volatility_threshold
+            )
+            optimization_interval = max(
+                1800, min(self.base_optimization_interval * 2, optimization_interval)
+            )  # Минимум 30 минут
+            if (
+                time.time() - self.last_optimization.get(symbol, 0)
+                < optimization_interval
+                and volatility_change < 0.5
+            ):
+                logger.info(
+                    f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд"
+                )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
             # Использование TPESampler с multivariate=True для учета корреляций
             study = optuna.create_study(
-                direction='maximize',
+                direction="maximize",
                 sampler=TPESampler(
                     n_startup_trials=10,
                     multivariate=True,
-                    warn_independent_sampling=False
-                )
+                    warn_independent_sampling=False,
+                ),
             )
             callbacks = []
             if self.mlflow_enabled:
                 callbacks.append(
                     MLflowCallback(
                         tracking_uri=self.mlflow_tracking_uri,
-                        metric_name="sharpe_ratio"
+                        metric_name="sharpe_ratio",
                     )
                 )
             obj_refs = []
@@ -162,11 +217,15 @@ class ParameterOptimizer:
                 except Exception as e:
                     logger.error(f"Ошибка GridSearchCV для {symbol}: {e}")
             if not self.validate_params(best_params):
-                logger.warning(f"Некорректные параметры для {symbol}, использование предыдущих")
+                logger.warning(
+                    f"Некорректные параметры для {symbol}, использование предыдущих"
+                )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config
             self.best_params_by_symbol[symbol] = best_params
             self.last_optimization[symbol] = time.time()
-            logger.info(f"Оптимизация для {symbol} завершена, лучшие параметры: {best_params}")
+            logger.info(
+                f"Оптимизация для {symbol} завершена, лучшие параметры: {best_params}"
+            )
             return best_params
         except Exception as e:
             logger.error(f"Ошибка оптимизации для {symbol}: {e}")
@@ -175,28 +234,50 @@ class ParameterOptimizer:
     def validate_params(self, params):
         # Валидация оптимизированных параметров
         try:
-            ema30 = params.get('ema30_period', self.config.get('ema30_period'))
-            ema100 = params.get('ema100_period', self.config.get('ema100_period'))
-            ema200 = params.get('ema200_period', self.config.get('ema200_period'))
+            ema30 = params.get("ema30_period", self.config.get("ema30_period"))
+            ema100 = params.get("ema100_period", self.config.get("ema100_period"))
+            ema200 = params.get("ema200_period", self.config.get("ema200_period"))
             if ema30 >= ema100 or ema100 >= ema200:
                 return False
 
-            tp_mult = params.get('tp_multiplier', self.config.get('tp_multiplier'))
-            sl_mult = params.get('sl_multiplier', self.config.get('sl_multiplier'))
+            tp_mult = params.get("tp_multiplier", self.config.get("tp_multiplier"))
+            sl_mult = params.get("sl_multiplier", self.config.get("sl_multiplier"))
             if tp_mult < sl_mult:
                 return False
 
-            base_prob = params.get('base_probability_threshold', self.config.get('base_probability_threshold'))
+            base_prob = params.get(
+                "base_probability_threshold",
+                self.config.get("base_probability_threshold"),
+            )
             if not (0.1 <= base_prob <= 0.9):
                 return False
 
-            if not (2 <= params.get('loss_streak_threshold', self.config.get('loss_streak_threshold', 2)) <= 5):
+            if not (
+                2
+                <= params.get(
+                    "loss_streak_threshold", self.config.get("loss_streak_threshold", 2)
+                )
+                <= 5
+            ):
                 return False
 
-            if not (2 <= params.get('win_streak_threshold', self.config.get('win_streak_threshold', 2)) <= 5):
+            if not (
+                2
+                <= params.get(
+                    "win_streak_threshold", self.config.get("win_streak_threshold", 2)
+                )
+                <= 5
+            ):
                 return False
 
-            if not (0.01 <= params.get('threshold_adjustment', self.config.get('threshold_adjustment', 0.05)) <= 0.1):
+            if not (
+                0.01
+                <= params.get(
+                    "threshold_adjustment",
+                    self.config.get("threshold_adjustment", 0.05),
+                )
+                <= 0.1
+            ):
                 return False
 
             return True
@@ -208,15 +289,15 @@ class ParameterOptimizer:
         # Целевая функция для оптимизации
         try:
             ema_periods = [
-                trial.suggest_int('ema30_period', 10, 50),
-                trial.suggest_int('ema100_period', 50, 200),
-                trial.suggest_int('ema200_period', 100, 300),
+                trial.suggest_int("ema30_period", 10, 50),
+                trial.suggest_int("ema100_period", 50, 200),
+                trial.suggest_int("ema200_period", 100, 300),
             ]
             ema_periods.sort()
             ema30_period, ema100_period, ema200_period = ema_periods
-            atr_period_default = trial.suggest_int('atr_period_default', 5, 20)
-            trial.suggest_float('sl_multiplier', 0.5, 2.0)
-            trial.suggest_float('tp_multiplier', 0.5, 3.0)
+            atr_period_default = trial.suggest_int("atr_period_default", 5, 20)
+            trial.suggest_float("sl_multiplier", 0.5, 2.0)
+            trial.suggest_float("tp_multiplier", 0.5, 3.0)
             return _objective_remote.remote(
                 df,
                 symbol,
@@ -224,14 +305,17 @@ class ParameterOptimizer:
                 ema100_period,
                 ema200_period,
                 atr_period_default,
-                self.config['timeframe'],
+                self.config["timeframe"],
             )
         except Exception as e:
             logger.error(f"Ошибка в objective для {symbol}: {e}")
-            return _objective_remote.remote(pd.DataFrame(), symbol, 0, 0, 0, 0, self.config.get('timeframe', '1m'))
+            return _objective_remote.remote(
+                pd.DataFrame(), symbol, 0, 0, 0, 0, self.config.get("timeframe", "1m")
+            )
 
     def _grid_search(self, df, symbol, base_params):
         """Refine best parameters using GridSearchCV for reliability."""
+
         class _Estimator(BaseEstimator):
             def __init__(self, df, symbol, timeframe):
                 self.df = df
@@ -255,12 +339,28 @@ class ParameterOptimizer:
             def score(self, X=None, y=None):
                 return self.score_
 
-        estimator = _Estimator(df, symbol, self.config['timeframe'])
+        estimator = _Estimator(df, symbol, self.config["timeframe"])
         param_grid = {
-            'ema30_period': [max(10, base_params['ema30_period'] - 5), base_params['ema30_period'], min(50, base_params['ema30_period'] + 5)],
-            'ema100_period': [max(50, base_params['ema100_period'] - 20), base_params['ema100_period'], min(200, base_params['ema100_period'] + 20)],
-            'ema200_period': [max(100, base_params['ema200_period'] - 20), base_params['ema200_period'], min(300, base_params['ema200_period'] + 20)],
-            'atr_period_default': [max(5, base_params['atr_period_default'] - 2), base_params['atr_period_default'], min(20, base_params['atr_period_default'] + 2)],
+            "ema30_period": [
+                max(10, base_params["ema30_period"] - 5),
+                base_params["ema30_period"],
+                min(50, base_params["ema30_period"] + 5),
+            ],
+            "ema100_period": [
+                max(50, base_params["ema100_period"] - 20),
+                base_params["ema100_period"],
+                min(200, base_params["ema100_period"] + 20),
+            ],
+            "ema200_period": [
+                max(100, base_params["ema200_period"] - 20),
+                base_params["ema200_period"],
+                min(300, base_params["ema200_period"] + 20),
+            ],
+            "atr_period_default": [
+                max(5, base_params["atr_period_default"] - 2),
+                base_params["atr_period_default"],
+                min(20, base_params["atr_period_default"] + 2),
+            ],
         }
         gs = GridSearchCV(estimator, param_grid, cv=[(slice(None), slice(None))])
         dummy_X = np.zeros((1, 1))
