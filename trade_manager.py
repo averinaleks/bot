@@ -610,15 +610,57 @@ class TradeManager:
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
 from flask import Flask, request, jsonify
+import json
+import threading
 
 api_app = Flask(__name__)
+
+# Optional list to inspect created positions during testing
 POSITIONS = []
+
+# Global TradeManager instance initialized on startup
+trade_manager: Optional[TradeManager] = None
+
+
+def init_trade_manager() -> TradeManager:
+    """Initialize the global TradeManager on first use."""
+    global trade_manager
+    if trade_manager is None:
+        config_path = os.environ.get('CONFIG_PATH', 'config.json')
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except Exception:
+            config = {}
+
+        # Lazy imports to avoid heavy dependencies during testing
+        from data_handler import DataHandler
+        from model_builder import ModelBuilder
+
+        data_handler = DataHandler(config, None, None)
+        model_builder = ModelBuilder(config, data_handler, None)
+        trade_manager = TradeManager(config, data_handler, model_builder, None, None)
+    return trade_manager
 
 
 @api_app.route('/open_position', methods=['POST'])
 def open_position_route():
+    """Open a position via the running TradeManager."""
     info = request.get_json(force=True)
+
+    symbol = info.get('symbol')
+    side = info.get('side')
+    price = float(info.get('price', 0))
+    params = info.get('params', {})
+
+    # Keep for logging/testing purposes
     POSITIONS.append(info)
+
+    if trade_manager is None:
+        init_trade_manager()
+
+    # Execute the async open_position method
+    asyncio.run(trade_manager.open_position(symbol, side, price, params))
     return jsonify({'status': 'ok'})
 
 
@@ -632,6 +674,17 @@ def ping():
     return jsonify({'status': 'ok'})
 
 
+@api_app.route('/start', methods=['POST'])
+def start_trading():
+    """Begin background trading loop."""
+    if trade_manager is None:
+        init_trade_manager()
+    thread = threading.Thread(target=lambda: asyncio.run(trade_manager.run()), daemon=True)
+    thread.start()
+    return jsonify({'status': 'started'})
+
+
 if __name__ == '__main__':
+    init_trade_manager()
     port = int(os.environ.get('PORT', 8002))
     api_app.run(host='0.0.0.0', port=port)
