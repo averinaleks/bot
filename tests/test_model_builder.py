@@ -72,7 +72,6 @@ def make_df(length=5):
     df = df.set_index(["symbol", df.index])
     return df
 
-@pytest.mark.asyncio
 def test_prepare_lstm_features_shape():
     df = make_df()
     mb = create_model_builder(df)
