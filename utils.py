@@ -6,6 +6,7 @@ import numpy as np
 import asyncio
 import time
 import inspect
+from typing import Dict, List, Optional
 from scipy.stats import zscore
 import gzip
 import psutil
@@ -13,6 +14,7 @@ import shutil
 from numba import jit, prange
 import httpx
 from telegram.error import RetryAfter
+from pybit.unified_trading import HTTP
 
 
 async def handle_rate_limits(exchange) -> None:
@@ -58,6 +60,150 @@ async def safe_api_call(exchange, method: str, *args, **kwargs):
                 raise
             await asyncio.sleep(delay)
             delay = min(delay * 2, 10)
+
+
+class BybitSDKAsync:
+    """Asynchronous wrapper around the official Bybit SDK."""
+
+    def __init__(self, api_key: str, api_secret: str) -> None:
+        self.client = HTTP(api_key=api_key, api_secret=api_secret)
+        self.last_http_status = 200
+        self.last_response_headers = {}
+
+    async def fetch_ticker(self, symbol: str) -> Dict:
+        def _sync():
+            res = self.client.get_tickers(category="linear", symbol=symbol.replace(":USDT", "USDT"))
+            return res.get("result", {}).get("list", [{}])[0]
+
+        return await asyncio.to_thread(_sync)
+
+    async def fetch_ohlcv(
+        self, symbol: str, timeframe: str, limit: int = 200, since: Optional[int] = None
+    ) -> List[List[float]]:
+        def _sync():
+            params = {
+                "category": "linear",
+                "symbol": symbol.replace(":USDT", "USDT"),
+                "interval": timeframe,
+                "limit": limit,
+            }
+            if since is not None:
+                params["start"] = int(since)
+            res = self.client.get_kline(**params)
+            candles = res.get("result", {}).get("list", [])
+            return [
+                [
+                    int(c[0]),
+                    float(c[1]),
+                    float(c[2]),
+                    float(c[3]),
+                    float(c[4]),
+                    float(c[5]),
+                ]
+                for c in candles
+            ]
+
+        return await asyncio.to_thread(_sync)
+
+    async def fetch_order_book(self, symbol: str, limit: int = 10) -> Dict:
+        def _sync():
+            res = self.client.get_orderbook(category="linear", symbol=symbol.replace(":USDT", "USDT"))
+            ob = res.get("result", {})
+            return {
+                "bids": [[float(p), float(q)] for p, q, *_ in ob.get("b", [])][:limit],
+                "asks": [[float(p), float(q)] for p, q, *_ in ob.get("a", [])][:limit],
+            }
+
+        return await asyncio.to_thread(_sync)
+
+    async def fetch_funding_rate(self, symbol: str) -> Dict:
+        def _sync():
+            res = self.client.get_funding_rate_history(
+                category="linear",
+                symbol=symbol.replace(":USDT", "USDT"),
+                limit=1,
+            )
+            items = res.get("result", {}).get("list", [])
+            rate = float(items[0]["fundingRate"]) if items else 0.0
+            return {"fundingRate": rate}
+
+        return await asyncio.to_thread(_sync)
+
+    async def fetch_open_interest(self, symbol: str) -> Dict:
+        def _sync():
+            res = self.client.get_open_interest(
+                category="linear",
+                symbol=symbol.replace(":USDT", "USDT"),
+                intervalTime="5min",
+            )
+            items = res.get("result", {}).get("list", [])
+            interest = float(items[-1]["openInterest"]) if items else 0.0
+            return {"openInterest": interest}
+
+        return await asyncio.to_thread(_sync)
+
+    async def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: Optional[float] = None,
+        params: Optional[Dict] = None,
+    ):
+        def _sync():
+            payload = {
+                "category": "linear",
+                "symbol": symbol.replace(":USDT", "USDT"),
+                "side": side.capitalize(),
+                "orderType": order_type.capitalize(),
+                "qty": amount,
+            }
+            if price is not None and order_type == "limit":
+                payload["price"] = price
+            if params:
+                payload.update(params)
+            return self.client.place_order(**payload)
+
+        return await asyncio.to_thread(_sync)
+
+    async def create_order_with_take_profit_and_stop_loss(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: Optional[float],
+        take_profit: Optional[float],
+        stop_loss: Optional[float],
+        params: Optional[Dict] = None,
+    ):
+        def _sync():
+            payload = {
+                "category": "linear",
+                "symbol": symbol.replace(":USDT", "USDT"),
+                "side": side.capitalize(),
+                "orderType": order_type.capitalize(),
+                "qty": amount,
+            }
+            if price is not None and order_type == "limit":
+                payload["price"] = price
+            if take_profit is not None:
+                payload["takeProfit"] = take_profit
+            if stop_loss is not None:
+                payload["stopLoss"] = stop_loss
+            if params:
+                payload.update(params)
+            return self.client.place_order(**payload)
+
+        return await asyncio.to_thread(_sync)
+
+    async def fetch_balance(self) -> Dict:
+        def _sync():
+            res = self.client.get_wallet_balance(accountType="UNIFIED")
+            return res.get("result", {})
+
+        return await asyncio.to_thread(_sync)
 
 logger = logging.getLogger("TradingBot")
 logger.setLevel(logging.INFO)

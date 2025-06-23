@@ -19,6 +19,12 @@ sys.modules.setdefault('ccxt', ccxt_mod)
 sys.modules.setdefault('ccxt.async_support', ccxt_mod.async_support)
 sys.modules.setdefault('ccxt.pro', ccxt_mod.pro)
 sys.modules.setdefault('websockets', types.ModuleType('websockets'))
+pybit_mod = types.ModuleType('pybit')
+ut_mod = types.ModuleType('unified_trading')
+ut_mod.HTTP = object
+pybit_mod.unified_trading = ut_mod
+sys.modules.setdefault('pybit', pybit_mod)
+sys.modules.setdefault('pybit.unified_trading', ut_mod)
 ray_mod = types.ModuleType('ray')
 ray_mod.remote = lambda *a, **k: (lambda f: f)
 sys.modules.setdefault('ray', ray_mod)
