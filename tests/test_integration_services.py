@@ -3,7 +3,23 @@ import time
 import requests
 import multiprocessing
 from flask import Flask, request, jsonify
-import trading_bot
+import sys
+import types
+
+# Stub heavy dependencies before importing trading_bot
+numba_mod = types.ModuleType('numba')
+numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
+numba_mod.jit = lambda *a, **k: (lambda f: f)
+numba_mod.prange = range
+sys.modules.setdefault('numba', numba_mod)
+sys.modules.setdefault('numba.cuda', numba_mod.cuda)
+sys.modules.setdefault('httpx', types.ModuleType('httpx'))
+telegram_error_mod = types.ModuleType('telegram.error')
+telegram_error_mod.RetryAfter = Exception
+sys.modules.setdefault('telegram', types.ModuleType('telegram'))
+sys.modules.setdefault('telegram.error', telegram_error_mod)
+
+import trading_bot  # noqa: E402
 
 
 # Minimal stubs for services to avoid heavy dependencies

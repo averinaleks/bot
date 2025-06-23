@@ -8,15 +8,8 @@ import ta
 import types
 
 import importlib.util
-from data_handler import ema_fast, atr_fast
-if importlib.util.find_spec('numba') is None:
-    numba_mod = types.ModuleType('numba')
-    numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
-    numba_mod.jit = lambda *a, **k: (lambda f: f)
-    numba_mod.prange = range
-    sys.modules.setdefault('numba', numba_mod)
-    sys.modules.setdefault('numba.cuda', numba_mod.cuda)
 
+# Stub heavy dependencies before importing data_handler
 ccxt_mod = types.ModuleType('ccxt')
 ccxt_mod.async_support = types.ModuleType('async_support')
 ccxt_mod.async_support.bybit = object
@@ -29,29 +22,29 @@ sys.modules.setdefault('websockets', types.ModuleType('websockets'))
 ray_mod = types.ModuleType('ray')
 ray_mod.remote = lambda *a, **k: (lambda f: f)
 sys.modules.setdefault('ray', ray_mod)
-if importlib.util.find_spec('tenacity') is None:
-    tenacity_mod = types.ModuleType('tenacity')
-    tenacity_mod.retry = lambda *a, **k: (lambda f: f)
-    tenacity_mod.wait_exponential = lambda *a, **k: None
-    tenacity_mod.stop_after_attempt = lambda *a, **k: (lambda f: f)
-    sys.modules['tenacity'] = tenacity_mod
+tenacity_mod = types.ModuleType('tenacity')
+tenacity_mod.retry = lambda *a, **k: (lambda f: f)
+tenacity_mod.wait_exponential = lambda *a, **k: None
+tenacity_mod.stop_after_attempt = lambda *a, **k: (lambda f: f)
+sys.modules.setdefault('tenacity', tenacity_mod)
 psutil_mod = types.ModuleType('psutil')
 psutil_mod.cpu_percent = lambda interval=1: 0
 psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
 sys.modules.setdefault('psutil', psutil_mod)
-if importlib.util.find_spec('scipy') is None:
-    scipy_mod = types.ModuleType('scipy')
-    stats_mod = types.ModuleType('scipy.stats')
-    stats_mod.zscore = lambda a, axis=0: (a - np.mean(a, axis=axis)) / np.std(a, axis=axis)
-    scipy_mod.__version__ = "1.0"
-    scipy_mod.stats = stats_mod
-    sys.modules.setdefault('scipy', scipy_mod)
-    sys.modules.setdefault('scipy.stats', stats_mod)
 sys.modules.setdefault('httpx', types.ModuleType('httpx'))
 telegram_error_mod = types.ModuleType('telegram.error')
 telegram_error_mod.RetryAfter = Exception
 sys.modules.setdefault('telegram', types.ModuleType('telegram'))
 sys.modules.setdefault('telegram.error', telegram_error_mod)
+if importlib.util.find_spec('numba') is None:
+    numba_mod = types.ModuleType('numba')
+    numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
+    numba_mod.jit = lambda *a, **k: (lambda f: f)
+    numba_mod.prange = range
+    sys.modules.setdefault('numba', numba_mod)
+    sys.modules.setdefault('numba.cuda', numba_mod.cuda)
+
+from data_handler import ema_fast, atr_fast  # noqa: E402
 
 
 def test_ema_fast_matches_ta():
