@@ -2,6 +2,7 @@ import os
 import time
 import requests
 from utils import logger
+from tenacity import retry, wait_exponential, stop_after_attempt
 
 SYMBOL = os.getenv("SYMBOL", "TEST")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
@@ -16,6 +17,7 @@ def _load_env() -> dict:
     }
 
 
+@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def check_services() -> bool:
     """Return True if all dependent services respond to /ping."""
     env = _load_env()
@@ -36,6 +38,7 @@ def check_services() -> bool:
     return True
 
 
+@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or None if request failed."""
     try:
@@ -49,6 +52,7 @@ def fetch_price(symbol: str, env: dict) -> float | None:
         return None
 
 
+@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def get_prediction(symbol: str, price: float, env: dict) -> str | None:
     """Return model signal if available."""
     try:
@@ -66,6 +70,7 @@ def get_prediction(symbol: str, price: float, env: dict) -> str | None:
         return None
 
 
+@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
     """Send trade request to trade manager."""
     try:
