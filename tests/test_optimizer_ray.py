@@ -6,7 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import optuna  # noqa: F401
-from optimizer import ParameterOptimizer
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.modules['utils'] = importlib.import_module('utils')
+ParameterOptimizer = importlib.import_module('optimizer').ParameterOptimizer
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')

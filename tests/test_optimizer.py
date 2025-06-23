@@ -1,12 +1,13 @@
 import os
 import sys
-
-import pytest
-import types
 import logging
-from optimizer import ParameterOptimizer
+import types
+import pytest
+import importlib
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.modules['utils'] = importlib.import_module('utils')
+ParameterOptimizer = importlib.import_module('optimizer').ParameterOptimizer
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')

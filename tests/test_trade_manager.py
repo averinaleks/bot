@@ -1,10 +1,14 @@
-import pandas as pd
-import pytest
+import os
 import sys
 import types
 import logging
-import os
-from trade_manager import TradeManager
+import pandas as pd
+import pytest
+import importlib
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.modules['utils'] = importlib.import_module('utils')
+TradeManager = importlib.import_module('trade_manager').TradeManager
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')
