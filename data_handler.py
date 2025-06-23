@@ -34,12 +34,21 @@ except Exception:  # pragma: no cover - numba without cuda support
 
 
 def create_exchange() -> ccxt_async.bybit:
-    """Create an authenticated Bybit exchange instance."""
-    return ccxt_async.bybit({
-        "apiKey": os.environ.get("BYBIT_API_KEY"),
-        "secret": os.environ.get("BYBIT_API_SECRET"),
-        "enableRateLimit": True,
-    })
+    """Create an authenticated Bybit exchange instance for market data."""
+    return ccxt_async.bybit(
+        {
+            "apiKey": os.environ.get("BYBIT_API_KEY"),
+            "secret": os.environ.get("BYBIT_API_SECRET"),
+            "enableRateLimit": True,
+        }
+    )
+
+
+def create_bybit_client(testnet: bool = False):
+    """Return asynchronous client using the official Bybit SDK."""
+    from bybit_sdk import AsyncBybit
+
+    return AsyncBybit(testnet=testnet)
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
@@ -144,6 +153,7 @@ class DataHandler:
                  pro_exchange: ccxtpro.bybit | None = None):
         self.config = config
         self.exchange = exchange or create_exchange()
+        self.client = create_bybit_client(config.get("testnet", False))
         self.pro_exchange = pro_exchange
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
         self.cache = HistoricalDataCache(config["cache_dir"])

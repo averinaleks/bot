@@ -67,7 +67,7 @@ class TradeManager:
         self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
-        self.exchange = data_handler.exchange
+        self.exchange = getattr(data_handler, "client", data_handler.exchange)
         self.max_positions = config.get("max_positions", 5)
         self.leverage = config.get("leverage", 10)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
@@ -185,36 +185,25 @@ class TradeManager:
     ) -> Optional[Dict]:
         async with self.position_lock:
             try:
-                params = {"category": "linear", **params}
-                order_type = params.get("type", "market")
+                data = {
+                    "category": "linear",
+                    "symbol": symbol,
+                    "side": side.capitalize(),
+                    "qty": size,
+                }
+                order_type = params.pop("type", "market")
+                data["orderType"] = order_type.capitalize()
+                if order_type.lower() != "market":
+                    data["price"] = price
                 tp_price = params.pop("takeProfitPrice", None)
                 sl_price = params.pop("stopLossPrice", None)
-                if (tp_price is not None or sl_price is not None) and hasattr(
-                    self.exchange, "create_order_with_take_profit_and_stop_loss"
-                ):
-                    order = await safe_api_call(
-                        self.exchange,
-                        "create_order_with_take_profit_and_stop_loss",
-                        symbol,
-                        order_type,
-                        side,
-                        size,
-                        price if order_type != "market" else None,
-                        tp_price,
-                        sl_price,
-                        params,
-                    )
-                else:
-                    order = await safe_api_call(
-                        self.exchange,
-                        "create_order",
-                        symbol,
-                        order_type,
-                        side,
-                        size,
-                        price,
-                        params,
-                    )
+                if tp_price is not None:
+                    data["takeProfit"] = tp_price
+                if sl_price is not None:
+                    data["stopLoss"] = sl_price
+                data.update(params)
+
+                order = await safe_api_call(self.exchange, "place_order", **data)
                 logger.info(
                     f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
                 )
@@ -248,8 +237,24 @@ class TradeManager:
                     f"Invalid inputs for {symbol}: price={price}, atr={atr}"
                 )
                 return 0.0
-            account = await safe_api_call(self.exchange, "fetch_balance")
-            equity = float(account["total"].get("USDT", 0))
+            account = await safe_api_call(
+                self.exchange, "get_wallet_balance", accountType="UNIFIED"
+            )
+            equity = 0.0
+            if isinstance(account, dict):
+                coins = (
+                    account.get("result", {})
+                    .get("list", [{}])[0]
+                    .get("coin", [])
+                )
+                for c in coins:
+                    if c.get("coin") == "USDT":
+                        equity = float(
+                            c.get("equity")
+                            or c.get("walletBalance")
+                            or c.get("availableToWithdraw", 0)
+                        )
+                        break
             if equity <= 0:
                 logger.warning(f"Insufficient balance for {symbol}")
                 await self.telegram_logger.send_telegram_message(
