@@ -104,7 +104,10 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Install runtime and development dependencies:
+Before executing the test suite, **install all packages from `requirements.txt`**.
+Failure to do so will result in missing module errors.
+
+Run `pip install -r requirements.txt` to install all runtime and development dependencies before testing:
 
 ```bash
 pip install -r requirements.txt
@@ -150,7 +153,7 @@ The test suite relies on the following packages:
 
 GPU libraries such as CUDA-enabled torch or numba may be required for some tests.
 
-Run all tests with:
+After installing dependencies, run all tests with:
 
 ```bash
 pytest
