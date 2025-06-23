@@ -6,6 +6,7 @@ from utils import (
     logger,
     check_dataframe_empty,
     TelegramLogger,
+    safe_api_call,
 )
 import inspect
 import torch
@@ -185,21 +186,28 @@ class TradeManager:
                 if (tp_price is not None or sl_price is not None) and hasattr(
                     self.exchange, "create_order_with_take_profit_and_stop_loss"
                 ):
-                    order = (
-                        await self.exchange.create_order_with_take_profit_and_stop_loss(
-                            symbol,
-                            order_type,
-                            side,
-                            size,
-                            price if order_type != "market" else None,
-                            tp_price,
-                            sl_price,
-                            params,
-                        )
+                    order = await safe_api_call(
+                        self.exchange,
+                        "create_order_with_take_profit_and_stop_loss",
+                        symbol,
+                        order_type,
+                        side,
+                        size,
+                        price if order_type != "market" else None,
+                        tp_price,
+                        sl_price,
+                        params,
                     )
                 else:
-                    order = await self.exchange.create_order(
-                        symbol, order_type, side, size, price, params
+                    order = await safe_api_call(
+                        self.exchange,
+                        "create_order",
+                        symbol,
+                        order_type,
+                        side,
+                        size,
+                        price,
+                        params,
                     )
                 logger.info(
                     f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
@@ -224,7 +232,7 @@ class TradeManager:
                     f"Invalid inputs for {symbol}: price={price}, atr={atr}"
                 )
                 return 0.0
-            account = await self.exchange.fetch_balance()
+            account = await safe_api_call(self.exchange, "fetch_balance")
             equity = float(account["total"].get("USDT", 0))
             if equity <= 0:
                 logger.warning(f"Insufficient balance for {symbol}")
