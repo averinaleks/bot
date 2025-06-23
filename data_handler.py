@@ -31,6 +31,15 @@ except Exception:  # pragma: no cover - numba without cuda support
     GPU_AVAILABLE = False
 
 
+def create_exchange() -> ccxt_async.bybit:
+    """Create an authenticated Bybit exchange instance."""
+    return ccxt_async.bybit({
+        "apiKey": os.environ.get("BYBIT_API_KEY"),
+        "secret": os.environ.get("BYBIT_API_SECRET"),
+        "enableRateLimit": True,
+    })
+
+
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
     """Compute EMA using GPU if available, otherwise CPU."""
     values = np.asarray(values, dtype=np.float64)
@@ -128,9 +137,11 @@ def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe
 
 
 class DataHandler:
-    def __init__(self, config: dict, exchange: ccxt_async.bybit, telegram_bot, chat_id, pro_exchange: ccxtpro.bybit | None = None):
+    def __init__(self, config: dict, telegram_bot, chat_id,
+                 exchange: ccxt_async.bybit | None = None,
+                 pro_exchange: ccxtpro.bybit | None = None):
         self.config = config
-        self.exchange = exchange
+        self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
         self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
         self.cache = HistoricalDataCache(config["cache_dir"])

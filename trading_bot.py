@@ -10,6 +10,15 @@ SYMBOL = os.getenv('SYMBOL', 'TEST')
 INTERVAL = float(os.getenv('INTERVAL', '5'))
 
 
+def _load_env() -> dict:
+    """Load service URLs from environment variables."""
+    return {
+        'data_handler_url': os.getenv('DATA_HANDLER_URL', 'http://data_handler:8000'),
+        'model_builder_url': os.getenv('MODEL_BUILDER_URL', 'http://model_builder:8001'),
+        'trade_manager_url': os.getenv('TRADE_MANAGER_URL', 'http://trade_manager:8002'),
+    }
+
+
 def check_services() -> bool:
     """Return True if all dependent services respond to /ping."""
     env = _load_env()
@@ -31,9 +40,10 @@ def check_services() -> bool:
 
 
 def run_once():
+    env = _load_env()
     try:
         price_resp = requests.get(
-            f"{DATA_HANDLER_URL}/price/{SYMBOL}", timeout=5
+            f"{env['data_handler_url']}/price/{SYMBOL}", timeout=5
         )
         if price_resp.status_code != 200:
             logger.error(
@@ -47,7 +57,7 @@ def run_once():
 
     try:
         model_resp = requests.post(
-            f"{MODEL_BUILDER_URL}/predict",
+            f"{env['model_builder_url']}/predict",
             json={"symbol": SYMBOL, "price": price},
             timeout=5,
         )
@@ -64,7 +74,7 @@ def run_once():
     if signal:
         try:
             trade_resp = requests.post(
-                f"{TRADE_MANAGER_URL}/open_position",
+                f"{env['trade_manager_url']}/open_position",
                 json={"symbol": SYMBOL, "side": signal, "price": price},
                 timeout=5,
             )
