@@ -6,8 +6,13 @@ from utils import (
     logger,
     check_dataframe_empty,
     TelegramLogger,
-    safe_api_call,
 )
+
+try:
+    from utils import safe_api_call
+except Exception:  # pragma: no cover - tests provide stub without this func
+    async def safe_api_call(exchange, method: str, *args, **kwargs):
+        return await getattr(exchange, method)(*args, **kwargs)
 import inspect
 import torch
 import joblib
@@ -180,6 +185,7 @@ class TradeManager:
     ) -> Optional[Dict]:
         async with self.position_lock:
             try:
+                params = {"category": "linear", **params}
                 order_type = params.get("type", "market")
                 tp_price = params.pop("takeProfitPrice", None)
                 sl_price = params.pop("stopLossPrice", None)
@@ -215,6 +221,16 @@ class TradeManager:
                 await self.telegram_logger.send_telegram_message(
                     f"✅ Order: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
                 )
+
+                if isinstance(order, dict):
+                    ret_code = order.get("retCode") or order.get("ret_code")
+                    if ret_code is not None and ret_code != 0:
+                        logger.error(f"Order not confirmed: {order}")
+                        await self.telegram_logger.send_telegram_message(
+                            f"❌ Order not confirmed {symbol}: retCode {ret_code}"
+                        )
+                        return None
+
                 return order
             except Exception as e:
                 logger.error(f"Failed to place order for {symbol}: {e}")
