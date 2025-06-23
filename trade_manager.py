@@ -6,8 +6,13 @@ from utils import (
     logger,
     check_dataframe_empty,
     TelegramLogger,
-    safe_api_call,
 )
+
+try:
+    from utils import safe_api_call
+except Exception:  # pragma: no cover - tests provide stub without this func
+    async def safe_api_call(exchange, method: str, *args, **kwargs):
+        return await getattr(exchange, method)(*args, **kwargs)
 import inspect
 import torch
 import joblib
@@ -62,7 +67,7 @@ class TradeManager:
         self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
-        self.exchange = data_handler.exchange
+        self.exchange = getattr(data_handler, "client", data_handler.exchange)
         self.max_positions = config.get("max_positions", 5)
         self.leverage = config.get("leverage", 10)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
@@ -180,41 +185,76 @@ class TradeManager:
     ) -> Optional[Dict]:
         async with self.position_lock:
             try:
-                order_type = params.get("type", "market")
+                data = {
+                    "category": "linear",
+                    "symbol": symbol,
+                    "side": side.capitalize(),
+                    "qty": size,
+                }
+                order_type = params.pop("type", "market")
+                data["orderType"] = order_type.capitalize()
+                if order_type.lower() != "market":
+                    data["price"] = price
                 tp_price = params.pop("takeProfitPrice", None)
                 sl_price = params.pop("stopLossPrice", None)
-                if (tp_price is not None or sl_price is not None) and hasattr(
-                    self.exchange, "create_order_with_take_profit_and_stop_loss"
-                ):
+                if tp_price is not None:
+                    data["takeProfit"] = tp_price
+                if sl_price is not None:
+                    data["stopLoss"] = sl_price
+                data.update(params)
+
+                if hasattr(self.exchange, "place_order"):
                     order = await safe_api_call(
-                        self.exchange,
-                        "create_order_with_take_profit_and_stop_loss",
-                        symbol,
-                        order_type,
-                        side,
-                        size,
-                        price if order_type != "market" else None,
-                        tp_price,
-                        sl_price,
-                        params,
+                        self.exchange, "place_order", **data
                     )
                 else:
-                    order = await safe_api_call(
-                        self.exchange,
-                        "create_order",
-                        symbol,
-                        order_type,
-                        side,
-                        size,
-                        price,
-                        params,
-                    )
+                    ccxt_params = params.copy()
+                    if (
+                        (tp_price is not None or sl_price is not None)
+                        and hasattr(
+                            self.exchange,
+                            "create_order_with_take_profit_and_stop_loss",
+                        )
+                    ):
+                        order = await safe_api_call(
+                            self.exchange,
+                            "create_order_with_take_profit_and_stop_loss",
+                            symbol,
+                            order_type,
+                            side,
+                            size,
+                            price if order_type != "market" else None,
+                            tp_price,
+                            sl_price,
+                            ccxt_params,
+                        )
+                    else:
+                        order = await safe_api_call(
+                            self.exchange,
+                            "create_order",
+                            symbol,
+                            order_type,
+                            side,
+                            size,
+                            price,
+                            ccxt_params,
+                        )
                 logger.info(
                     f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"✅ Order: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
                 )
+
+                if isinstance(order, dict):
+                    ret_code = order.get("retCode") or order.get("ret_code")
+                    if ret_code is not None and ret_code != 0:
+                        logger.error(f"Order not confirmed: {order}")
+                        await self.telegram_logger.send_telegram_message(
+                            f"❌ Order not confirmed {symbol}: retCode {ret_code}"
+                        )
+                        return None
+
                 return order
             except Exception as e:
                 logger.error(f"Failed to place order for {symbol}: {e}")
@@ -232,8 +272,30 @@ class TradeManager:
                     f"Invalid inputs for {symbol}: price={price}, atr={atr}"
                 )
                 return 0.0
-            account = await safe_api_call(self.exchange, "fetch_balance")
-            equity = float(account["total"].get("USDT", 0))
+            if hasattr(self.exchange, "get_wallet_balance"):
+                account = await safe_api_call(
+                    self.exchange, "get_wallet_balance", accountType="UNIFIED"
+                )
+            else:
+                account = await safe_api_call(self.exchange, "fetch_balance")
+            equity = 0.0
+            if isinstance(account, dict):
+                if "result" in account:
+                    coins = (
+                        account.get("result", {})
+                        .get("list", [{}])[0]
+                        .get("coin", [])
+                    )
+                    for c in coins:
+                        if c.get("coin") == "USDT":
+                            equity = float(
+                                c.get("equity")
+                                or c.get("walletBalance")
+                                or c.get("availableToWithdraw", 0)
+                            )
+                            break
+                else:
+                    equity = float(account.get("total", {}).get("USDT", 0))
             if equity <= 0:
                 logger.warning(f"Insufficient balance for {symbol}")
                 await self.telegram_logger.send_telegram_message(

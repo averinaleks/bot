@@ -13,6 +13,30 @@ import shutil
 from numba import jit, prange
 import httpx
 from telegram.error import RetryAfter
+from typing import Any, Callable
+from pybit.unified_trading import HTTP
+
+
+class AsyncBybit:
+    """Simple async wrapper around pybit's HTTP client."""
+
+    def __init__(self, testnet: bool = False):
+        self.client = HTTP(
+            testnet=testnet,
+            api_key=os.environ.get("BYBIT_API_KEY"),
+            api_secret=os.environ.get("BYBIT_API_SECRET"),
+        )
+
+    async def _call(self, func: Callable[..., Any], *args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    async def __getattr__(self, name: str):  # type: ignore[override]
+        func = getattr(self.client, name)
+        if callable(func):
+            async def wrapper(*args, **kwargs):
+                return await self._call(func, *args, **kwargs)
+            return wrapper
+        raise AttributeError(name)
 
 
 async def handle_rate_limits(exchange) -> None:
@@ -31,12 +55,19 @@ async def handle_rate_limits(exchange) -> None:
 
 
 async def safe_api_call(exchange, method: str, *args, **kwargs):
-    """Call a ccxt method with retry and rate-limit handling."""
+    """Call an API method with retry and retCode verification."""
     delay = 1.0
     for attempt in range(5):
         try:
             result = await getattr(exchange, method)(*args, **kwargs)
-            await handle_rate_limits(exchange)
+            if hasattr(exchange, "last_response_headers"):
+                await handle_rate_limits(exchange)
+
+            if isinstance(result, dict):
+                ret_code = result.get("retCode") or result.get("ret_code")
+                if ret_code is not None and ret_code != 0:
+                    raise RuntimeError(f"retCode {ret_code}")
+
             return result
         except Exception as exc:
             logger.error(f"Bybit API error in {method}: {exc}")
