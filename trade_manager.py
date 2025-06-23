@@ -885,21 +885,57 @@ class TradeManager:
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
 from flask import Flask, request, jsonify
+import json
+import threading
 
 api_app = Flask(__name__)
+
+# For simple logging/testing of received orders
 POSITIONS = []
+
+trade_manager: TradeManager | None = None
+
+
+def create_trade_manager() -> TradeManager:
+    """Instantiate the TradeManager using config.json."""
+    global trade_manager
+    if trade_manager is None:
+        with open("config.json", "r") as f:
+            cfg = json.load(f)
+        # Minimal placeholders for Telegram bot integration
+        telegram_bot = None
+        chat_id = None
+        from data_handler import DataHandler
+        from model_builder import ModelBuilder
+
+        dh = DataHandler(cfg, telegram_bot, chat_id)
+        mb = ModelBuilder(cfg, dh, None)
+        trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
+    return trade_manager
 
 
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
     info = request.get_json(force=True)
     POSITIONS.append(info)
+    tm = trade_manager or create_trade_manager()
+    symbol = info.get("symbol")
+    side = info.get("side")
+    price = float(info.get("price", 0))
+    asyncio.run(tm.open_position(symbol, side, price, info))
     return jsonify({"status": "ok"})
 
 
 @api_app.route("/positions")
 def positions_route():
     return jsonify({"positions": POSITIONS})
+
+
+@api_app.route("/start")
+def start_route():
+    tm = trade_manager or create_trade_manager()
+    threading.Thread(target=lambda: asyncio.run(tm.run()), daemon=True).start()
+    return jsonify({"status": "started"})
 
 
 @api_app.route("/ping")
