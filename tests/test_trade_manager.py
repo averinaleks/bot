@@ -4,12 +4,60 @@ import sys
 import types
 import logging
 import os
-from trade_manager import TradeManager
 
+# Stub heavy dependencies before importing the trade manager
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     sys.modules['torch'] = torch
+
+ray_mod = types.ModuleType('ray')
+ray_mod.remote = lambda *a, **k: (lambda f: f)
+ray_mod.get = lambda x: x
+sys.modules.setdefault('ray', ray_mod)
+
+sk_mod = types.ModuleType('sklearn')
+model_sel = types.ModuleType('sklearn.model_selection')
+model_sel.GridSearchCV = object
+sk_mod.model_selection = model_sel
+base_estimator = types.ModuleType('sklearn.base')
+base_estimator.BaseEstimator = object
+sk_mod.base = base_estimator
+sys.modules.setdefault('sklearn', sk_mod)
+sys.modules.setdefault('sklearn.model_selection', model_sel)
+sys.modules.setdefault('sklearn.base', base_estimator)
+utils_stub = types.ModuleType('utils')
+class _TL:
+    def __init__(self, *a, **k):
+        pass
+    async def send_telegram_message(self, *a, **k):
+        pass
+utils_stub.TelegramLogger = _TL
+utils_stub.logger = logging.getLogger('test')
+async def _cde_stub(*a, **kw):
+    return False
+utils_stub.check_dataframe_empty = _cde_stub
+sys.modules['utils'] = utils_stub
+tenacity_mod = types.ModuleType('tenacity')
+tenacity_mod.retry = lambda *a, **k: (lambda f: f)
+tenacity_mod.wait_exponential = lambda *a, **k: None
+tenacity_mod.stop_after_attempt = lambda *a, **k: None
+sys.modules.setdefault('tenacity', tenacity_mod)
+joblib_mod = types.ModuleType('joblib')
+joblib_mod.dump = lambda *a, **k: None
+joblib_mod.load = lambda *a, **k: {}
+sys.modules.setdefault('joblib', joblib_mod)
+sys.modules.setdefault('httpx', types.ModuleType('httpx'))
+telegram_error_mod = types.ModuleType('telegram.error')
+telegram_error_mod.RetryAfter = Exception
+sys.modules.setdefault('telegram', types.ModuleType('telegram'))
+sys.modules.setdefault('telegram.error', telegram_error_mod)
+psutil_mod = types.ModuleType('psutil')
+psutil_mod.cpu_percent = lambda interval=1: 0
+psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
+sys.modules.setdefault('psutil', psutil_mod)
+
+from trade_manager import TradeManager  # noqa: E402
 
 class DummyTelegramLogger:
     def __init__(self, *a, **kw):
@@ -24,32 +72,6 @@ async def _cde(*a, **kw):
     return False
 utils.check_dataframe_empty = _cde
 sys.modules['utils'] = utils
-
-tenacity_mod = types.ModuleType('tenacity')
-tenacity_mod.retry = lambda *a, **k: (lambda f: f)
-tenacity_mod.wait_exponential = lambda *a, **k: None
-tenacity_mod.stop_after_attempt = lambda *a, **k: None
-sys.modules['tenacity'] = tenacity_mod
-scipy_mod = types.ModuleType('scipy')
-stats_mod = types.ModuleType('scipy.stats')
-stats_mod.zscore = lambda a, axis=0: (a - a.mean()) / a.std()
-scipy_mod.__version__ = "1.0"
-scipy_mod.stats = stats_mod
-sys.modules.setdefault('scipy', scipy_mod)
-sys.modules.setdefault('scipy.stats', stats_mod)
-sys.modules.setdefault('httpx', types.ModuleType('httpx'))
-telegram_error_mod = types.ModuleType('telegram.error')
-telegram_error_mod.RetryAfter = Exception
-sys.modules.setdefault('telegram', types.ModuleType('telegram'))
-sys.modules.setdefault('telegram.error', telegram_error_mod)
-psutil_mod = types.ModuleType('psutil')
-psutil_mod.cpu_percent = lambda interval=1: 0
-psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
-sys.modules.setdefault('psutil', psutil_mod)
-joblib_mod = types.ModuleType('joblib')
-joblib_mod.dump = lambda *a, **k: None
-joblib_mod.load = lambda *a, **k: {}
-sys.modules.setdefault('joblib', joblib_mod)
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
