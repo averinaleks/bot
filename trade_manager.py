@@ -644,7 +644,7 @@ def init_trade_manager() -> TradeManager:
 
 
 @api_app.route('/open_position', methods=['POST'])
-def open_position_route():
+async def open_position_route():
     """Open a position via the running TradeManager."""
     info = request.get_json(force=True)
 
@@ -660,7 +660,7 @@ def open_position_route():
         init_trade_manager()
 
     # Execute the async open_position method
-    asyncio.run(trade_manager.open_position(symbol, side, price, params))
+    await trade_manager.open_position(symbol, side, price, params)
     return jsonify({'status': 'ok'})
 
 
