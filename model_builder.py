@@ -18,6 +18,7 @@ from collections import deque
 import ray
 import gym
 from gym import spaces
+from flask import Flask, request, jsonify
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -813,7 +814,6 @@ class RLAgent:
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
-from flask import Flask, request, jsonify
 
 api_app = Flask(__name__)
 

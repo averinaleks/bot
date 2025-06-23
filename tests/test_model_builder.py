@@ -1,4 +1,7 @@
-import os, sys; sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import asyncio
 import numpy as np
 import pandas as pd
@@ -23,7 +26,6 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common"] = common
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
-import model_builder
 from model_builder import ModelBuilder, _train_model_remote
 
 class DummyIndicators:

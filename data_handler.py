@@ -22,6 +22,7 @@ from queue import Queue
 import pickle
 import psutil
 import ray
+from flask import Flask, jsonify
 
 try:
     from numba import cuda  # type: ignore
@@ -1002,7 +1003,6 @@ class DataHandler:
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
-from flask import Flask, jsonify
 
 api_app = Flask(__name__)
 PRICES = {"TEST": 100.0}

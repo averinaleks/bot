@@ -1,10 +1,12 @@
-import os, sys
+import os
+import sys
 import importlib
 import types
-import asyncio
 import numpy as np
 import pandas as pd
 import pytest
+import optuna  # noqa: F401
+from optimizer import ParameterOptimizer
 
 if 'torch' not in sys.modules:
     torch = types.ModuleType('torch')
@@ -25,7 +27,6 @@ if 'optuna' in sys.modules and not hasattr(sys.modules['optuna'], 'create_study'
     del sys.modules['optuna']
     sys.modules.pop('optuna.samplers', None)
     sys.modules.pop('optuna.integration.mlflow', None)
-import optuna  # noqa: F401
 mlflow_mod = types.ModuleType('optuna.integration.mlflow')
 mlflow_mod.MLflowCallback = object
 sys.modules.setdefault('optuna.integration.mlflow', mlflow_mod)
@@ -45,7 +46,6 @@ ray_mod.get = lambda x: x
 sys.modules['ray'] = ray_mod
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from optimizer import ParameterOptimizer
 
 
 class DummyDataHandler:

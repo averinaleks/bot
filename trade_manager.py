@@ -9,14 +9,17 @@ from utils import (
 )
 import inspect
 import torch
-
-# Determine computation device once
-device_type = "cuda" if torch.cuda.is_available() else "cpu"
 import joblib
 import os
 import time
 from typing import Dict, Optional
 import shutil
+from flask import Flask, request, jsonify
+import json
+import threading
+
+# Determine computation device once
+device_type = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 async def _check_df_async(df, context: str = "") -> bool:
@@ -888,9 +891,6 @@ class TradeManager:
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
-from flask import Flask, request, jsonify
-import json
-import threading
 
 api_app = Flask(__name__)
 
