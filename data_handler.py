@@ -3,10 +3,9 @@ import json
 import time
 import pandas as pd
 import numpy as np
-import ccxt.async_support as ccxt_async
-import ccxt.pro as ccxtpro
 import websockets
 from utils import (
+    BybitSDKAsync,
     logger,
     check_dataframe_empty,
     HistoricalDataCache,
@@ -33,13 +32,12 @@ except Exception:  # pragma: no cover - numba without cuda support
     GPU_AVAILABLE = False
 
 
-def create_exchange() -> ccxt_async.bybit:
-    """Create an authenticated Bybit exchange instance."""
-    return ccxt_async.bybit({
-        "apiKey": os.environ.get("BYBIT_API_KEY"),
-        "secret": os.environ.get("BYBIT_API_SECRET"),
-        "enableRateLimit": True,
-    })
+def create_exchange() -> BybitSDKAsync:
+    """Create an authenticated Bybit SDK instance."""
+    return BybitSDKAsync(
+        api_key=os.environ.get("BYBIT_API_KEY", ""),
+        api_secret=os.environ.get("BYBIT_API_SECRET", ""),
+    )
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
@@ -140,7 +138,7 @@ def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe
 
 class DataHandler:
     def __init__(self, config: dict, telegram_bot, chat_id,
-                 exchange: ccxt_async.bybit | None = None,
+                 exchange: BybitSDKAsync | None = None,
                  pro_exchange: ccxtpro.bybit | None = None):
         self.config = config
         self.exchange = exchange or create_exchange()
