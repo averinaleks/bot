@@ -375,7 +375,7 @@ class TradeManager:
                     f"Position opened: {symbol}, {side}, size={size}, entry={price}"
                 )
                 await self.telegram_logger.send_telegram_message(
-                    f"📈 Position opened: {symbol} {side.upper()} size={size:.4f} @ {price:.2f}",
+                    f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
                     urgent=True,
                 )
         except Exception as e:
@@ -422,7 +422,7 @@ class TradeManager:
                             f"Position closed: {symbol}, profit={profit:.2f}, reason={reason}"
                         )
                         await self.telegram_logger.send_telegram_message(
-                            f"📉 Position closed: {symbol} profit={profit:.2f} USDT ({reason})",
+                            f"📉 {symbol} {position['side'].upper()} exit={exit_price:.2f} PnL={profit:.2f} USDT ({reason})",
                             urgent=True,
                         )
                 except Exception as e:
@@ -968,6 +968,19 @@ def create_trade_manager() -> TradeManager:
         dh = DataHandler(cfg, telegram_bot, chat_id)
         mb = ModelBuilder(cfg, dh, None)
         trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
+        if telegram_bot:
+            from utils import TelegramUpdateListener
+
+            listener = TelegramUpdateListener(telegram_bot)
+
+            async def _handle(upd):
+                msg = getattr(upd, "message", None)
+                if msg and msg.text and msg.text.lower().startswith("/status"):
+                    await telegram_bot.send_message(chat_id=msg.chat_id, text="Bot is running")
+
+            threading.Thread(
+                target=lambda: asyncio.run(listener.listen(_handle)), daemon=True
+            ).start()
     return trade_manager
 
 

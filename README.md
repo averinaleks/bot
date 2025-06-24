@@ -61,6 +61,14 @@ trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
 You can limit the logger queue with `telegram_queue_size` in `config.json`.
 ```
 
+To avoid processing old updates after a restart, store the `update_id` and pass
+it to the `offset` parameter when calling `get_updates`. The helper class
+`TelegramUpdateListener` handles this automatically and logs any errors.
+
+Telegram enforces message limits per bot account, so duplicate notifications are
+typically caused by bugs rather than global restrictions. Ensure that your code
+filters repeated messages and checks that `send_message` returns HTTP 200.
+
 You can run this bot either with long polling or a webhook using the
 `Application` class from `python-telegram-bot`.
 
