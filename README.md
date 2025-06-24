@@ -30,10 +30,12 @@
    - `max_subscriptions_per_connection` определяет, сколько символов подписывается через одно WebSocket‑соединение.
    - `telegram_queue_size` ограничивает размер очереди сообщений Telegram.
 4. Запустите бота:
-   ```bash
-   python trading_bot.py
-   ```
+  ```bash
+  python trading_bot.py
+  ```
   При старте бот проверяет доступность всех сервисов по маршруту `/ping`.
+  Параметры проверки можно изменить переменными окружения
+  `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY` (в секундах).
 
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
 

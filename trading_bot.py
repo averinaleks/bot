@@ -20,12 +20,23 @@ def _load_env() -> dict:
     }
 
 
-def check_services(retries: int = 5, delay: float = 2.0) -> bool:
+def check_services(
+    retries: int | None = None,
+    delay: float | None = None,
+) -> bool:
     """Return True if all dependent services respond to /ping.
+
+    The ``SERVICE_CHECK_RETRIES`` and ``SERVICE_CHECK_DELAY`` environment
+    variables can override the default attempt count (5) and delay between
+    attempts (2 seconds).
 
     Each service is queried several times with a small delay between attempts
     to allow containers time to start accepting connections.
     """
+    if retries is None:
+        retries = int(os.getenv("SERVICE_CHECK_RETRIES", "5"))
+    if delay is None:
+        delay = float(os.getenv("SERVICE_CHECK_DELAY", "2.0"))
 
     env = _load_env()
     services = {
