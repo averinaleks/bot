@@ -13,7 +13,7 @@ import psutil
 import shutil
 from numba import jit, prange
 import httpx
-from telegram.error import RetryAfter
+from telegram.error import RetryAfter, BadRequest, Forbidden
 from pybit.unified_trading import HTTP
 
 
@@ -230,7 +230,7 @@ class TelegramLogger(logging.Handler):
     _bot = None
     _stop_event: asyncio.Event | None = None
 
-    def __init__(self, bot, chat_id, level=logging.NOTSET):
+    def __init__(self, bot, chat_id, level=logging.NOTSET, max_queue_size: int | None = None):
         super().__init__(level)
         self.bot = bot
         self.chat_id = chat_id
@@ -239,7 +239,7 @@ class TelegramLogger(logging.Handler):
         self.message_lock = asyncio.Lock()
 
         if TelegramLogger._queue is None:
-            TelegramLogger._queue = asyncio.Queue()
+            TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
             TelegramLogger._bot = bot
             TelegramLogger._stop_event = asyncio.Event()
             TelegramLogger._worker_task = asyncio.create_task(self._worker())
@@ -290,6 +290,16 @@ class TelegramLogger(logging.Handler):
                         if attempt < 4:
                             await asyncio.sleep(delay)
                             delay = min(delay * 2, 60)
+                    except BadRequest as e:
+                        logger.error(
+                            f"BadRequest Telegram: {e}. Проверьте chat_id"
+                        )
+                        break
+                    except Forbidden as e:
+                        logger.error(
+                            f"Forbidden Telegram: {e}. Проверьте токен и chat_id"
+                        )
+                        break
                     except httpx.HTTPError as e:
                         logger.error(f"HTTP ошибка Telegram: {e}")
                         break
@@ -301,7 +311,10 @@ class TelegramLogger(logging.Handler):
 
     async def send_telegram_message(self, message, urgent: bool = False):
         msg = message[:512]
-        await TelegramLogger._queue.put((self.chat_id, msg, urgent))
+        try:
+            TelegramLogger._queue.put_nowait((self.chat_id, msg, urgent))
+        except asyncio.QueueFull:
+            logger.warning("Очередь Telegram переполнена, сообщение пропущено")
 
     def emit(self, record):
         try:

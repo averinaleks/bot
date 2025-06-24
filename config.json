@@ -66,6 +66,7 @@
     "ws_min_process_rate": 30,
     "disk_buffer_size": 10000,
     "prediction_history_size": 100,
+    "telegram_queue_size": 100,
     "optuna_trials": 20,
     "enable_grid_search": false,
     "loss_streak_threshold": 3,

@@ -159,7 +159,11 @@ class DataHandler:
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
-        self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
+        self.telegram_logger = TelegramLogger(
+            telegram_bot,
+            chat_id,
+            max_queue_size=config.get("telegram_queue_size"),
+        )
         self.cache = HistoricalDataCache(config["cache_dir"])
         self.ohlcv = pd.DataFrame()
         self.ohlcv_2h = pd.DataFrame()
