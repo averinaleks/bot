@@ -148,6 +148,11 @@ Run `pip install -r requirements.txt` to install all runtime and development dep
 ```bash
 pip install -r requirements.txt
 ```
+Alternatively, run the helper script:
+```bash
+./install_test_deps.sh
+```
+This script simply installs packages from `requirements.txt`.
 
 The `requirements.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
