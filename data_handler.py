@@ -137,6 +137,22 @@ def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe
 
 
 class DataHandler:
+    """Collects market data and exposes it via an HTTP API.
+
+    Parameters
+    ----------
+    config : dict
+        Bot configuration.
+    telegram_bot : telegram.Bot or compatible
+        Bot instance for sending notifications.
+    chat_id : str | int
+        Identifier of the Telegram chat for notifications.
+    exchange : BybitSDKAsync, optional
+        Preconfigured Bybit client.
+    pro_exchange : ccxtpro.bybit, optional
+        ccxtpro client for WebSocket data.
+    """
+
     def __init__(self, config: dict, telegram_bot, chat_id,
                  exchange: BybitSDKAsync | None = None,
                  pro_exchange: ccxtpro.bybit | None = None):

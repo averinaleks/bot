@@ -32,9 +32,34 @@
    ```bash
    python trading_bot.py
    ```
-   При старте бот проверяет доступность всех сервисов по маршруту `/ping`.
+  При старте бот проверяет доступность всех сервисов по маршруту `/ping`.
 
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
+
+## Telegram notifications
+
+Set the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` variables in `.env` to
+enable notifications. Create the bot with `telegram.Bot` and pass it to both
+`DataHandler` and `TradeManager`:
+
+```python
+from telegram import Bot
+import json
+import os
+
+with open("config.json") as f:
+    cfg = json.load(f)
+
+bot = Bot(os.environ["TELEGRAM_BOT_TOKEN"])
+chat_id = os.environ["TELEGRAM_CHAT_ID"]
+
+data_handler = DataHandler(cfg, bot, chat_id)
+model_builder = ModelBuilder(cfg, data_handler, None)
+trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
+```
+
+You can run this bot either with long polling or a webhook using the
+`Application` class from `python-telegram-bot`.
 
 ## Лимиты WebSocket-подписок
 
