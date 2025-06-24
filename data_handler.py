@@ -210,6 +210,7 @@ class DataHandler:
         self.active_subscriptions = 0
         self.load_threshold = 0.8
         self.ws_pool = {}
+        self.tasks = []
 
     async def get_atr(self, symbol: str) -> float:
         """Return the latest ATR value for a symbol, recalculating if missing."""
@@ -595,15 +596,14 @@ class DataHandler:
         """
         try:
             self.cleanup_task = asyncio.create_task(self.cleanup_old_data())
+            self.tasks = []
             if self.pro_exchange:
                 await self._subscribe_with_ccxtpro(symbols)
             else:
-                # Divide symbols into batches for subscription
                 chunk_size = self.ws_subscription_batch_size
-                tasks = []
                 for i in range(0, len(symbols), chunk_size):
                     chunk = symbols[i : i + chunk_size]
-                    tasks.append(
+                    t1 = asyncio.create_task(
                         self._subscribe_chunk(
                             chunk,
                             self.config["ws_url"],
@@ -611,7 +611,7 @@ class DataHandler:
                             timeframe="primary",
                         )
                     )
-                    tasks.append(
+                    t2 = asyncio.create_task(
                         self._subscribe_chunk(
                             chunk,
                             self.config["ws_url"],
@@ -619,10 +619,11 @@ class DataHandler:
                             timeframe="secondary",
                         )
                     )
-                tasks.append(self._process_ws_queue())
-                tasks.append(self.load_from_disk_buffer())
-                tasks.append(self.monitor_load())
-                await asyncio.gather(*tasks, return_exceptions=True)
+                    self.tasks.extend([t1, t2])
+                self.tasks.append(asyncio.create_task(self._process_ws_queue()))
+                self.tasks.append(asyncio.create_task(self.load_from_disk_buffer()))
+                self.tasks.append(asyncio.create_task(self.monitor_load()))
+                await asyncio.gather(*self.tasks, return_exceptions=True)
         except Exception as e:
             logger.error(f"Ошибка подписки на WebSocket: {e}")
             await self.telegram_logger.send_telegram_message(f"Ошибка WebSocket: {e}")
@@ -711,20 +712,21 @@ class DataHandler:
                     break
 
     async def _subscribe_with_ccxtpro(self, symbols: List[str]):
-        tasks = []
+        self.tasks = []
         for symbol in symbols:
-            tasks.append(
+            t1 = asyncio.create_task(
                 self._subscribe_symbol_ccxtpro(
                     symbol, self.config["timeframe"], "primary"
                 )
             )
-            tasks.append(
+            t2 = asyncio.create_task(
                 self._subscribe_symbol_ccxtpro(
                     symbol, self.config["secondary_timeframe"], "secondary"
                 )
             )
-        tasks.append(self.monitor_load())
-        await asyncio.gather(*tasks, return_exceptions=True)
+            self.tasks.extend([t1, t2])
+        self.tasks.append(asyncio.create_task(self.monitor_load()))
+        await asyncio.gather(*self.tasks, return_exceptions=True)
 
     async def _connect_ws(self, url: str, connection_timeout: int):
         """Return an active WebSocket connection for ``url`` with retries."""
@@ -1086,6 +1088,41 @@ class DataHandler:
                 await asyncio.sleep(2)
             finally:
                 self.ws_queue.task_done()
+
+    async def stop(self):
+        """Gracefully cancel running tasks and close open connections."""
+        if self.cleanup_task:
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self.cleanup_task = None
+
+        for task in list(self.tasks):
+            task.cancel()
+        for task in list(self.tasks):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self.tasks.clear()
+
+        for url, conns in list(self.ws_pool.items()):
+            for ws in conns:
+                try:
+                    await ws.close()
+                except Exception as e:
+                    logger.error(f"Ошибка закрытия WebSocket {url}: {e}")
+        self.ws_pool.clear()
+
+        if self.pro_exchange is not None and hasattr(self.pro_exchange, "close"):
+            try:
+                await self.pro_exchange.close()
+            except Exception as e:
+                logger.error(f"Ошибка закрытия ccxtpro: {e}")
+
+        await TelegramLogger.shutdown()
 
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing

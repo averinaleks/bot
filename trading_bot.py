@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 import requests
 from utils import logger
 from config import load_config, BotConfig
@@ -100,9 +101,16 @@ def run_once() -> None:
 def main():
     if not check_services():
         raise SystemExit('dependent services are unavailable')
-    while True:
-        run_once()
-        time.sleep(INTERVAL)
+    try:
+        while True:
+            run_once()
+            time.sleep(INTERVAL)
+    except KeyboardInterrupt:
+        logger.info('Stopping trading bot')
+    finally:
+        dh = globals().get('data_handler')
+        if dh is not None and hasattr(dh, 'stop'):
+            asyncio.run(dh.stop())
 
 
 if __name__ == '__main__':
