@@ -868,4 +868,5 @@ def ping():
 if __name__ == "__main__":
     _load_model()
     port = int(os.environ.get("PORT", 8001))
+    logger.info("Starting ModelBuilder service on port %s", port)
     api_app.run(host="0.0.0.0", port=port)
