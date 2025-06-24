@@ -244,6 +244,8 @@ class TelegramLogger(logging.Handler):
             TelegramLogger._stop_event = asyncio.Event()
             TelegramLogger._worker_task = asyncio.create_task(self._worker())
 
+        self.last_sent_text = ""
+
     async def _worker(self):
         assert TelegramLogger._queue is not None
         assert TelegramLogger._stop_event is not None
@@ -270,12 +272,19 @@ class TelegramLogger(logging.Handler):
 
             parts = [message[i : i + 500] for i in range(0, len(message), 500)]
             for part in parts:
+                if part == self.last_sent_text:
+                    logger.debug("Повторное сообщение Telegram пропущено")
+                    continue
                 delay = 1
                 for attempt in range(5):
                     try:
-                        await TelegramLogger._bot.send_message(
+                        result = await TelegramLogger._bot.send_message(
                             chat_id=chat_id, text=part
                         )
+                        if not getattr(result, "message_id", None):
+                            logger.error("Telegram message response without message_id")
+                        else:
+                            self.last_sent_text = part
                         self.last_message_time = time.time()
                         break
                     except RetryAfter as e:
@@ -337,6 +346,51 @@ class TelegramLogger(logging.Handler):
             cls._worker_task = None
         cls._queue = None
         cls._stop_event = None
+
+
+class TelegramUpdateListener:
+    """Listen for incoming Telegram updates with persistent offset."""
+
+    def __init__(self, bot, offset_file: str = "telegram_offset.txt"):
+        self.bot = bot
+        self.offset_file = offset_file
+        self.offset = self._load_offset()
+        self._stop_event = asyncio.Event()
+
+    def _load_offset(self) -> int:
+        try:
+            with open(self.offset_file, "r", encoding="utf-8") as f:
+                return int(f.read().strip())
+        except Exception:
+            return 0
+
+    def _save_offset(self) -> None:
+        try:
+            with open(self.offset_file, "w", encoding="utf-8") as f:
+                f.write(str(self.offset))
+        except Exception as exc:
+            logger.error(f"Ошибка сохранения offset Telegram: {exc}")
+
+    async def listen(self, handler):
+        while not self._stop_event.is_set():
+            try:
+                updates = await self.bot.get_updates(
+                    offset=self.offset + 1, timeout=10
+                )
+                for upd in updates:
+                    self.offset = upd.update_id
+                    try:
+                        await handler(upd)
+                    finally:
+                        self._save_offset()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(f"Ошибка получения обновлений Telegram: {exc}")
+                await asyncio.sleep(5)
+
+    def stop(self) -> None:
+        self._stop_event.set()
 
 
 def check_dataframe_empty(df, context: str = "") -> bool:
