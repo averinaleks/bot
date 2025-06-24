@@ -134,10 +134,9 @@ def test_position_calculations():
     size = asyncio.run(tm.calculate_position_size('BTCUSDT', 100, 1.0, 1.5))
     assert size == pytest.approx(10 / (1.5 * 10))
 
-    stop_loss_price = 100 - 1.5 * 1.0
-    take_profit_price = 100 + 2.5 * 1.0
-    assert stop_loss_price == pytest.approx(98.5)
-    assert take_profit_price == pytest.approx(102.5)
+    sl, tp = tm.calculate_stop_loss_take_profit('buy', 100, 1.0, 1.5, 2.5)
+    assert sl == pytest.approx(98.5)
+    assert tp == pytest.approx(102.5)
 
 
 def test_open_position_places_tp_sl_orders():
