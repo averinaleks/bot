@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 # Load defaults from config.json
 CONFIG_PATH = os.getenv(
-    "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "..", "config.json")
+    "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
 )
 try:
     with open(CONFIG_PATH, "r") as f:
