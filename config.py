@@ -5,9 +5,10 @@ import os
 from dataclasses import dataclass, field, fields, asdict
 from typing import Any, Dict, List
 
-# Load defaults from config.json
+# Load defaults from config.json located alongside this module
 CONFIG_PATH = os.getenv(
-    "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "..", "config.json")
+    "CONFIG_PATH",
+    os.path.join(os.path.dirname(__file__), "config.json"),
 )
 try:
     with open(CONFIG_PATH, "r") as f:
@@ -25,19 +26,25 @@ class BotConfig:
     exchange: str = _get_default("exchange", "bybit")
     timeframe: str = _get_default("timeframe", "1m")
     secondary_timeframe: str = _get_default("secondary_timeframe", "2h")
-    ws_url: str = _get_default("ws_url", "wss://stream.bybit.com/v5/public/linear")
+    ws_url: str = _get_default(
+        "ws_url",
+        "wss://stream.bybit.com/v5/public/linear",
+    )
     private_ws_url: str = _get_default(
-        "private_ws_url", "wss://stream.bybit.com/v5/private"
+        "private_ws_url",
+        "wss://stream.bybit.com/v5/private",
     )
     backup_ws_urls: List[str] = field(
         default_factory=lambda: _get_default(
-            "backup_ws_urls", ["wss://stream.bybit.com/v5/public/linear"]
+            "backup_ws_urls",
+            ["wss://stream.bybit.com/v5/public/linear"],
         )
     )
     max_concurrent_requests: int = _get_default("max_concurrent_requests", 10)
     max_symbols: int = _get_default("max_symbols", 50)
     max_subscriptions_per_connection: int = _get_default(
-        "max_subscriptions_per_connection", 15
+        "max_subscriptions_per_connection",
+        15,
     )
     ws_rate_limit: int = _get_default("ws_rate_limit", 20)
     ws_reconnect_interval: int = _get_default("ws_reconnect_interval", 5)
@@ -50,15 +57,25 @@ class BotConfig:
     max_positions: int = _get_default("max_positions", 5)
     check_interval: int = _get_default("check_interval", 60)
     data_cleanup_interval: int = _get_default("data_cleanup_interval", 3600)
-    base_probability_threshold: float = _get_default("base_probability_threshold", 0.6)
-    trailing_stop_percentage: float = _get_default("trailing_stop_percentage", 1.0)
+    base_probability_threshold: float = _get_default(
+        "base_probability_threshold",
+        0.6,
+    )
+    trailing_stop_percentage: float = _get_default(
+        "trailing_stop_percentage",
+        1.0,
+    )
     trailing_stop_coeff: float = _get_default("trailing_stop_coeff", 1.0)
     retrain_threshold: float = _get_default("retrain_threshold", 0.1)
     retrain_volatility_threshold: float = _get_default(
-        "retrain_volatility_threshold", 0.02
+        "retrain_volatility_threshold",
+        0.02,
     )
     forget_window: int = _get_default("forget_window", 86400)
-    trailing_stop_multiplier: float = _get_default("trailing_stop_multiplier", 1.0)
+    trailing_stop_multiplier: float = _get_default(
+        "trailing_stop_multiplier",
+        1.0,
+    )
     tp_multiplier: float = _get_default("tp_multiplier", 2.0)
     sl_multiplier: float = _get_default("sl_multiplier", 1.0)
     kelly_win_prob: float = _get_default("kelly_win_prob", 0.6)
@@ -79,7 +96,8 @@ class BotConfig:
     macd_window_sign: int = _get_default("macd_window_sign", 9)
     adx_window: int = _get_default("adx_window", 14)
     volume_profile_update_interval: int = _get_default(
-        "volume_profile_update_interval", 300
+        "volume_profile_update_interval",
+        300,
     )
     model_save_path: str = _get_default("model_save_path", "/app/models")
     cache_dir: str = _get_default("cache_dir", "/app/cache")
@@ -90,9 +108,15 @@ class BotConfig:
     optimization_interval: int = _get_default("optimization_interval", 7200)
     shap_cache_duration: int = _get_default("shap_cache_duration", 86400)
     volatility_threshold: float = _get_default("volatility_threshold", 0.02)
-    ema_crossover_lookback: int = _get_default("ema_crossover_lookback", 7200)
+    ema_crossover_lookback: int = _get_default(
+        "ema_crossover_lookback",
+        7200,
+    )
     pullback_period: int = _get_default("pullback_period", 3600)
-    pullback_volatility_coeff: float = _get_default("pullback_volatility_coeff", 1.0)
+    pullback_volatility_coeff: float = _get_default(
+        "pullback_volatility_coeff",
+        1.0,
+    )
     retrain_interval: int = _get_default("retrain_interval", 86400)
     min_liquidity: int = _get_default("min_liquidity", 1000000)
     ws_queue_size: int = _get_default("ws_queue_size", 10000)
@@ -141,7 +165,7 @@ def _convert(value: str, typ: type) -> Any:
         try:
             return json.loads(value)
         except json.JSONDecodeError:
-            return [v.strip() for v in value.split(",") if v.strip()]
+            return [v.strip() for v in value.split(',') if v.strip()]
     return value
 
 
@@ -149,7 +173,7 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
     cfg: Dict[str, Any] = {}
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path, 'r') as f:
             cfg.update(json.load(f))
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
