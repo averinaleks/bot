@@ -20,23 +20,33 @@ def _load_env() -> dict:
     }
 
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def check_services() -> bool:
-    """Return True if all dependent services respond to /ping."""
+def check_services(retries: int = 5, delay: float = 2.0) -> bool:
+    """Return True if all dependent services respond to /ping.
+
+    Each service is queried several times with a small delay between attempts
+    to allow containers time to start accepting connections.
+    """
+
     env = _load_env()
     services = {
         "data_handler": env["data_handler_url"],
         "model_builder": env["model_builder_url"],
         "trade_manager": env["trade_manager_url"],
     }
+
     for name, url in services.items():
-        try:
-            resp = requests.get(f"{url}/ping", timeout=5)
-            if resp.status_code != 200:
-                logger.error("Service %s at %s returned %s", name, url, resp.status_code)
-                return False
-        except requests.RequestException as exc:
-            logger.error("Service %s at %s unavailable: %s", name, url, exc)
+        for _ in range(retries):
+            try:
+                resp = requests.get(f"{url}/ping", timeout=5)
+                if resp.status_code == 200:
+                    break
+                logger.error(
+                    "Service %s at %s returned %s", name, url, resp.status_code
+                )
+            except requests.RequestException as exc:
+                logger.error("Service %s at %s unavailable: %s", name, url, exc)
+            time.sleep(delay)
+        else:
             return False
     return True
 

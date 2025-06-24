@@ -11,7 +11,17 @@ from scipy.stats import zscore
 import gzip
 import psutil
 import shutil
-from numba import jit, prange
+try:
+    from numba import jit, prange  # type: ignore
+except Exception:  # pragma: no cover - allow missing numba package
+    def jit(*a, **k):
+        def wrapper(f):
+            return f
+        return wrapper
+
+    def prange(*args):  # type: ignore
+        return range(*args)
+
 import httpx
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
