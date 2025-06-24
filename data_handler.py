@@ -246,6 +246,27 @@ class DataHandler:
             logger.error(f"Ошибка расчета ATR для {symbol}: {e}")
         return 0.0
 
+    async def is_data_fresh(
+        self, symbol: str, timeframe: str = "primary", max_delay: float = 60
+    ) -> bool:
+        """Return True if the most recent candle is within ``max_delay`` seconds."""
+        try:
+            df_lock = self.ohlcv_lock if timeframe == "primary" else self.ohlcv_2h_lock
+            df = self.ohlcv if timeframe == "primary" else self.ohlcv_2h
+            async with df_lock:
+                if "symbol" in df.index.names and symbol in df.index.get_level_values("symbol"):
+                    sub_df = df.xs(symbol, level="symbol", drop_level=False)
+                else:
+                    return False
+            if sub_df.empty:
+                return False
+            last_ts = sub_df.index.get_level_values("timestamp")[-1]
+            age = pd.Timestamp.now(tz="UTC") - last_ts
+            return age.total_seconds() <= max_delay
+        except Exception as e:
+            logger.error(f"Error checking data freshness for {symbol}: {e}")
+            return False
+
     async def load_initial(self):
         try:
             markets = await safe_api_call(self.exchange, "load_markets")
