@@ -36,6 +36,24 @@ async def _check_df_async(df, context: str = "") -> bool:
 
 
 class TradeManager:
+    """Handles trading logic and sends Telegram notifications.
+
+    Parameters
+    ----------
+    config : dict
+        Bot configuration.
+    data_handler : DataHandler
+        Instance providing market data.
+    model_builder
+        Associated ModelBuilder instance.
+    telegram_bot : telegram.Bot or compatible
+        Bot used to send messages.
+    chat_id : str | int
+        Telegram chat identifier.
+    rl_agent : optional
+        Reinforcement learning agent used for decisions.
+    """
+
     def __init__(
         self,
         config: dict,
@@ -930,9 +948,16 @@ def create_trade_manager() -> TradeManager:
     if trade_manager is None:
         with open("config.json", "r") as f:
             cfg = json.load(f)
-        # Minimal placeholders for Telegram bot integration
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         telegram_bot = None
-        chat_id = None
+        if token:
+            try:
+                from telegram import Bot
+
+                telegram_bot = Bot(token)
+            except Exception as exc:  # pragma: no cover - import/runtime errors
+                logger.error(f"Failed to create Telegram Bot: {exc}")
         from data_handler import DataHandler
         from model_builder import ModelBuilder
 
