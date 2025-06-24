@@ -726,36 +726,46 @@ class DataHandler:
         tasks.append(self.monitor_load())
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
-        """Subscribe to kline data for a chunk of symbols.
-
-        Subscriptions are sent in batches defined by ``max_subscriptions_per_connection``
-        to avoid sending too many requests at once.
-        """
-        reconnect_attempts = 0
-        max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
-        urls = [ws_url] + self.backup_ws_urls
-        current_url_index = 0
-        selected_timeframe = self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
+    async def _connect_ws(self, url: str, connection_timeout: int):
+        """Return an active WebSocket connection for ``url`` with retries."""
+        attempts = 0
+        max_attempts = self.config.get("max_reconnect_attempts", 10)
         while True:
-            current_url = urls[current_url_index % len(urls)]
-            ws = None
             try:
-                if current_url not in self.ws_pool:
-                    self.ws_pool[current_url] = []
-                if not self.ws_pool[current_url]:
+                if url not in self.ws_pool:
+                    self.ws_pool[url] = []
+                if not self.ws_pool[url]:
                     ws = await websockets.connect(
-                        current_url,
+                        url,
                         ping_interval=20,
                         ping_timeout=30,
                         open_timeout=max(connection_timeout, 10),
                     )
-                    self.ws_pool[current_url].append(ws)
+                    self.ws_pool[url].append(ws)
                 else:
-                    ws = self.ws_pool[current_url].pop(0)
-                logger.info(f"Подключение к WebSocket {current_url} для {len(symbols)} символов ({timeframe})")
-                start_time = time.time()
-                batch_size = self.ws_subscription_batch_size
+                    ws = self.ws_pool[url].pop(0)
+                logger.info(f"Подключение к WebSocket {url}")
+                return ws
+            except Exception as e:
+                attempts += 1
+                delay = min(2 ** attempts, 60)
+                logger.error(
+                    f"Ошибка подключения к WebSocket {url}, попытка {attempts}/{max_attempts}, ожидание {delay} секунд: {e}"
+                )
+                if attempts >= max_attempts:
+                    raise
+                await asyncio.sleep(delay)
+
+    async def _send_subscriptions(self, ws, symbols, timeframe: str):
+        """Send subscription requests for ``symbols`` and confirm success."""
+        attempts = 0
+        max_attempts = self.config.get("max_reconnect_attempts", 10)
+        selected_timeframe = (
+            self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
+        )
+        batch_size = self.ws_subscription_batch_size
+        while True:
+            try:
                 for i in range(0, len(symbols), batch_size):
                     batch = symbols[i : i + batch_size]
                     for symbol in batch:
@@ -765,27 +775,13 @@ class DataHandler:
                         if len(self.ws_rate_timestamps) > self.config["ws_rate_limit"]:
                             logger.warning("Превышен лимит подписок WebSocket, ожидание")
                             await asyncio.sleep(1)
-                            # очистка устаревших отметок после ожидания
-                            self.ws_rate_timestamps = [
-                                t for t in self.ws_rate_timestamps if current_time - t < 1
-                            ]
+                            self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
                         ws_symbol = self.fix_ws_symbol(symbol)
                         await ws.send(
-                            json.dumps(
-                                {
-                                    "op": "subscribe",
-                                    "args": [f"kline.{selected_timeframe}.{ws_symbol}"],
-                                }
-                            )
+                            json.dumps({"op": "subscribe", "args": [f"kline.{selected_timeframe}.{ws_symbol}"]})
                         )
-                        # небольшая задержка, чтобы не превышать лимит отправки
                         await asyncio.sleep(max(0, 1 / self.config["ws_rate_limit"]))
-                reconnect_attempts = 0
-                current_url_index = 0
-                self.restart_attempts = 0
-                self.active_subscriptions += len(symbols)
-                # Проверка успешной подписки
-                # Wait for confirmation messages for each subscription
+
                 confirmations_needed = len(symbols)
                 confirmations = 0
                 startup_messages = []
@@ -801,8 +797,105 @@ class DataHandler:
                     except asyncio.TimeoutError:
                         continue
                 if confirmations < confirmations_needed:
-                    logger.warning(f"Не удалось подтвердить подписку для {symbols} ({timeframe}), повторная попытка")
                     raise Exception("Подписка не подтверждена")
+                return startup_messages
+            except Exception as e:
+                attempts += 1
+                delay = min(2 ** attempts, 60)
+                logger.error(
+                    f"Ошибка подписки на WebSocket для {symbols} ({timeframe}), попытка {attempts}/{max_attempts}, ожидание {delay} секунд: {e}"
+                )
+                if attempts >= max_attempts:
+                    raise
+                await asyncio.sleep(delay)
+
+    async def _read_messages(
+        self,
+        ws,
+        symbols,
+        timeframe: str,
+        selected_timeframe: str,
+        connection_timeout: int,
+    ):
+        """Read messages from ``ws`` and enqueue them for processing."""
+        start_time = time.time()
+        while True:
+            try:
+                message = await asyncio.wait_for(ws.recv(), timeout=connection_timeout)
+                latency = time.time() - start_time
+                for symbol in symbols:
+                    self.ws_latency[symbol] = latency
+                if latency > 5:
+                    logger.warning(
+                        f"Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
+                    )
+                    await self.telegram_logger.send_telegram_message(
+                        f"⚠️ Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
+                    )
+                    for symbol in symbols:
+                        symbol_df = await self.fetch_ohlcv_single(
+                            symbol,
+                            selected_timeframe,
+                            limit=1,
+                            cache_prefix="2h_" if timeframe == "secondary" else "",
+                        )
+                        if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
+                            _, df = symbol_df
+                            if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
+                                df["symbol"] = symbol
+                                df = df.set_index(["symbol", df.index])
+                                await self.synchronize_and_update(
+                                    symbol,
+                                    df,
+                                    self.funding_rates.get(symbol, 0.0),
+                                    self.open_interest.get(symbol, 0.0),
+                                    {"imbalance": 0.0, "timestamp": time.time()},
+                                    timeframe=timeframe,
+                                )
+                    break
+                try:
+                    data = json.loads(message)
+                    topic = data.get("topic", "")
+                    symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
+                    priority = self.symbol_priority.get(symbol, 0)
+                    try:
+                        await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
+                    except asyncio.TimeoutError:
+                        logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
+                        await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                except asyncio.TimeoutError:
+                    logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
+                    await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                    continue
+            except asyncio.TimeoutError:
+                logger.warning(f"Тайм-аут WebSocket для {symbols} ({timeframe}), отправка пинга")
+                await ws.ping()
+                continue
+            except websockets.exceptions.ConnectionClosed as e:
+                logger.error(f"WebSocket соединение закрыто для {symbols} ({timeframe}): {e}")
+                break
+            except Exception as e:
+                logger.error(f"Ошибка обработки WebSocket сообщения для {symbols} ({timeframe}): {e}")
+                break
+
+    async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
+        """Subscribe to kline data for a chunk of symbols."""
+        reconnect_attempts = 0
+        max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
+        urls = [ws_url] + self.backup_ws_urls
+        current_url_index = 0
+        selected_timeframe = self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
+        while True:
+            current_url = urls[current_url_index % len(urls)]
+            ws = None
+            try:
+                ws = await self._connect_ws(current_url, connection_timeout)
+                self.active_subscriptions += len(symbols)
+                self.restart_attempts = 0
+                reconnect_attempts = 0
+                current_url_index = 0
+
+                startup_messages = await self._send_subscriptions(ws, symbols, timeframe)
                 for message in startup_messages:
                     try:
                         data = json.loads(message)
@@ -816,62 +909,8 @@ class DataHandler:
                             await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
                     except Exception:
                         continue
-                while True:
-                    try:
-                        message = await asyncio.wait_for(ws.recv(), timeout=connection_timeout)
-                        latency = time.time() - start_time
-                        for symbol in symbols:
-                            self.ws_latency[symbol] = latency
-                        if latency > 5:
-                            logger.warning(f"Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек")
-                            await self.telegram_logger.send_telegram_message(
-                                f"⚠️ Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
-                            )
-                            for symbol in symbols:
-                                symbol_df = await self.fetch_ohlcv_single(
-                                    symbol,
-                                    selected_timeframe,
-                                    limit=1,
-                                    cache_prefix="2h_" if timeframe == "secondary" else "",
-                                )
-                                if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
-                                    _, df = symbol_df
-                                    if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
-                                        df["symbol"] = symbol
-                                        df = df.set_index(["symbol", df.index])
-                                        await self.synchronize_and_update(
-                                            symbol,
-                                            df,
-                                            self.funding_rates.get(symbol, 0.0),
-                                            self.open_interest.get(symbol, 0.0),
-                                            {"imbalance": 0.0, "timestamp": time.time()},
-                                            timeframe=timeframe,
-                                        )
-                            break
-                        try:
-                            data = json.loads(message)
-                            topic = data.get("topic", "")
-                            symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
-                            priority = self.symbol_priority.get(symbol, 0)
-                            try:
-                                await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
-                            except asyncio.TimeoutError:
-                                logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
-                                await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
-                        except asyncio.TimeoutError:
-                            logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
-                            await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
-                            continue
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Тайм-аут WebSocket для {symbols} ({timeframe}), отправка пинга")
-                        await ws.ping()
-                        continue
-                    except websockets.exceptions.ConnectionClosed as e:
-                        logger.error(f"WebSocket соединение закрыто для {symbols} ({timeframe}): {e}")
-                        break
-                    except Exception as e:
-                        logger.error(f"Ошибка обработки WebSocket сообщения для {symbols} ({timeframe}): {e}")
-                        break
+
+                await self._read_messages(ws, symbols, timeframe, selected_timeframe, connection_timeout)
             except Exception as e:
                 reconnect_attempts += 1
                 current_url_index += 1
