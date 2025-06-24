@@ -8,7 +8,6 @@ import pandas as pd
 import types
 import pytest
 import importlib.util
-from config import BotConfig
 
 if importlib.util.find_spec('torch') is None:
     pytest.skip('torch not available', allow_module_level=True)
@@ -51,13 +50,13 @@ class DummyTradeManager:
     pass
 
 def create_model_builder(df):
-    config = BotConfig(
-        cache_dir="/tmp",
-        min_data_length=len(df),
-        lstm_timesteps=2,
-        lstm_batch_size=2,
-        model_type="cnn_lstm",
-    )
+    config = {
+        "cache_dir": "/tmp",
+        "min_data_length": len(df),
+        "lstm_timesteps": 2,
+        "lstm_batch_size": 2,
+        "model_type": "cnn_lstm",
+    }
     data_handler = DummyDataHandler(df)
     trade_manager = DummyTradeManager()
     return ModelBuilder(config, data_handler, trade_manager)

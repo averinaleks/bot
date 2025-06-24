@@ -6,7 +6,6 @@ import time
 import torch
 import ray
 from utils import logger, check_dataframe_empty
-from config import BotConfig
 import inspect
 from optuna.samplers import TPESampler
 from optuna.integration.mlflow import MLflowCallback
@@ -116,7 +115,7 @@ def _objective_remote(
 
 
 class ParameterOptimizer:
-    def __init__(self, config: BotConfig, data_handler):
+    def __init__(self, config, data_handler):
         self.config = config
         self.data_handler = data_handler
         self.base_optimization_interval = (
@@ -161,7 +160,7 @@ class ParameterOptimizer:
             empty = await _check_df_async(df, f"optimize {symbol}")
             if empty:
                 logger.warning(f"Нет данных для оптимизации {symbol}")
-                return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             # Проверка значительного изменения волатильности
             volatility_change = abs(
@@ -182,7 +181,7 @@ class ParameterOptimizer:
                 logger.info(
                     f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд"
                 )
-                return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             # Использование TPESampler с multivariate=True для учета корреляций
             study = optuna.create_study(
                 direction="maximize",
@@ -211,7 +210,7 @@ class ParameterOptimizer:
                 study.tell(trial, value)
                 for cb in callbacks:
                     cb(study, trial)
-            best_params = {**self.config.asdict(), **study.best_params}
+            best_params = {**self.config, **study.best_params}
             if self.enable_grid_search:
                 try:
                     best_params = self._grid_search(df, symbol, best_params)
@@ -221,7 +220,7 @@ class ParameterOptimizer:
                 logger.warning(
                     f"Некорректные параметры для {symbol}, использование предыдущих"
                 )
-                return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+                return self.best_params_by_symbol.get(symbol, {}) or self.config
             self.best_params_by_symbol[symbol] = best_params
             self.last_optimization[symbol] = time.time()
             logger.info(
@@ -230,7 +229,7 @@ class ParameterOptimizer:
             return best_params
         except Exception as e:
             logger.error(f"Ошибка оптимизации для {symbol}: {e}")
-            return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+            return self.best_params_by_symbol.get(symbol, {}) or self.config
 
     def validate_params(self, params):
         # Валидация оптимизированных параметров

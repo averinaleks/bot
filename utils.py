@@ -17,13 +17,13 @@ try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
 except Exception:  # pragma: no cover - allow missing telegram package
     class RetryAfter(Exception):
-        pass
+        """Fallback when telegram.error is unavailable."""
 
     class BadRequest(Exception):
-        pass
+        """Fallback when telegram.error is unavailable."""
 
     class Forbidden(Exception):
-        pass
+        """Fallback when telegram.error is unavailable."""
 from pybit.unified_trading import HTTP
 
 

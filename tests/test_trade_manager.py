@@ -4,7 +4,6 @@ import sys
 import types
 import logging
 import os
-from config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
 if 'torch' not in sys.modules:
@@ -110,17 +109,17 @@ class DummyDataHandler:
         return float(ind.atr.iloc[-1]) if ind else 0.0
 
 def make_config():
-    return BotConfig(
-        cache_dir='/tmp',
-        max_positions=5,
-        leverage=10,
-        min_risk_per_trade=0.01,
-        max_risk_per_trade=0.05,
-        check_interval=1,
-        performance_window=60,
-        sl_multiplier=1.0,
-        tp_multiplier=2.0,
-    )
+    return {
+        'cache_dir': '/tmp',
+        'max_positions': 5,
+        'leverage': 10,
+        'min_risk_per_trade': 0.01,
+        'max_risk_per_trade': 0.05,
+        'check_interval': 1,
+        'performance_window': 60,
+        'sl_multiplier': 1.0,
+        'tp_multiplier': 2.0,
+    }
 
 def test_position_calculations():
     dh = DummyDataHandler()

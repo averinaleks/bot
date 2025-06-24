@@ -50,7 +50,6 @@ psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
 sys.modules.setdefault('psutil', psutil_mod)
 
 from optimizer import ParameterOptimizer  # noqa: E402
-from config import BotConfig
 
 numba_mod = types.ModuleType('numba')
 numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
@@ -87,23 +86,23 @@ def make_df():
 @pytest.mark.asyncio
 async def test_optimize_returns_params():
     df = make_df()
-    config = BotConfig(
-        timeframe='1m',
-        optuna_trials=1,
-        optimization_interval=1,
-        volatility_threshold=0.02,
-        ema30_period=30,
-        ema100_period=100,
-        ema200_period=200,
-        atr_period_default=14,
-        tp_multiplier=2.0,
-        sl_multiplier=1.0,
-        base_probability_threshold=0.5,
-        loss_streak_threshold=2,
-        win_streak_threshold=2,
-        threshold_adjustment=0.05,
-        mlflow_enabled=False,
-    )
+    config = {
+        'timeframe': '1m',
+        'optuna_trials': 1,
+        'optimization_interval': 1,
+        'volatility_threshold': 0.02,
+        'ema30_period': 30,
+        'ema100_period': 100,
+        'ema200_period': 200,
+        'atr_period_default': 14,
+        'tp_multiplier': 2.0,
+        'sl_multiplier': 1.0,
+        'base_probability_threshold': 0.5,
+        'loss_streak_threshold': 2,
+        'win_streak_threshold': 2,
+        'threshold_adjustment': 0.05,
+        'mlflow_enabled': False,
+    }
     opt = ParameterOptimizer(config, DummyDataHandler(df))
     params = await opt.optimize('BTCUSDT')
     assert isinstance(params, dict)

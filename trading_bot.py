@@ -2,12 +2,10 @@ import os
 import time
 import requests
 from utils import logger
-from config import load_config, BotConfig
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 SYMBOL = os.getenv("SYMBOL", "TEST")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
-CONFIG: BotConfig = load_config("config.json")
 
 
 def _load_env() -> dict:
