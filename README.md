@@ -28,6 +28,7 @@
   - `enable_grid_search` включает дополнительную проверку лучших параметров через GridSearchCV после оптимизации Optuna.
   - `max_symbols` задаёт количество наиболее ликвидных торговых пар, которые бот выберет из доступных.
    - `max_subscriptions_per_connection` определяет, сколько символов подписывается через одно WebSocket‑соединение.
+   - `telegram_queue_size` ограничивает размер очереди сообщений Telegram.
 4. Запустите бота:
    ```bash
    python trading_bot.py
@@ -56,6 +57,8 @@ chat_id = os.environ["TELEGRAM_CHAT_ID"]
 data_handler = DataHandler(cfg, bot, chat_id)
 model_builder = ModelBuilder(cfg, data_handler, None)
 trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
+
+You can limit the logger queue with `telegram_queue_size` in `config.json`.
 ```
 
 You can run this bot either with long polling or a webhook using the

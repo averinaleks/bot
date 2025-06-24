@@ -67,7 +67,11 @@ class TradeManager:
         self.data_handler = data_handler
         self.model_builder = model_builder
         self.rl_agent = rl_agent
-        self.telegram_logger = TelegramLogger(telegram_bot, chat_id)
+        self.telegram_logger = TelegramLogger(
+            telegram_bot,
+            chat_id,
+            max_queue_size=config.get("telegram_queue_size"),
+        )
         self.positions = pd.DataFrame(
             columns=[
                 "symbol",
