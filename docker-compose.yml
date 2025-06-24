@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: trading_bot
+    # container_name: trading_bot
     command: python trading_bot.py
     depends_on:
       - data_handler
