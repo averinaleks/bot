@@ -87,9 +87,8 @@ def test_prepare_lstm_features_shape():
 def test_train_model_remote_returns_state_and_predictions(model_type):
     X = np.random.rand(20, 3, 2).astype(np.float32)
     y = (np.random.rand(20) > 0.5).astype(np.float32)
-    state, preds, labels = _train_model_remote._function(
-        X, y, batch_size=2, model_type=model_type
-    )
+    func = getattr(_train_model_remote, "_function", _train_model_remote)
+    state, preds, labels = func(X, y, batch_size=2, model_type=model_type)
     assert isinstance(state, dict)
     assert len(preds) == len(labels)
     assert isinstance(preds, list)

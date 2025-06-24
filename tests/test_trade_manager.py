@@ -96,7 +96,7 @@ class DummyIndicators:
         self.atr = pd.Series([1.0])
 
 class DummyDataHandler:
-    def __init__(self):
+    def __init__(self, fresh: bool = True):
         self.exchange = DummyExchange()
         self.usdt_pairs = ['BTCUSDT']
         idx = pd.MultiIndex.from_tuples([
@@ -104,10 +104,14 @@ class DummyDataHandler:
         ], names=['symbol', 'timestamp'])
         self.ohlcv = pd.DataFrame({'close': [100]}, index=idx)
         self.indicators = {'BTCUSDT': DummyIndicators()}
+        self.fresh = fresh
 
     async def get_atr(self, symbol: str) -> float:
         ind = self.indicators.get(symbol)
         return float(ind.atr.iloc[-1]) if ind else 0.0
+
+    async def is_data_fresh(self, symbol: str, timeframe: str = 'primary', max_delay: float = 60) -> bool:
+        return self.fresh
 
 def make_config():
     return BotConfig(
@@ -186,4 +190,33 @@ def test_trailing_stop_to_breakeven():
     assert len(dh.exchange.orders) >= 2
     assert tm.positions.iloc[0]['breakeven_triggered'] is True
     assert tm.positions.iloc[0]['size'] < dh.exchange.orders[0]['amount']
+
+
+def test_open_position_skips_existing():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    import asyncio
+    asyncio.run(run())
+
+    assert len(dh.exchange.orders) == 1
+    assert len(tm.positions) == 1
+
+
+def test_is_data_fresh():
+    fresh_dh = DummyDataHandler(fresh=True)
+    stale_dh = DummyDataHandler(fresh=False)
+
+    import asyncio
+    assert asyncio.run(fresh_dh.is_data_fresh('BTCUSDT')) is True
+    assert asyncio.run(stale_dh.is_data_fresh('BTCUSDT')) is False
 

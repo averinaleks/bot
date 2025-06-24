@@ -333,11 +333,17 @@ class TradeManager:
                         f"Maximum number of positions reached: {self.max_positions}"
                     )
                     return
+                if side not in {"buy", "sell"}:
+                    logger.warning(f"Invalid side {side} for {symbol}")
+                    return
                 if (
                     "symbol" in self.positions.index.names
                     and symbol in self.positions.index.get_level_values("symbol")
                 ):
                     logger.warning(f"Position for {symbol} already open")
+                    return
+                if not await self.data_handler.is_data_fresh(symbol):
+                    logger.warning(f"Stale data for {symbol}, skipping trade")
                     return
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
@@ -808,6 +814,9 @@ class TradeManager:
                 df = ohlcv.xs(symbol, level="symbol", drop_level=False)
             else:
                 df = None
+            if not await self.data_handler.is_data_fresh(symbol):
+                logger.debug(f"Stale data for {symbol}, skipping signal")
+                return None
             if df is not None and not df.empty:
                 volatility = df["close"].pct_change().std()
             else:
