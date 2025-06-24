@@ -19,7 +19,7 @@ import torch
 import joblib
 import os
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import shutil
 from flask import Flask, request, jsonify
 import threading
@@ -308,6 +308,23 @@ class TradeManager:
             logger.error(f"Failed to calculate position size for {symbol}: {e}")
             return 0.0
 
+    def calculate_stop_loss_take_profit(
+        self,
+        side: str,
+        price: float,
+        atr: float,
+        sl_multiplier: float,
+        tp_multiplier: float,
+    ) -> Tuple[float, float]:
+        """Return stop-loss and take-profit prices."""
+        stop_loss_price = (
+            price - sl_multiplier * atr if side == "buy" else price + sl_multiplier * atr
+        )
+        take_profit_price = (
+            price + tp_multiplier * atr if side == "buy" else price - tp_multiplier * atr
+        )
+        return stop_loss_price, take_profit_price
+
     async def open_position(self, symbol: str, side: str, price: float, params: Dict):
         try:
             async with self.position_lock:
@@ -334,11 +351,8 @@ class TradeManager:
                 if size <= 0:
                     logger.warning(f"Position size too small for {symbol}")
                     return
-                stop_loss_price = (
-                    price - sl_mult * atr if side == "buy" else price + sl_mult * atr
-                )
-                take_profit_price = (
-                    price + tp_mult * atr if side == "buy" else price - tp_mult * atr
+                stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
+                    side, price, atr, sl_mult, tp_mult
                 )
             order_params = {
                 "leverage": self.leverage,
