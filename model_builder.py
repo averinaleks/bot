@@ -14,6 +14,7 @@ import asyncio
 import shap
 import mlflow
 from utils import logger, check_dataframe_empty, HistoricalDataCache
+from config import BotConfig
 from collections import deque
 import ray
 import gym
@@ -285,7 +286,7 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
 class ModelBuilder:
     """Simplified model builder used for training LSTM models."""
 
-    def __init__(self, config, data_handler, trade_manager):
+    def __init__(self, config: BotConfig, data_handler, trade_manager):
         self.config = config
         self.data_handler = data_handler
         self.trade_manager = trade_manager
@@ -698,7 +699,7 @@ class TradingEnv(gym.Env):
 
 
 class RLAgent:
-    def __init__(self, config, data_handler, model_builder):
+    def __init__(self, config: BotConfig, data_handler, model_builder):
         self.config = config
         self.data_handler = data_handler
         self.model_builder = model_builder

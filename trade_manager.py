@@ -7,6 +7,7 @@ from utils import (
     check_dataframe_empty,
     TelegramLogger,
 )
+from config import BotConfig, load_config
 
 try:
     from utils import safe_api_call
@@ -21,7 +22,6 @@ import time
 from typing import Dict, Optional
 import shutil
 from flask import Flask, request, jsonify
-import json
 import threading
 
 # Determine computation device once
@@ -56,7 +56,7 @@ class TradeManager:
 
     def __init__(
         self,
-        config: dict,
+        config: BotConfig,
         data_handler,
         model_builder,
         telegram_bot,
@@ -950,8 +950,7 @@ def create_trade_manager() -> TradeManager:
     """Instantiate the TradeManager using config.json."""
     global trade_manager
     if trade_manager is None:
-        with open("config.json", "r") as f:
-            cfg = json.load(f)
+        cfg = load_config("config.json")
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         telegram_bot = None
