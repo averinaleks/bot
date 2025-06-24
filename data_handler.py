@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import time
@@ -16,6 +18,7 @@ from utils import (
 )
 from tenacity import retry, wait_exponential
 from typing import List, Dict
+from config import BotConfig
 import ta
 import os
 from queue import Queue
@@ -85,7 +88,7 @@ def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int) 
 
 
 class IndicatorsCache:
-    def __init__(self, df: pd.DataFrame, config: dict, volatility: float, timeframe: str = "primary"):
+    def __init__(self, df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str = "primary"):
         self.df = df
         self.config = config
         self.volatility = volatility
@@ -132,7 +135,7 @@ class IndicatorsCache:
 
 
 @ray.remote(num_cpus=1)
-def calc_indicators(df: pd.DataFrame, config: dict, volatility: float, timeframe: str):
+def calc_indicators(df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str):
     return IndicatorsCache(df, config, volatility, timeframe)
 
 
@@ -153,7 +156,7 @@ class DataHandler:
         ccxtpro client for WebSocket data.
     """
 
-    def __init__(self, config: dict, telegram_bot, chat_id,
+    def __init__(self, config: BotConfig, telegram_bot, chat_id,
                  exchange: BybitSDKAsync | None = None,
                  pro_exchange: ccxtpro.bybit | None = None):
         self.config = config

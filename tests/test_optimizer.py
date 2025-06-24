@@ -4,6 +4,7 @@ import sys
 import pytest
 import types
 import logging
+from config import BotConfig
 
 # Stub heavy dependencies before importing the optimizer
 if 'torch' not in sys.modules:
@@ -74,7 +75,7 @@ class DummyDataHandler:
 
 data_handler = DummyDataHandler()
 
-config = {"optimization_interval": 7200, "volatility_threshold": 0.02}
+config = BotConfig(optimization_interval=7200, volatility_threshold=0.02)
 
 opt = ParameterOptimizer(config, data_handler)
 

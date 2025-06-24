@@ -13,7 +13,17 @@ import psutil
 import shutil
 from numba import jit, prange
 import httpx
-from telegram.error import RetryAfter, BadRequest, Forbidden
+try:
+    from telegram.error import RetryAfter, BadRequest, Forbidden
+except Exception:  # pragma: no cover - allow missing telegram package
+    class RetryAfter(Exception):
+        pass
+
+    class BadRequest(Exception):
+        pass
+
+    class Forbidden(Exception):
+        pass
 from pybit.unified_trading import HTTP
 
 
