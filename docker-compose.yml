@@ -40,6 +40,8 @@ services:
       - LOG_DIR=/app/logs
       - MODEL_SAVE_PATH=/app/models
       - CONFIG_PATH=/app/config.json
+      - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
+      - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
