@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import optuna  # noqa: F401
+from config import BotConfig
 
 # Stub heavy dependencies before importing the optimizer
 if 'torch' not in sys.modules:
@@ -50,7 +51,6 @@ psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
 sys.modules.setdefault('psutil', psutil_mod)
 
 from optimizer import ParameterOptimizer  # noqa: E402
-from config import BotConfig
 
 numba_mod = types.ModuleType('numba')
 numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
