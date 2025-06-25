@@ -18,16 +18,6 @@ telegram_error_mod = types.ModuleType('telegram.error')
 telegram_error_mod.RetryAfter = Exception
 sys.modules.setdefault('telegram', types.ModuleType('telegram'))
 sys.modules.setdefault('telegram.error', telegram_error_mod)
-pybit_mod = types.ModuleType('pybit')
-ut_mod = types.ModuleType('unified_trading')
-ut_mod.HTTP = object
-pybit_mod.unified_trading = ut_mod
-sys.modules.setdefault('pybit', pybit_mod)
-sys.modules.setdefault('pybit.unified_trading', ut_mod)
-psutil_mod = types.ModuleType('psutil')
-psutil_mod.cpu_percent = lambda interval=1: 0
-psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
-sys.modules.setdefault('psutil', psutil_mod)
 
 import trading_bot  # noqa: E402
 

@@ -17,7 +17,7 @@ from utils import (
     safe_api_call,
 )
 from tenacity import retry, wait_exponential
-from typing import List, Dict, TYPE_CHECKING
+from typing import List, Dict
 from config import BotConfig
 import ta
 import os
@@ -26,9 +26,6 @@ import pickle
 import psutil
 import ray
 from flask import Flask, jsonify
-
-if TYPE_CHECKING:  # pragma: no cover - for type checkers only
-    import ccxtpro
 
 try:
     from numba import cuda  # type: ignore
@@ -155,13 +152,13 @@ class DataHandler:
         Identifier of the Telegram chat for notifications.
     exchange : BybitSDKAsync, optional
         Preconfigured Bybit client.
-    pro_exchange : "ccxtpro.bybit", optional
+    pro_exchange : ccxtpro.bybit, optional
         ccxtpro client for WebSocket data.
     """
 
     def __init__(self, config: BotConfig, telegram_bot, chat_id,
                  exchange: BybitSDKAsync | None = None,
-                 pro_exchange: "ccxtpro.bybit" | None = None):
+                 pro_exchange: ccxtpro.bybit | None = None):
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
