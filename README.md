@@ -165,10 +165,11 @@ Install full GPU versions:
 pip install -r requirements.txt
 ```
 
-Install lightweight CPU versions:
+Install lightweight CPU versions (the file already includes the extra
+index URL for CPU wheels):
 
 ```bash
-pip install -r requirements-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-cpu.txt
 ```
 
 The `requirements.txt` file already includes test-only packages such as
