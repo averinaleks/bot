@@ -17,8 +17,12 @@ from utils import logger, check_dataframe_empty, HistoricalDataCache
 from config import BotConfig
 from collections import deque
 import ray
-import gym
-from gym import spaces
+try:
+    import gym
+    from gym import spaces
+except Exception:  # pragma: no cover - optional dependency
+    gym = None
+    spaces = None
 from flask import Flask, request, jsonify
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -658,7 +662,7 @@ class ModelBuilder:
         return results
 
 
-class TradingEnv(gym.Env):
+class TradingEnv(gym.Env if gym else object):
     """Simple trading environment for offline training."""
 
     def __init__(self, df: pd.DataFrame):
