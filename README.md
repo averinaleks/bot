@@ -156,8 +156,8 @@ The default `requirements.txt` installs GPU builds of libraries such as
 PyTorch. On systems without CUDA you can use the lighter
 `requirements-cpu.txt` instead. Both variants contain the same package set,
 but the CPU file pins the CPU wheels of heavy libraries using version strings
-like `torch==2.7.1+cpu`, `torchvision==0.22.1+cpu` and
-`tensorflow-cpu==2.16.1`.
+like `torch==2.7.1+cpu`, `torchvision==0.22.1+cpu`,
+`tensorflow-cpu==2.16.1` and `numba==0.60.0`.
 
 Install full GPU versions:
 
