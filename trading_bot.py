@@ -58,6 +58,14 @@ def check_services(
                 logger.error("Service %s at %s unavailable: %s", name, url, exc)
             time.sleep(delay)
         else:
+            logger.error(
+                "Service %s at %s did not respond after %s retries."
+                " Increase SERVICE_CHECK_RETRIES or SERVICE_CHECK_DELAY if"
+                " your containers need more time to start.",
+                name,
+                url,
+                retries,
+            )
             return False
     return True
 
@@ -121,6 +129,10 @@ def run_once() -> None:
 
 def main():
     if not check_services():
+        logger.error(
+            "Dependent services are unavailable. Adjust SERVICE_CHECK_RETRIES "
+            "and SERVICE_CHECK_DELAY in your .env if startup is slow."
+        )
         raise SystemExit('dependent services are unavailable')
     try:
         while True:
