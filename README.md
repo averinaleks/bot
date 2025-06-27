@@ -13,11 +13,6 @@
    source venv/bin/activate
    pip install -r requirements.txt
    ```
-- Для CPU достаточно установить пакеты из `requirements-cpu.txt`:
-   ```bash
-   pip install -r requirements-cpu.txt
-   ```
-  Этот список подходит для запуска тестов без GPU.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
 - Библиотека `catalyst` закреплена на версии `21.4`, так как новые версии не устанавливаются с `pip>=24.1`. Если требуется `catalyst>=22.2`, понизьте `pip` ниже 24.1.
 2. Создайте файл `.env` по примеру `.env.example` и укажите свои значения.
@@ -156,14 +151,13 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Before executing the test suite, **install all packages from `requirements-cpu.txt`**.
-Failure to do so will result in missing module errors. GPU builds are not required for the unit tests.
+Before executing the test suite, **install all packages from `requirements.txt`**.
+Failure to do so will result in missing module errors.
 
-Run one of the following commands depending on your hardware:
+Run `pip install -r requirements.txt` to install all runtime and development dependencies before testing:
 
 ```bash
-pip install -r requirements-cpu.txt  # CPU only (tests)
-pip install -r requirements.txt       # GPU acceleration
+pip install -r requirements.txt
 ```
 
 The `requirements.txt` file already includes test-only packages such as
