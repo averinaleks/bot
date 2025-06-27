@@ -151,13 +151,23 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Before executing the test suite, **install all packages from `requirements.txt`**.
-Failure to do so will result in missing module errors.
+Before executing the test suite, **install the required packages**.
+The default `requirements.txt` installs GPU builds of libraries such as
+PyTorch. On systems without CUDA you can use the lighter
+`requirements-cpu.txt` instead. Both variants contain the same package set,
+but the CPU file pins CPU wheels of `torch`, `torchvision`, `tensorflow` and
+`numba`.
 
-Run `pip install -r requirements.txt` to install all runtime and development dependencies before testing:
+Install full GPU versions:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Install lightweight CPU versions:
+
+```bash
+pip install -r requirements-cpu.txt
 ```
 
 The `requirements.txt` file already includes test-only packages such as
