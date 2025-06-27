@@ -2,9 +2,13 @@ import os
 import time
 import asyncio
 import requests
+from dotenv import load_dotenv
 from utils import logger
 from config import load_config, BotConfig
 from tenacity import retry, wait_exponential, stop_after_attempt
+
+# Automatically load environment variables from a .env file if present
+load_dotenv()
 
 SYMBOL = os.getenv("SYMBOL", "TEST")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
