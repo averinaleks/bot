@@ -168,7 +168,7 @@ pip install -r requirements.txt
 Install lightweight CPU versions:
 
 ```bash
-pip install -r requirements-cpu.txt
+pip install -r requirements-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 The `requirements.txt` file already includes test-only packages such as
