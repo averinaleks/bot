@@ -218,15 +218,15 @@ GPU libraries such as CUDA-enabled torch or numba may be required for some tests
 
 ## Linting
 
-The project uses **flake8** for style checks. Install dependencies including `flake8`:
+The project uses **flake8** for style checks. Install dependencies and set up an optional Git pre-commit hook so linting runs automatically:
 
 ```bash
 pip install -r requirements.txt  # or requirements-cpu.txt
-flake8 --install-hook git  # optional Git pre-commit hook
+flake8 --install-hook git
 ```
 
-To run linting manually:
+Linting configuration is stored in `.flake8`. Run the checker manually:
 
 ```bash
-flake8 . --max-line-length=180 --select=E9,F63,F7,F82 --extend-ignore=E203,W503
+flake8
 ```
