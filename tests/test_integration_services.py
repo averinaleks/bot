@@ -5,6 +5,7 @@ import multiprocessing
 from flask import Flask, request, jsonify
 import sys
 import types
+import pytest
 
 # Stub heavy dependencies before importing trading_bot
 numba_mod = types.ModuleType('numba')
@@ -119,6 +120,56 @@ def test_service_availability_check():
         for port in (8000, 8001, 8002):
             resp = requests.get(f'http://localhost:{port}/ping', timeout=5)
             assert resp.status_code == 200
+    finally:
+        for p in processes:
+            p.terminate()
+        for p in processes:
+            p.join()
+
+
+def test_check_services_success():
+    processes = [
+        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
+        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
+        multiprocessing.Process(target=_run, args=(tm_app, 8002)),
+    ]
+    for p in processes:
+        p.start()
+    time.sleep(1)
+    os.environ.update({
+        'DATA_HANDLER_URL': 'http://localhost:8000',
+        'MODEL_BUILDER_URL': 'http://localhost:8001',
+        'TRADE_MANAGER_URL': 'http://localhost:8002',
+        'SERVICE_CHECK_RETRIES': '2',
+        'SERVICE_CHECK_DELAY': '0.1',
+    })
+    try:
+        trading_bot.check_services()
+    finally:
+        for p in processes:
+            p.terminate()
+        for p in processes:
+            p.join()
+
+
+def test_check_services_failure():
+    processes = [
+        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
+        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
+    ]
+    for p in processes:
+        p.start()
+    time.sleep(1)
+    os.environ.update({
+        'DATA_HANDLER_URL': 'http://localhost:8000',
+        'MODEL_BUILDER_URL': 'http://localhost:8001',
+        'TRADE_MANAGER_URL': 'http://localhost:8002',
+        'SERVICE_CHECK_RETRIES': '2',
+        'SERVICE_CHECK_DELAY': '0.1',
+    })
+    try:
+        with pytest.raises(SystemExit):
+            trading_bot.check_services()
     finally:
         for p in processes:
             p.terminate()
