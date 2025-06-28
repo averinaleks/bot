@@ -51,6 +51,12 @@
   ```
 
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
+По умолчанию используется образ с поддержкой GPU. Если она не требуется,
+запустите compose с переменной `DOCKERFILE` и отключите NVIDIA-переменные:
+
+```bash
+DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
+```
 
 ## Telegram notifications
 
