@@ -7,17 +7,16 @@
 
 ## Быстрый старт
 
-1. Установите зависимости:
+1. Установите зависимости. Варианты для GPU и CPU:
    ```bash
    python3 -m venv venv
    source venv/bin/activate
+   # Вариант с GPU (по умолчанию)
    pip install -r requirements.txt
-   ```
- - Для CPU достаточно установить пакеты из `requirements-cpu.txt`, где используются сборки `torch` и `tensorflow` без поддержки GPU:
-   ```bash
+   # Или CPU‑сборки без CUDA
    pip install -r requirements-cpu.txt
    ```
-   Этот список подходит для запуска тестов без GPU и не тянет тяжелые CUDA-зависимости.
+   Список `requirements-cpu.txt` содержит версии `torch` и `tensorflow` без поддержки GPU. Его можно использовать для установки зависимостей и запуска тестов на машинах без CUDA.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
 - Библиотека `catalyst` закреплена на версии `21.4`, так как новые версии не устанавливаются с `pip>=24.1`. Если требуется `catalyst>=22.2`, понизьте `pip` ниже 24.1.
 2. Создайте файл `.env` по примеру `.env.example` и укажите свои значения.
@@ -156,16 +155,19 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Before executing the test suite, **install all packages from `requirements-cpu.txt`**.
-This list pins CPU-only wheels of PyTorch and TensorFlow, so the tests do not download any CUDA dependencies.
-GPU builds are not required for the unit tests.
+Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
+Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
 
-Run one of the following commands depending on your hardware:
+Пример полного процесса:
 
 ```bash
-pip install -r requirements-cpu.txt  # CPU only (tests)
-pip install -r requirements.txt       # GPU acceleration
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-cpu.txt
+pytest
 ```
+
+Если у вас есть GPU и установленный CUDA, можно установить полный список зависимостей из `requirements.txt` и затем запустить те же тесты.
 
 The `requirements.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
@@ -207,9 +209,3 @@ The test suite relies on the following packages:
 - pytest
 
 GPU libraries such as CUDA-enabled torch or numba may be required for some tests.
-
-After installing dependencies, run all tests with:
-
-```bash
-pytest
-```
