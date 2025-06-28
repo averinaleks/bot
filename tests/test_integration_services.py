@@ -115,13 +115,10 @@ def test_service_availability_check():
     for p in processes:
         p.start()
     time.sleep(1)
-    os.environ.update({
-        'DATA_HANDLER_URL': 'http://localhost:8000',
-        'MODEL_BUILDER_URL': 'http://localhost:8001',
-        'TRADE_MANAGER_URL': 'http://localhost:8002',
-    })
     try:
-        assert trading_bot.check_services(), 'services not reachable'
+        for port in (8000, 8001, 8002):
+            resp = requests.get(f'http://localhost:{port}/ping', timeout=5)
+            assert resp.status_code == 200
     finally:
         for p in processes:
             p.terminate()

@@ -6,6 +6,12 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python data_handler.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
     networks:
       - trading_bot_default
   model_builder:
@@ -13,6 +19,12 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python model_builder.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
     networks:
       - trading_bot_default
   trade_manager:
@@ -20,6 +32,12 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python trade_manager.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
     networks:
       - trading_bot_default
   trading_bot:
@@ -29,9 +47,12 @@ services:
     # container_name: trading_bot
     command: python trading_bot.py
     depends_on:
-      - data_handler
-      - model_builder
-      - trade_manager
+      data_handler:
+        condition: service_healthy
+      model_builder:
+        condition: service_healthy
+      trade_manager:
+        condition: service_healthy
     environment:
       - DATA_HANDLER_URL=http://data_handler:8000
       - MODEL_BUILDER_URL=http://model_builder:8001
@@ -47,8 +68,6 @@ services:
       - LOG_DIR=/app/logs
       - MODEL_SAVE_PATH=/app/models
       - CONFIG_PATH=/app/config.json
-      - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
-      - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models

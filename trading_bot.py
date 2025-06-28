@@ -24,54 +24,6 @@ def _load_env() -> dict:
     }
 
 
-def check_services(
-    retries: int | None = None,
-    delay: float | None = None,
-) -> bool:
-    """Return True if all dependent services respond to /ping.
-
-    The ``SERVICE_CHECK_RETRIES`` and ``SERVICE_CHECK_DELAY`` environment
-    variables can override the default attempt count (5) and delay between
-    attempts (2 seconds).
-
-    Each service is queried several times with a small delay between attempts
-    to allow containers time to start accepting connections.
-    """
-    if retries is None:
-        retries = int(os.getenv("SERVICE_CHECK_RETRIES", "5"))
-    if delay is None:
-        delay = float(os.getenv("SERVICE_CHECK_DELAY", "2.0"))
-
-    env = _load_env()
-    services = {
-        "data_handler": env["data_handler_url"],
-        "model_builder": env["model_builder_url"],
-        "trade_manager": env["trade_manager_url"],
-    }
-
-    for name, url in services.items():
-        for _ in range(retries):
-            try:
-                resp = requests.get(f"{url}/ping", timeout=5)
-                if resp.status_code == 200:
-                    break
-                logger.error(
-                    "Service %s at %s returned %s", name, url, resp.status_code
-                )
-            except requests.RequestException as exc:
-                logger.error("Service %s at %s unavailable: %s", name, url, exc)
-            time.sleep(delay)
-        else:
-            logger.error(
-                "Service %s at %s did not respond after %s retries."
-                " Increase SERVICE_CHECK_RETRIES or SERVICE_CHECK_DELAY if"
-                " your containers need more time to start.",
-                name,
-                url,
-                retries,
-            )
-            return False
-    return True
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
@@ -132,12 +84,6 @@ def run_once() -> None:
 
 
 def main():
-    if not check_services():
-        logger.error(
-            "Dependent services are unavailable. Adjust SERVICE_CHECK_RETRIES "
-            "and SERVICE_CHECK_DELAY in your .env if startup is slow."
-        )
-        raise SystemExit('dependent services are unavailable')
     try:
         while True:
             run_once()
