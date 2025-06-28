@@ -55,6 +55,24 @@
 DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
 ```
 
+## Docker Compose logs
+
+Просмотреть вывод контейнеров можно через `docker compose logs`.
+Выберите нужный сервис или добавьте флаг `-f` для режима слежения:
+
+```bash
+docker compose logs data_handler          # логи DataHandler
+docker compose logs -f trade_manager     # следить за выводом TradeManager
+docker compose logs model_builder
+```
+
+Команда без аргументов печатает логи всех сервисов.
+Если GPU недоступен, собирайте образ через переменную `DOCKERFILE=Dockerfile.cpu`:
+
+```bash
+DOCKERFILE=Dockerfile.cpu docker compose up --build
+```
+
 ## Telegram notifications
 
 Set the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` variables in `.env` to
