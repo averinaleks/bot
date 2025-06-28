@@ -209,3 +209,18 @@ The test suite relies on the following packages:
 - pytest
 
 GPU libraries such as CUDA-enabled torch or numba may be required for some tests.
+
+## Linting
+
+The project uses **flake8** for style checks. Install dependencies including `flake8`:
+
+```bash
+pip install -r requirements.txt  # or requirements-cpu.txt
+flake8 --install-hook git  # optional Git pre-commit hook
+```
+
+To run linting manually:
+
+```bash
+flake8 . --max-line-length=180 --select=E9,F63,F7,F82 --extend-ignore=E203,W503
+```
