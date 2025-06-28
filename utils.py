@@ -616,6 +616,7 @@ class HistoricalDataCache:
         try:
             safe_symbol = sanitize_symbol(symbol)
             filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
+            old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
                     logger.info(f"Кэш для {symbol}_{timeframe} устарел, удаление")
@@ -624,6 +625,12 @@ class HistoricalDataCache:
                 start_time = time.time()
                 with gzip.open(filename, "rb") as f:
                     data = pickle.load(f)
+                if not isinstance(data, pd.DataFrame):
+                    logger.error(
+                        f"Неверный тип данных в кэше {symbol}_{timeframe}: {type(data)}"
+                    )
+                    os.remove(filename)
+                    return None
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(
@@ -631,19 +638,28 @@ class HistoricalDataCache:
                     )
                 logger.info(f"Данные загружены из кэша (gzip): {filename}")
                 return data
-            old_filename = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{timeframe}.pkl"
-            )
             if os.path.exists(old_filename):
                 logger.info(
                     f"Обнаружен старый кэш для {symbol}_{timeframe}, конвертация в gzip"
                 )
                 with open(old_filename, "rb") as f:
                     data = pickle.load(f)
+                if not isinstance(data, pd.DataFrame):
+                    logger.error(
+                        f"Неверный тип данных в старом кэше {symbol}_{timeframe}: {type(data)}"
+                    )
+                    os.remove(old_filename)
+                    return None
                 self.save_cached_data(symbol, timeframe, data)
                 os.remove(old_filename)
                 return data
             return None
         except Exception as e:
             logger.error(f"Ошибка загрузки кэша для {symbol}_{timeframe}: {e}")
+            for f in (filename, old_filename):
+                try:
+                    if os.path.exists(f):
+                        os.remove(f)
+                except OSError:
+                    pass
             return None
