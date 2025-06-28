@@ -39,16 +39,10 @@
   ```bash
   python trading_bot.py
   ```
-  При старте бот проверяет доступность всех сервисов по маршруту `/ping`.
-  Параметры проверки контролируются переменными окружения
-  `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY` (в секундах).
-  Если в логах появляется сообщение "dependent services are unavailable",
-  увеличьте эти значения в `.env`. Например:
-
-  ```env
-  SERVICE_CHECK_RETRIES=20
-  SERVICE_CHECK_DELAY=5
-  ```
+  Перед запуском убедитесь, что сервисы `data_handler`, `model_builder` и
+  `trade_manager` отвечают на `/ping`. В Docker Compose это происходит
+  автоматически через встроенные health check'и, так что дополнительных
+  настроек не требуется.
 
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
