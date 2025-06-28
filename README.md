@@ -13,7 +13,7 @@
    source venv/bin/activate
    pip install -r requirements.txt
    ```
- - Для CPU достаточно установить пакеты из `requirements-cpu.txt`, где используются сборки `torch` и `tensorflow` без поддержки GPU:
+ - Для CPU достаточно установить пакеты из `requirements-cpu.txt`, где явно указаны колёсные сборки `torch` и `torchvision` c суффиксом `+cpu`, а также `tensorflow-cpu`:
    ```bash
    pip install -r requirements-cpu.txt
    ```
@@ -157,7 +157,7 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Before executing the test suite, **install all packages from `requirements-cpu.txt`**.
-This list pins CPU-only wheels of PyTorch and TensorFlow, so the tests do not download any CUDA dependencies.
+This list pins CPU-only wheels of PyTorch (with the `+cpu` tag), torchvision and TensorFlow, so the tests do not download any CUDA dependencies.
 GPU builds are not required for the unit tests.
 
 Run one of the following commands depending on your hardware:
