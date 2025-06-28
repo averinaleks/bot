@@ -255,3 +255,9 @@ Linting configuration is stored in `.flake8`. Run the checker manually:
 ```bash
 flake8
 ```
+
+## Continuous integration
+
+All pushes and pull requests trigger a GitHub Actions workflow that installs
+dependencies from `requirements-cpu.txt`, runs `flake8`, and executes `pytest`.
+This ensures style checks and tests run automatically.
