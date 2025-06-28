@@ -73,6 +73,29 @@ docker compose logs model_builder
 DOCKERFILE=Dockerfile.cpu docker compose up --build
 ```
 
+## Troubleshooting service health
+
+If `trading_bot.py` exits with `dependent services are unavailable`,
+use these steps to diagnose the problem:
+
+1. Inspect container logs to see why a service failed to start:
+
+   ```bash
+   docker compose logs data_handler
+   docker compose logs model_builder
+   docker compose logs trade_manager
+   ```
+
+2. On systems without a GPU driver, build the stack with the CPU Dockerfile to
+   avoid CUDA errors:
+
+   ```bash
+   DOCKERFILE=Dockerfile.cpu docker compose up --build
+   ```
+
+3. If services require more time to initialize, increase
+   `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
+
 ## Telegram notifications
 
 Set the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` variables in `.env` to
