@@ -212,6 +212,27 @@ def test_open_position_skips_existing():
     assert len(tm.positions) == 1
 
 
+def test_open_position_concurrent_single_entry():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await asyncio.gather(
+            tm.open_position('BTCUSDT', 'buy', 100, {}),
+            tm.open_position('BTCUSDT', 'buy', 100, {}),
+        )
+
+    import asyncio
+    asyncio.run(run())
+
+    assert len(tm.positions) == 1
+
+
 def test_is_data_fresh():
     fresh_dh = DummyDataHandler(fresh=True)
     stale_dh = DummyDataHandler(fresh=False)
