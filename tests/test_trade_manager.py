@@ -39,6 +39,7 @@ async def _cde_stub(*a, **kw):
     return False
 utils_stub.check_dataframe_empty = _cde_stub
 sys.modules['utils'] = utils_stub
+os.environ["TEST_MODE"] = "1"
 tenacity_mod = types.ModuleType('tenacity')
 tenacity_mod.retry = lambda *a, **k: (lambda f: f)
 tenacity_mod.wait_exponential = lambda *a, **k: None
@@ -58,7 +59,11 @@ psutil_mod.cpu_percent = lambda interval=1: 0
 psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
 sys.modules.setdefault('psutil', psutil_mod)
 
+import trade_manager
 from trade_manager import TradeManager  # noqa: E402
+
+def test_utils_injected_before_trade_manager_import():
+    assert trade_manager.TelegramLogger is _TL
 
 class DummyTelegramLogger:
     def __init__(self, *a, **kw):
