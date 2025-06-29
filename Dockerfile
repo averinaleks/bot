@@ -38,6 +38,8 @@ WORKDIR /app
 
 # Установка минимальных пакетов для выполнения
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgomp1 \
     python3.12 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
