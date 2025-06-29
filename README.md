@@ -86,8 +86,14 @@ use these steps to diagnose the problem:
    docker compose logs trade_manager
    ```
 
-2. On systems without a GPU driver, build the stack with the CPU Dockerfile to
-   avoid CUDA errors:
+2. GPU images require the NVIDIA runtime (`nvidia-container-toolkit` or
+   `nvidia-docker2`). Verify that the GPU is visible from a container:
+
+   ```bash
+   docker compose run --rm data_handler nvidia-smi
+   ```
+
+   If no GPU is detected, rebuild with the CPU Dockerfile:
 
    ```bash
    DOCKERFILE=Dockerfile.cpu docker compose up --build
