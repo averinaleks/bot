@@ -33,6 +33,9 @@ class _TL:
         pass
     async def send_telegram_message(self, *a, **k):
         pass
+    @classmethod
+    async def shutdown(cls):
+        pass
 utils_stub.TelegramLogger = _TL
 utils_stub.logger = logging.getLogger('test')
 async def _cde_stub(*a, **kw):
@@ -40,6 +43,7 @@ async def _cde_stub(*a, **kw):
 utils_stub.check_dataframe_empty = _cde_stub
 sys.modules['utils'] = utils_stub
 os.environ["TEST_MODE"] = "1"
+sys.modules.pop('trade_manager', None)
 tenacity_mod = types.ModuleType('tenacity')
 tenacity_mod.retry = lambda *a, **k: (lambda f: f)
 tenacity_mod.wait_exponential = lambda *a, **k: None
@@ -61,6 +65,14 @@ sys.modules.setdefault('psutil', psutil_mod)
 
 import trade_manager
 from trade_manager import TradeManager  # noqa: E402
+
+import asyncio
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_telegram_logger():
+    yield
+    asyncio.run(trade_manager.TelegramLogger.shutdown())
 
 def test_utils_injected_before_trade_manager_import():
     assert trade_manager.TelegramLogger is _TL
