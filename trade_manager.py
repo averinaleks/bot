@@ -203,14 +203,22 @@ class TradeManager:
         wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3)
     )
     async def place_order(
-        self, symbol: str, side: str, size: float, price: float, params: Dict = {}
+        self,
+        symbol: str,
+        side: str,
+        size: float,
+        price: float,
+        params: Dict = {},
+        *,
+        use_lock: bool = True,
     ) -> Optional[Dict]:
-        async with self.position_lock:
+
+        async def _execute_order() -> Optional[Dict]:
             try:
-                params = {"category": "linear", **params}
-                order_type = params.get("type", "market")
-                tp_price = params.pop("takeProfitPrice", None)
-                sl_price = params.pop("stopLossPrice", None)
+                order_params = {"category": "linear", **params}
+                order_type = order_params.get("type", "market")
+                tp_price = order_params.pop("takeProfitPrice", None)
+                sl_price = order_params.pop("stopLossPrice", None)
                 if (tp_price is not None or sl_price is not None) and hasattr(
                     self.exchange, "create_order_with_take_profit_and_stop_loss"
                 ):
@@ -224,7 +232,7 @@ class TradeManager:
                         price if order_type != "market" else None,
                         tp_price,
                         sl_price,
-                        params,
+                        order_params,
                     )
                 else:
                     order = await safe_api_call(
@@ -235,7 +243,7 @@ class TradeManager:
                         side,
                         size,
                         price,
-                        params,
+                        order_params,
                     )
                 logger.info(
                     f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
@@ -260,6 +268,12 @@ class TradeManager:
                     f"❌ Order error {symbol}: {e}"
                 )
                 return None
+
+        if use_lock:
+            async with self.position_lock:
+                return await _execute_order()
+        else:
+            return await _execute_order()
 
     async def calculate_position_size(
         self, symbol: str, price: float, atr: float, sl_multiplier: float
@@ -360,75 +374,79 @@ class TradeManager:
                 stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
                     side, price, atr, sl_mult, tp_mult
                 )
-            order_params = {
-                "leverage": self.leverage,
-                "stopLossPrice": stop_loss_price,
-                "takeProfitPrice": take_profit_price,
-                "tpslMode": "full",
-            }
-            order = await self.place_order(symbol, side, size, price, order_params)
-            if not order:
-                logger.error(f"Order failed for {symbol}: no confirmation returned")
-                await self.telegram_logger.send_telegram_message(
-                    f"❌ Order failed {symbol}: no confirmation"
-                )
-                return
-            if isinstance(order, dict):
-                ret_code = order.get("retCode") or order.get("ret_code")
-                if ret_code is not None and ret_code != 0:
-                    logger.error(f"Order error for {symbol}: {order}")
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Order error {symbol}: retCode {ret_code}"
-                    )
-                    return
-                if not (order.get("id") or order.get("orderId") or order.get("result")):
-                    logger.error(f"Order confirmation missing id for {symbol}: {order}")
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Order confirmation missing id {symbol}"
-                    )
-                    return
 
-            new_position = {
-                "symbol": symbol,
-                "side": side,
-                "size": size,
-                "entry_price": price,
-                "tp_multiplier": tp_mult,
-                "sl_multiplier": sl_mult,
-                "highest_price": price if side == "buy" else float("inf"),
-                "lowest_price": price if side == "sell" else 0.0,
-                "breakeven_triggered": False,
-            }
-            new_position_df = pd.DataFrame(
-                [new_position],
-                index=pd.MultiIndex.from_tuples(
-                    [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
-                ),
-            )
-            async with self.position_lock:
-                    if (
-                        "symbol" in self.positions.index.names
-                        and symbol in self.positions.index.get_level_values("symbol")
-                    ):
-                        logger.warning(
-                            f"Position for {symbol} already open after order placed"
+                order_params = {
+                    "leverage": self.leverage,
+                    "stopLossPrice": stop_loss_price,
+                    "takeProfitPrice": take_profit_price,
+                    "tpslMode": "full",
+                }
+                order = await self.place_order(
+                    symbol, side, size, price, order_params, use_lock=False
+                )
+                if not order:
+                    logger.error(
+                        f"Order failed for {symbol}: no confirmation returned"
+                    )
+                    await self.telegram_logger.send_telegram_message(
+                        f"❌ Order failed {symbol}: no confirmation"
+                    )
+                    return
+                if isinstance(order, dict):
+                    ret_code = order.get("retCode") or order.get("ret_code")
+                    if ret_code is not None and ret_code != 0:
+                        logger.error(f"Order error for {symbol}: {order}")
+                        await self.telegram_logger.send_telegram_message(
+                            f"❌ Order error {symbol}: retCode {ret_code}"
                         )
                         return
-                    if self.positions.empty:
-                        self.positions = new_position_df
-                    else:
-                        self.positions = pd.concat(
-                            [self.positions, new_position_df], ignore_index=False
+                    if not (order.get("id") or order.get("orderId") or order.get("result")):
+                        logger.error(f"Order confirmation missing id for {symbol}: {order}")
+                        await self.telegram_logger.send_telegram_message(
+                            f"❌ Order confirmation missing id {symbol}"
                         )
-                    self.positions_changed = True
-                    self.save_state()
-            logger.info(
-                f"Position opened: {symbol}, {side}, size={size}, entry={price}"
-            )
-            await self.telegram_logger.send_telegram_message(
-                f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
-                urgent=True,
-            )
+                        return
+                new_position = {
+                    "symbol": symbol,
+                    "side": side,
+                    "size": size,
+                    "entry_price": price,
+                    "tp_multiplier": tp_mult,
+                    "sl_multiplier": sl_mult,
+                    "highest_price": price if side == "buy" else float("inf"),
+                    "lowest_price": price if side == "sell" else 0.0,
+                    "breakeven_triggered": False,
+                }
+                new_position_df = pd.DataFrame(
+                    [new_position],
+                    index=pd.MultiIndex.from_tuples(
+                        [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
+                    ),
+                    dtype=object,
+                )
+                if (
+                    "symbol" in self.positions.index.names
+                    and symbol in self.positions.index.get_level_values("symbol")
+                ):
+                    logger.warning(
+                        f"Position for {symbol} already open after order placed"
+                    )
+                    return
+                if self.positions.empty:
+                    self.positions = new_position_df
+                else:
+                    self.positions = pd.concat(
+                        [self.positions, new_position_df], ignore_index=False
+                    )
+                self.positions_changed = True
+                self.save_state()
+                logger.info(
+                    f"Position opened: {symbol}, {side}, size={size}, entry={price}"
+                )
+                await self.telegram_logger.send_telegram_message(
+                    f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
+                    urgent=True,
+                )
         except Exception as e:
             logger.error(f"Failed to open position for {symbol}: {e}")
             await self.telegram_logger.send_telegram_message(
@@ -453,7 +471,11 @@ class TradeManager:
                     position = position.iloc[0]
                     side = "sell" if position["side"] == "buy" else "buy"
                     order = await self.place_order(
-                        symbol, side, position["size"], exit_price
+                        symbol,
+                        side,
+                        position["size"],
+                        exit_price,
+                        use_lock=False,
                     )
                     if order:
                         profit = (
@@ -528,7 +550,13 @@ class TradeManager:
                 ):
                     close_size = position["size"] * 0.5
                     side = "sell" if position["side"] == "buy" else "buy"
-                    await self.place_order(symbol, side, close_size, current_price)
+                    await self.place_order(
+                        symbol,
+                        side,
+                        close_size,
+                        current_price,
+                        use_lock=False,
+                    )
                     remaining_size = position["size"] - close_size
                     self.positions.loc[(symbol, slice(None)), "size"] = remaining_size
                     self.positions.loc[(symbol, slice(None)), "sl_multiplier"] = 0.0
