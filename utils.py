@@ -267,7 +267,8 @@ class TelegramLogger(logging.Handler):
             TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
             TelegramLogger._bot = bot
             TelegramLogger._stop_event = asyncio.Event()
-            TelegramLogger._worker_task = asyncio.create_task(self._worker())
+            if os.getenv("TEST_MODE") != "1":
+                TelegramLogger._worker_task = asyncio.create_task(self._worker())
 
         self.last_sent_text = ""
 
