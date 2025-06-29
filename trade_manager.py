@@ -386,9 +386,12 @@ class TradeManager:
                     ),
                 )
                 async with self.position_lock:
-                    self.positions = pd.concat(
-                        [self.positions, new_position_df], ignore_index=False
-                    )
+                    if self.positions.empty:
+                        self.positions = new_position_df
+                    else:
+                        self.positions = pd.concat(
+                            [self.positions, new_position_df], ignore_index=False
+                        )
                     self.positions_changed = True
                     self.save_state()
                 logger.info(
