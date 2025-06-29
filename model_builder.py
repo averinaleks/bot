@@ -20,7 +20,8 @@ import ray
 try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
     from gymnasium import spaces  # type: ignore
-except Exception:  # pragma: no cover - gymnasium missing
+except Exception as e:  # pragma: no cover - gymnasium missing
+    logger.warning("gymnasium import failed: %s", e)
     try:
         import gym
         from gym import spaces
