@@ -367,25 +367,45 @@ class TradeManager:
                 "tpslMode": "full",
             }
             order = await self.place_order(symbol, side, size, price, order_params)
-            if order:
-                new_position = {
-                    "symbol": symbol,
-                    "side": side,
-                    "size": size,
-                    "entry_price": price,
-                    "tp_multiplier": tp_mult,
-                    "sl_multiplier": sl_mult,
-                    "highest_price": price if side == "buy" else float("inf"),
-                    "lowest_price": price if side == "sell" else 0.0,
-                    "breakeven_triggered": False,
-                }
-                new_position_df = pd.DataFrame(
-                    [new_position],
-                    index=pd.MultiIndex.from_tuples(
-                        [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
-                    ),
+            if not order:
+                logger.error(f"Order failed for {symbol}: no confirmation returned")
+                await self.telegram_logger.send_telegram_message(
+                    f"❌ Order failed {symbol}: no confirmation"
                 )
-                async with self.position_lock:
+                return
+            if isinstance(order, dict):
+                ret_code = order.get("retCode") or order.get("ret_code")
+                if ret_code is not None and ret_code != 0:
+                    logger.error(f"Order error for {symbol}: {order}")
+                    await self.telegram_logger.send_telegram_message(
+                        f"❌ Order error {symbol}: retCode {ret_code}"
+                    )
+                    return
+                if not (order.get("id") or order.get("orderId") or order.get("result")):
+                    logger.error(f"Order confirmation missing id for {symbol}: {order}")
+                    await self.telegram_logger.send_telegram_message(
+                        f"❌ Order confirmation missing id {symbol}"
+                    )
+                    return
+
+            new_position = {
+                "symbol": symbol,
+                "side": side,
+                "size": size,
+                "entry_price": price,
+                "tp_multiplier": tp_mult,
+                "sl_multiplier": sl_mult,
+                "highest_price": price if side == "buy" else float("inf"),
+                "lowest_price": price if side == "sell" else 0.0,
+                "breakeven_triggered": False,
+            }
+            new_position_df = pd.DataFrame(
+                [new_position],
+                index=pd.MultiIndex.from_tuples(
+                    [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
+                ),
+            )
+            async with self.position_lock:
                     if (
                         "symbol" in self.positions.index.names
                         and symbol in self.positions.index.get_level_values("symbol")
@@ -402,13 +422,13 @@ class TradeManager:
                         )
                     self.positions_changed = True
                     self.save_state()
-                logger.info(
-                    f"Position opened: {symbol}, {side}, size={size}, entry={price}"
-                )
-                await self.telegram_logger.send_telegram_message(
-                    f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
-                    urgent=True,
-                )
+            logger.info(
+                f"Position opened: {symbol}, {side}, size={size}, entry={price}"
+            )
+            await self.telegram_logger.send_telegram_message(
+                f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
+                urgent=True,
+            )
         except Exception as e:
             logger.error(f"Failed to open position for {symbol}: {e}")
             await self.telegram_logger.send_telegram_message(
