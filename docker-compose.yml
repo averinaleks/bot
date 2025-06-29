@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python data_handler.py
+    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 5s
@@ -19,6 +20,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python model_builder.py
+    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
       interval: 5s
@@ -32,6 +34,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python trade_manager.py
+    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
       interval: 5s
@@ -46,6 +49,7 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # container_name: trading_bot
     command: python trading_bot.py
+    runtime: nvidia
     depends_on:
       data_handler:
         condition: service_healthy
