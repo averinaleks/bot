@@ -17,12 +17,16 @@ from utils import logger, check_dataframe_empty, HistoricalDataCache
 from config import BotConfig
 from collections import deque
 import ray
-try:
-    import gym
-    from gym import spaces
-except Exception:  # pragma: no cover - optional dependency
-    gym = None
-    spaces = None
+try:  # prefer gymnasium if available
+    import gymnasium as gym  # type: ignore
+    from gymnasium import spaces  # type: ignore
+except Exception:  # pragma: no cover - gymnasium missing
+    try:
+        import gym
+        from gym import spaces
+    except Exception:  # pragma: no cover - optional dependency
+        gym = None
+        spaces = None
 from flask import Flask, request, jsonify
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.vec_env import DummyVecEnv
