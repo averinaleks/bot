@@ -386,6 +386,14 @@ class TradeManager:
                     ),
                 )
                 async with self.position_lock:
+                    if (
+                        "symbol" in self.positions.index.names
+                        and symbol in self.positions.index.get_level_values("symbol")
+                    ):
+                        logger.warning(
+                            f"Position for {symbol} already open after order placed"
+                        )
+                        return
                     if self.positions.empty:
                         self.positions = new_position_df
                     else:
