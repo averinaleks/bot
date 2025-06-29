@@ -84,16 +84,21 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 class DummyExchange:
     def __init__(self):
         self.orders = []
+        self.fail = False
     async def fetch_balance(self):
         return {'total': {'USDT': 1000}}
     async def create_order(self, symbol, type, side, amount, price, params):
         self.orders.append({'method': 'create_order', 'symbol': symbol, 'type': type, 'side': side,
                              'amount': amount, 'price': price, 'params': params})
+        if self.fail:
+            return {'retCode': 1}
         return {'id': '1'}
     async def create_order_with_take_profit_and_stop_loss(self, symbol, type, side, amount, price, takeProfit, stopLoss, params):
         self.orders.append({'method': 'create_order_with_tp_sl', 'symbol': symbol, 'type': type, 'side': side,
                              'amount': amount, 'price': price, 'tp': takeProfit, 'sl': stopLoss,
                              'params': params})
+        if self.fail:
+            return {'retCode': 1}
         return {'id': '2'}
 
 class DummyIndicators:
@@ -101,8 +106,9 @@ class DummyIndicators:
         self.atr = pd.Series([1.0])
 
 class DummyDataHandler:
-    def __init__(self, fresh: bool = True):
+    def __init__(self, fresh: bool = True, fail_order: bool = False):
         self.exchange = DummyExchange()
+        self.exchange.fail = fail_order
         self.usdt_pairs = ['BTCUSDT']
         idx = pd.MultiIndex.from_tuples([
             ('BTCUSDT', pd.Timestamp('2020-01-01'))
@@ -236,6 +242,24 @@ def test_open_position_concurrent_single_entry():
     asyncio.run(run())
 
     assert len(tm.positions) == 1
+
+
+def test_open_position_failed_order_not_recorded():
+    dh = DummyDataHandler(fail_order=True)
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    import asyncio
+    asyncio.run(run())
+
+    assert len(tm.positions) == 0
 
 
 def test_is_data_fresh():
