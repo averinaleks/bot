@@ -182,6 +182,7 @@ python trading_bot.py
 Модуль `RLAgent` может обучать модели с помощью `stable-baselines3`, `Ray RLlib` или фреймворка `Catalyst` от Яндекса.
 Выберите подходящий движок параметром `rl_framework` в `config.json` (`stable_baselines3`, `rllib` или `catalyst`).
 Алгоритм указывается опцией `rl_model` (`PPO` или `DQN`), продолжительность обучения — `rl_timesteps`.
+Для корректной работы `stable-baselines3` необходим пакет `gymnasium`.
 
 Периодическое переобучение задаётся параметром `retrain_interval` в
 `config.json`. Можно запускать бота по расписанию (например, через `cron`) для
