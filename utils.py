@@ -230,9 +230,14 @@ logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 log_dir = os.getenv("LOG_DIR", "/app/logs")
-os.makedirs(log_dir, exist_ok=True)
-if not os.access(log_dir, os.W_OK):
-    raise PermissionError(f"Нет прав на запись в директорию логов: {log_dir}")
+fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
+try:
+    os.makedirs(log_dir, exist_ok=True)
+    if not os.access(log_dir, os.W_OK):
+        raise PermissionError
+except (OSError, PermissionError):
+    log_dir = fallback_dir
+    os.makedirs(log_dir, exist_ok=True)
 
 file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
 file_handler.setFormatter(formatter)
