@@ -105,7 +105,7 @@ use these steps to diagnose the problem:
   dependency with `pip install gymnasium`. The project now installs
   `gym` by default as a fallback.
 
-4. When RL components start, they first try to import `gymnasium`.
+5. When RL components start, they first try to import `gymnasium`.
   A warning `gymnasium import failed: ...` will be logged if the package
   is missing, after which the code attempts to load `gym` instead.
 
