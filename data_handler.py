@@ -320,15 +320,16 @@ class DataHandler:
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
         """Return top liquid USDT futures pairs only.
 
-        Filters out spot markets by selecting symbols that contain a colon
-        (``:``) or explicitly end with ``":USDT"``. Volume ranking and
-        the configured top limit remain unchanged.
+        Filters out spot markets by selecting futures symbols. Both plain
+        notation like ``BTCUSDT`` and the colon-delimited form 
+        ``BTC/USDT:USDT`` are supported. Volume ranking and the configured
+        top limit remain unchanged.
         """
 
         pair_volumes = []
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols
-            if market.get("active") and symbol.endswith("USDT") and (":" in symbol or symbol.endswith(":USDT")):
+            if market.get("active") and symbol.endswith("USDT") and ((":" in symbol) or ("/" not in symbol)):
                 try:
                     ticker = await safe_api_call(self.exchange, "fetch_ticker", symbol)
                     volume = float(ticker.get("quoteVolume") or 0)
@@ -667,8 +668,7 @@ class DataHandler:
         Parameters
         ----------
         symbol : str
-            Symbol in one of the supported formats, e.g. ``BTC/USDT`` or
-            ``BTC/USDT:USDT``.
+            Symbol in one of the supported formats, e.g. ``BTCUSDT``, ``BTC/USDT`` or ``BTC/USDT:USDT``.
 
         Returns
         -------
