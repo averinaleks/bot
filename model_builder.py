@@ -33,8 +33,14 @@ except Exception as e:  # pragma: no cover - gymnasium missing
         gym = None
         spaces = None
 from flask import Flask, request, jsonify
-from stable_baselines3 import PPO, DQN
-from stable_baselines3.common.vec_env import DummyVecEnv
+try:
+    from stable_baselines3 import PPO, DQN
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    SB3_AVAILABLE = True
+except ImportError as e:  # pragma: no cover - optional dependency
+    PPO = DQN = DummyVecEnv = None  # type: ignore
+    SB3_AVAILABLE = False
+    logger.warning("stable_baselines3 import failed: %s", e)
 
 
 class CNNLSTM(nn.Module):
@@ -797,6 +803,12 @@ class RLAgent:
                 logger.error(f"Ошибка Catalyst-обучения {symbol}: {e}")
                 return
         else:
+            if not SB3_AVAILABLE:
+                logger.warning(
+                    "stable_baselines3 not available, skipping RL training for %s",
+                    symbol,
+                )
+                return
             env = DummyVecEnv([lambda: TradingEnv(features_df)])
             if algo == "DQN":
                 model = DQN("MlpPolicy", env, verbose=0)
@@ -818,6 +830,11 @@ class RLAgent:
         if framework == "rllib":
             action = model.compute_single_action(obs)[0]
         else:
+            if not SB3_AVAILABLE:
+                logger.warning(
+                    "stable_baselines3 not available, cannot make RL prediction"
+                )
+                return None
             action, _ = model.predict(obs, deterministic=True)
         if int(action) == 1:
             return "buy"
