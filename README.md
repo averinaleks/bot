@@ -102,11 +102,12 @@ use these steps to diagnose the problem:
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
 4. If logs contain `gymnasium import failed`, install the optional
-   dependency with `pip install gymnasium`.
+  dependency with `pip install gymnasium`. The project now installs
+  `gym` by default as a fallback.
 
 4. When RL components start, they first try to import `gymnasium`.
-   A warning `gymnasium import failed: ...` will be logged if the package
-   is missing, after which the code attempts to load `gym` instead.
+  A warning `gymnasium import failed: ...` will be logged if the package
+  is missing, after which the code attempts to load `gym` instead.
 
 ## Telegram notifications
 
@@ -188,7 +189,9 @@ python trading_bot.py
 Модуль `RLAgent` может обучать модели с помощью `stable-baselines3`, `Ray RLlib` или фреймворка `Catalyst` от Яндекса.
 Выберите подходящий движок параметром `rl_framework` в `config.json` (`stable_baselines3`, `rllib` или `catalyst`).
 Алгоритм указывается опцией `rl_model` (`PPO` или `DQN`), продолжительность обучения — `rl_timesteps`.
-Для корректной работы `stable-baselines3` необходим пакет `gymnasium`.
+Для корректной работы `stable-baselines3` необходим пакет `gymnasium`. Он
+установлен вместе с базовым `gym`, который используется как резервная
+зависимость.
 
 Периодическое переобучение задаётся параметром `retrain_interval` в
 `config.json`. Можно запускать бота по расписанию (например, через `cron`) для
