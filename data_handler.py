@@ -668,13 +668,15 @@ class DataHandler:
         Parameters
         ----------
         symbol : str
-            Symbol in one of the supported formats, e.g. ``BTCUSDT``, ``BTC/USDT`` or ``BTC/USDT:USDT``.
+            Symbol in one of the supported formats, e.g. ``BTCUSDT``,
+            ``BTC/USDT`` or ``BTC/USDT:USDT``.
 
         Returns
         -------
         str
-            Symbol formatted as ``BTC/USDT:USDT``. If the input already
-            contains ``:USDT`` it will not be duplicated.
+            ``BTCUSDT`` –> ``BTCUSDT``
+            ``BTC/USDT`` –> ``BTC/USDT:USDT``
+            ``BTC/USDT:USDT`` remains unchanged
         """
 
         if symbol.endswith("/USDT"):
