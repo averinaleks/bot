@@ -1073,7 +1073,10 @@ def open_position_route():
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
-    asyncio.run(tm.open_position(symbol, side, price, info))
+    threading.Thread(
+        target=lambda: asyncio.run(tm.open_position(symbol, side, price, info)),
+        daemon=True,
+    ).start()
     return jsonify({"status": "ok"})
 
 
