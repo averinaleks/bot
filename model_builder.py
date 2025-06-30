@@ -1,5 +1,18 @@
 import numpy as np
 import pandas as pd
+import os
+import time
+import asyncio
+from config import BotConfig
+from collections import deque
+import ray
+from utils import logger, check_dataframe_empty, HistoricalDataCache
+try:  # prefer gymnasium if available
+    import gymnasium as gym  # type: ignore
+    from gymnasium import spaces  # type: ignore
+except Exception as e:  # pragma: no cover - gymnasium missing
+    logger.error("gymnasium import failed: %s", e)
+    raise ImportError("gymnasium package is required") from e
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -8,25 +21,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
 from sklearn.calibration import calibration_curve
 import joblib
-import os
-import time
-import asyncio
 import mlflow
-from utils import logger, check_dataframe_empty, HistoricalDataCache
 try:
     import shap
 except Exception as e:
     shap = None
     logger.warning("shap import failed: %s", e)
-from config import BotConfig
-from collections import deque
-import ray
-try:  # prefer gymnasium if available
-    import gymnasium as gym  # type: ignore
-    from gymnasium import spaces  # type: ignore
-except Exception as e:  # pragma: no cover - gymnasium missing
-    logger.error("gymnasium import failed: %s", e)
-    raise ImportError("gymnasium package is required") from e
 from flask import Flask, request, jsonify
 try:
     from stable_baselines3 import PPO, DQN

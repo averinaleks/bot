@@ -6,6 +6,7 @@ import numpy as np
 import asyncio
 import time
 import inspect
+import threading
 from typing import Dict, List, Optional
 from scipy.stats import zscore
 import gzip
@@ -268,7 +269,14 @@ class TelegramLogger(logging.Handler):
             TelegramLogger._bot = bot
             TelegramLogger._stop_event = asyncio.Event()
             if os.getenv("TEST_MODE") != "1":
-                TelegramLogger._worker_task = asyncio.create_task(self._worker())
+                try:
+                    loop = asyncio.get_running_loop()
+                    TelegramLogger._worker_task = loop.create_task(self._worker())
+                except RuntimeError:
+                    threading.Thread(
+                        target=lambda: asyncio.run(self._worker()),
+                        daemon=True,
+                    ).start()
 
         self.last_sent_text = ""
 
