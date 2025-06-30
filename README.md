@@ -102,6 +102,10 @@ use these steps to diagnose the problem:
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
 
+4. When RL components start, they first try to import `gymnasium`.
+   A warning `gymnasium import failed: ...` will be logged if the package
+   is missing, after which the code attempts to load `gym` instead.
+
 ## Telegram notifications
 
 Set the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` variables in `.env` to
