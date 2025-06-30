@@ -327,16 +327,26 @@ class DataHandler:
         """
 
         pair_volumes = []
+        semaphore = asyncio.Semaphore(self.config.get("max_concurrent_requests", 10))
+
+        async def fetch_volume(sym: str) -> tuple:
+            async with semaphore:
+                try:
+                    ticker = await safe_api_call(self.exchange, "fetch_ticker", sym)
+                    volume = float(ticker.get("quoteVolume") or 0)
+                except Exception as e:
+                    logger.error(f"Ошибка получения тикера для {sym}: {e}")
+                    volume = 0.0
+                return sym, volume
+
+        tasks = []
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols
             if market.get("active") and symbol.endswith("USDT") and ((":" in symbol) or ("/" not in symbol)):
-                try:
-                    ticker = await safe_api_call(self.exchange, "fetch_ticker", symbol)
-                    volume = float(ticker.get("quoteVolume") or 0)
-                except Exception as e:
-                    logger.error(f"Ошибка получения тикера для {symbol}: {e}")
-                    volume = 0.0
-                pair_volumes.append((symbol, volume))
+                tasks.append(asyncio.create_task(fetch_volume(symbol)))
+
+        if tasks:
+            pair_volumes.extend(await asyncio.gather(*tasks))
 
         pair_volumes.sort(key=lambda x: x[1], reverse=True)
         top_limit = self.config.get("max_symbols", 50)
