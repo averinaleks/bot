@@ -101,6 +101,8 @@ use these steps to diagnose the problem:
 
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
+4. If logs contain `gymnasium import failed`, install the optional
+   dependency with `pip install gymnasium`.
 
 4. When RL components start, they first try to import `gymnasium`.
    A warning `gymnasium import failed: ...` will be logged if the package
