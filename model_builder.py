@@ -25,13 +25,8 @@ try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
     from gymnasium import spaces  # type: ignore
 except Exception as e:  # pragma: no cover - gymnasium missing
-    logger.warning("gymnasium import failed: %s", e)
-    try:
-        import gym
-        from gym import spaces
-    except Exception:  # pragma: no cover - optional dependency
-        gym = None
-        spaces = None
+    logger.error("gymnasium import failed: %s", e)
+    raise ImportError("gymnasium package is required") from e
 from flask import Flask, request, jsonify
 try:
     from stable_baselines3 import PPO, DQN
