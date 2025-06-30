@@ -36,3 +36,5 @@ venv/
 !.env
 !Dockerfile
 !docker-compose.yml
+!Dockerfile.cpu
+!requirements-cpu.txt
