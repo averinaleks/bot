@@ -11,9 +11,13 @@ import joblib
 import os
 import time
 import asyncio
-import shap
 import mlflow
 from utils import logger, check_dataframe_empty, HistoricalDataCache
+try:
+    import shap
+except Exception as e:
+    shap = None
+    logger.warning("shap import failed: %s", e)
 from config import BotConfig
 from collections import deque
 import ray
@@ -572,7 +576,7 @@ class ModelBuilder:
 
     async def compute_shap_values(self, symbol, model, X):
         try:
-            if self.nn_framework != 'pytorch':
+            if shap is None or self.nn_framework != 'pytorch':
                 return
             cache_file = os.path.join(self.cache.cache_dir, f"shap_{symbol}.pkl")
             last_time = self.shap_cache_times.get(symbol, 0)
