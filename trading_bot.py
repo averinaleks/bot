@@ -7,8 +7,6 @@ from utils import logger
 from config import load_config, BotConfig
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-# Automatically load environment variables from a .env file if present
-load_dotenv()
 
 SYMBOL = os.getenv("SYMBOL", "TEST")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
@@ -108,6 +106,8 @@ def run_once() -> None:
 
 
 def main():
+    # Load environment variables from a .env file when running as a script
+    load_dotenv()
     try:
         check_services()
         while True:
