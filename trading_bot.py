@@ -84,10 +84,11 @@ def get_prediction(symbol: str, price: float, env: dict) -> str | None:
 def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
     """Send trade request to trade manager."""
     try:
+        timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
         resp = requests.post(
             f"{env['trade_manager_url']}/open_position",
             json={"symbol": symbol, "side": side, "price": price},
-            timeout=5,
+            timeout=timeout,
         )
         if resp.status_code != 200:
             logger.error("Trade manager error: HTTP %s", resp.status_code)
