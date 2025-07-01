@@ -1099,5 +1099,9 @@ def ping():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8002"))
+    logger.info("Initializing TradeManager")
+    tm = create_trade_manager()
+    if tm is not None:
+        threading.Thread(target=lambda: asyncio.run(tm.run()), daemon=True).start()
     logger.info("Starting TradeManager service on port %s", port)
     api_app.run(host="0.0.0.0", port=port)
