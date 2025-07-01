@@ -7,6 +7,9 @@ import sys
 import types
 import pytest
 
+# Ensure the project root is on the Python path so that 'trading_bot' can be imported
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 # Stub heavy dependencies before importing trading_bot
 numba_mod = types.ModuleType('numba')
 numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
