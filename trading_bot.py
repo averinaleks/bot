@@ -117,10 +117,6 @@ def main():
             time.sleep(INTERVAL)
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
-    finally:
-        dh = globals().get('data_handler')
-        if dh is not None and hasattr(dh, 'stop'):
-            asyncio.run(dh.stop())
 
 
 if __name__ == '__main__':
