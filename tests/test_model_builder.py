@@ -7,6 +7,7 @@ import types
 import pytest
 import importlib.util
 from config import BotConfig
+import asyncio
 
 if importlib.util.find_spec('torch') is None:
     pytest.skip('torch not available', allow_module_level=True)
