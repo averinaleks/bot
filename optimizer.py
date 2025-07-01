@@ -311,7 +311,8 @@ class ParameterOptimizer:
             atr_period_default = trial.suggest_int("atr_period_default", 5, 20)
             # Stop loss and take profit multipliers are now taken
             # directly from the configuration and are not optimized.
-            return _objective_remote.remote(
+            obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+            return obj_fn(
                 df,
                 symbol,
                 ema30_period,
@@ -322,8 +323,15 @@ class ParameterOptimizer:
             )
         except Exception as e:
             logger.error(f"Ошибка в objective для {symbol}: {e}")
-            return _objective_remote.remote(
-                pd.DataFrame(), symbol, 0, 0, 0, 0, self.config.get("timeframe", "1m")
+            obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+            return obj_fn(
+                pd.DataFrame(),
+                symbol,
+                0,
+                0,
+                0,
+                0,
+                self.config.get("timeframe", "1m"),
             )
 
     def _grid_search(self, df, symbol, base_params):
@@ -336,8 +344,9 @@ class ParameterOptimizer:
                 self.timeframe = timeframe
 
             def fit(self, X=None, y=None):
+                obj_fn = getattr(_objective_remote, "remote", _objective_remote)
                 self.score_ = ray.get(
-                    _objective_remote.remote(
+                    obj_fn(
                         self.df,
                         self.symbol,
                         self.ema30_period,
