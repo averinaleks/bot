@@ -78,7 +78,7 @@ def _objective_remote(
                     },
                     test_df["close"].pct_change().std(),
                 )
-            result = asyncio.run(_check_df_async(indicators.df, f"objective {symbol}"))
+            result = check_dataframe_empty(indicators.df, f"objective {symbol}")
             if not indicators or result:
                 return 0.0
             returns = []
