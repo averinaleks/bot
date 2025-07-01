@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    command: python data_handler.py
+    command: gunicorn -w 2 -b 0.0.0.0:8000 data_handler:api_app
     runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    command: python model_builder.py
+    command: gunicorn -w 2 -b 0.0.0.0:8001 model_builder:api_app
     runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    command: python trade_manager.py
+    command: gunicorn -w 2 -b 0.0.0.0:8002 trade_manager:api_app
     runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
