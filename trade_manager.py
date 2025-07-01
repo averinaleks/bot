@@ -208,10 +208,11 @@ class TradeManager:
         side: str,
         size: float,
         price: float,
-        params: Dict = {},
+        params: Dict | None = None,
         *,
         use_lock: bool = True,
     ) -> Optional[Dict]:
+        params = params or {}
 
         async def _execute_order() -> Optional[Dict]:
             try:
