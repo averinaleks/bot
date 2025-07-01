@@ -3,13 +3,19 @@ import numpy as np
 import optuna
 import asyncio
 import time
-import torch
+try:
+    import torch
+except Exception:  # pragma: no cover - optional dependency
+    torch = None  # type: ignore
 import ray
 from utils import logger, check_dataframe_empty
 from config import BotConfig
 import inspect
 from optuna.samplers import TPESampler
-from optuna.integration.mlflow import MLflowCallback
+try:
+    from optuna.integration.mlflow import MLflowCallback
+except Exception:  # pragma: no cover - optional dependency may not be installed
+    MLflowCallback = None  # type: ignore
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
 
@@ -22,7 +28,7 @@ async def _check_df_async(df, context: str = "") -> bool:
     return result
 
 
-@ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
+@ray.remote(num_gpus=1 if torch and torch.cuda.is_available() else 0)
 def _objective_remote(
     df,
     symbol,
@@ -133,6 +139,12 @@ class ParameterOptimizer:
         self.max_trials = config.get("optuna_trials", 20)
         self.mlflow_enabled = config.get("mlflow_enabled", False)
         self.mlflow_tracking_uri = config.get("mlflow_tracking_uri", "mlruns")
+        if self.mlflow_enabled and MLflowCallback is None:
+            logger.warning(
+                "MLflow is enabled but optuna-integration is not installed; "
+                "disabling MLflow integration"
+            )
+            self.mlflow_enabled = False
         self.enable_grid_search = config.get("enable_grid_search", False)
 
     def get_opt_interval(self, symbol: str, volatility: float) -> float:
