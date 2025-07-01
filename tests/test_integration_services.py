@@ -5,7 +5,9 @@ import multiprocessing
 from flask import Flask, request, jsonify
 import pytest
 
-import trading_bot  # noqa: E402
+# Ensure processes use the spawn start method on all platforms
+multiprocessing.set_start_method("spawn", force=True)
+ctx = multiprocessing.get_context("spawn")
 
 
 
@@ -53,15 +55,24 @@ def tm_ping():
     return jsonify({'status': 'ok'})
 
 
-def _run(app, port):
-    app.run(port=port)
+def _run_dh():
+    dh_app.run(port=8000)
+
+
+def _run_mb():
+    mb_app.run(port=8001)
+
+
+def _run_tm():
+    tm_app.run(port=8002)
 
 
 def test_services_communicate():
+    import trading_bot  # noqa: E402
     processes = [
-        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
-        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
-        multiprocessing.Process(target=_run, args=(tm_app, 8002)),
+        ctx.Process(target=_run_dh),
+        ctx.Process(target=_run_mb),
+        ctx.Process(target=_run_tm),
     ]
     for p in processes:
         p.start()
@@ -84,10 +95,11 @@ def test_services_communicate():
 
 
 def test_service_availability_check():
+    import trading_bot  # noqa: E402
     processes = [
-        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
-        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
-        multiprocessing.Process(target=_run, args=(tm_app, 8002)),
+        ctx.Process(target=_run_dh),
+        ctx.Process(target=_run_mb),
+        ctx.Process(target=_run_tm),
     ]
     for p in processes:
         p.start()
@@ -104,10 +116,11 @@ def test_service_availability_check():
 
 
 def test_check_services_success():
+    import trading_bot  # noqa: E402
     processes = [
-        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
-        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
-        multiprocessing.Process(target=_run, args=(tm_app, 8002)),
+        ctx.Process(target=_run_dh),
+        ctx.Process(target=_run_mb),
+        ctx.Process(target=_run_tm),
     ]
     for p in processes:
         p.start()
@@ -129,9 +142,10 @@ def test_check_services_success():
 
 
 def test_check_services_failure():
+    import trading_bot  # noqa: E402
     processes = [
-        multiprocessing.Process(target=_run, args=(dh_app, 8000)),
-        multiprocessing.Process(target=_run, args=(mb_app, 8001)),
+        ctx.Process(target=_run_dh),
+        ctx.Process(target=_run_mb),
     ]
     for p in processes:
         p.start()
