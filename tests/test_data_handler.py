@@ -1,44 +1,9 @@
 import os, sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import importlib
 import types
 import logging
 import pytest
 from config import BotConfig
-
-# Stub heavy dependencies before importing data_handler
-sys.modules.setdefault('websockets', types.ModuleType('websockets'))
-pybit_mod = types.ModuleType('pybit')
-ut_mod = types.ModuleType('unified_trading')
-ut_mod.HTTP = object
-pybit_mod.unified_trading = ut_mod
-sys.modules.setdefault('pybit', pybit_mod)
-sys.modules.setdefault('pybit.unified_trading', ut_mod)
-ray_mod = types.ModuleType('ray')
-ray_mod.remote = lambda *a, **k: (lambda f: f)
-sys.modules.setdefault('ray', ray_mod)
-tenacity_mod = types.ModuleType('tenacity')
-tenacity_mod.retry = lambda *a, **k: (lambda f: f)
-tenacity_mod.wait_exponential = lambda *a, **k: None
-tenacity_mod.stop_after_attempt = lambda *a, **k: (lambda f: f)
-sys.modules.setdefault('tenacity', tenacity_mod)
-psutil_mod = types.ModuleType('psutil')
-psutil_mod.cpu_percent = lambda interval=1: 0
-psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
-sys.modules.setdefault('psutil', psutil_mod)
-sys.modules.setdefault('httpx', types.ModuleType('httpx'))
-telegram_error_mod = types.ModuleType('telegram.error')
-telegram_error_mod.RetryAfter = Exception
-sys.modules.setdefault('telegram', types.ModuleType('telegram'))
-sys.modules.setdefault('telegram.error', telegram_error_mod)
-numba_mod = types.ModuleType('numba')
-numba_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
-numba_mod.jit = lambda *a, **k: (lambda f: f)
-numba_mod.prange = range
-import importlib.machinery
-numba_mod.__spec__ = importlib.machinery.ModuleSpec("numba", None)
-sys.modules.setdefault('numba', numba_mod)
-sys.modules.setdefault('numba.cuda', numba_mod.cuda)
 
 # Replace utils with a stub that overrides TelegramLogger
 real_utils = importlib.import_module('utils')
