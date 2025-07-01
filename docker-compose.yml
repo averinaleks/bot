@@ -21,6 +21,8 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8001 model_builder:api_app
     runtime: nvidia
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
       interval: 5s
