@@ -26,6 +26,7 @@ import pickle
 import psutil
 import ray
 from flask import Flask, jsonify
+from optimizer import ParameterOptimizer
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
@@ -214,6 +215,7 @@ class DataHandler:
         self.load_threshold = 0.8
         self.ws_pool = {}
         self.tasks = []
+        self.parameter_optimizer = ParameterOptimizer(self.config, self)
 
     async def get_atr(self, symbol: str) -> float:
         """Return the latest ATR value for a symbol, recalculating if missing."""
