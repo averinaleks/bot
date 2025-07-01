@@ -37,6 +37,18 @@ optuna_mod.samplers = optuna_samplers
 sys.modules.setdefault('optuna', optuna_mod)
 sys.modules.setdefault('optuna.samplers', optuna_samplers)
 
+scipy_mod = types.ModuleType('scipy')
+stats_mod = types.ModuleType('scipy.stats')
+stats_mod.zscore = lambda a, axis=0: (a - a.mean()) / a.std()
+scipy_mod.__version__ = "1.0"
+scipy_mod.stats = stats_mod
+sys.modules.setdefault('scipy', scipy_mod)
+sys.modules.setdefault('scipy.stats', stats_mod)
+
+import builtins
+from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
+builtins.ExperimentalWarning = _OptunaExperimentalWarning
+
 from optimizer import ParameterOptimizer  # noqa: E402
 
 
@@ -64,6 +76,7 @@ def make_df():
     return df.set_index(['symbol', df.index])
 
 
+@pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
 @pytest.mark.asyncio
 async def test_optimize_returns_params():
     df = make_df()
