@@ -20,6 +20,8 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: python model_builder.py
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=2
     runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
