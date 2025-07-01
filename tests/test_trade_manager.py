@@ -12,10 +12,6 @@ if 'torch' not in sys.modules:
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     sys.modules['torch'] = torch
 
-ray_mod = types.ModuleType('ray')
-ray_mod.remote = lambda *a, **k: (lambda f: f)
-ray_mod.get = lambda x: x
-sys.modules.setdefault('ray', ray_mod)
 
 sk_mod = types.ModuleType('sklearn')
 model_sel = types.ModuleType('sklearn.model_selection')
@@ -44,24 +40,10 @@ utils_stub.check_dataframe_empty = _cde_stub
 sys.modules['utils'] = utils_stub
 os.environ["TEST_MODE"] = "1"
 sys.modules.pop('trade_manager', None)
-tenacity_mod = types.ModuleType('tenacity')
-tenacity_mod.retry = lambda *a, **k: (lambda f: f)
-tenacity_mod.wait_exponential = lambda *a, **k: None
-tenacity_mod.stop_after_attempt = lambda *a, **k: None
-sys.modules.setdefault('tenacity', tenacity_mod)
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
-sys.modules.setdefault('httpx', types.ModuleType('httpx'))
-telegram_error_mod = types.ModuleType('telegram.error')
-telegram_error_mod.RetryAfter = Exception
-sys.modules.setdefault('telegram', types.ModuleType('telegram'))
-sys.modules.setdefault('telegram.error', telegram_error_mod)
-psutil_mod = types.ModuleType('psutil')
-psutil_mod.cpu_percent = lambda interval=1: 0
-psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
-sys.modules.setdefault('psutil', psutil_mod)
 
 import trade_manager
 from trade_manager import TradeManager  # noqa: E402
@@ -91,7 +73,6 @@ async def _cde(*a, **kw):
 utils.check_dataframe_empty = _cde
 sys.modules['utils'] = utils
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 class DummyExchange:
     def __init__(self):

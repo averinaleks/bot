@@ -14,10 +14,6 @@ if 'torch' not in sys.modules:
     torch.__spec__ = importlib.machinery.ModuleSpec('torch', None)
     sys.modules['torch'] = torch
 
-ray_mod = types.ModuleType('ray')
-ray_mod.remote = lambda *a, **k: (lambda f: f)
-ray_mod.get = lambda x: x
-sys.modules.setdefault('ray', ray_mod)
 
 sk_mod = types.ModuleType('sklearn')
 model_sel = types.ModuleType('sklearn.model_selection')
@@ -38,21 +34,10 @@ optuna_samplers.TPESampler = object
 optuna_mod.samplers = optuna_samplers
 sys.modules.setdefault('optuna', optuna_mod)
 sys.modules.setdefault('optuna.samplers', optuna_samplers)
-sys.modules.setdefault('httpx', types.ModuleType('httpx'))
-telegram_error_mod = types.ModuleType('telegram.error')
-telegram_error_mod.RetryAfter = Exception
-sys.modules.setdefault('telegram', types.ModuleType('telegram'))
-sys.modules.setdefault('telegram.error', telegram_error_mod)
-psutil_mod = types.ModuleType('psutil')
-psutil_mod.cpu_percent = lambda interval=1: 0
-psutil_mod.virtual_memory = lambda: type('mem', (), {'percent': 0})
-sys.modules.setdefault('psutil', psutil_mod)
 
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from optimizer import ParameterOptimizer  # noqa: E402
 
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 utils = types.ModuleType('utils')
 utils.logger = logging.getLogger('test')
