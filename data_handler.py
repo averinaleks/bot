@@ -1181,5 +1181,6 @@ def ping():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
-    logger.info("Starting DataHandler service on port %s", port)
-    api_app.run(host="0.0.0.0", port=port)
+    host = os.environ.get("HOST", "0.0.0.0")
+    logger.info("Starting DataHandler service on %s:%s", host, port)
+    api_app.run(host=host, port=port)
