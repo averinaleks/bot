@@ -51,6 +51,8 @@
   настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
+В зависимости от версии Docker команда может называться `docker compose` или
+`docker-compose`.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
 запустите compose с переменной `DOCKERFILE` и отключите NVIDIA-переменные:
 
@@ -60,13 +62,17 @@ DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= do
 
 ## Docker Compose logs
 
-Просмотреть вывод контейнеров можно через `docker compose logs`.
+Просмотреть вывод контейнеров можно через `docker compose logs` (или
+`docker-compose logs` в более старых версиях Docker).
 Выберите нужный сервис или добавьте флаг `-f` для режима слежения:
 
 ```bash
 docker compose logs data_handler          # логи DataHandler
+docker-compose logs data_handler         # для docker-compose
 docker compose logs -f trade_manager     # следить за выводом TradeManager
+docker-compose logs -f trade_manager
 docker compose logs model_builder
+docker-compose logs model_builder
 ```
 
 Команда без аргументов печатает логи всех сервисов.
