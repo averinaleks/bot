@@ -256,7 +256,7 @@ def _train_model_lightning(X, y, batch_size, model_type):
     return net.state_dict(), preds, labels
 
 
-@ray.remote()
+@ray.remote
 def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pytorch"):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(X, y, batch_size, model_type)
