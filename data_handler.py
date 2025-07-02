@@ -818,7 +818,8 @@ class DataHandler:
                         await ws.send(
                             json.dumps({"op": "subscribe", "args": [f"kline.{selected_timeframe}.{ws_symbol}"]})
                         )
-                        await asyncio.sleep(max(0, 1 / self.config["ws_rate_limit"]))
+                        rate = max(self.config.get("ws_rate_limit", 1), 1)
+                        await asyncio.sleep(1 / rate)
 
                 confirmations_needed = len(symbols)
                 confirmations = 0

@@ -40,3 +40,21 @@ async def test_select_liquid_pairs_plain_symbol_included():
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert 'BTCUSDT' in pairs
+
+
+class DummyWS:
+    def __init__(self):
+        self.sent = []
+    async def send(self, message):
+        self.sent.append(message)
+    async def recv(self):
+        return '{"success": true}'
+
+
+@pytest.mark.asyncio
+async def test_ws_rate_limit_zero_no_exception():
+    cfg = BotConfig(cache_dir='/tmp', ws_rate_limit=0)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    ws = DummyWS()
+    await dh._send_subscriptions(ws, ['BTCUSDT'], 'primary')
+    assert ws.sent
