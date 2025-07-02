@@ -150,8 +150,9 @@ class ParameterOptimizer:
     def get_opt_interval(self, symbol: str, volatility: float) -> float:
         """Return optimization interval for a symbol based on its volatility."""
         try:
+            threshold = max(self.volatility_threshold, 1e-6)
             interval = self.base_optimization_interval / (
-                1 + volatility / self.volatility_threshold
+                1 + volatility / threshold
             )
             interval = max(1800, min(self.base_optimization_interval * 2, interval))
             return interval

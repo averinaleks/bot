@@ -74,3 +74,10 @@ def test_get_opt_interval(vol, expected):
     max_int = max(1800, min(opt.base_optimization_interval * 2, expected))
     assert interval == pytest.approx(max_int)
 
+
+def test_get_opt_interval_zero_threshold():
+    cfg = BotConfig(optimization_interval=7200, volatility_threshold=0)
+    opt_zero = ParameterOptimizer(cfg, data_handler)
+    interval = opt_zero.get_opt_interval("BTCUSDT", 0.01)
+    assert interval >= 1800
+
