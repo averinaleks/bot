@@ -216,6 +216,13 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
+Tests rely on the packages listed in `requirements-cpu.txt`. Install them before
+executing `pytest`:
+
+```bash
+pip install -r requirements-cpu.txt
+```
+
 Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
 
