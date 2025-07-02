@@ -13,9 +13,6 @@ try:  # prefer gymnasium if available
 except Exception as e:  # pragma: no cover - gymnasium missing
     logger.error("gymnasium import failed: %s", e)
     raise ImportError("gymnasium package is required") from e
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
@@ -36,103 +33,125 @@ except ImportError as e:  # pragma: no cover - optional dependency
     logger.warning("stable_baselines3 import failed: %s", e)
 
 
-class CNNLSTM(nn.Module):
-    """Neural network that combines 1D convolution and LSTM layers."""
-
-    def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.l2_lambda = l2_lambda
-        padding = kernel_size // 2
-        self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout)
-        self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
-        self.attn = nn.Linear(hidden_size, 1)
-        self.fc = nn.Linear(hidden_size, 1)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        # x shape: (batch, seq_len, features)
-        x = x.permute(0, 2, 1)  # (batch, features, seq_len)
-        x = self.conv(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = x.permute(0, 2, 1)  # (batch, seq_len, channels)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
-        out, _ = self.lstm(x, (h0, c0))
-        attn_weights = torch.softmax(self.attn(out), dim=1)
-        context = (out * attn_weights).sum(dim=1)
-        context = self.dropout(context)
-        out = self.fc(context)
-        return self.sigmoid(out)
-
-    def l2_regularization(self):
-        return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+_torch_modules = None
 
 
-class CNNGRU(nn.Module):
-    """Conv1D + GRU variant."""
+def _get_torch_modules():
+    """Lazy import torch and define neural network classes."""
 
-    def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.l2_lambda = l2_lambda
-        padding = kernel_size // 2
-        self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout)
-        self.gru = nn.GRU(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
-        self.attn = nn.Linear(hidden_size, 1)
-        self.fc = nn.Linear(hidden_size, 1)
-        self.sigmoid = nn.Sigmoid()
+    global _torch_modules
+    if _torch_modules is not None:
+        return _torch_modules
 
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.conv(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = x.permute(0, 2, 1)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
-        out, _ = self.gru(x, h0)
-        attn_weights = torch.softmax(self.attn(out), dim=1)
-        context = (out * attn_weights).sum(dim=1)
-        context = self.dropout(context)
-        out = self.fc(context)
-        return self.sigmoid(out)
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
 
-    def l2_regularization(self):
-        return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+    class CNNLSTM(nn.Module):
+        """Neural network that combines 1D convolution and LSTM layers."""
 
+        def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
+            super().__init__()
+            self.hidden_size = hidden_size
+            self.num_layers = num_layers
+            self.l2_lambda = l2_lambda
+            padding = kernel_size // 2
+            self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
+            self.relu = nn.ReLU()
+            self.dropout = nn.Dropout(dropout)
+            self.lstm = nn.LSTM(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
+            self.attn = nn.Linear(hidden_size, 1)
+            self.fc = nn.Linear(hidden_size, 1)
+            self.sigmoid = nn.Sigmoid()
 
-class Net(nn.Module):
-    """Simple multilayer perceptron."""
+        def forward(self, x):
+            x = x.permute(0, 2, 1)
+            x = self.conv(x)
+            x = self.relu(x)
+            x = self.dropout(x)
+            x = x.permute(0, 2, 1)
+            h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
+            c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
+            out, _ = self.lstm(x, (h0, c0))
+            attn_weights = torch.softmax(self.attn(out), dim=1)
+            context = (out * attn_weights).sum(dim=1)
+            context = self.dropout(context)
+            out = self.fc(context)
+            return self.sigmoid(out)
 
-    def __init__(self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5):
-        super().__init__()
-        self.l2_lambda = l2_lambda
-        self.fc1 = nn.Linear(input_size, hidden_sizes[0])
-        self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
-        self.fc3 = nn.Linear(hidden_sizes[1], 1)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout)
-        self.sigmoid = nn.Sigmoid()
+        def l2_regularization(self):
+            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = self.fc3(x)
-        return self.sigmoid(x)
+    class CNNGRU(nn.Module):
+        """Conv1D + GRU variant."""
 
-    def l2_regularization(self):
-        return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+        def __init__(self, input_size, hidden_size, num_layers, dropout, conv_channels=32, kernel_size=3, l2_lambda=1e-5):
+            super().__init__()
+            self.hidden_size = hidden_size
+            self.num_layers = num_layers
+            self.l2_lambda = l2_lambda
+            padding = kernel_size // 2
+            self.conv = nn.Conv1d(input_size, conv_channels, kernel_size=kernel_size, padding=padding)
+            self.relu = nn.ReLU()
+            self.dropout = nn.Dropout(dropout)
+            self.gru = nn.GRU(conv_channels, hidden_size, num_layers, batch_first=True, dropout=dropout)
+            self.attn = nn.Linear(hidden_size, 1)
+            self.fc = nn.Linear(hidden_size, 1)
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x):
+            x = x.permute(0, 2, 1)
+            x = self.conv(x)
+            x = self.relu(x)
+            x = self.dropout(x)
+            x = x.permute(0, 2, 1)
+            h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, device=x.device)
+            out, _ = self.gru(x, h0)
+            attn_weights = torch.softmax(self.attn(out), dim=1)
+            context = (out * attn_weights).sum(dim=1)
+            context = self.dropout(context)
+            out = self.fc(context)
+            return self.sigmoid(out)
+
+        def l2_regularization(self):
+            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+
+    class Net(nn.Module):
+        """Simple multilayer perceptron."""
+
+        def __init__(self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5):
+            super().__init__()
+            self.l2_lambda = l2_lambda
+            self.fc1 = nn.Linear(input_size, hidden_sizes[0])
+            self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
+            self.fc3 = nn.Linear(hidden_sizes[1], 1)
+            self.relu = nn.ReLU()
+            self.dropout = nn.Dropout(dropout)
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x):
+            x = self.fc1(x)
+            x = self.relu(x)
+            x = self.dropout(x)
+            x = self.fc2(x)
+            x = self.relu(x)
+            x = self.dropout(x)
+            x = self.fc3(x)
+            return self.sigmoid(x)
+
+        def l2_regularization(self):
+            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+
+    _torch_modules = {
+        "torch": torch,
+        "nn": nn,
+        "DataLoader": DataLoader,
+        "TensorDataset": TensorDataset,
+        "CNNLSTM": CNNLSTM,
+        "CNNGRU": CNNGRU,
+        "Net": Net,
+    }
+    return _torch_modules
 
 
 def _train_model_keras(X, y, batch_size, model_type):
@@ -167,6 +186,14 @@ def _train_model_keras(X, y, batch_size, model_type):
 
 
 def _train_model_lightning(X, y, batch_size, model_type):
+    torch_mods = _get_torch_modules()
+    torch = torch_mods["torch"]
+    nn = torch_mods["nn"]
+    DataLoader = torch_mods["DataLoader"]
+    TensorDataset = torch_mods["TensorDataset"]
+    Net = torch_mods["Net"]
+    CNNGRU = torch_mods["CNNGRU"]
+    CNNLSTM = torch_mods["CNNLSTM"]
     import pytorch_lightning as pl
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_tensor = torch.tensor(X, dtype=torch.float32)
@@ -229,12 +256,21 @@ def _train_model_lightning(X, y, batch_size, model_type):
     return net.state_dict(), preds, labels
 
 
-@ray.remote(num_gpus=1 if torch.cuda.is_available() else 0)
+@ray.remote()
 def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pytorch"):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(X, y, batch_size, model_type)
     if framework == "lightning":
         return _train_model_lightning(X, y, batch_size, model_type)
+
+    torch_mods = _get_torch_modules()
+    torch = torch_mods["torch"]
+    nn = torch_mods["nn"]
+    DataLoader = torch_mods["DataLoader"]
+    TensorDataset = torch_mods["TensorDataset"]
+    Net = torch_mods["Net"]
+    CNNGRU = torch_mods["CNNGRU"]
+    CNNLSTM = torch_mods["CNNLSTM"]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_tensor = torch.tensor(X, dtype=torch.float32)
@@ -305,7 +341,12 @@ class ModelBuilder:
         self.model_type = config.get('model_type', 'cnn_lstm')
         self.nn_framework = config.get('nn_framework', 'pytorch').lower()
         self.lstm_models = {}
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if self.nn_framework in {'pytorch', 'lightning'}:
+            torch_mods = _get_torch_modules()
+            torch = torch_mods['torch']
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = 'cpu'
         self.cache = HistoricalDataCache(config['cache_dir'])
         self.state_file = os.path.join(config['cache_dir'], 'model_builder_state.pkl')
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
@@ -349,6 +390,10 @@ class ModelBuilder:
                     state = joblib.load(f)
                 self.scalers = state.get('scalers', {})
                 if self.nn_framework == 'pytorch':
+                    torch_mods = _get_torch_modules()
+                    Net = torch_mods['Net']
+                    CNNGRU = torch_mods['CNNGRU']
+                    CNNLSTM = torch_mods['CNNLSTM']
                     for symbol, sd in state.get('lstm_models', {}).items():
                         scaler = self.scalers.get(symbol)
                         input_size = len(scaler.mean_) if scaler else self.config['lstm_timesteps']
@@ -461,7 +506,12 @@ class ModelBuilder:
         pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
         thr = self.config.get('target_change_threshold', 0.001)
         y = (pct_change > thr).astype(np.float32)
-        model_state, val_preds, val_labels = await _train_model_remote.remote(
+        train_task = _train_model_remote
+        if self.nn_framework in {'pytorch', 'lightning'}:
+            torch_mods = _get_torch_modules()
+            torch = torch_mods['torch']
+            train_task = _train_model_remote.options(num_gpus=1 if torch.cuda.is_available() else 0)
+        model_state, val_preds, val_labels = await train_task.remote(
             X, y, self.config['lstm_batch_size'], self.model_type, self.nn_framework
         )
         if self.nn_framework in {'keras', 'tensorflow'}:
@@ -491,6 +541,10 @@ class ModelBuilder:
             model = build_model()
             model.set_weights(model_state)
         else:
+            torch_mods = _get_torch_modules()
+            Net = torch_mods['Net']
+            CNNGRU = torch_mods['CNNGRU']
+            CNNLSTM = torch_mods['CNNLSTM']
             if self.model_type == 'mlp':
                 model = Net(X.shape[1] * X.shape[2])
             elif self.model_type == 'gru':
@@ -584,6 +638,8 @@ class ModelBuilder:
                     return
             if self.nn_framework != 'pytorch':
                 return
+            torch_mods = _get_torch_modules()
+            torch = torch_mods['torch']
             cache_file = os.path.join(self.cache.cache_dir, f"shap_{symbol}.pkl")
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
@@ -638,6 +694,8 @@ class ModelBuilder:
             if self.nn_framework in {'keras', 'tensorflow'}:
                 preds = model.predict(X).reshape(-1)
             else:
+                torch_mods = _get_torch_modules()
+                torch = torch_mods['torch']
                 X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device)
                 model.eval()
                 with torch.no_grad():
@@ -784,6 +842,8 @@ class RLAgent:
         elif framework == "catalyst":
             try:
                 from catalyst import dl
+                torch_mods = _get_torch_modules()
+                torch = torch_mods['torch']
                 dataset = torch.utils.data.TensorDataset(
                     torch.tensor(features_df.values, dtype=torch.float32)
                 )
