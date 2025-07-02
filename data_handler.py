@@ -22,7 +22,7 @@ from config import BotConfig
 import ta
 import os
 from queue import Queue
-import pickle
+import joblib
 import psutil
 import ray
 from flask import Flask, jsonify
@@ -576,9 +576,8 @@ class DataHandler:
 
     async def save_to_disk_buffer(self, priority, item):
         try:
-            filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.pkl")
-            with open(filename, "wb") as f:
-                pickle.dump((priority, item), f)
+            filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.joblib")
+            joblib.dump((priority, item), filename)
             self.disk_buffer.put(filename)
             logger.info(f"Сообщение сохранено в дисковый буфер: {filename}")
         except Exception as e:
@@ -588,8 +587,7 @@ class DataHandler:
         while not self.disk_buffer.empty():
             try:
                 filename = self.disk_buffer.get()
-                with open(filename, "rb") as f:
-                    priority, item = pickle.load(f)
+                priority, item = joblib.load(filename)
                 await self.ws_queue.put((priority, item))
                 os.remove(filename)
                 logger.info(f"Сообщение загружено из дискового буфера: {filename}")
