@@ -286,3 +286,17 @@ def test_is_data_fresh():
     assert asyncio.run(fresh_dh.is_data_fresh('BTCUSDT')) is True
     assert asyncio.run(stale_dh.is_data_fresh('BTCUSDT')) is False
 
+
+def test_compute_risk_per_trade_zero_threshold():
+    cfg = make_config()
+    cfg.update({'volatility_threshold': 0})
+    dh = DummyDataHandler()
+    tm = TradeManager(cfg, dh, None, None, None)
+
+    async def run():
+        return await tm.compute_risk_per_trade('BTCUSDT', 0.01)
+
+    import asyncio
+    risk = asyncio.run(run())
+    assert tm.min_risk_per_trade <= risk <= tm.max_risk_per_trade
+

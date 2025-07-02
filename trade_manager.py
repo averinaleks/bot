@@ -125,7 +125,8 @@ class TradeManager:
             base_risk *= 0.5
         elif sharpe > 1:
             base_risk *= 1.5
-        vol_coeff = volatility / self.config.get("volatility_threshold", 0.02)
+        threshold = max(self.config.get("volatility_threshold", 0.02), 1e-6)
+        vol_coeff = volatility / threshold
         base_risk *= max(0.5, min(2.0, vol_coeff))
         return min(self.max_risk_per_trade, max(self.min_risk_per_trade, base_risk))
 
