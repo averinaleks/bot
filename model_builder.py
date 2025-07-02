@@ -22,11 +22,9 @@ from sklearn.metrics import brier_score_loss
 from sklearn.calibration import calibration_curve
 import joblib
 import mlflow
-try:
-    import shap
-except Exception as e:
-    shap = None
-    logger.warning("shap import failed: %s", e)
+
+# Delay heavy SHAP import until needed to avoid CUDA warnings at startup
+shap = None
 from flask import Flask, request, jsonify
 try:
     from stable_baselines3 import PPO, DQN
@@ -577,7 +575,14 @@ class ModelBuilder:
 
     async def compute_shap_values(self, symbol, model, X):
         try:
-            if shap is None or self.nn_framework != 'pytorch':
+            global shap
+            if shap is None:
+                try:
+                    import shap  # type: ignore
+                except Exception as e:  # pragma: no cover - optional dependency
+                    logger.warning("shap import failed: %s", e)
+                    return
+            if self.nn_framework != 'pytorch':
                 return
             cache_file = os.path.join(self.cache.cache_dir, f"shap_{symbol}.pkl")
             last_time = self.shap_cache_times.get(symbol, 0)
