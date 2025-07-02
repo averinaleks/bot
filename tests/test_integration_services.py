@@ -56,19 +56,23 @@ def tm_ping():
 
 
 def _run_dh():
-    dh_app.run(port=8000)
+    host = os.environ.get("HOST", "0.0.0.0")
+    dh_app.run(host=host, port=8000)
 
 
 def _run_mb():
-    mb_app.run(port=8001)
+    host = os.environ.get("HOST", "0.0.0.0")
+    mb_app.run(host=host, port=8001)
 
 
 def _run_tm():
-    tm_app.run(port=8002)
+    host = os.environ.get("HOST", "0.0.0.0")
+    tm_app.run(host=host, port=8002)
 
 
 def test_services_communicate():
     import trading_bot  # noqa: E402
+    os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
         ctx.Process(target=_run_mb),
@@ -96,6 +100,7 @@ def test_services_communicate():
 
 def test_service_availability_check():
     import trading_bot  # noqa: E402
+    os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
         ctx.Process(target=_run_mb),
@@ -117,6 +122,7 @@ def test_service_availability_check():
 
 def test_check_services_success():
     import trading_bot  # noqa: E402
+    os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
         ctx.Process(target=_run_mb),
@@ -143,6 +149,7 @@ def test_check_services_success():
 
 def test_check_services_failure():
     import trading_bot  # noqa: E402
+    os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
         ctx.Process(target=_run_mb),
