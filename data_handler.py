@@ -225,8 +225,8 @@ class DataHandler:
                 value = float(indicators.atr.iloc[-1])
                 if value > 0:
                     return value
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error("get_atr failed for %s: %s", symbol, exc)
         async with self.ohlcv_lock:
             if (
                 "symbol" in self.ohlcv.index.names
