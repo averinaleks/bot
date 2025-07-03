@@ -34,7 +34,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type checkers only
 try:
     from numba import cuda  # type: ignore
     GPU_AVAILABLE = hasattr(cuda, "is_available") and cuda.is_available()
-except Exception:  # pragma: no cover - numba without cuda support
+except Exception as e:  # pragma: no cover - numba without cuda support
+    logger.warning("CUDA initialization failed: %s", e)
     cuda = None  # type: ignore
     GPU_AVAILABLE = False
 
@@ -120,11 +121,12 @@ class IndicatorsCache:
             if len(df) - self.last_volume_profile_update >= self.volume_profile_update_interval:
                 self.volume_profile = self.calculate_volume_profile(df)
                 self.last_volume_profile_update = len(df)
-        except Exception as e:
-            logger.error(f"Ошибка расчета индикаторов ({timeframe}): {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = (
                 self.volume_profile
             ) = None
+            raise
 
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
         try:
@@ -133,8 +135,8 @@ class IndicatorsCache:
             vp = utils_volume_profile(prices, volumes, bins=50)
             price_bins = np.linspace(prices.min(), prices.max(), num=len(vp))
             return pd.Series(vp, index=price_bins)
-        except Exception as e:
-            logger.error(f"Ошибка расчета Volume Profile: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error("Ошибка расчета Volume Profile: %s", e)
             return None
 
 
@@ -225,7 +227,7 @@ class DataHandler:
                 value = float(indicators.atr.iloc[-1])
                 if value > 0:
                     return value
-            except Exception as exc:
+            except (IndexError, ValueError) as exc:
                 logger.error("get_atr failed for %s: %s", symbol, exc)
         async with self.ohlcv_lock:
             if (
@@ -247,8 +249,8 @@ class DataHandler:
             self.indicators[symbol] = new_ind
             if new_ind.atr is not None and not new_ind.atr.empty:
                 return float(new_ind.atr.iloc[-1])
-        except Exception as e:
-            logger.error(f"Ошибка расчета ATR для {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error("Ошибка расчета ATR для %s: %s", symbol, e)
         return 0.0
 
     async def is_data_fresh(
@@ -268,8 +270,8 @@ class DataHandler:
             last_ts = sub_df.index.get_level_values("timestamp")[-1]
             age = pd.Timestamp.now(tz="UTC") - last_ts
             return age.total_seconds() <= max_delay
-        except Exception as e:
-            logger.error(f"Error checking data freshness for {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error("Error checking data freshness for %s: %s", symbol, e)
             return False
 
     async def load_initial(self):
@@ -315,8 +317,8 @@ class DataHandler:
                             {"imbalance": 0.0, "timestamp": time.time()},
                             timeframe="primary" if timeframe == self.config["timeframe"] else "secondary",
                         )
-        except Exception as e:
-            logger.error(f"Ошибка загрузки начальных данных: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error("Ошибка загрузки начальных данных: %s", e)
             await self.telegram_logger.send_telegram_message(f"Ошибка загрузки данных: {e}")
 
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
@@ -336,8 +338,8 @@ class DataHandler:
                 try:
                     ticker = await safe_api_call(self.exchange, "fetch_ticker", sym)
                     volume = float(ticker.get("quoteVolume") or 0)
-                except Exception as e:
-                    logger.error(f"Ошибка получения тикера для {sym}: {e}")
+                except (KeyError, ValueError) as e:
+                    logger.error("Ошибка получения тикера для %s: %s", sym, e)
                     volume = 0.0
                 return sym, volume
 
@@ -392,8 +394,8 @@ class DataHandler:
             df = df.interpolate(method="time", limit_direction="both")
             self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
-        except Exception as e:
-            logger.error(f"Ошибка получения OHLCV для {symbol} ({timeframe}): {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error("Ошибка получения OHLCV для %s (%s): %s", symbol, timeframe, e)
             return symbol, pd.DataFrame()
 
     async def fetch_ohlcv_history(self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = "") -> tuple:
@@ -430,8 +432,13 @@ class DataHandler:
             df = pd.concat(all_data).sort_index().drop_duplicates()
             self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
-        except Exception as e:
-            logger.error(f"Ошибка получения расширенной истории OHLCV для {symbol} ({timeframe}): {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(
+                "Ошибка получения расширенной истории OHLCV для %s (%s): %s",
+                symbol,
+                timeframe,
+                e,
+            )
             return symbol, pd.DataFrame()
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -447,8 +454,8 @@ class DataHandler:
             async with self.funding_lock:
                 self.funding_rates[symbol] = rate
             return rate
-        except Exception as e:
-            logger.error(f"Ошибка получения ставки финансирования для {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error("Ошибка получения ставки финансирования для %s: %s", symbol, e)
             return 0.0
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -464,8 +471,8 @@ class DataHandler:
             async with self.oi_lock:
                 self.open_interest[symbol] = interest
             return interest
-        except Exception as e:
-            logger.error(f"Ошибка получения открытого интереса для {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error("Ошибка получения открытого интереса для %s: %s", symbol, e)
             return 0.0
 
     @retry(wait=wait_exponential(multiplier=1, min=2, max=5))
@@ -481,8 +488,8 @@ class DataHandler:
                 logger.warning(f"Пустая книга ордеров для {symbol}, повторная попытка")
                 raise Exception("Пустой ордербук")
             return orderbook
-        except Exception as e:
-            logger.error(f"Ошибка получения книги ордеров для {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error("Ошибка получения книги ордеров для %s: %s", symbol, e)
             return {"bids": [], "asks": []}
 
     async def synchronize_and_update(
@@ -541,8 +548,8 @@ class DataHandler:
                         self.indicators_cache_2h[cache_key] = await obj_ref
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
-        except Exception as e:
-            logger.error(f"Ошибка синхронизации данных для {symbol} ({timeframe}): {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error("Ошибка синхронизации данных для %s (%s): %s", symbol, timeframe, e)
 
     async def cleanup_old_data(self):
         while True:
@@ -575,7 +582,7 @@ class DataHandler:
                     logger.info("Старые данные очищены")
                 await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
             except Exception as e:
-                logger.error(f"Ошибка очистки данных: {e}")
+                logger.error("Ошибка очистки данных: %s", e)
                 await asyncio.sleep(60)
 
     async def save_to_disk_buffer(self, priority, item):
@@ -584,8 +591,8 @@ class DataHandler:
             joblib.dump((priority, item), filename)
             self.disk_buffer.put(filename)
             logger.info(f"Сообщение сохранено в дисковый буфер: {filename}")
-        except Exception as e:
-            logger.error(f"Ошибка сохранения в дисковый буфер: {e}")
+        except (OSError, ValueError) as e:
+            logger.error("Ошибка сохранения в дисковый буфер: %s", e)
 
     async def load_from_disk_buffer(self):
         while not self.disk_buffer.empty():
@@ -595,8 +602,8 @@ class DataHandler:
                 await self.ws_queue.put((priority, item))
                 os.remove(filename)
                 logger.info(f"Сообщение загружено из дискового буфера: {filename}")
-            except Exception as e:
-                logger.error(f"Ошибка загрузки из дискового буфера: {e}")
+            except (OSError, ValueError) as e:
+                logger.error("Ошибка загрузки из дискового буфера: %s", e)
 
     async def adjust_subscriptions(self):
         cpu_load = psutil.cpu_percent(interval=1)
@@ -664,8 +671,9 @@ class DataHandler:
                 self.tasks.append(asyncio.create_task(self.monitor_load()))
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except Exception as e:
-            logger.error(f"Ошибка подписки на WebSocket: {e}")
+            logger.error("Ошибка подписки на WebSocket: %s", e)
             await self.telegram_logger.send_telegram_message(f"Ошибка WebSocket: {e}")
+            raise
 
     async def monitor_load(self):
         while True:
@@ -673,8 +681,9 @@ class DataHandler:
                 await self.adjust_subscriptions()
                 await asyncio.sleep(300)
             except Exception as e:
-                logger.error(f"Ошибка мониторинга нагрузки: {e}")
+                logger.error("Ошибка мониторинга нагрузки: %s", e)
                 await asyncio.sleep(60)
+                raise
 
     def fix_symbol(self, symbol: str) -> str:
         """Normalize symbol for Bybit futures REST requests.
@@ -742,7 +751,13 @@ class DataHandler:
                 reconnect_attempts += 1
                 delay = min(2**reconnect_attempts, 60)
                 logger.error(
-                    f"Ошибка CCXT Pro для {symbol} ({label}), попытка {reconnect_attempts}/{max_reconnect_attempts}, ожидание {delay} секунд: {e}"
+                    "Ошибка CCXT Pro для %s (%s), попытка %s/%s, ожидание %s секунд: %s",
+                    symbol,
+                    label,
+                    reconnect_attempts,
+                    max_reconnect_attempts,
+                    delay,
+                    e,
                 )
                 await asyncio.sleep(delay)
                 if reconnect_attempts >= max_reconnect_attempts:
@@ -788,11 +803,16 @@ class DataHandler:
                     ws = self.ws_pool[url].pop(0)
                 logger.info(f"Подключение к WebSocket {url}")
                 return ws
-            except Exception as e:
+            except OSError as e:
                 attempts += 1
                 delay = min(2 ** attempts, 60)
                 logger.error(
-                    f"Ошибка подключения к WebSocket {url}, попытка {attempts}/{max_attempts}, ожидание {delay} секунд: {e}"
+                    "Ошибка подключения к WebSocket %s, попытка %s/%s, ожидание %s секунд: %s",
+                    url,
+                    attempts,
+                    max_attempts,
+                    delay,
+                    e,
                 )
                 if attempts >= max_attempts:
                     raise
@@ -846,7 +866,13 @@ class DataHandler:
                 attempts += 1
                 delay = min(2 ** attempts, 60)
                 logger.error(
-                    f"Ошибка подписки на WebSocket для {symbols} ({timeframe}), попытка {attempts}/{max_attempts}, ожидание {delay} секунд: {e}"
+                    "Ошибка подписки на WebSocket для %s (%s), попытка %s/%s, ожидание %s секунд: %s",
+                    symbols,
+                    timeframe,
+                    attempts,
+                    max_attempts,
+                    delay,
+                    e,
                 )
                 if attempts >= max_attempts:
                     raise
@@ -918,7 +944,12 @@ class DataHandler:
                 logger.error(f"WebSocket соединение закрыто для {symbols} ({timeframe}): {e}")
                 break
             except Exception as e:
-                logger.error(f"Ошибка обработки WebSocket сообщения для {symbols} ({timeframe}): {e}")
+                logger.error(
+                    "Ошибка обработки WebSocket сообщения для %s (%s): %s",
+                    symbols,
+                    timeframe,
+                    e,
+                )
                 break
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
@@ -950,7 +981,7 @@ class DataHandler:
                         except asyncio.TimeoutError:
                             logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
                             await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
-                    except Exception:
+                    except (json.JSONDecodeError, KeyError, ValueError):
                         continue
 
                 await self._read_messages(ws, symbols, timeframe, selected_timeframe, connection_timeout)
@@ -959,7 +990,14 @@ class DataHandler:
                 current_url_index += 1
                 delay = min(2**reconnect_attempts, 60)
                 logger.error(
-                    f"Ошибка WebSocket {current_url} для {symbols} ({timeframe}), попытка {reconnect_attempts}/{max_reconnect_attempts}, ожидание {delay} секунд: {e}"
+                    "Ошибка WebSocket %s для %s (%s), попытка %s/%s, ожидание %s секунд: %s",
+                    current_url,
+                    symbols,
+                    timeframe,
+                    reconnect_attempts,
+                    max_reconnect_attempts,
+                    delay,
+                    e,
                 )
                 await asyncio.sleep(delay)
                 if reconnect_attempts >= max_reconnect_attempts:
@@ -1002,7 +1040,9 @@ class DataHandler:
                                         timeframe=timeframe,
                                     )
                         except Exception as rest_e:
-                            logger.error(f"Ошибка REST API для {symbol} ({timeframe}): {rest_e}")
+                            logger.error(
+                                "Ошибка REST API для %s (%s): %s", symbol, timeframe, rest_e
+                            )
             finally:
                 self.active_subscriptions -= len(symbols)
                 if ws and ws.open:
@@ -1116,7 +1156,7 @@ class DataHandler:
                             timeframe=timeframe,
                         )
                     except Exception as e:
-                        logger.error(f"Ошибка обработки данных для {symbol}: {e}")
+                        logger.error("Ошибка обработки данных для %s: %s", symbol, e)
                         continue
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
@@ -1125,7 +1165,7 @@ class DataHandler:
                     )
                     last_latency_log = time.time()
             except Exception as e:
-                logger.error(f"Ошибка обработки очереди WebSocket: {e}")
+                logger.error("Ошибка обработки очереди WebSocket: %s", e)
                 await asyncio.sleep(2)
             finally:
                 self.ws_queue.task_done()
@@ -1154,14 +1194,14 @@ class DataHandler:
                 try:
                     await ws.close()
                 except Exception as e:
-                    logger.error(f"Ошибка закрытия WebSocket {url}: {e}")
+                    logger.error("Ошибка закрытия WebSocket %s: %s", url, e)
         self.ws_pool.clear()
 
         if self.pro_exchange is not None and hasattr(self.pro_exchange, "close"):
             try:
                 await self.pro_exchange.close()
             except Exception as e:
-                logger.error(f"Ошибка закрытия ccxtpro: {e}")
+                logger.error("Ошибка закрытия ccxtpro: %s", e)
 
         await TelegramLogger.shutdown()
 
