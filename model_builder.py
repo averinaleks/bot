@@ -164,6 +164,10 @@ def _get_torch_modules():
     return _torch_modules
 
 
+# Reduce verbose TensorFlow logs before any TF import
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+
 def _train_model_keras(X, y, batch_size, model_type):
     import tensorflow as tf
     from tensorflow import keras
