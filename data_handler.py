@@ -582,8 +582,9 @@ class DataHandler:
                     logger.info("Старые данные очищены")
                 await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
             except Exception as e:
-                logger.error("Ошибка очистки данных: %s", e)
+                logger.exception("Ошибка очистки данных: %s", e)
                 await asyncio.sleep(60)
+                raise
 
     async def save_to_disk_buffer(self, priority, item):
         try:
@@ -764,7 +765,7 @@ class DataHandler:
                     logger.error(
                         f"Не удалось восстановить подписку CCXT Pro для {symbol} ({label})"
                     )
-                    break
+                    raise
 
     async def _subscribe_with_ccxtpro(self, symbols: List[str]):
         self.tasks = []
@@ -877,6 +878,7 @@ class DataHandler:
                 if attempts >= max_attempts:
                     raise
                 await asyncio.sleep(delay)
+                raise
 
     async def _read_messages(
         self,
@@ -944,13 +946,13 @@ class DataHandler:
                 logger.error(f"WebSocket соединение закрыто для {symbols} ({timeframe}): {e}")
                 break
             except Exception as e:
-                logger.error(
+                logger.exception(
                     "Ошибка обработки WebSocket сообщения для %s (%s): %s",
                     symbols,
                     timeframe,
                     e,
                 )
-                break
+                raise
 
     async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
         """Subscribe to kline data for a chunk of symbols."""
@@ -1043,6 +1045,7 @@ class DataHandler:
                             logger.error(
                                 "Ошибка REST API для %s (%s): %s", symbol, timeframe, rest_e
                             )
+                            raise
             finally:
                 self.active_subscriptions -= len(symbols)
                 if ws and ws.open:
@@ -1156,8 +1159,8 @@ class DataHandler:
                             timeframe=timeframe,
                         )
                     except Exception as e:
-                        logger.error("Ошибка обработки данных для %s: %s", symbol, e)
-                        continue
+                        logger.exception("Ошибка обработки данных для %s: %s", symbol, e)
+                        raise
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
                     logger.info(
@@ -1165,8 +1168,9 @@ class DataHandler:
                     )
                     last_latency_log = time.time()
             except Exception as e:
-                logger.error("Ошибка обработки очереди WebSocket: %s", e)
+                logger.exception("Ошибка обработки очереди WebSocket: %s", e)
                 await asyncio.sleep(2)
+                raise
             finally:
                 self.ws_queue.task_done()
 
@@ -1194,14 +1198,16 @@ class DataHandler:
                 try:
                     await ws.close()
                 except Exception as e:
-                    logger.error("Ошибка закрытия WebSocket %s: %s", url, e)
+                    logger.exception("Ошибка закрытия WebSocket %s: %s", url, e)
+                    raise
         self.ws_pool.clear()
 
         if self.pro_exchange is not None and hasattr(self.pro_exchange, "close"):
             try:
                 await self.pro_exchange.close()
             except Exception as e:
-                logger.error("Ошибка закрытия ccxtpro: %s", e)
+                logger.exception("Ошибка закрытия ccxtpro: %s", e)
+                raise
 
         await TelegramLogger.shutdown()
 
