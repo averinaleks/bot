@@ -1,3 +1,9 @@
+"""Hyperparameter optimizer for trading indicators and strategies.
+
+Uses Optuna and Ray to search for the best indicator parameters based on
+Sharpe ratio and supports an optional grid search refinement step.
+"""
+
 import pandas as pd
 import numpy as np
 import optuna

@@ -1,3 +1,9 @@
+"""Trading engine for executing and managing positions.
+
+This module coordinates order placement, risk management and Telegram
+notifications while interacting with the :class:`ModelBuilder` and exchange.
+"""
+
 import asyncio
 import pandas as pd
 import numpy as np
