@@ -39,8 +39,25 @@ def _stub_modules():
 
     sys.modules.setdefault("websockets", types.ModuleType("websockets"))
 
+    class _RayRemoteFunction:
+        def __init__(self, func):
+            self._function = func
+
+        def remote(self, *args, **kwargs):
+            return self._function(*args, **kwargs)
+
+        def options(self, *args, **kwargs):
+            return self
+
+    def _ray_remote(func=None, **remote_kwargs):
+        if func is None:
+            def wrapper(f):
+                return _RayRemoteFunction(f)
+            return wrapper
+        return _RayRemoteFunction(func)
+
     ray_mod = types.ModuleType("ray")
-    ray_mod.remote = lambda *a, **k: (lambda f: f)
+    ray_mod.remote = _ray_remote
     ray_mod.get = lambda x: x
     sys.modules.setdefault("ray", ray_mod)
 
