@@ -1,3 +1,4 @@
+"""Collects market data and serves it through a Flask REST API."""
 from __future__ import annotations
 
 import asyncio
