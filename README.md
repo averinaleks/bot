@@ -60,6 +60,9 @@
 DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
 ```
 
+The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
+GPU warnings. Adjust or remove this variable if you need more detailed logs.
+
 ## Docker Compose logs
 
 Просмотреть вывод контейнеров можно через `docker compose logs` (или
