@@ -5,7 +5,7 @@ import asyncio
 import time
 try:
     import torch
-except Exception:  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 import ray
 from utils import logger, check_dataframe_empty
@@ -14,7 +14,7 @@ import inspect
 from optuna.samplers import TPESampler
 try:
     from optuna.integration.mlflow import MLflowCallback
-except Exception:  # pragma: no cover - optional dependency may not be installed
+except ImportError:  # pragma: no cover - optional dependency may not be installed
     MLflowCallback = None  # type: ignore
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator

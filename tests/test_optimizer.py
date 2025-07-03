@@ -32,8 +32,14 @@ optuna_mod = types.ModuleType('optuna')
 optuna_samplers = types.ModuleType('optuna.samplers')
 optuna_samplers.TPESampler = object
 optuna_mod.samplers = optuna_samplers
+optuna_exceptions = types.ModuleType('optuna.exceptions')
+class ExperimentalWarning(Warning):
+    pass
+optuna_exceptions.ExperimentalWarning = ExperimentalWarning
+optuna_mod.exceptions = optuna_exceptions
 sys.modules.setdefault('optuna', optuna_mod)
 sys.modules.setdefault('optuna.samplers', optuna_samplers)
+sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
 
 from optimizer import ParameterOptimizer  # noqa: E402
