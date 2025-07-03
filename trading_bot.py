@@ -1,3 +1,5 @@
+"""Main entry point for the trading bot."""
+
 import os
 import time
 import requests
@@ -95,6 +97,7 @@ def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
 
 
 def run_once() -> None:
+    """Execute a single trading cycle."""
     env = _load_env()
     price = fetch_price(SYMBOL, env)
     if price is None:
@@ -105,6 +108,7 @@ def run_once() -> None:
 
 
 def main():
+    """Run the trading bot until interrupted."""
     # Load environment variables from a .env file when running as a script
     load_dotenv()
     try:
