@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Configuration loader for the trading bot.
+
+This module defines the :class:`BotConfig` dataclass along with helpers to
+load configuration values from ``config.json`` and environment variables.
+"""
+
 import json
 import os
 from dataclasses import dataclass, field, fields, asdict

@@ -1,3 +1,5 @@
+"""Miscellaneous helper utilities for the trading bot."""
+
 import logging
 import os
 import pickle

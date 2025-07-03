@@ -1,3 +1,9 @@
+"""Training utilities for predictive and reinforcement learning models.
+
+This module houses the :class:`ModelBuilder` used to train LSTM or RL models,
+remote training helpers and a small REST API for integration tests.
+"""
+
 import numpy as np
 import pandas as pd
 import os
