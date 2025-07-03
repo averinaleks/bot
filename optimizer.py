@@ -220,7 +220,9 @@ class ParameterOptimizer:
                 trial = study.ask()
                 obj_refs.append(self.objective(trial, symbol, df))
                 trials.append(trial)
-            results = ray.get(obj_refs)
+            results = await asyncio.gather(
+                *[asyncio.to_thread(ray.get, ref) for ref in obj_refs]
+            )
             for trial, value in zip(trials, results):
                 study.tell(trial, value)
                 for cb in callbacks:
