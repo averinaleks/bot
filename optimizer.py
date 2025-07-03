@@ -60,6 +60,11 @@ def _objective_remote(
             if end > len(df):
                 break
             test_df = df.iloc[start + train_size : end].droplevel("symbol")
+            # Ensure we have enough data for indicators like ADX that
+            # require a minimum window size. Skip this split if the
+            # resulting DataFrame is too small.
+            if len(test_df) < 14:
+                continue
             current_candle_count = len(test_df)
             if current_candle_count - last_atr_update >= atr_update_interval:
                 indicators = IndicatorsCache(
@@ -224,7 +229,16 @@ class ParameterOptimizer:
             trials = []
             for _ in range(self.max_trials):
                 trial = study.ask()
-                obj_refs.append(self.objective(trial, symbol, df))
+                result = self.objective(trial, symbol, df)
+                # When using the ray stub in tests, ``result`` is the immediate
+                # return value instead of an awaitable. Wrap it in a coroutine
+                # so ``asyncio.gather`` can handle it uniformly.
+                if not asyncio.iscoroutine(result):
+                    async def _wrapper(value):
+                        return value
+
+                    result = _wrapper(result)
+                obj_refs.append(result)
                 trials.append(trial)
             results = await asyncio.gather(*obj_refs)
             for trial, value in zip(trials, results):
