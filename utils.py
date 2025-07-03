@@ -364,7 +364,21 @@ class TelegramLogger(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            asyncio.create_task(self.send_telegram_message(msg))
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.send_telegram_message(msg))
+            except RuntimeError:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self.send_telegram_message(msg))
+                    else:
+                        raise RuntimeError
+                except RuntimeError:
+                    threading.Thread(
+                        target=lambda: asyncio.run(self.send_telegram_message(msg)),
+                        daemon=True,
+                    ).start()
         except Exception as e:
             logger.error(f"Ошибка в TelegramLogger: {e}")
 
