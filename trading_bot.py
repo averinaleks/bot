@@ -4,14 +4,12 @@ import asyncio
 import requests
 from dotenv import load_dotenv
 from utils import logger
-from config import load_config, BotConfig
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 
 # Default trading symbol. Override with the SYMBOL environment variable.
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
-CONFIG: BotConfig = load_config("config.json")
 
 
 def _load_env() -> dict:
