@@ -123,8 +123,8 @@ def _objective_remote(
                 sharpe_ratios.append(sharpe_ratio)
         return float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0
     except Exception as e:  # pragma: no cover - log and return
-        logger.error(f"Ошибка в _objective_remote для {symbol}: {e}")
-        return 0.0
+        logger.exception(f"Ошибка в _objective_remote для {symbol}: {e}")
+        raise
 
 
 class ParameterOptimizer:
@@ -163,8 +163,8 @@ class ParameterOptimizer:
             interval = max(1800, min(self.base_optimization_interval * 2, interval))
             return interval
         except Exception as e:
-            logger.error(f"Ошибка расчёта интервала оптимизации для {symbol}: {e}")
-            return self.base_optimization_interval
+            logger.exception(f"Ошибка расчёта интервала оптимизации для {symbol}: {e}")
+            raise
 
     async def optimize(self, symbol):
         # Оптимизация гиперпараметров для символа
@@ -236,7 +236,8 @@ class ParameterOptimizer:
                 try:
                     best_params = self._grid_search(df, symbol, best_params)
                 except Exception as e:
-                    logger.error(f"Ошибка GridSearchCV для {symbol}: {e}")
+                    logger.exception(f"Ошибка GridSearchCV для {symbol}: {e}")
+                    raise
             if not self.validate_params(best_params):
                 logger.warning(
                     f"Некорректные параметры для {symbol}, использование предыдущих"
@@ -249,8 +250,8 @@ class ParameterOptimizer:
             )
             return best_params
         except Exception as e:
-            logger.error(f"Ошибка оптимизации для {symbol}: {e}")
-            return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+            logger.exception(f"Ошибка оптимизации для {symbol}: {e}")
+            raise
 
     def validate_params(self, params):
         # Валидация оптимизированных параметров
@@ -303,8 +304,8 @@ class ParameterOptimizer:
 
             return True
         except Exception as e:
-            logger.error(f"Ошибка валидации параметров: {e}")
-            return False
+            logger.exception(f"Ошибка валидации параметров: {e}")
+            raise
 
     def objective(self, trial, symbol, df):
         # Целевая функция для оптимизации
@@ -330,17 +331,8 @@ class ParameterOptimizer:
                 self.config["timeframe"],
             )
         except Exception as e:
-            logger.error(f"Ошибка в objective для {symbol}: {e}")
-            obj_fn = getattr(_objective_remote, "remote", _objective_remote)
-            return obj_fn(
-                pd.DataFrame(),
-                symbol,
-                0,
-                0,
-                0,
-                0,
-                self.config.get("timeframe", "1m"),
-            )
+            logger.exception(f"Ошибка в objective для {symbol}: {e}")
+            raise
 
     def _grid_search(self, df, symbol, base_params):
         """Refine best parameters using GridSearchCV for reliability."""
@@ -410,5 +402,5 @@ class ParameterOptimizer:
                     logger.error(f"Ошибка оптимизации для {symbol}: {result}")
             return self.best_params_by_symbol
         except Exception as e:
-            logger.error(f"Ошибка в optimize_all: {e}")
-            return self.best_params_by_symbol
+            logger.exception(f"Ошибка в optimize_all: {e}")
+            raise
