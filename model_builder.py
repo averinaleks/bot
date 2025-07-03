@@ -18,7 +18,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
 from sklearn.calibration import calibration_curve
 import joblib
-import mlflow
+try:
+    import mlflow
+except Exception as e:  # pragma: no cover - optional dependency
+    mlflow = None  # type: ignore
+    logger.warning("mlflow import failed: %s", e)
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
@@ -563,7 +567,7 @@ class ModelBuilder:
             'prob_true': prob_true.tolist(),
             'prob_pred': prob_pred.tolist()
         }
-        if self.config.get("mlflow_enabled", False):
+        if self.config.get("mlflow_enabled", False) and mlflow is not None:
             mlflow.set_tracking_uri(self.config.get("mlflow_tracking_uri", "mlruns"))
             with mlflow.start_run(run_name=f"{symbol}_retrain"):
                 mlflow.log_params({
