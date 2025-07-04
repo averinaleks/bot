@@ -252,6 +252,7 @@ logger.addHandler(console_handler)
 
 
 class TelegramLogger(logging.Handler):
+    """Logging handler that forwards records to a Telegram chat."""
     _queue: asyncio.Queue | None = None
     _worker_task: asyncio.Task | None = None
     _worker_lock = asyncio.Lock()
@@ -525,6 +526,7 @@ def calculate_volume_profile(prices, volumes, bins=50):
 
 
 class HistoricalDataCache:
+    """Manage on-disk storage for historical OHLCV data."""
     def __init__(self, cache_dir="/app/cache"):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
