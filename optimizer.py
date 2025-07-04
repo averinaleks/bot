@@ -229,18 +229,10 @@ class ParameterOptimizer:
             trials = []
             for _ in range(self.max_trials):
                 trial = study.ask()
-                result = self.objective(trial, symbol, df)
-                # When using the ray stub in tests, ``result`` is the immediate
-                # return value instead of an awaitable. Wrap it in a coroutine
-                # so ``asyncio.gather`` can handle it uniformly.
-                if not asyncio.iscoroutine(result):
-                    async def _wrapper(value):
-                        return value
-
-                    result = _wrapper(result)
-                obj_refs.append(result)
+                obj_ref = self.objective(trial, symbol, df)
+                obj_refs.append(obj_ref)
                 trials.append(trial)
-            results = await asyncio.gather(*obj_refs)
+            results = ray.get(obj_refs)
             for trial, value in zip(trials, results):
                 study.tell(trial, value)
                 for cb in callbacks:
