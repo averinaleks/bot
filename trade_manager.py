@@ -1052,9 +1052,21 @@ def create_trade_manager() -> TradeManager:
     """Instantiate the TradeManager using config.json."""
     global trade_manager
     if trade_manager is None:
-        cfg = load_config("config.json")
+        logger.info("Loading configuration from config.json")
+        try:
+            cfg = load_config("config.json")
+            logger.info("Configuration loaded successfully")
+        except Exception as exc:
+            logger.exception("Failed to load configuration: %s", exc)
+            raise
         if not ray.is_initialized():
-            ray.init(num_cpus=cfg["ray_num_cpus"], ignore_reinit_error=True)
+            logger.info("Initializing Ray with num_cpus=%s", cfg["ray_num_cpus"])
+            try:
+                ray.init(num_cpus=cfg["ray_num_cpus"], ignore_reinit_error=True)
+                logger.info("Ray initialized successfully")
+            except Exception as exc:
+                logger.exception("Ray initialization failed: %s", exc)
+                raise
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         telegram_bot = None
@@ -1069,9 +1081,24 @@ def create_trade_manager() -> TradeManager:
         from data_handler import DataHandler
         from model_builder import ModelBuilder
 
-        dh = DataHandler(cfg, telegram_bot, chat_id)
-        mb = ModelBuilder(cfg, dh, None)
+        logger.info("Creating DataHandler")
+        try:
+            dh = DataHandler(cfg, telegram_bot, chat_id)
+            logger.info("DataHandler created successfully")
+        except Exception as exc:
+            logger.exception("Failed to create DataHandler: %s", exc)
+            raise
+
+        logger.info("Creating ModelBuilder")
+        try:
+            mb = ModelBuilder(cfg, dh, None)
+            logger.info("ModelBuilder created successfully")
+        except Exception as exc:
+            logger.exception("Failed to create ModelBuilder: %s", exc)
+            raise
+
         trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
+        logger.info("TradeManager instance created")
         if telegram_bot:
             from utils import TelegramUpdateListener
 

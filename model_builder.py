@@ -361,6 +361,12 @@ class ModelBuilder:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = 'cpu'
+        logger.info(
+            "Starting ModelBuilder initialization: model_type=%s, framework=%s, device=%s",
+            self.model_type,
+            self.nn_framework,
+            self.device,
+        )
         self.cache = HistoricalDataCache(config['cache_dir'])
         self.state_file = os.path.join(config['cache_dir'], 'model_builder_state.pkl')
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
@@ -373,6 +379,7 @@ class ModelBuilder:
         self.shap_cache_times = {}
         self.shap_cache_duration = config.get('shap_cache_duration', 86400)
         self.last_backtest_time = 0
+        logger.info("ModelBuilder initialization complete")
 
     # ------------------------------------------------------------------
     # Persistence helpers
