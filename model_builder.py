@@ -527,8 +527,14 @@ class ModelBuilder:
             torch_mods = _get_torch_modules()
             torch = torch_mods['torch']
             train_task = _train_model_remote.options(num_gpus=1 if torch.cuda.is_available() else 0)
-        model_state, val_preds, val_labels = await train_task.remote(
-            X, y, self.config['lstm_batch_size'], self.model_type, self.nn_framework
+        model_state, val_preds, val_labels = ray.get(
+            train_task.remote(
+                X,
+                y,
+                self.config['lstm_batch_size'],
+                self.model_type,
+                self.nn_framework,
+            )
         )
         if self.nn_framework in {'keras', 'tensorflow'}:
             import tensorflow as tf
