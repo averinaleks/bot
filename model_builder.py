@@ -16,7 +16,7 @@ from utils import logger, check_dataframe_empty, HistoricalDataCache
 try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
     from gymnasium import spaces  # type: ignore
-except Exception as e:  # pragma: no cover - gymnasium missing
+except ImportError as e:  # pragma: no cover - gymnasium missing
     logger.error("gymnasium import failed: %s", e)
     raise ImportError("gymnasium package is required") from e
 from sklearn.preprocessing import StandardScaler
@@ -26,7 +26,7 @@ from sklearn.calibration import calibration_curve
 import joblib
 try:
     import mlflow
-except Exception as e:  # pragma: no cover - optional dependency
+except ImportError as e:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
     logger.warning("mlflow import failed: %s", e)
 
@@ -395,7 +395,8 @@ class ModelBuilder:
             self.last_save_time = time.time()
             logger.info("Состояние ModelBuilder сохранено")
         except Exception as e:
-            logger.error(f"Ошибка сохранения состояния ModelBuilder: {e}")
+            logger.exception("Ошибка сохранения состояния ModelBuilder: %s", e)
+            raise
 
     def load_state(self):
         try:
@@ -449,7 +450,8 @@ class ModelBuilder:
                 self.last_retrain_time = state.get('last_retrain_time', self.last_retrain_time)
                 logger.info("Состояние ModelBuilder загружено")
         except Exception as e:
-            logger.error(f"Ошибка загрузки состояния ModelBuilder: {e}")
+            logger.exception("Ошибка загрузки состояния ModelBuilder: %s", e)
+            raise
 
     # ------------------------------------------------------------------
     async def preprocess(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -607,8 +609,9 @@ class ModelBuilder:
                         await self.retrain_symbol(symbol)
                 await asyncio.sleep(self.config['retrain_interval'])
             except Exception as e:
-                logger.error(f"Ошибка цикла обучения: {e}")
+                logger.exception("Ошибка цикла обучения: %s", e)
                 await asyncio.sleep(60)
+                raise
 
     async def adjust_thresholds(self, symbol, prediction: float):
         base_long = self.config.get('base_probability_threshold', 0.6)
@@ -647,7 +650,7 @@ class ModelBuilder:
             if shap is None:
                 try:
                     import shap  # type: ignore
-                except Exception as e:  # pragma: no cover - optional dependency
+                except ImportError as e:  # pragma: no cover - optional dependency
                     logger.warning("shap import failed: %s", e)
                     return
             if self.nn_framework != 'pytorch':
@@ -690,7 +693,8 @@ class ModelBuilder:
             await self.data_handler.telegram_logger.send_telegram_message(
                 f"🔍 SHAP {symbol}: {top_feats}")
         except Exception as e:
-            logger.error(f"Ошибка вычисления SHAP для {symbol}: {e}")
+            logger.exception("Ошибка вычисления SHAP для %s: %s", symbol, e)
+            raise
 
     async def simple_backtest(self, symbol):
         try:
@@ -736,8 +740,8 @@ class ModelBuilder:
             sharpe = np.mean(returns) / (np.std(returns) + 1e-6) * np.sqrt(365 * 24 * 60 / pd.Timedelta(self.config['timeframe']).total_seconds())
             return float(sharpe)
         except Exception as e:
-            logger.error(f"Ошибка бектеста {symbol}: {e}")
-            return None
+            logger.exception("Ошибка бектеста %s: %s", symbol, e)
+            raise
 
     async def backtest_all(self):
         results = {}
@@ -851,8 +855,8 @@ class RLAgent:
                     trainer.train()
                 self.models[symbol] = trainer
             except Exception as e:
-                logger.error(f"Ошибка RLlib-обучения {symbol}: {e}")
-                return
+                logger.exception("Ошибка RLlib-обучения %s: %s", symbol, e)
+                raise
         elif framework == "catalyst":
             try:
                 from catalyst import dl
@@ -874,8 +878,8 @@ class RLAgent:
                 runner.train(model=model, loaders={"train": loader}, num_epochs=max(1, timesteps // 1000))
                 self.models[symbol] = model
             except Exception as e:
-                logger.error(f"Ошибка Catalyst-обучения {symbol}: {e}")
-                return
+                logger.exception("Ошибка Catalyst-обучения %s: %s", symbol, e)
+                raise
         else:
             if not SB3_AVAILABLE:
                 logger.warning(
@@ -932,8 +936,9 @@ def _load_model() -> None:
         try:
             _model = joblib.load(MODEL_FILE)
         except Exception as e:  # pragma: no cover - model may be corrupted
-            logger.error(f"Failed to load model: {e}")
+            logger.exception("Failed to load model: %s", e)
             _model = None
+            raise
 
 
 @api_app.route("/train", methods=["POST"])

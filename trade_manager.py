@@ -17,7 +17,7 @@ from config import BotConfig, load_config
 
 try:
     from utils import safe_api_call
-except Exception:  # pragma: no cover - tests provide stub without this func
+except ImportError:  # pragma: no cover - tests provide stub without this func
     async def safe_api_call(exchange, method: str, *args, **kwargs):
         return await getattr(exchange, method)(*args, **kwargs)
 import inspect
@@ -193,7 +193,8 @@ class TradeManager:
             self.positions_changed = False
             logger.info("TradeManager state saved")
         except Exception as e:
-            logger.error(f"Failed to save state: {e}")
+            logger.exception("Failed to save state: %s", e)
+            raise
 
     def load_state(self):
         try:
@@ -204,7 +205,8 @@ class TradeManager:
                     self.returns_by_symbol = joblib.load(f)
                 logger.info("TradeManager state loaded")
         except Exception as e:
-            logger.error(f"Failed to load state: {e}")
+            logger.exception("Failed to load state: %s", e)
+            raise
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3)
@@ -271,11 +273,11 @@ class TradeManager:
 
                 return order
             except Exception as e:
-                logger.error(f"Failed to place order for {symbol}: {e}")
+                logger.exception("Failed to place order for %s: %s", symbol, e)
                 await self.telegram_logger.send_telegram_message(
                     f"❌ Order error {symbol}: {e}"
                 )
-                return None
+                raise
 
         if use_lock:
             async with self.position_lock:
@@ -327,8 +329,8 @@ class TradeManager:
             )
             return position_size
         except Exception as e:
-            logger.error(f"Failed to calculate position size for {symbol}: {e}")
-            return 0.0
+            logger.exception("Failed to calculate position size for %s: %s", symbol, e)
+            raise
 
     def calculate_stop_loss_take_profit(
         self,
@@ -456,10 +458,11 @@ class TradeManager:
                     urgent=True,
                 )
         except Exception as e:
-            logger.error(f"Failed to open position for {symbol}: {e}")
+            logger.exception("Failed to open position for %s: %s", symbol, e)
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to open position {symbol}: {e}"
             )
+            raise
 
     async def close_position(
         self, symbol: str, exit_price: float, reason: str = "Manual"
@@ -507,10 +510,11 @@ class TradeManager:
                             urgent=True,
                         )
                 except Exception as e:
-                    logger.error(f"Failed to close position for {symbol}: {e}")
+                    logger.exception("Failed to close position for %s: %s", symbol, e)
                     await self.telegram_logger.send_telegram_message(
                         f"❌ Failed to close position {symbol}: {e}"
                     )
+                    raise
 
     async def check_trailing_stop(self, symbol: str, current_price: float):
         async with self.position_lock:
@@ -598,7 +602,8 @@ class TradeManager:
                             symbol, current_price, "Trailing Stop"
                         )
             except Exception as e:
-                logger.error(f"Failed trailing stop check for {symbol}: {e}")
+                logger.exception("Failed trailing stop check for %s: %s", symbol, e)
+                raise
 
     async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
         async with self.position_lock:
@@ -639,7 +644,8 @@ class TradeManager:
                 elif position["side"] == "sell" and current_price <= take_profit:
                     await self.close_position(symbol, current_price, "Take Profit")
             except Exception as e:
-                logger.error(f"Failed SL/TP check for {symbol}: {e}")
+                logger.exception("Failed SL/TP check for %s: %s", symbol, e)
+                raise
 
     async def check_lstm_exit_signal(self, symbol: str, current_price: float):
         try:
@@ -691,7 +697,8 @@ class TradeManager:
                 )
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
         except Exception as e:
-            logger.error(f"Failed to check CNN-LSTM signal for {symbol}: {e}")
+            logger.exception("Failed to check CNN-LSTM signal for %s: %s", symbol, e)
+            raise
 
     async def monitor_performance(self):
         while True:
@@ -753,8 +760,9 @@ class TradeManager:
                                 )
                 await asyncio.sleep(self.performance_window / 10)
             except Exception as e:
-                logger.error(f"Performance monitoring error: {e}")
+                logger.exception("Performance monitoring error: %s", e)
                 await asyncio.sleep(60)
+                raise
 
     async def manage_positions(self):
         while True:
@@ -780,8 +788,9 @@ class TradeManager:
                     await self.check_lstm_exit_signal(symbol, current_price)
                 await asyncio.sleep(self.check_interval)
             except Exception as e:
-                logger.error(f"Error managing positions: {e}")
+                logger.exception("Error managing positions: %s", e)
                 await asyncio.sleep(60)
+                raise
 
     async def evaluate_ema_condition(self, symbol: str, signal: str) -> bool:
         try:
@@ -856,8 +865,8 @@ class TradeManager:
             logger.info(f"EMA conditions satisfied for {symbol}, signal={signal}")
             return True
         except Exception as e:
-            logger.error(f"Failed to check EMA conditions for {symbol}: {e}")
-            return False
+            logger.exception("Failed to check EMA conditions for %s: %s", symbol, e)
+            raise
 
     async def evaluate_signal(self, symbol: str):
         try:
@@ -958,8 +967,8 @@ class TradeManager:
                     return rl_signal
             return None
         except Exception as e:
-            logger.error(f"Failed to evaluate signal for {symbol}: {e}")
-            return None
+            logger.exception("Failed to evaluate signal for %s: %s", symbol, e)
+            raise
 
     async def run(self):
         try:
@@ -982,10 +991,11 @@ class TradeManager:
                         f"❌ Task {task.get_name()} failed: {result}"
                     )
         except Exception as e:
-            logger.error(f"Critical error in TradeManager: {e}")
+            logger.exception("Critical error in TradeManager: %s", e)
             await self.telegram_logger.send_telegram_message(
                 f"❌ Critical TradeManager error: {e}"
             )
+            raise
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.lstm_models:
@@ -1020,8 +1030,9 @@ class TradeManager:
                     self.config["check_interval"] / len(self.data_handler.usdt_pairs)
                 )
             except Exception as e:
-                logger.error(f"Error processing {symbol}: {e}")
+                logger.exception("Error processing %s: %s", symbol, e)
                 await asyncio.sleep(60)
+                raise
 
 
 # ----------------------------------------------------------------------
@@ -1050,7 +1061,8 @@ def create_trade_manager() -> TradeManager:
 
                 telegram_bot = Bot(token)
             except Exception as exc:  # pragma: no cover - import/runtime errors
-                logger.error(f"Failed to create Telegram Bot: {exc}")
+                logger.exception("Failed to create Telegram Bot: %s", exc)
+                raise
         from data_handler import DataHandler
         from model_builder import ModelBuilder
 
