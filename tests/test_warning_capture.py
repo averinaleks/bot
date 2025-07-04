@@ -1,5 +1,4 @@
 import warnings
-import pytest
 
 
 def api_v2():
