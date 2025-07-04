@@ -57,8 +57,15 @@ def _stub_modules():
         return _RayRemoteFunction(func)
 
     ray_mod = types.ModuleType("ray")
+    _ray_state = {"initialized": False}
+    def _init(*a, **k):
+        _ray_state["initialized"] = True
+    def _is_initialized():
+        return _ray_state["initialized"]
     ray_mod.remote = _ray_remote
     ray_mod.get = lambda x: x
+    ray_mod.init = _init
+    ray_mod.is_initialized = _is_initialized
     sys.modules.setdefault("ray", ray_mod)
 
     tenacity_mod = types.ModuleType("tenacity")
