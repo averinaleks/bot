@@ -542,18 +542,36 @@ class DataHandler:
             if timeframe == "primary":
                 async with self.ohlcv_lock:
                     if cache_key not in self.indicators_cache:
+                        logger.debug(
+                            "Dispatching calc_indicators for %s %s", symbol, timeframe
+                        )
                         obj_ref = calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "primary"
                         )
                         self.indicators_cache[cache_key] = ray.get(obj_ref)
+                        logger.debug(
+                            "calc_indicators completed for %s %s (key=%s)",
+                            symbol,
+                            timeframe,
+                            cache_key,
+                        )
                     self.indicators[symbol] = self.indicators_cache[cache_key]
             else:
                 async with self.ohlcv_2h_lock:
                     if cache_key not in self.indicators_cache_2h:
+                        logger.debug(
+                            "Dispatching calc_indicators for %s %s", symbol, timeframe
+                        )
                         obj_ref = calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "secondary"
                         )
                         self.indicators_cache_2h[cache_key] = ray.get(obj_ref)
+                        logger.debug(
+                            "calc_indicators completed for %s %s (key=%s)",
+                            symbol,
+                            timeframe,
+                            cache_key,
+                        )
                     self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError) as e:
