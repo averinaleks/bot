@@ -229,10 +229,17 @@ class ParameterOptimizer:
             trials = []
             for _ in range(self.max_trials):
                 trial = study.ask()
+                logger.debug(
+                    "Dispatching _objective_remote for %s trial %s", symbol, trial.number
+                )
                 obj_ref = self.objective(trial, symbol, df)
                 obj_refs.append(obj_ref)
                 trials.append(trial)
             results = ray.get(obj_refs)
+            for t in trials:
+                logger.debug(
+                    "Received result for %s trial %s", symbol, t.number
+                )
             for trial, value in zip(trials, results):
                 study.tell(trial, value)
                 for cb in callbacks:
@@ -351,6 +358,9 @@ class ParameterOptimizer:
 
             def fit(self, X=None, y=None):
                 obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+                logger.debug(
+                    "Dispatching _objective_remote for grid search %s", self.symbol
+                )
                 self.score_ = ray.get(
                     obj_fn(
                         self.df,
@@ -362,6 +372,7 @@ class ParameterOptimizer:
                         self.timeframe,
                     )
                 )
+                logger.debug("Received grid search result for %s", self.symbol)
                 return self
 
             def score(self, X=None, y=None):

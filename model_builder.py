@@ -534,6 +534,7 @@ class ModelBuilder:
             torch_mods = _get_torch_modules()
             torch = torch_mods['torch']
             train_task = _train_model_remote.options(num_gpus=1 if torch.cuda.is_available() else 0)
+        logger.debug("Dispatching _train_model_remote for %s", symbol)
         model_state, val_preds, val_labels = ray.get(
             train_task.remote(
                 X,
@@ -543,6 +544,7 @@ class ModelBuilder:
                 self.nn_framework,
             )
         )
+        logger.debug("_train_model_remote completed for %s", symbol)
         if self.nn_framework in {'keras', 'tensorflow'}:
             import tensorflow as tf
             from tensorflow import keras
