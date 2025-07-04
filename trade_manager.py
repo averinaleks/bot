@@ -5,6 +5,7 @@ notifications while interacting with the :class:`ModelBuilder` and exchange.
 """
 
 import asyncio
+import ray
 import pandas as pd
 import numpy as np
 from tenacity import retry, wait_exponential, stop_after_attempt
@@ -1052,6 +1053,8 @@ def create_trade_manager() -> TradeManager:
     global trade_manager
     if trade_manager is None:
         cfg = load_config("config.json")
+        if not ray.is_initialized():
+            ray.init(num_cpus=cfg["ray_num_cpus"], ignore_reinit_error=True)
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         telegram_bot = None
