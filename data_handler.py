@@ -166,6 +166,12 @@ class DataHandler:
     def __init__(self, config: BotConfig, telegram_bot, chat_id,
                  exchange: BybitSDKAsync | None = None,
                  pro_exchange: "ccxtpro.bybit" | None = None):
+        logger.info(
+            "Starting DataHandler initialization: timeframe=%s, max_symbols=%s, GPU available=%s",
+            config.timeframe,
+            config.get("max_symbols"),
+            GPU_AVAILABLE,
+        )
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
@@ -208,6 +214,7 @@ class DataHandler:
         self.latency_log_interval = 3600
         self.restart_attempts = 0
         self.max_restart_attempts = 20
+        logger.info("DataHandler initialization complete")
         # Maximum number of symbols to work with overall
         self.max_symbols = config.get("max_symbols", 50)
         # Start with the configured limit for dynamic adjustments
