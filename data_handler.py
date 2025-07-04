@@ -94,6 +94,7 @@ def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int) 
 
 
 class IndicatorsCache:
+    """Container for computed technical indicators."""
     def __init__(self, df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str = "primary"):
         self.df = df
         self.config = config
