@@ -37,3 +37,15 @@ def test_load_env_explicit_urls(monkeypatch):
     assert env['model_builder_url'] == 'http://127.0.0.1:9001'
     assert env['trade_manager_url'] == 'http://127.0.0.1:9002'
 
+
+
+
+def test_load_env_uses_host_when_missing(monkeypatch):
+    """Fallback to HOST when service URLs are absent."""
+    for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv('HOST', '127.0.0.1')
+    env = trading_bot._load_env()
+    assert env['data_handler_url'] == 'http://127.0.0.1:8000'
+    assert env['model_builder_url'] == 'http://127.0.0.1:8001'
+    assert env['trade_manager_url'] == 'http://127.0.0.1:8002'
