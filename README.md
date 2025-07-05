@@ -60,6 +60,12 @@ DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= do
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
 GPU warnings. Adjust or remove this variable if you need more detailed logs.
 
+When both TensorFlow and PyTorch start in the same container you might see
+messages like `Unable to register cuDNN factory` or `computation placer already
+registered`. These warnings appear because each framework loads CUDA plugins and
+tries to register them more than once. They are not fatal errors and can be
+safely ignored. Using the CPU Dockerfile avoids these messages entirely.
+
 ## Docker Compose logs
 
 Просмотреть вывод контейнеров можно через `docker compose logs` (или
