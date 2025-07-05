@@ -51,4 +51,22 @@ def test_model_builder_imports_without_mlflow(monkeypatch):
     gym_stub.spaces = types.ModuleType('spaces')
     monkeypatch.setitem(sys.modules, 'gymnasium', gym_stub)
     monkeypatch.setitem(sys.modules, 'mlflow', None)
+    sk_mod = types.ModuleType('sklearn')
+    preproc = types.ModuleType('sklearn.preprocessing')
+    preproc.StandardScaler = object
+    sk_mod.preprocessing = preproc
+    linear_mod = types.ModuleType('sklearn.linear_model')
+    linear_mod.LogisticRegression = object
+    metrics_mod = types.ModuleType('sklearn.metrics')
+    metrics_mod.brier_score_loss = lambda *a, **k: 0.0
+    calib_mod = types.ModuleType('sklearn.calibration')
+    calib_mod.calibration_curve = lambda *a, **k: ([], [])
+    sk_mod.linear_model = linear_mod
+    sk_mod.metrics = metrics_mod
+    sk_mod.calibration = calib_mod
+    monkeypatch.setitem(sys.modules, 'sklearn', sk_mod)
+    monkeypatch.setitem(sys.modules, 'sklearn.preprocessing', preproc)
+    monkeypatch.setitem(sys.modules, 'sklearn.linear_model', linear_mod)
+    monkeypatch.setitem(sys.modules, 'sklearn.metrics', metrics_mod)
+    monkeypatch.setitem(sys.modules, 'sklearn.calibration', calib_mod)
     importlib.import_module('model_builder')

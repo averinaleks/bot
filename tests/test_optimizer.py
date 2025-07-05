@@ -32,6 +32,7 @@ optuna_mod = types.ModuleType('optuna')
 optuna_samplers = types.ModuleType('optuna.samplers')
 optuna_samplers.TPESampler = object
 optuna_mod.samplers = optuna_samplers
+optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(optimize=lambda *a, **k: None, best_params={})
 optuna_exceptions = types.ModuleType('optuna.exceptions')
 class ExperimentalWarning(Warning):
     pass
@@ -43,6 +44,7 @@ sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
 
 from optimizer import ParameterOptimizer  # noqa: E402
+sys.modules.pop("optimizer", None)
 
 
 utils = types.ModuleType('utils')
@@ -87,3 +89,6 @@ def test_get_opt_interval_zero_threshold():
     interval = opt_zero.get_opt_interval("BTCUSDT", 0.01)
     assert interval >= 1800
 
+sys.modules.pop('optuna', None)
+sys.modules.pop('optuna.exceptions', None)
+sys.modules.pop('optuna.samplers', None)
