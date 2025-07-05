@@ -163,3 +163,36 @@ async def test_custom_n_splits(monkeypatch):
     opt = ParameterOptimizer(config, DummyDataHandler(df))
     await opt.optimize('BTCUSDT')
     assert captured['val'] == config.n_splits
+
+@pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
+@pytest.mark.asyncio
+async def test_custom_n_splits_three(monkeypatch):
+    df = make_df()
+    config = BotConfig(
+        timeframe='1m',
+        optuna_trials=1,
+        optimization_interval=1,
+        volatility_threshold=0.02,
+        n_splits=3,
+        ema30_period=30,
+        ema100_period=100,
+        ema200_period=200,
+        atr_period_default=14,
+        tp_multiplier=2.0,
+        sl_multiplier=1.0,
+        base_probability_threshold=0.5,
+        loss_streak_threshold=2,
+        win_streak_threshold=2,
+        threshold_adjustment=0.05,
+        mlflow_enabled=False,
+    )
+    captured = {}
+
+    def dummy_remote(*args, **kwargs):
+        captured['val'] = args[-1]
+        return 0.0
+
+    monkeypatch.setattr(optimizer._objective_remote, 'remote', dummy_remote)
+    opt = ParameterOptimizer(config, DummyDataHandler(df))
+    await opt.optimize('BTCUSDT')
+    assert captured['val'] == config.n_splits
