@@ -172,3 +172,29 @@ def test_check_services_failure():
             p.terminate()
         for p in processes:
             p.join()
+
+
+def test_check_services_host_only():
+    import trading_bot  # noqa: E402
+    os.environ['HOST'] = '127.0.0.1'
+    for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
+        os.environ.pop(var, None)
+    os.environ.update({
+        'SERVICE_CHECK_RETRIES': '2',
+        'SERVICE_CHECK_DELAY': '0.1',
+    })
+    processes = [
+        ctx.Process(target=_run_dh),
+        ctx.Process(target=_run_mb),
+        ctx.Process(target=_run_tm),
+    ]
+    for p in processes:
+        p.start()
+    time.sleep(1)
+    try:
+        trading_bot.check_services()
+    finally:
+        for p in processes:
+            p.terminate()
+        for p in processes:
+            p.join()
