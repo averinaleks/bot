@@ -28,6 +28,7 @@ import psutil
 import ray
 from flask import Flask, jsonify
 from optimizer import ParameterOptimizer
+from dotenv import load_dotenv
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
@@ -1356,6 +1357,7 @@ def ping():
 
 
 if __name__ == "__main__":
+    load_dotenv()
     port = int(os.environ.get("PORT", "8000"))
     host = os.environ.get("HOST", "0.0.0.0")
     logger.info("Starting DataHandler service on %s:%s", host, port)

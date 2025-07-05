@@ -13,6 +13,7 @@ from config import BotConfig
 from collections import deque
 import ray
 from utils import logger, check_dataframe_empty, HistoricalDataCache
+from dotenv import load_dotenv
 try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
     from gymnasium import spaces  # type: ignore
@@ -998,6 +999,7 @@ def ping():
 
 
 if __name__ == "__main__":
+    load_dotenv()
     _load_model()
     port = int(os.environ.get("PORT", "8001"))
     host = os.environ.get("HOST", "0.0.0.0")
