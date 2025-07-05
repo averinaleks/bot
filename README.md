@@ -38,18 +38,15 @@
   - `max_symbols` задаёт количество наиболее ликвидных торговых пар, которые бот выберет из доступных.
    - `max_subscriptions_per_connection` определяет, сколько символов подписывается через одно WebSocket‑соединение.
    - `telegram_queue_size` ограничивает размер очереди сообщений Telegram.
-4. Запустите бота:
-  ```bash
-  python trading_bot.py
-  ```
-  Перед запуском убедитесь, что сервисы `data_handler`, `model_builder` и
-  `trade_manager` отвечают на `/ping`. В Docker Compose это происходит
-  автоматически через встроенные health check'и, так что дополнительных
-  настроек не требуется.
-  При запуске вне Compose бот использует функцию `check_services`, которая
-  повторяет запросы к `/ping`. Количество попыток и пауза между ними
-  настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
-
+4. Запустите бота. При локальном запуске без Docker Compose задайте адреса сервисов переменными `DATA_HANDLER_URL`, `MODEL_BUILDER_URL` и `TRADE_MANAGER_URL`:
+```bash
+DATA_HANDLER_URL=http://localhost:8000 \
+MODEL_BUILDER_URL=http://localhost:8001 \
+TRADE_MANAGER_URL=http://localhost:8002 \
+python trading_bot.py
+```
+Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
+Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
 В зависимости от версии Docker команда может называться `docker compose` или
 `docker-compose`.
