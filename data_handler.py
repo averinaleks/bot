@@ -905,7 +905,7 @@ class DataHandler:
                 if attempts >= max_attempts:
                     raise
                 await asyncio.sleep(delay)
-                raise
+                continue
 
     async def _read_messages(
         self,
