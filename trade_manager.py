@@ -28,6 +28,7 @@ import os
 import time
 from typing import Dict, Optional, Tuple
 import shutil
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 import threading
 
@@ -1202,6 +1203,7 @@ def ping():
 
 
 if __name__ == "__main__":
+    load_dotenv()
     port = int(os.environ.get("PORT", "8002"))
     host = os.environ.get("HOST", "0.0.0.0")
     logger.info("Initializing TradeManager")
