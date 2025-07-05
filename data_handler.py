@@ -101,7 +101,9 @@ class IndicatorsCache:
         self.config = config
         self.volatility = volatility
         self.last_volume_profile_update = 0
-        self.volume_profile_update_interval = 5
+        self.volume_profile_update_interval = config.get(
+            "volume_profile_update_interval", 300
+        )
         try:
             if timeframe == "primary":
                 close_np = df["close"].to_numpy()

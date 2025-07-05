@@ -32,7 +32,10 @@ mlflow_mod.MLflowCallback = object
 sys.modules.setdefault('optuna.integration.mlflow', mlflow_mod)
 optuna_mod = types.ModuleType('optuna')
 optuna_samplers = types.ModuleType('optuna.samplers')
-optuna_samplers.TPESampler = object
+class _TPESampler:
+    def __init__(self, *a, **k):
+        pass
+optuna_samplers.TPESampler = _TPESampler
 optuna_mod.samplers = optuna_samplers
 sys.modules.setdefault('optuna', optuna_mod)
 sys.modules.setdefault('optuna.samplers', optuna_samplers)
