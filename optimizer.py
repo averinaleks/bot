@@ -43,12 +43,12 @@ def _objective_remote(
     ema200_period,
     atr_period_default,
     timeframe,
+    n_splits=5,
 ):
     """Heavy part of objective executed remotely."""
     try:
         from data_handler import IndicatorsCache
 
-        n_splits = 5
         train_size = int(0.6 * len(df))
         test_size = int(0.2 * len(df))
         sharpe_ratios = []
@@ -148,6 +148,7 @@ class ParameterOptimizer:
             symbol: 0.0 for symbol in data_handler.usdt_pairs
         }  # Для отслеживания изменений волатильности
         self.max_trials = config.get("optuna_trials", 20)
+        self.n_splits = config.get("n_splits", 5)
         self.mlflow_enabled = config.get("mlflow_enabled", False)
         self.mlflow_tracking_uri = config.get("mlflow_tracking_uri", "mlruns")
         if self.mlflow_enabled and MLflowCallback is None:
@@ -351,6 +352,7 @@ class ParameterOptimizer:
                 ema200_period,
                 atr_period_default,
                 self.config["timeframe"],
+                self.n_splits,
             )
         except Exception as e:
             logger.exception("Ошибка в objective для %s: %s", symbol, e)
@@ -360,10 +362,11 @@ class ParameterOptimizer:
         """Refine best parameters using GridSearchCV for reliability."""
 
         class _Estimator(BaseEstimator):
-            def __init__(self, df, symbol, timeframe):
+            def __init__(self, df, symbol, timeframe, n_splits):
                 self.df = df
                 self.symbol = symbol
                 self.timeframe = timeframe
+                self.n_splits = n_splits
 
             def fit(self, X=None, y=None):
                 obj_fn = getattr(_objective_remote, "remote", _objective_remote)
@@ -379,6 +382,7 @@ class ParameterOptimizer:
                         self.ema200_period,
                         self.atr_period_default,
                         self.timeframe,
+                        self.n_splits,
                     )
                 )
                 logger.debug("Received grid search result for %s", self.symbol)
@@ -387,7 +391,7 @@ class ParameterOptimizer:
             def score(self, X=None, y=None):
                 return self.score_
 
-        estimator = _Estimator(df, symbol, self.config["timeframe"])
+        estimator = _Estimator(df, symbol, self.config["timeframe"], self.n_splits)
         param_grid = {
             "ema30_period": [
                 max(10, base_params["ema30_period"] - 5),
