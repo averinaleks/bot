@@ -7,6 +7,8 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8000 data_handler:api_app
     runtime: nvidia
+    ports:
+      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 5s
@@ -21,6 +23,8 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8001 model_builder:api_app
     runtime: nvidia
+    ports:
+      - "8001:8001"
     environment:
       - TF_CPP_MIN_LOG_LEVEL=3
     healthcheck:
@@ -37,6 +41,8 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8002 trade_manager:api_app
     runtime: nvidia
+    ports:
+      - "8002:8002"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
       interval: 5s
