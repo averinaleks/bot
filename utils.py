@@ -51,7 +51,11 @@ async def handle_rate_limits(exchange) -> None:
     if remaining and remaining <= 5:
         wait_time = max(0.0, reset_ts / 1000 - time.time())
         if wait_time > 0:
-            logger.info(f"Rate limit low ({remaining}), sleeping {wait_time:.2f}s")
+            logger.info(
+                "Rate limit low (%s), sleeping %.2fs",
+                remaining,
+                wait_time,
+            )
             await asyncio.sleep(wait_time)
 
 
@@ -74,7 +78,7 @@ async def safe_api_call(exchange, method: str, *args, **kwargs):
 
             return result
         except Exception as exc:
-            logger.error(f"Bybit API error in {method}: {exc}")
+            logger.error("Bybit API error in %s: %s", method, exc)
             if "10002" in str(exc):
                 logger.error(
                     "Request not authorized. Check server time sync and recv_window"
@@ -303,7 +307,8 @@ class TelegramLogger(logging.Handler):
                 and time.time() - self.last_message_time < self.message_interval
             ):
                 logger.debug(
-                    f"Сообщение Telegram пропущено из-за интервала: {message[:100]}..."
+                    "Сообщение Telegram пропущено из-за интервала: %s...",
+                    message[:100],
                 )
                 return
 
@@ -326,33 +331,37 @@ class TelegramLogger(logging.Handler):
                         break
                     except RetryAfter as e:
                         wait_time = getattr(e, "retry_after", delay)
-                        logger.warning(f"Flood control: ожидание {wait_time}с")
+                        logger.warning(
+                            "Flood control: ожидание %sс",
+                            wait_time,
+                        )
                         await asyncio.sleep(wait_time)
                         delay = min(delay * 2, 60)
                     except httpx.ConnectError as e:
                         logger.warning(
-                            f"Ошибка соединения Telegram: {e}. Попытка {attempt + 1}/5"
+                            "Ошибка соединения Telegram: %s. Попытка %s/5",
+                            e,
+                            attempt + 1,
                         )
                         if attempt < 4:
                             await asyncio.sleep(delay)
                             delay = min(delay * 2, 60)
                     except BadRequest as e:
-                        logger.error(
-                            f"BadRequest Telegram: {e}. Проверьте chat_id"
-                        )
+                        logger.error("BadRequest Telegram: %s. Проверьте chat_id", e)
                         break
                     except Forbidden as e:
                         logger.error(
-                            f"Forbidden Telegram: {e}. Проверьте токен и chat_id"
+                            "Forbidden Telegram: %s. Проверьте токен и chat_id",
+                            e,
                         )
                         break
                     except httpx.HTTPError as e:
-                        logger.error(f"HTTP ошибка Telegram: {e}")
+                        logger.error("HTTP ошибка Telegram: %s", e)
                         break
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
-                        logger.exception(f"Ошибка отправки сообщения Telegram: {e}")
+                        logger.exception("Ошибка отправки сообщения Telegram: %s", e)
                         return
 
     async def send_telegram_message(self, message, urgent: bool = False):
@@ -381,7 +390,7 @@ class TelegramLogger(logging.Handler):
                         daemon=True,
                     ).start()
         except Exception as e:
-            logger.error(f"Ошибка в TelegramLogger: {e}")
+            logger.error("Ошибка в TelegramLogger: %s", e)
 
     @classmethod
     async def shutdown(cls):
@@ -420,7 +429,7 @@ class TelegramUpdateListener:
             with open(self.offset_file, "w", encoding="utf-8") as f:
                 f.write(str(self.offset))
         except Exception as exc:
-            logger.error(f"Ошибка сохранения offset Telegram: {exc}")
+            logger.error("Ошибка сохранения offset Telegram: %s", exc)
 
     async def listen(self, handler):
         while not self._stop_event.is_set():
@@ -437,7 +446,7 @@ class TelegramUpdateListener:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.error(f"Ошибка получения обновлений Telegram: {exc}")
+                logger.error("Ошибка получения обновлений Telegram: %s", exc)
                 await asyncio.sleep(5)
 
     def stop(self) -> None:
@@ -447,18 +456,25 @@ class TelegramUpdateListener:
 def check_dataframe_empty(df, context: str = "") -> bool:
     try:
         if df is None:
-            logger.warning(f"DataFrame является None в контексте: {context}")
+            logger.warning("DataFrame является None в контексте: %s", context)
             return True
         if isinstance(df, pd.DataFrame):
             if df.empty:
-                logger.warning(f"DataFrame пуст в контексте: {context}")
+                logger.warning("DataFrame пуст в контексте: %s", context)
                 return True
             if df.isna().all().all():
-                logger.warning(f"DataFrame содержит только NaN в контексте: {context}")
+                logger.warning(
+                    "DataFrame содержит только NaN в контексте: %s",
+                    context,
+                )
                 return True
         return False
     except (KeyError, AttributeError, TypeError) as e:
-        logger.error(f"Ошибка проверки DataFrame в контексте {context}: {e}")
+        logger.error(
+            "Ошибка проверки DataFrame в контексте %s: %s",
+            context,
+            e,
+        )
         return True
 
 
@@ -483,7 +499,8 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
     try:
         if len(df[column].dropna()) < 3:
             logger.warning(
-                f"Недостаточно данных для z-оценки в {column}, возвращается исходный DataFrame"
+                "Недостаточно данных для z-оценки в %s, возвращается исходный DataFrame",
+                column,
             )
             return df
         z_scores = zscore(df[column].dropna())
@@ -492,11 +509,14 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
         df_filtered = df[np.abs(z_scores) <= adjusted_threshold]
         if len(df_filtered) < len(df):
             logger.info(
-                f"Удалено {len(df) - len(df_filtered)} аномалий в {column} с z-оценкой, порог={adjusted_threshold:.2f}"
+                "Удалено %s аномалий в %s с z-оценкой, порог=%.2f",
+                len(df) - len(df_filtered),
+                column,
+                adjusted_threshold,
             )
         return df_filtered
     except (KeyError, TypeError) as e:
-        logger.error(f"Ошибка фильтрации аномалий в {column}: {e}")
+        logger.error("Ошибка фильтрации аномалий в %s: %s", column, e)
         return df
 
 
@@ -521,7 +541,7 @@ def calculate_volume_profile(prices, volumes, bins=50):
     try:
         return _calculate_volume_profile(prices, volumes, bins)
     except (ValueError, TypeError) as exc:
-        logger.error(f"Ошибка вычисления профиля объема: {exc}")
+        logger.error("Ошибка вычисления профиля объема: %s", exc)
         return np.zeros(bins)
 
 
@@ -552,7 +572,8 @@ class HistoricalDataCache:
         disk_usage = shutil.disk_usage(self.cache_dir)
         if disk_usage.free / (1024**3) < 0.5:
             logger.warning(
-                f"Недостаточно свободного места на диске: {disk_usage.free / (1024 ** 3):.2f} ГБ"
+                "Недостаточно свободного места на диске: %.2f ГБ",
+                disk_usage.free / (1024 ** 3),
             )
             self._aggressive_clean()
             return False
@@ -563,7 +584,7 @@ class HistoricalDataCache:
         available_mb = memory.available / (1024 * 1024)
         used_percent = memory.percent
         if used_percent > self.memory_threshold * 100:
-            logger.warning(f"Высокая загрузка памяти: {used_percent:.1f}%")
+            logger.warning("Высокая загрузка памяти: %.1f%%", used_percent)
             self._aggressive_clean()
         return (
             self.current_cache_size_mb + additional_size_mb
@@ -587,16 +608,19 @@ class HistoricalDataCache:
                 os.remove(file_path)
                 self.current_cache_size_mb -= file_size_mb
                 logger.info(
-                    f"Удален файл кэша (агрессивная очистка): {file_name}, освобождено {file_size_mb:.2f} МБ"
+                    "Удален файл кэша (агрессивная очистка): %s, освобождено %.2f МБ",
+                    file_name,
+                    file_size_mb,
                 )
         except OSError as e:
-            logger.error(f"Ошибка агрессивной очистки кэша: {e}")
+            logger.error("Ошибка агрессивной очистки кэша: %s", e)
 
     def _check_buffer_size(self):
         buffer_size_mb = self._calculate_cache_size()
         if buffer_size_mb > self.max_buffer_size_mb:
             logger.warning(
-                f"Дисковый буфер превысил лимит {self.max_buffer_size_mb} МБ, очистка"
+                "Дисковый буфер превысил лимит %s МБ, очистка",
+                self.max_buffer_size_mb,
             )
             self._aggressive_clean()
 
@@ -605,7 +629,9 @@ class HistoricalDataCache:
             safe_symbol = sanitize_symbol(symbol)
             if not self._check_disk_space():
                 logger.error(
-                    f"Невозможно кэшировать {symbol}_{timeframe}: нехватка места на диске"
+                    "Невозможно кэшировать %s_%s: нехватка места на диске",
+                    symbol,
+                    timeframe,
                 )
                 return
             filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
@@ -619,12 +645,16 @@ class HistoricalDataCache:
             os.remove(temp_filename)
             if not self._check_memory(file_size_mb):
                 logger.warning(
-                    f"Недостаточно памяти для кэширования {symbol}_{timeframe}, очистка кэша"
+                    "Недостаточно памяти для кэширования %s_%s, очистка кэша",
+                    symbol,
+                    timeframe,
                 )
                 self._aggressive_clean()
                 if not self._check_memory(file_size_mb):
                     logger.error(
-                        f"Невозможно кэшировать {symbol}_{timeframe}: нехватка памяти"
+                        "Невозможно кэшировать %s_%s: нехватка памяти",
+                        symbol,
+                        timeframe,
                     )
                     return
             self._check_buffer_size()
@@ -635,14 +665,19 @@ class HistoricalDataCache:
             elapsed_time = time.time() - start_time
             if elapsed_time > 0.5:
                 logger.warning(
-                    f"Высокая задержка сжатия gzip для {symbol}_{timeframe}: {elapsed_time:.2f} сек"
+                    "Высокая задержка сжатия gzip для %s_%s: %.2f сек",
+                    symbol,
+                    timeframe,
+                    elapsed_time,
                 )
             logger.info(
-                f"Данные кэшированы (gzip): {filename}, размер {compressed_size_mb:.2f} МБ"
+                "Данные кэшированы (gzip): %s, размер %.2f МБ",
+                filename,
+                compressed_size_mb,
             )
             self._aggressive_clean()
         except Exception as e:
-            logger.error(f"Ошибка сохранения кэша для {symbol}_{timeframe}: {e}")
+            logger.error("Ошибка сохранения кэша для %s_%s: %s", symbol, timeframe, e)
 
     def load_cached_data(self, symbol, timeframe):
         try:
@@ -651,7 +686,7 @@ class HistoricalDataCache:
             old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
-                    logger.info(f"Кэш для {symbol}_{timeframe} устарел, удаление")
+                    logger.info("Кэш для %s_%s устарел, удаление", symbol, timeframe)
                     os.remove(filename)
                     return None
                 start_time = time.time()
@@ -659,26 +694,37 @@ class HistoricalDataCache:
                     data = pickle.load(f)
                 if not isinstance(data, pd.DataFrame):
                     logger.error(
-                        f"Неверный тип данных в кэше {symbol}_{timeframe}: {type(data)}"
+                        "Неверный тип данных в кэше %s_%s: %s",
+                        symbol,
+                        timeframe,
+                        type(data),
                     )
                     os.remove(filename)
                     return None
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(
-                        f"Высокая задержка чтения gzip для {symbol}_{timeframe}: {elapsed_time:.2f} сек"
+                        "Высокая задержка чтения gzip для %s_%s: %.2f сек",
+                        symbol,
+                        timeframe,
+                        elapsed_time,
                     )
-                logger.info(f"Данные загружены из кэша (gzip): {filename}")
+                logger.info("Данные загружены из кэша (gzip): %s", filename)
                 return data
             if os.path.exists(old_filename):
                 logger.info(
-                    f"Обнаружен старый кэш для {symbol}_{timeframe}, конвертация в gzip"
+                    "Обнаружен старый кэш для %s_%s, конвертация в gzip",
+                    symbol,
+                    timeframe,
                 )
                 with open(old_filename, "rb") as f:
                     data = pickle.load(f)
                 if not isinstance(data, pd.DataFrame):
                     logger.error(
-                        f"Неверный тип данных в старом кэше {symbol}_{timeframe}: {type(data)}"
+                        "Неверный тип данных в старом кэше %s_%s: %s",
+                        symbol,
+                        timeframe,
+                        type(data),
                     )
                     os.remove(old_filename)
                     return None
@@ -687,7 +733,7 @@ class HistoricalDataCache:
                 return data
             return None
         except Exception as e:
-            logger.error(f"Ошибка загрузки кэша для {symbol}_{timeframe}: {e}")
+            logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
             for f in (filename, old_filename):
                 try:
                     if os.path.exists(f):

@@ -499,7 +499,7 @@ class ModelBuilder:
     async def retrain_symbol(self, symbol):
         indicators = self.data_handler.indicators.get(symbol)
         if not indicators:
-            logger.warning(f"Нет индикаторов для {symbol}")
+            logger.warning("Нет индикаторов для %s", symbol)
             return
         features = await self.prepare_lstm_features(symbol, indicators)
         required_len = self.config['lstm_timesteps'] * 2
@@ -521,7 +521,10 @@ class ModelBuilder:
                 indicators = self.data_handler.indicators.get(sym)
                 features = await self.prepare_lstm_features(sym, indicators)
         if len(features) < required_len:
-            logger.warning(f"Недостаточно данных для обучения {symbol}")
+            logger.warning(
+                "Недостаточно данных для обучения %s",
+                symbol,
+            )
             return
         X = np.array([features[i:i + self.config['lstm_timesteps']] for i in range(len(features) - self.config['lstm_timesteps'])])
         price_now = features[:-self.config['lstm_timesteps'], 0]
@@ -611,7 +614,12 @@ class ModelBuilder:
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         await self.compute_shap_values(symbol, model, X)
-        logger.info(f"Модель {self.model_type} обучена для {symbol}, Brier={brier:.4f}")
+        logger.info(
+            "Модель %s обучена для %s, Brier=%.4f",
+            self.model_type,
+            symbol,
+            brier,
+        )
         await self.data_handler.telegram_logger.send_telegram_message(
             f"🎯 {symbol} обучен. Brier={brier:.4f}")
 
@@ -704,7 +712,7 @@ class ModelBuilder:
             top_idx = np.argsort(mean_abs)[-3:][::-1]
             top_feats = {feature_names[i]: float(mean_abs[i]) for i in top_idx}
             self.shap_cache_times[symbol] = time.time()
-            logger.info(f"SHAP значения для {symbol}: {top_feats}")
+            logger.info("SHAP значения для %s: %s", symbol, top_feats)
             await self.data_handler.telegram_logger.send_telegram_message(
                 f"🔍 SHAP {symbol}: {top_feats}")
         except Exception as e:
@@ -841,7 +849,7 @@ class RLAgent:
     async def train_symbol(self, symbol: str):
         indicators = self.data_handler.indicators.get(symbol)
         if not indicators:
-            logger.warning(f"Нет индикаторов для RL-обучения {symbol}")
+            logger.warning("Нет индикаторов для RL-обучения %s", symbol)
             return
         features_df = await self._prepare_features(symbol, indicators)
         if check_dataframe_empty(features_df, f"rl_train {symbol}") or len(features_df) < 2:
@@ -909,7 +917,7 @@ class RLAgent:
                 model = PPO("MlpPolicy", env, verbose=0)
             model.learn(total_timesteps=timesteps)
             self.models[symbol] = model
-        logger.info(f"RL-модель обучена для {symbol}")
+        logger.info("RL-модель обучена для %s", symbol)
 
     async def train(self):
         for symbol in self.data_handler.usdt_pairs:

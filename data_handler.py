@@ -287,7 +287,10 @@ class DataHandler:
         try:
             markets = await safe_api_call(self.exchange, "load_markets")
             self.usdt_pairs = await self.select_liquid_pairs(markets)
-            logger.info(f"Найдено {len(self.usdt_pairs)} USDT-пар с высокой ликвидностью")
+            logger.info(
+                "Найдено %s USDT-пар с высокой ликвидностью",
+                len(self.usdt_pairs),
+            )
             tasks = []
             history_limit = self.config.get("min_data_length", 200)
             for symbol in self.usdt_pairs:
@@ -376,7 +379,13 @@ class DataHandler:
                 limit=limit,
             )
             if not ohlcv or len(ohlcv) < limit * 0.8:
-                logger.warning(f"Неполные данные OHLCV для {symbol} ({timeframe}), получено {len(ohlcv)} из {limit}")
+                logger.warning(
+                    "Неполные данные OHLCV для %s (%s), получено %s из %s",
+                    symbol,
+                    timeframe,
+                    len(ohlcv),
+                    limit,
+                )
                 return symbol, pd.DataFrame()
             df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
@@ -387,14 +396,19 @@ class DataHandler:
                 df = filter_outliers_zscore(df, "close")
             if df["close"].isna().sum() / len(df) > 0.05:
                 logger.warning(
-                    f"Слишком много пропусков в данных для {symbol} ({timeframe}) (>5%), использование forward-fill"
+                    "Слишком много пропусков в данных для %s (%s) (>5%), использование forward-fill",
+                    symbol,
+                    timeframe,
                 )
                 df = df.fillna(method="ffill")
             time_diffs = df.index.to_series().diff().dt.total_seconds()
             max_gap = pd.Timedelta(timeframe).total_seconds() * 2
             if time_diffs.max() > max_gap:
                 logger.warning(
-                    f"Обнаружен значительный разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                    "Обнаружен значительный разрыв в данных для %s (%s): %.2f минут",
+                    symbol,
+                    timeframe,
+                    time_diffs.max() / 60,
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"⚠️ Разрыв в данных для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
@@ -494,7 +508,10 @@ class DataHandler:
                 limit=10,
             )
             if not orderbook["bids"] or not orderbook["asks"]:
-                logger.warning(f"Пустая книга ордеров для {symbol}, повторная попытка")
+                logger.warning(
+                    "Пустая книга ордеров для %s, повторная попытка",
+                    symbol,
+                )
                 raise Exception("Пустой ордербук")
             return orderbook
         except (KeyError, ValueError) as e:
@@ -512,10 +529,18 @@ class DataHandler:
     ):
         try:
             if check_dataframe_empty(df, f"synchronize_and_update {symbol} {timeframe}"):
-                logger.warning(f"Пустой DataFrame для {symbol} ({timeframe}), пропуск синхронизации")
+                logger.warning(
+                    "Пустой DataFrame для %s (%s), пропуск синхронизации",
+                    symbol,
+                    timeframe,
+                )
                 return
             if df["close"].isna().any() or (df["close"] <= 0).any():
-                logger.warning(f"Некорректные данные для {symbol} ({timeframe}), пропуск")
+                logger.warning(
+                    "Некорректные данные для %s (%s), пропуск",
+                    symbol,
+                    timeframe,
+                )
                 return
             if timeframe == "primary":
                 async with self.ohlcv_lock:
@@ -618,7 +643,10 @@ class DataHandler:
             filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.joblib")
             joblib.dump((priority, item), filename)
             self.disk_buffer.put(filename)
-            logger.info(f"Сообщение сохранено в дисковый буфер: {filename}")
+            logger.info(
+                "Сообщение сохранено в дисковый буфер: %s",
+                filename,
+            )
         except (OSError, ValueError) as e:
             logger.error("Ошибка сохранения в дисковый буфер: %s", e)
 
@@ -629,7 +657,10 @@ class DataHandler:
                 priority, item = joblib.load(filename)
                 await self.ws_queue.put((priority, item))
                 os.remove(filename)
-                logger.info(f"Сообщение загружено из дискового буфера: {filename}")
+                logger.info(
+                    "Сообщение загружено из дискового буфера: %s",
+                    filename,
+                )
             except (OSError, ValueError) as e:
                 logger.error("Ошибка загрузки из дискового буфера: %s", e)
 
@@ -645,12 +676,19 @@ class DataHandler:
         if cpu_load > self.load_threshold * 100 or memory_load > self.load_threshold * 100:
             new_max = max(10, self.max_subscriptions // 2)
             logger.warning(
-                f"Высокая нагрузка (CPU: {cpu_load}%, Memory: {memory_load}%), уменьшение подписок до {new_max}"
+                "Высокая нагрузка (CPU: %s%%, Memory: %s%%), уменьшение подписок до %s",
+                cpu_load,
+                memory_load,
+                new_max,
             )
             self.max_subscriptions = new_max
         elif current_rate < self.ws_min_process_rate:
             new_max = max(10, int(self.max_subscriptions * 0.8))
-            logger.warning(f"Низкая скорость обработки ({current_rate:.2f}/s), уменьшение подписок до {new_max}")
+            logger.warning(
+                "Низкая скорость обработки (%.2f/s), уменьшение подписок до %s",
+                current_rate,
+                new_max,
+            )
             self.max_subscriptions = new_max
         elif (
             cpu_load < self.load_threshold * 50
@@ -658,7 +696,10 @@ class DataHandler:
             and current_rate > self.ws_min_process_rate * 1.5
         ):
             new_max = min(100, self.max_subscriptions * 2)
-            logger.info(f"Низкая нагрузка, увеличение подписок до {new_max}")
+            logger.info(
+                "Низкая нагрузка, увеличение подписок до %s",
+                new_max,
+            )
             self.max_subscriptions = new_max
 
     async def subscribe_to_klines(self, symbols: List[str]):
@@ -790,7 +831,9 @@ class DataHandler:
                 await asyncio.sleep(delay)
                 if reconnect_attempts >= max_reconnect_attempts:
                     logger.error(
-                        f"Не удалось восстановить подписку CCXT Pro для {symbol} ({label})"
+                        "Не удалось восстановить подписку CCXT Pro для %s (%s)",
+                        symbol,
+                        label,
                     )
                     raise
 
@@ -829,7 +872,7 @@ class DataHandler:
                     self.ws_pool[url].append(ws)
                 else:
                     ws = self.ws_pool[url].pop(0)
-                logger.info(f"Подключение к WebSocket {url}")
+                logger.info("Подключение к WebSocket %s", url)
                 return ws
             except OSError as e:
                 attempts += 1
@@ -925,7 +968,10 @@ class DataHandler:
                     self.ws_latency[symbol] = latency
                 if latency > 5:
                     logger.warning(
-                        f"Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
+                        "Высокая задержка WebSocket для %s (%s): %.2f сек",
+                        symbols,
+                        timeframe,
+                        latency,
                     )
                     await self.telegram_logger.send_telegram_message(
                         f"⚠️ Высокая задержка WebSocket для {symbols} ({timeframe}): {latency:.2f} сек"
@@ -966,11 +1012,20 @@ class DataHandler:
                     await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
                     continue
             except asyncio.TimeoutError:
-                logger.warning(f"Тайм-аут WebSocket для {symbols} ({timeframe}), отправка пинга")
+                logger.warning(
+                    "Тайм-аут WebSocket для %s (%s), отправка пинга",
+                    symbols,
+                    timeframe,
+                )
                 await ws.ping()
                 continue
             except websockets.exceptions.ConnectionClosed as e:
-                logger.error(f"WebSocket соединение закрыто для {symbols} ({timeframe}): {e}")
+                logger.error(
+                    "WebSocket соединение закрыто для %s (%s): %s",
+                    symbols,
+                    timeframe,
+                    e,
+                )
                 break
             except Exception as e:
                 logger.exception(
@@ -1033,20 +1088,30 @@ class DataHandler:
                     self.restart_attempts += 1
                     if self.restart_attempts >= self.max_restart_attempts:
                         logger.critical(
-                            f"Превышено максимальное количество перезапусков WebSocket для {symbols} ({timeframe})"
+                            "Превышено максимальное количество перезапусков WebSocket для %s (%s)",
+                            symbols,
+                            timeframe,
                         )
                         await self.telegram_logger.send_telegram_message(
                             f"Критическая ошибка: Не удалось восстановить WebSocket для {symbols} ({timeframe})"
                         )
                         break
                     logger.info(
-                        f"Автоматический перезапуск WebSocket для {symbols} ({timeframe}), попытка {self.restart_attempts}/{self.max_restart_attempts}"
+                        "Автоматический перезапуск WebSocket для %s (%s), попытка %s/%s",
+                        symbols,
+                        timeframe,
+                        self.restart_attempts,
+                        self.max_restart_attempts,
                     )
                     reconnect_attempts = 0
                     current_url_index = 0
                     await asyncio.sleep(60)
                 else:
-                    logger.info(f"Попытка загрузки данных через REST API для {symbols} ({timeframe})")
+                    logger.info(
+                        "Попытка загрузки данных через REST API для %s (%s)",
+                        symbols,
+                        timeframe,
+                    )
                     for symbol in symbols:
                         try:
                             symbol_df = await self.fetch_ohlcv_single(
@@ -1102,17 +1167,28 @@ class DataHandler:
                     or "data" not in data
                     or not isinstance(data["data"], list)
                 ):
-                    logger.debug(f"Error in message format for {symbols}: {message}")
+                    logger.debug(
+                        "Error in message format for %s: %s",
+                        symbols,
+                        message,
+                    )
                     continue
                 topic = data.get("topic", "")
                 symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                 if not symbol:
-                    logger.debug(f"Symbol not found in topic for message: {message}")
+                    logger.debug(
+                        "Symbol not found in topic for message: %s",
+                        message,
+                    )
                     continue
                 for entry in data["data"]:
                     required_fields = ["start", "open", "high", "low", "close", "volume"]
                     if not all(field in entry for field in required_fields):
-                        logger.warning(f"Invalid kline data ({timeframe}): {entry}")
+                        logger.warning(
+                            "Invalid kline data (%s): %s",
+                            timeframe,
+                            entry,
+                        )
                         continue
                     try:
                         kline_timestamp = pd.to_datetime(int(entry["start"]), unit="ms", utc=True)
@@ -1122,7 +1198,12 @@ class DataHandler:
                         close_price = float(entry["close"])
                         volume = float(entry["volume"])
                     except (ValueError, TypeError) as e:
-                        logger.warning(f"Ошибка формата данных свечи для {symbol} ({timeframe}): {e}")
+                        logger.warning(
+                            "Ошибка формата данных свечи для %s (%s): %s",
+                            symbol,
+                            timeframe,
+                            e,
+                        )
                         continue
                     timestamp_dict = (
                         self.processed_timestamps if timeframe == "primary" else self.processed_timestamps_2h
@@ -1133,7 +1214,10 @@ class DataHandler:
                             timestamp_dict[symbol] = set()
                         if entry["start"] in timestamp_dict[symbol]:
                             logger.debug(
-                                f"Дубликат сообщения для {symbol} ({timeframe}) с временной меткой {kline_timestamp}"
+                                "Дубликат сообщения для %s (%s) с временной меткой %s",
+                                symbol,
+                                timeframe,
+                                kline_timestamp,
                             )
                             continue
                         timestamp_dict[symbol].add(entry["start"])
@@ -1141,7 +1225,12 @@ class DataHandler:
                             timestamp_dict[symbol] = set(list(timestamp_dict[symbol])[-500:])
                     current_time = pd.Timestamp.now(tz="UTC")
                     if (current_time - kline_timestamp).total_seconds() > 5:
-                        logger.warning(f"Получены устаревшие данные для {symbol} ({timeframe}): {kline_timestamp}")
+                        logger.warning(
+                            "Получены устаревшие данные для %s (%s): %s",
+                            symbol,
+                            timeframe,
+                            kline_timestamp,
+                        )
                         continue
                     try:
                         df = pd.DataFrame(
@@ -1159,7 +1248,11 @@ class DataHandler:
                         if len(df) >= 3:
                             df = filter_outliers_zscore(df, "close")
                         if df.empty:
-                            logger.warning(f"Данные для {symbol} ({timeframe}) отфильтрованы как аномалии")
+                            logger.warning(
+                                "Данные для %s (%s) отфильтрованы как аномалии",
+                                symbol,
+                                timeframe,
+                            )
                             continue
                         df["symbol"] = symbol
                         df = df.set_index(["symbol", "timestamp"])
@@ -1172,7 +1265,10 @@ class DataHandler:
                         )
                         if time_diffs.max() > max_gap:
                             logger.warning(
-                                f"Обнаружен разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
+                                "Обнаружен разрыв в данных WebSocket для %s (%s): %.2f минут",
+                                symbol,
+                                timeframe,
+                                time_diffs.max() / 60,
                             )
                             await self.telegram_logger.send_telegram_message(
                                 f"⚠️ Разрыв в данных WebSocket для {symbol} ({timeframe}): {time_diffs.max()/60:.2f} минут"
@@ -1191,7 +1287,9 @@ class DataHandler:
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
                     logger.info(
-                        f"Средняя задержка WebSocket: {sum(self.ws_latency.values()) / len(self.ws_latency):.2f} сек, скорость обработки: {rate:.2f}/с"
+                        "Средняя задержка WebSocket: %.2f сек, скорость обработки: %.2f/с",
+                        sum(self.ws_latency.values()) / len(self.ws_latency),
+                        rate,
                     )
                     last_latency_log = time.time()
             except Exception as e:
