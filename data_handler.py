@@ -223,7 +223,7 @@ class DataHandler:
         # Number of symbols to subscribe per WebSocket connection
         self.ws_subscription_batch_size = config.get("max_subscriptions_per_connection", 30)
         self.active_subscriptions = 0
-        self.load_threshold = 0.8
+        self.load_threshold = config.get("load_threshold", 0.8)
         self.ws_pool = {}
         self.tasks = []
         self.parameter_optimizer = ParameterOptimizer(self.config, self)
