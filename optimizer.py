@@ -128,7 +128,7 @@ def _objective_remote(
                 sharpe_ratios.append(sharpe_ratio)
         return float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0
     except Exception as e:  # pragma: no cover - log and return
-        logger.exception(f"Ошибка в _objective_remote для {symbol}: {e}")
+        logger.exception("Ошибка в _objective_remote для %s: %s", symbol, e)
         raise
 
 
@@ -168,7 +168,11 @@ class ParameterOptimizer:
             interval = max(1800, min(self.base_optimization_interval * 2, interval))
             return interval
         except Exception as e:
-            logger.exception(f"Ошибка расчёта интервала оптимизации для {symbol}: {e}")
+            logger.exception(
+                "Ошибка расчёта интервала оптимизации для %s: %s",
+                symbol,
+                e,
+            )
             raise
 
     async def optimize(self, symbol):
@@ -184,7 +188,7 @@ class ParameterOptimizer:
                 df = None
             empty = await _check_df_async(df, f"optimize {symbol}")
             if empty:
-                logger.warning(f"Нет данных для оптимизации {symbol}")
+                logger.warning("Нет данных для оптимизации %s", symbol)
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             # Проверка значительного изменения волатильности
@@ -205,7 +209,9 @@ class ParameterOptimizer:
                 and volatility_change < 0.5
             ):
                 logger.info(
-                    f"Оптимизация для {symbol} не требуется, следующая через {optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)):.0f} секунд"
+                    "Оптимизация для %s не требуется, следующая через %.0f секунд",
+                    symbol,
+                    optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)),
                 )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
             # Использование TPESampler с multivariate=True для учета корреляций
@@ -249,21 +255,24 @@ class ParameterOptimizer:
                 try:
                     best_params = self._grid_search(df, symbol, best_params)
                 except Exception as e:
-                    logger.exception(f"Ошибка GridSearchCV для {symbol}: {e}")
+                    logger.exception("Ошибка GridSearchCV для %s: %s", symbol, e)
                     raise
             if not self.validate_params(best_params):
                 logger.warning(
-                    f"Некорректные параметры для {symbol}, использование предыдущих"
+                    "Некорректные параметры для %s, использование предыдущих",
+                    symbol,
                 )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
             self.best_params_by_symbol[symbol] = best_params
             self.last_optimization[symbol] = time.time()
             logger.info(
-                f"Оптимизация для {symbol} завершена, лучшие параметры: {best_params}"
+                "Оптимизация для %s завершена, лучшие параметры: %s",
+                symbol,
+                best_params,
             )
             return best_params
         except Exception as e:
-            logger.exception(f"Ошибка оптимизации для {symbol}: {e}")
+            logger.exception("Ошибка оптимизации для %s: %s", symbol, e)
             raise
 
     def validate_params(self, params):
@@ -317,7 +326,7 @@ class ParameterOptimizer:
 
             return True
         except Exception as e:
-            logger.exception(f"Ошибка валидации параметров: {e}")
+            logger.exception("Ошибка валидации параметров: %s", e)
             raise
 
     def objective(self, trial, symbol, df):
@@ -344,7 +353,7 @@ class ParameterOptimizer:
                 self.config["timeframe"],
             )
         except Exception as e:
-            logger.exception(f"Ошибка в objective для {symbol}: {e}")
+            logger.exception("Ошибка в objective для %s: %s", symbol, e)
             raise
 
     def _grid_search(self, df, symbol, base_params):
@@ -414,10 +423,10 @@ class ParameterOptimizer:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for symbol, result in zip(self.data_handler.usdt_pairs, results):
                 if not isinstance(result, Exception):
-                    logger.info(f"Оптимизация завершена для {symbol}")
+                    logger.info("Оптимизация завершена для %s", symbol)
                 else:
-                    logger.error(f"Ошибка оптимизации для {symbol}: {result}")
+                    logger.error("Ошибка оптимизации для %s: %s", symbol, result)
             return self.best_params_by_symbol
         except Exception as e:
-            logger.exception(f"Ошибка в optimize_all: {e}")
+            logger.exception("Ошибка в optimize_all: %s", e)
             raise

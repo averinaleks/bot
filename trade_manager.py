@@ -183,8 +183,8 @@ class TradeManager:
             disk_usage = shutil.disk_usage(self.config["cache_dir"])
             if disk_usage.free / (1024**3) < 0.5:
                 logger.warning(
-                    "Not enough space to persist state: "
-                    f"{disk_usage.free / (1024 ** 3):.2f} GB left"
+                    "Not enough space to persist state: %.2f GB left",
+                    disk_usage.free / (1024 ** 3),
                 )
                 return
             self.positions.to_pickle(self.state_file)
@@ -257,7 +257,12 @@ class TradeManager:
                         order_params,
                     )
                 logger.info(
-                    f"Order placed: {symbol}, {side}, size={size}, price={price}, type={order_type}"
+                    "Order placed: %s, %s, size=%s, price=%s, type=%s",
+                    symbol,
+                    side,
+                    size,
+                    price,
+                    order_type,
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"✅ Order: {symbol} {side.upper()} size={size:.4f} @ {price:.2f} ({order_type})"
@@ -266,7 +271,7 @@ class TradeManager:
                 if isinstance(order, dict):
                     ret_code = order.get("retCode") or order.get("ret_code")
                     if ret_code is not None and ret_code != 0:
-                        logger.error(f"Order not confirmed: {order}")
+                        logger.error("Order not confirmed: %s", order)
                         await self.telegram_logger.send_telegram_message(
                             f"❌ Order not confirmed {symbol}: retCode {ret_code}"
                         )
@@ -292,13 +297,16 @@ class TradeManager:
         try:
             if price <= 0 or atr <= 0:
                 logger.warning(
-                    f"Invalid inputs for {symbol}: price={price}, atr={atr}"
+                    "Invalid inputs for %s: price=%s, atr=%s",
+                    symbol,
+                    price,
+                    atr,
                 )
                 return 0.0
             account = await safe_api_call(self.exchange, "fetch_balance")
             equity = float(account["total"].get("USDT", 0))
             if equity <= 0:
-                logger.warning(f"Insufficient balance for {symbol}")
+                logger.warning("Insufficient balance for %s", symbol)
                 await self.telegram_logger.send_telegram_message(
                     f"⚠️ Insufficient balance for {symbol}: equity={equity}"
                 )
@@ -320,13 +328,16 @@ class TradeManager:
             risk_amount = equity * risk_per_trade
             stop_loss_distance = atr * sl_multiplier
             if stop_loss_distance <= 0:
-                logger.warning(f"Invalid stop_loss_distance for {symbol}")
+                logger.warning("Invalid stop_loss_distance for %s", symbol)
                 return 0.0
             position_size = risk_amount / (stop_loss_distance * self.leverage)
             position_size = min(position_size, equity * self.leverage / price * 0.1)
             logger.info(
-                f"Position size for {symbol}: {position_size:.4f} "
-                f"(risk {risk_amount:.2f} USDT, ATR {atr:.2f})"
+                "Position size for %s: %.4f (risk %.2f USDT, ATR %.2f)",
+                symbol,
+                position_size,
+                risk_amount,
+                atr,
             )
             return position_size
         except Exception as e:
@@ -355,32 +366,34 @@ class TradeManager:
             async with self.position_lock:
                 if len(self.positions) >= self.max_positions:
                     logger.warning(
-                        f"Maximum number of positions reached: {self.max_positions}"
+                        "Maximum number of positions reached: %s",
+                        self.max_positions,
                     )
                     return
                 if side not in {"buy", "sell"}:
-                    logger.warning(f"Invalid side {side} for {symbol}")
+                    logger.warning("Invalid side %s for %s", side, symbol)
                     return
                 if (
                     "symbol" in self.positions.index.names
                     and symbol in self.positions.index.get_level_values("symbol")
                 ):
-                    logger.warning(f"Position for {symbol} already open")
+                    logger.warning("Position for %s already open", symbol)
                     return
                 if not await self.data_handler.is_data_fresh(symbol):
-                    logger.warning(f"Stale data for {symbol}, skipping trade")
+                    logger.warning("Stale data for %s, skipping trade", symbol)
                     return
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
                     logger.warning(
-                        f"ATR data missing for {symbol}, retrying later"
+                        "ATR data missing for %s, retrying later",
+                        symbol,
                     )
                     return
                 sl_mult = params.get("sl_multiplier", self.config["sl_multiplier"])
                 tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
                 size = await self.calculate_position_size(symbol, price, atr, sl_mult)
                 if size <= 0:
-                    logger.warning(f"Position size too small for {symbol}")
+                    logger.warning("Position size too small for %s", symbol)
                     return
                 stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
                     side, price, atr, sl_mult, tp_mult
@@ -397,7 +410,8 @@ class TradeManager:
                 )
                 if not order:
                     logger.error(
-                        f"Order failed for {symbol}: no confirmation returned"
+                        "Order failed for %s: no confirmation returned",
+                        symbol,
                     )
                     await self.telegram_logger.send_telegram_message(
                         f"❌ Order failed {symbol}: no confirmation"
@@ -406,13 +420,13 @@ class TradeManager:
                 if isinstance(order, dict):
                     ret_code = order.get("retCode") or order.get("ret_code")
                     if ret_code is not None and ret_code != 0:
-                        logger.error(f"Order error for {symbol}: {order}")
+                        logger.error("Order error for %s: %s", symbol, order)
                         await self.telegram_logger.send_telegram_message(
                             f"❌ Order error {symbol}: retCode {ret_code}"
                         )
                         return
                     if not (order.get("id") or order.get("orderId") or order.get("result")):
-                        logger.error(f"Order confirmation missing id for {symbol}: {order}")
+                        logger.error("Order confirmation missing id for %s: %s", symbol, order)
                         await self.telegram_logger.send_telegram_message(
                             f"❌ Order confirmation missing id {symbol}"
                         )
@@ -440,7 +454,8 @@ class TradeManager:
                     and symbol in self.positions.index.get_level_values("symbol")
                 ):
                     logger.warning(
-                        f"Position for {symbol} already open after order placed"
+                        "Position for %s already open after order placed",
+                        symbol,
                     )
                     return
                 if self.positions.empty:
@@ -452,7 +467,11 @@ class TradeManager:
                 self.positions_changed = True
                 self.save_state()
                 logger.info(
-                    f"Position opened: {symbol}, {side}, size={size}, entry={price}"
+                    "Position opened: %s, %s, size=%s, entry=%s",
+                    symbol,
+                    side,
+                    size,
+                    price,
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
@@ -478,7 +497,7 @@ class TradeManager:
                     else:
                         position = pd.DataFrame()
                     if position.empty:
-                        logger.warning(f"Position for {symbol} not found")
+                        logger.warning("Position for %s not found", symbol)
                         return
                     position = position.iloc[0]
                     side = "sell" if position["side"] == "buy" else "buy"
@@ -504,7 +523,10 @@ class TradeManager:
                         self.positions_changed = True
                         self.save_state()
                         logger.info(
-                            f"Position closed: {symbol}, profit={profit:.2f}, reason={reason}"
+                            "Position closed: %s, profit=%.2f, reason=%s",
+                            symbol,
+                            profit,
+                            reason,
                         )
                         await self.telegram_logger.send_telegram_message(
                             f"📉 {symbol} {position['side'].upper()} exit={exit_price:.2f} PnL={profit:.2f} USDT ({reason})",
@@ -527,13 +549,14 @@ class TradeManager:
                 else:
                     position = pd.DataFrame()
                 if position.empty:
-                    logger.warning(f"Position for {symbol} not found")
+                    logger.warning("Position for %s not found", symbol)
                     return
                 position = position.iloc[0]
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
                     logger.warning(
-                        f"ATR data missing for {symbol}, retrying later"
+                        "ATR data missing for %s, retrying later",
+                        symbol,
                     )
                     return
                 trailing_stop_distance = atr * self.config.get(
@@ -652,7 +675,7 @@ class TradeManager:
         try:
             model = self.model_builder.lstm_models.get(symbol)
             if not model:
-                logger.debug(f"Model for {symbol} not found")
+                logger.debug("Model for %s not found", symbol)
                 return
             if "symbol" in self.positions.index.names:
                 position = self.positions.loc[
@@ -689,12 +712,18 @@ class TradeManager:
             )
             if position["side"] == "buy" and prediction < short_threshold:
                 logger.info(
-                    f"CNN-LSTM exit long signal for {symbol}: pred={prediction:.4f}, threshold={short_threshold:.2f}"
+                    "CNN-LSTM exit long signal for %s: pred=%.4f, threshold=%.2f",
+                    symbol,
+                    prediction,
+                    short_threshold,
                 )
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
             elif position["side"] == "sell" and prediction > long_threshold:
                 logger.info(
-                    f"CNN-LSTM exit short signal for {symbol}: pred={prediction:.4f}, threshold={long_threshold:.2f}"
+                    "CNN-LSTM exit short signal for %s: pred=%.4f, threshold=%.2f",
+                    symbol,
+                    prediction,
+                    long_threshold,
                 )
                 await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
         except Exception as e:
@@ -724,7 +753,9 @@ class TradeManager:
                                 * np.sqrt(365 * 24 * 60 * 60 / self.performance_window)
                             )
                             logger.info(
-                                f"Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
+                                "Sharpe Ratio for %s: %.2f",
+                                symbol,
+                                sharpe_ratio,
                             )
                             ohlcv = self.data_handler.ohlcv
                             if (
@@ -746,7 +777,10 @@ class TradeManager:
                                     or volatility_change > 0.5
                                 ):
                                     logger.info(
-                                        f"Retraining triggered for {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility change={volatility_change:.2f}"
+                                        "Retraining triggered for %s: Sharpe=%.2f, Volatility change=%.2f",
+                                        symbol,
+                                        sharpe_ratio,
+                                        volatility_change,
                                     )
                                     await self.model_builder.retrain_symbol(symbol)
                                     await self.telegram_logger.send_telegram_message(
@@ -754,7 +788,9 @@ class TradeManager:
                                     )
                             if sharpe_ratio < self.config.get("min_sharpe_ratio", 0.5):
                                 logger.warning(
-                                    f"Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
+                                    "Low Sharpe Ratio for %s: %.2f",
+                                    symbol,
+                                    sharpe_ratio,
                                 )
                                 await self.telegram_logger.send_telegram_message(
                                     f"⚠️ Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
@@ -807,7 +843,8 @@ class TradeManager:
             empty = await _check_df_async(df_2h, f"evaluate_ema_condition {symbol}")
             if empty or not indicators_2h:
                 logger.warning(
-                    f"No data or indicators for {symbol} on 2h timeframe"
+                    "No data or indicators for %s on 2h timeframe",
+                    symbol,
                 )
                 return False
             ema30 = indicators_2h.ema30
@@ -820,7 +857,8 @@ class TradeManager:
             recent_data = df_2h[timestamps >= timestamps[-1] - lookback_period]
             if len(recent_data) < 2:
                 logger.debug(
-                    f"Not enough data to check EMA crossover for {symbol}"
+                    "Not enough data to check EMA crossover for %s",
+                    symbol,
                 )
                 return False
             ema30_recent = ema30[-len(recent_data) :]
@@ -835,7 +873,9 @@ class TradeManager:
                 signal == "sell" and not crossover_short
             ):
                 logger.debug(
-                    f"EMA crossover not confirmed for {symbol}, signal={signal}"
+                    "EMA crossover not confirmed for %s, signal=%s",
+                    symbol,
+                    signal,
                 )
                 return False
             pullback_period = pd.Timedelta(seconds=self.config["pullback_period"])
@@ -854,16 +894,18 @@ class TradeManager:
                     break
             if not pullback_occurred:
                 logger.debug(
-                    f"No pullback to EMA30 for {symbol}, signal={signal}"
+                    "No pullback to EMA30 for %s, signal=%s",
+                    symbol,
+                    signal,
                 )
                 return False
             current_price = close.iloc[-1]
             if (signal == "buy" and current_price <= ema30.iloc[-1]) or (
                 signal == "sell" and current_price >= ema30.iloc[-1]
             ):
-                logger.debug(f"Price not consolidated for {symbol}, signal={signal}")
+                logger.debug("Price not consolidated for %s, signal=%s", symbol, signal)
                 return False
-            logger.info(f"EMA conditions satisfied for {symbol}, signal={signal}")
+            logger.info("EMA conditions satisfied for %s, signal=%s", symbol, signal)
             return True
         except Exception as e:
             logger.exception("Failed to check EMA conditions for %s: %s", symbol, e)
@@ -873,7 +915,7 @@ class TradeManager:
         try:
             model = self.model_builder.lstm_models.get(symbol)
             if not model:
-                logger.debug(f"Model for {symbol} not yet trained")
+                logger.debug("Model for %s not yet trained", symbol)
                 return None
             indicators = self.data_handler.indicators.get(symbol)
             empty = (
@@ -892,7 +934,7 @@ class TradeManager:
             else:
                 df = None
             if not await self.data_handler.is_data_fresh(symbol):
-                logger.debug(f"Stale data for {symbol}, skipping signal")
+                logger.debug("Stale data for %s, skipping signal", symbol)
                 return None
             if df is not None and not df.empty:
                 volatility = df["close"].pct_change().std()
@@ -905,7 +947,8 @@ class TradeManager:
                 and loss_streak >= 2
             ):
                 logger.info(
-                    f"Skipping signal for {symbol}: weak trend and loss streak"
+                    "Skipping signal for %s: weak trend and loss streak",
+                    symbol,
                 )
                 return None
             features = await self.model_builder.prepare_lstm_features(
@@ -937,27 +980,38 @@ class TradeManager:
                 rl_feat = features[-1]
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
                 if rl_signal:
-                    logger.info(f"RL signal for {symbol}: {rl_signal}")
+                    logger.info("RL signal for %s: %s", symbol, rl_signal)
 
             if signal:
                 logger.info(
-                    f"CNN-LSTM signal for {symbol}: {signal} (pred {prediction:.4f}, thresholds {long_threshold:.2f}/{short_threshold:.2f})"
+                    "CNN-LSTM signal for %s: %s (pred %.4f, thresholds %.2f/%.2f)",
+                    symbol,
+                    signal,
+                    prediction,
+                    long_threshold,
+                    short_threshold,
                 )
                 ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
                 if not ema_condition_met:
                     logger.info(
-                        f"EMA conditions not met for {symbol}, signal rejected"
+                        "EMA conditions not met for %s, signal rejected",
+                        symbol,
                     )
                     return None
                 logger.info(
-                    f"All conditions met for {symbol}, confirmed signal: {signal}"
+                    "All conditions met for %s, confirmed signal: %s",
+                    symbol,
+                    signal,
                 )
 
             if signal and rl_signal:
                 if signal == rl_signal:
                     return signal
                 logger.info(
-                    f"Signal mismatch for {symbol}: CNN-LSTM {signal}, RL {rl_signal}"
+                    "Signal mismatch for %s: CNN-LSTM %s, RL %s",
+                    symbol,
+                    signal,
+                    rl_signal,
                 )
                 return None
             if signal:
@@ -987,7 +1041,7 @@ class TradeManager:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for task, result in zip(tasks, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Task {task.get_name()} failed: {result}")
+                    logger.error("Task %s failed: %s", task.get_name(), result)
                     await self.telegram_logger.send_telegram_message(
                         f"❌ Task {task.get_name()} failed: {result}"
                     )
@@ -1000,7 +1054,7 @@ class TradeManager:
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.lstm_models:
-            logger.debug(f"Waiting for model for {symbol}")
+            logger.debug("Waiting for model for %s", symbol)
             await asyncio.sleep(30)
         while True:
             try:
