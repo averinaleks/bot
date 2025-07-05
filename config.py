@@ -9,7 +9,8 @@ load configuration values from ``config.json`` and environment variables.
 import json
 import os
 from dataclasses import dataclass, field, fields, asdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, get_type_hints
+from utils import logger
 
 # Load defaults from config.json
 CONFIG_PATH = os.getenv(
@@ -154,11 +155,15 @@ def _convert(value: str, typ: type) -> Any:
 def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
     cfg: Dict[str, Any] = {}
+    type_hints = get_type_hints(BotConfig)
     if os.path.exists(path):
+        logger.info("Loading configuration from %s", path)
         with open(path, "r") as f:
             cfg.update(json.load(f))
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
         if env_val is not None:
-            cfg[fdef.name] = _convert(env_val, fdef.type)
+            typ = type_hints.get(fdef.name, fdef.type)
+            cfg[fdef.name] = _convert(env_val, typ)
+            logger.info("Config override %s=%s", fdef.name, env_val)
     return BotConfig(**cfg)

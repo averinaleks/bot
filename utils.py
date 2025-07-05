@@ -233,7 +233,9 @@ class BybitSDKAsync:
         return await asyncio.to_thread(_sync)
 
 logger = logging.getLogger("TradingBot")
-logger.setLevel(logging.INFO)
+level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+level = getattr(logging, level_name, logging.INFO)
+logger.setLevel(level)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 log_dir = os.getenv("LOG_DIR", "/app/logs")
@@ -253,6 +255,7 @@ logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+logger.info("Log level set to %s", logging.getLevelName(logger.level))
 
 
 class TelegramLogger(logging.Handler):
