@@ -9,7 +9,8 @@ load configuration values from ``config.json`` and environment variables.
 import json
 import os
 from dataclasses import dataclass, field, fields, asdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, get_type_hints
+import ast
 
 # Load defaults from config.json
 CONFIG_PATH = os.getenv(
@@ -143,11 +144,14 @@ def _convert(value: str, typ: type) -> Any:
         return int(value)
     if typ is float:
         return float(value)
-    if typ is list or typ == List[str]:
+    if typ is list or typ == List[str] or getattr(typ, "__origin__", None) is list:
         try:
             return json.loads(value)
         except json.JSONDecodeError:
-            return [v.strip() for v in value.split(",") if v.strip()]
+            try:
+                return ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                return [v.strip().strip("'\"") for v in value.split(",") if v.strip()]
     return value
 
 
@@ -157,8 +161,9 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     if os.path.exists(path):
         with open(path, "r") as f:
             cfg.update(json.load(f))
+    type_hints = get_type_hints(BotConfig)
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
         if env_val is not None:
-            cfg[fdef.name] = _convert(env_val, fdef.type)
+            cfg[fdef.name] = _convert(env_val, type_hints.get(fdef.name, fdef.type))
     return BotConfig(**cfg)
