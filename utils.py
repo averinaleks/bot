@@ -246,6 +246,8 @@ except (OSError, PermissionError):
     log_dir = fallback_dir
     os.makedirs(log_dir, exist_ok=True)
 
+logger.info("Writing logs to %s", log_dir)
+
 file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
