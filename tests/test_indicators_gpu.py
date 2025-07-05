@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import ta
 import types
+import utils
 
 import importlib.util
 
@@ -17,7 +18,20 @@ sys.modules.setdefault('ccxt', ccxt_mod)
 sys.modules.setdefault('ccxt.async_support', ccxt_mod.async_support)
 sys.modules.setdefault('ccxt.pro', ccxt_mod.pro)
 
+optimizer_stubbed = False
+if 'optimizer' not in sys.modules:
+    optimizer_stubbed = True
+    optimizer_stub = types.ModuleType('optimizer')
+    class _PO:
+        def __init__(self, *a, **k):
+            pass
+    optimizer_stub.ParameterOptimizer = _PO
+    sys.modules['optimizer'] = optimizer_stub
+
 from data_handler import ema_fast, atr_fast  # noqa: E402
+
+if optimizer_stubbed:
+    sys.modules.pop('optimizer', None)
 
 
 def test_ema_fast_matches_ta():
@@ -35,3 +49,22 @@ def test_atr_fast_matches_ta():
     result_fast = atr_fast(high.to_numpy(), low.to_numpy(), close.to_numpy(), 14)
     expected = ta.volatility.average_true_range(high, low, close, window=14, fillna=True).to_numpy()
     assert np.allclose(result_fast, expected, atol=1e-6)
+
+
+def test_filter_outliers_zscore_handles_nans(monkeypatch):
+    def simple_z(a):
+        a = np.asarray(a, dtype=float)
+        return (a - a.mean()) / a.std()
+
+    monkeypatch.setattr(utils, "zscore", simple_z)
+    if hasattr(utils.filter_outliers_zscore, "__globals__"):
+        utils.filter_outliers_zscore.__globals__["zscore"] = simple_z
+
+    # Ensure scipy does not fail when a torch stub without Tensor exists
+    if "torch" in sys.modules and not hasattr(sys.modules["torch"], "Tensor"):
+        sys.modules["torch"].Tensor = object
+
+    df = pd.DataFrame({"close": [1.0, 2.0, np.nan, 4.0, 5.0]})
+    result = utils.filter_outliers_zscore(df, "close", threshold=3.0)
+    assert len(result) == len(df)
+    assert result["close"].isna().sum() == 1

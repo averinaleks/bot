@@ -504,16 +504,25 @@ def sanitize_symbol(symbol: str) -> str:
 
 def filter_outliers_zscore(df, column="close", threshold=3.0):
     try:
-        if len(df[column].dropna()) < 3:
+        series = df[column]
+        if len(series.dropna()) < 3:
             logger.warning(
                 "Недостаточно данных для z-оценки в %s, возвращается исходный DataFrame",
                 column,
             )
             return df
-        z_scores = zscore(df[column].dropna())
-        volatility = df[column].pct_change().std()
+
+        filled = (
+            series.fillna(method="ffill")
+            .fillna(method="bfill")
+            .fillna(series.mean())
+        )
+        z_scores = zscore(filled)
+        volatility = series.dropna().pct_change().std()
         adjusted_threshold = threshold * (1 + volatility / 0.02)
-        df_filtered = df[np.abs(z_scores) <= adjusted_threshold]
+
+        mask = (np.abs(z_scores) <= adjusted_threshold) | series.isna()
+        df_filtered = df[mask]
         if len(df_filtered) < len(df):
             logger.info(
                 "Удалено %s аномалий в %s с z-оценкой, порог=%.2f",
