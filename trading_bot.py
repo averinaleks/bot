@@ -14,11 +14,29 @@ INTERVAL = float(os.getenv("INTERVAL", "5"))
 
 
 def _load_env() -> dict:
-    """Load service URLs from environment variables."""
+    """Load service URLs from environment variables.
+
+    If explicit ``*_URL`` variables are not provided, fall back to the ``HOST``
+    value when constructing defaults. This allows running the bot locally by
+    specifying only ``HOST`` without overriding every service URL.
+    """
+
+    host = os.getenv("HOST")
+    data_handler = os.getenv("DATA_HANDLER_URL")
+    model_builder = os.getenv("MODEL_BUILDER_URL")
+    trade_manager = os.getenv("TRADE_MANAGER_URL")
+
+    if data_handler is None:
+        data_handler = f"http://{host}:8000" if host else "http://data_handler:8000"
+    if model_builder is None:
+        model_builder = f"http://{host}:8001" if host else "http://model_builder:8001"
+    if trade_manager is None:
+        trade_manager = f"http://{host}:8002" if host else "http://trade_manager:8002"
+
     return {
-        "data_handler_url": os.getenv("DATA_HANDLER_URL", "http://data_handler:8000"),
-        "model_builder_url": os.getenv("MODEL_BUILDER_URL", "http://model_builder:8001"),
-        "trade_manager_url": os.getenv("TRADE_MANAGER_URL", "http://trade_manager:8002"),
+        "data_handler_url": data_handler,
+        "model_builder_url": model_builder,
+        "trade_manager_url": trade_manager,
     }
 
 
