@@ -235,6 +235,10 @@ executing `pytest`:
 pip install -r requirements-cpu.txt
 ```
 
+As noted above, make sure to run `pip install -r requirements-cpu.txt` before
+executing `pytest`; otherwise imports such as `numpy`, `pandas` and `requests`
+will fail.
+
 Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
 
