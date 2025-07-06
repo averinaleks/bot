@@ -136,6 +136,9 @@ use these steps to diagnose the problem:
    might need more time to respond. Set `GUNICORN_TIMEOUT` in your
    environment to increase the timeout in seconds. The compose file
    defaults to `120` seconds.
+7. Use an async-capable worker for `gunicorn` (e.g. `--worker-class
+   uvicorn.workers.UvicornWorker`) so async views like the trade
+   manager's `/open_position` route can schedule tasks properly.
 
 ## Telegram notifications
 
