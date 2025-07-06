@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8000 data_handler:api_app
-    runtime: nvidia
+    runtime: ${RUNTIME:-nvidia}
     ports:
       - "8000:8000"
     healthcheck:
@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8001 model_builder:api_app
-    runtime: nvidia
+    runtime: ${RUNTIME:-nvidia}
     ports:
       - "8001:8001"
     environment:
@@ -40,7 +40,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     command: gunicorn -w 2 -b 0.0.0.0:8002 trade_manager:api_app
-    runtime: nvidia
+    runtime: ${RUNTIME:-nvidia}
     ports:
       - "8002:8002"
     healthcheck:
@@ -57,7 +57,7 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # container_name: trading_bot
     command: python trading_bot.py
-    runtime: nvidia
+    runtime: ${RUNTIME:-nvidia}
     depends_on:
       data_handler:
         condition: service_healthy

@@ -56,8 +56,11 @@ python trading_bot.py
 запустите compose с переменной `DOCKERFILE` и отключите NVIDIA-переменные:
 
 ```bash
-DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
+DOCKERFILE=Dockerfile.cpu RUNTIME= NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
 ```
+
+Переменная `RUNTIME` используется в `docker-compose.yml`. Если она пуста,
+контейнеры запускаются без NVIDIA runtime, что позволяет использовать CPU-образы.
 
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
 GPU warnings. Adjust or remove this variable if you need more detailed logs.
@@ -111,10 +114,11 @@ use these steps to diagnose the problem:
    docker compose run --rm data_handler nvidia-smi
    ```
 
-   If no GPU is detected, rebuild with the CPU Dockerfile:
+   If no GPU is detected, rebuild with the CPU Dockerfile and disable the NVIDIA
+   runtime:
 
    ```bash
-   DOCKERFILE=Dockerfile.cpu docker compose up --build
+   DOCKERFILE=Dockerfile.cpu RUNTIME= docker compose up --build
    ```
 
 3. If services require more time to initialize, increase
