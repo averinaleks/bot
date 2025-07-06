@@ -50,6 +50,7 @@ python trading_bot.py
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
 Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
+Эта конфигурация запускает упрощённые заглушки сервисов. Без их замены на реальные реализации бот не будет совершать сделки.
 В зависимости от версии Docker команда может называться `docker compose` или
 `docker-compose`.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
@@ -70,6 +71,10 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
+## Demo services
+
+The docker-compose configuration launches minimal placeholder services. `data_handler` exposes `/price/<symbol>` which always returns a fixed value (100 for `TEST`), and `model_builder` starts with no trained model. The bot will not open any real positions until these stubs are replaced with implementations that fetch live data and train a model.
+
 
 ## Docker Compose logs
 
