@@ -1,8 +1,11 @@
 # Этап сборки
 FROM nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04 AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
 
 # Установка необходимых пакетов для сборки
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
@@ -40,6 +43,7 @@ WORKDIR /app
 
 # Установка минимальных пакетов для выполнения
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
