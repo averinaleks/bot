@@ -1,9 +1,11 @@
 # Этап сборки
-FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04 AS builder
 
 # Установка необходимых пакетов для сборки
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-dev \
     python3.12-venv \
@@ -32,7 +34,7 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
     find /app/venv -type f -name '*.pyc' -delete
 
 # Этап выполнения
-FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:12.0.0-cudnn8-runtime-ubuntu22.04
 
 WORKDIR /app
 
