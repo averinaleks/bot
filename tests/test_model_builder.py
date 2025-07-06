@@ -9,7 +9,10 @@ import importlib.util
 from config import BotConfig
 import asyncio
 
-if importlib.util.find_spec('torch') is None:
+try:  # require functional torch installation for these tests
+    import torch
+    import torch.nn  # noqa: F401
+except Exception:
     pytest.skip('torch not available', allow_module_level=True)
 
 # Provide dummy stable_baselines3 if missing
