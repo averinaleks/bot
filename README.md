@@ -56,8 +56,10 @@ python trading_bot.py
 запустите compose с переменной `DOCKERFILE` и отключите NVIDIA-переменные:
 
 ```bash
-DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
+RUNTIME= DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABILITIES= docker-compose up --build
 ```
+
+Set `RUNTIME=` if you want to run these CPU images without the NVIDIA runtime.
 
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
 GPU warnings. Adjust or remove this variable if you need more detailed logs.
