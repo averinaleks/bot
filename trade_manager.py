@@ -5,6 +5,8 @@ notifications while interacting with the :class:`ModelBuilder` and exchange.
 """
 
 import asyncio
+import atexit
+import signal
 import ray
 import pandas as pd
 import numpy as np
@@ -41,6 +43,27 @@ async def _check_df_async(df, context: str = "") -> bool:
     if inspect.isawaitable(result):
         result = await result
     return result
+
+
+def _register_cleanup_handlers(tm: "TradeManager") -> None:
+    """Register atexit and signal handlers for graceful shutdown."""
+
+    if getattr(tm, "_cleanup_registered", False):
+        return
+
+    tm._cleanup_registered = True
+
+    def _handler(*_args):
+        logger.info("Stopping TradeManager")
+        tm.shutdown()
+
+    atexit.register(_handler)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, lambda s, f: _handler())
+        except ValueError:
+            # signal may fail if not in main thread
+            pass
 
 
 class TradeManager:
@@ -97,6 +120,8 @@ class TradeManager:
         self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
+        self.tasks: list[asyncio.Task] = []
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.exchange = data_handler.exchange
         self.max_positions = config.get("max_positions", 5)
         self.leverage = config.get("leverage", 10)
@@ -1028,7 +1053,8 @@ class TradeManager:
 
     async def run(self):
         try:
-            tasks = [
+            self.loop = asyncio.get_running_loop()
+            self.tasks = [
                 asyncio.create_task(
                     self.monitor_performance(), name="monitor_performance"
                 ),
@@ -1036,11 +1062,11 @@ class TradeManager:
             ]
             for symbol in self.data_handler.usdt_pairs:
                 task_name = f"process_symbol_{symbol}"
-                tasks.append(
+                self.tasks.append(
                     asyncio.create_task(self.process_symbol(symbol), name=task_name)
                 )
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for task, result in zip(tasks, results):
+            results = await asyncio.gather(*self.tasks, return_exceptions=True)
+            for task, result in zip(self.tasks, results):
                 if isinstance(result, Exception):
                     logger.error("Task %s failed: %s", task.get_name(), result)
                     await self.telegram_logger.send_telegram_message(
@@ -1052,6 +1078,35 @@ class TradeManager:
                 f"❌ Critical TradeManager error: {e}"
             )
             raise
+        finally:
+            self.tasks.clear()
+
+    async def stop(self) -> None:
+        """Cancel running tasks and shut down Telegram logging."""
+        for task in list(self.tasks):
+            task.cancel()
+        for task in list(self.tasks):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self.tasks.clear()
+        await TelegramLogger.shutdown()
+
+    def shutdown(self) -> None:
+        """Synchronous wrapper for graceful shutdown."""
+        if self.loop and self.loop.is_running():
+            fut = asyncio.run_coroutine_threadsafe(self.stop(), self.loop)
+            try:
+                fut.result()
+            except Exception:
+                pass
+        else:
+            try:
+                asyncio.run(self.stop())
+            except RuntimeError:
+                # event loop already closed
+                pass
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.lstm_models:
@@ -1167,6 +1222,8 @@ def create_trade_manager() -> TradeManager:
             threading.Thread(
                 target=lambda: asyncio.run(listener.listen(_handle)), daemon=True
             ).start()
+        if os.getenv("TEST_MODE") != "1":
+            _register_cleanup_handlers(trade_manager)
     return trade_manager
 
 # Initialize the trade manager once when the API app starts
