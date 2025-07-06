@@ -124,6 +124,10 @@ use these steps to diagnose the problem:
 
 5. When RL components start, they import `gymnasium`.
   If the package is missing, training will fail until you install it.
+6. If `gunicorn` logs show `WORKER TIMEOUT` messages, the service
+   might need more time to respond. Set `GUNICORN_TIMEOUT` in your
+   environment to increase the timeout in seconds. The compose file
+   defaults to `120` seconds.
 
 ## Telegram notifications
 
