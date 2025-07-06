@@ -403,7 +403,7 @@ class DataHandler:
                     symbol,
                     timeframe,
                 )
-                df = df.fillna(method="ffill")
+                df = df.ffill()
             time_diffs = df.index.to_series().diff().dt.total_seconds()
             max_gap = pd.Timedelta(timeframe).total_seconds() * 2
             if time_diffs.max() > max_gap:

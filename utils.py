@@ -513,8 +513,8 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
             return df
 
         filled = (
-            series.fillna(method="ffill")
-            .fillna(method="bfill")
+            series.ffill()
+            .bfill()
             .fillna(series.mean())
         )
         z_scores = zscore(filled)
