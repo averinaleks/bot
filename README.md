@@ -64,9 +64,10 @@ GPU warnings. Adjust or remove this variable if you need more detailed logs.
 
 When both TensorFlow and PyTorch start in the same container you might see
 messages like `Unable to register cuDNN factory` or `computation placer already
-registered`. These warnings appear because each framework loads CUDA plugins and
-tries to register them more than once. They are not fatal errors and can be
-safely ignored. Using the CPU Dockerfile avoids these messages entirely.
+registered`. These lines appear while each framework loads CUDA plugins and
+tries to register them more than once. They are warnings, not fatal errors, and
+can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
+entirely.
 
 ## Docker Compose logs
 
