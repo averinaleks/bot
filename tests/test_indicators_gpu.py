@@ -68,3 +68,17 @@ def test_filter_outliers_zscore_handles_nans(monkeypatch):
     result = utils.filter_outliers_zscore(df, "close", threshold=3.0)
     assert len(result) == len(df)
     assert result["close"].isna().sum() == 1
+
+def test_filter_outliers_zscore_mask_length(monkeypatch):
+    def simple_z(a):
+        a = np.asarray(a, dtype=float)
+        return (a - a.mean()) / a.std()
+
+    monkeypatch.setattr(utils, "zscore", simple_z)
+    if hasattr(utils.filter_outliers_zscore, "__globals__"):
+        utils.filter_outliers_zscore.__globals__["zscore"] = simple_z
+
+    df = pd.DataFrame({"close": [np.nan, 1.0, 2.0, 3.0, np.nan]})
+    result = utils.filter_outliers_zscore(df, "close", threshold=2.0)
+    assert len(result) == len(df)
+    assert result["close"].isna().sum() == 2

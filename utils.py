@@ -512,23 +512,17 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
             )
             return df
 
-        filled = (
-            series.ffill()
-            .bfill()
-            .fillna(series.mean())
-        )
-        z_scores = zscore(filled)
-        volatility = series.dropna().pct_change().std()
-        adjusted_threshold = threshold * (1 + volatility / 0.02)
+        filled = series.ffill().bfill().fillna(series.mean())
+        z_scores = pd.Series(zscore(filled.to_numpy()), index=df.index)
 
-        mask = (np.abs(z_scores) <= adjusted_threshold) | series.isna()
+        mask = (np.abs(z_scores) <= threshold) | series.isna()
         df_filtered = df[mask]
         if len(df_filtered) < len(df):
             logger.info(
                 "Удалено %s аномалий в %s с z-оценкой, порог=%.2f",
                 len(df) - len(df_filtered),
                 column,
-                adjusted_threshold,
+                threshold,
             )
         return df_filtered
     except (KeyError, TypeError) as e:
