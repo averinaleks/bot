@@ -1169,6 +1169,16 @@ def create_trade_manager() -> TradeManager:
             ).start()
     return trade_manager
 
+# Initialize the trade manager once when the API app starts
+load_dotenv()
+if os.getenv("TEST_MODE") != "1":
+    try:
+        trade_manager = create_trade_manager()
+    except Exception as exc:  # pragma: no cover - initialization failure
+        logger.exception("TradeManager initialization failed: %s", exc)
+        trade_manager = None
+
+
 
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
