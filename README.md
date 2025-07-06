@@ -238,6 +238,10 @@ executing `pytest`:
 pip install -r requirements-cpu.txt
 ```
 
+Unit tests automatically set the environment variable `TEST_MODE=1`.
+This disables the Telegram logger's background worker thread so tests
+run without spawning extra threads.
+
 As noted above, make sure to run `pip install -r requirements-cpu.txt` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas` and `requests`
 will fail.
