@@ -1181,17 +1181,14 @@ if os.getenv("TEST_MODE") != "1":
 
 
 @api_app.route("/open_position", methods=["POST"])
-def open_position_route():
+async def open_position_route():
     info = request.get_json(force=True)
     POSITIONS.append(info)
     tm = trade_manager or create_trade_manager()
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
-    threading.Thread(
-        target=lambda: asyncio.run(tm.open_position(symbol, side, price, info)),
-        daemon=True,
-    ).start()
+    asyncio.create_task(tm.open_position(symbol, side, price, info))
     return jsonify({"status": "ok"})
 
 
