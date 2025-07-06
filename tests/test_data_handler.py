@@ -70,3 +70,11 @@ async def test_ws_rate_limit_zero_no_exception():
     ws = DummyWS()
     await dh._send_subscriptions(ws, ['BTCUSDT'], 'primary')
     assert ws.sent
+
+
+def test_price_endpoint_returns_default():
+    from data_handler import api_app, DEFAULT_PRICE
+    with api_app.test_client() as client:
+        resp = client.get('/price/UNKNOWN')
+        assert resp.status_code == 200
+        assert resp.get_json() == {'price': DEFAULT_PRICE}
