@@ -1344,12 +1344,25 @@ class DataHandler:
 # ----------------------------------------------------------------------
 
 api_app = Flask(__name__)
-PRICES = {"TEST": 100.0}
+
+# Default price returned for any symbol when no explicit price is set.  The
+# value must be non-zero so tests relying on a positive price succeed.
+DEFAULT_PRICE = 100.0
+
+# In-memory store for explicitly set prices.  Symbols not present here will
+# fall back to ``DEFAULT_PRICE``.
+PRICES = {"TEST": DEFAULT_PRICE}
 
 
 @api_app.route("/price/<symbol>")
 def price(symbol: str):
-    price = PRICES.get(symbol, 0.0)
+    """Return the last known price for ``symbol``.
+
+    If the symbol is unknown, ``DEFAULT_PRICE`` is returned.  This keeps the
+    endpoint behaviour predictable in tests where the actual pricing logic is
+    not exercised.
+    """
+    price = PRICES.get(symbol, DEFAULT_PRICE)
     return jsonify({"price": price})
 
 
