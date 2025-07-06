@@ -87,10 +87,11 @@ docker-compose logs model_builder
 ```
 
 Команда без аргументов печатает логи всех сервисов.
-Если GPU недоступен, собирайте образ через переменную `DOCKERFILE=Dockerfile.cpu`:
+Если GPU недоступен, собирайте образ через переменную `DOCKERFILE=Dockerfile.cpu`
+и укажите `RUNTIME=`, чтобы отключить NVIDIA‑runtime:
 
 ```bash
-DOCKERFILE=Dockerfile.cpu docker compose up --build
+RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose up --build
 ```
 
 ## Troubleshooting service health
@@ -116,7 +117,7 @@ use these steps to diagnose the problem:
    If no GPU is detected, rebuild with the CPU Dockerfile:
 
    ```bash
-   DOCKERFILE=Dockerfile.cpu docker compose up --build
+   RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose up --build
    ```
 
 3. If services require more time to initialize, increase
