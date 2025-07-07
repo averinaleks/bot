@@ -1235,9 +1235,10 @@ def _initialize_trade_manager() -> None:
     try:
         trade_manager = create_trade_manager()
         if trade_manager is not None:
-            threading.Thread(
-                target=lambda: asyncio.run(trade_manager.run()), daemon=True
-            ).start()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.create_task(trade_manager.run())
+            loop.run_forever()
     finally:
         _ready_event.set()
 
@@ -1273,12 +1274,10 @@ def positions_route():
 
 
 @api_app.route("/start")
-def start_route():
+async def start_route():
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
-    threading.Thread(
-        target=lambda: asyncio.run(trade_manager.run()), daemon=True
-    ).start()
+    asyncio.create_task(trade_manager.run())
     return jsonify({"status": "started"})
 
 
