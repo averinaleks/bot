@@ -175,6 +175,10 @@ filters repeated messages and checks that `send_message` returns HTTP 200.
 You can run this bot either with long polling or a webhook using the
 `Application` class from `python-telegram-bot`.
 
+When deploying the `trade_manager` service with Gunicorn, use a single worker
+(`-w 1`). This ensures only one `TelegramUpdateListener` polls the bot token,
+preventing duplicated updates.
+
 ## Лимиты WebSocket-подписок
 
 Количество подписок через одно соединение ограничивается параметром `max_subscriptions_per_connection`. Если список пар превышает это значение, бот откроет дополнительные WebSocket-соединения.
