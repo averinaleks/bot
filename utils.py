@@ -295,9 +295,11 @@ class TelegramLogger(logging.Handler):
         self.last_sent_text = ""
 
     async def _worker(self):
-        assert TelegramLogger._queue is not None
-        assert TelegramLogger._stop_event is not None
-        while not TelegramLogger._stop_event.is_set():
+        while True:
+            if TelegramLogger._queue is None or TelegramLogger._stop_event is None:
+                return
+            if TelegramLogger._stop_event.is_set():
+                return
             try:
                 item = await asyncio.wait_for(TelegramLogger._queue.get(), 1.0)
             except asyncio.TimeoutError:

@@ -56,6 +56,11 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
     def _handler(*_args):
         logger.info("Stopping TradeManager")
         tm.shutdown()
+        try:
+            asyncio.run(TelegramLogger.shutdown())
+        except RuntimeError:
+            # event loop may already be closed
+            pass
 
     atexit.register(_handler)
     for sig in (signal.SIGTERM, signal.SIGINT):
