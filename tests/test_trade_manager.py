@@ -300,3 +300,41 @@ def test_compute_risk_per_trade_zero_threshold():
     risk = asyncio.run(run())
     assert tm.min_risk_per_trade <= risk <= tm.max_risk_per_trade
 
+
+def test_get_loss_streak():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    tm.returns_by_symbol['BTCUSDT'] = [
+        (0, 0.1),
+        (1, -0.2),
+        (2, -0.3),
+        (3, -0.4),
+    ]
+
+    async def run():
+        return await tm.get_loss_streak('BTCUSDT')
+
+    import asyncio
+    streak = asyncio.run(run())
+    assert streak == 3
+
+
+def test_get_win_streak():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    tm.returns_by_symbol['BTCUSDT'] = [
+        (0, -0.1),
+        (1, 0.2),
+        (2, 0.3),
+        (3, 0.4),
+    ]
+
+    async def run():
+        return await tm.get_win_streak('BTCUSDT')
+
+    import asyncio
+    streak = asyncio.run(run())
+    assert streak == 3
+
