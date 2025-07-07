@@ -1152,6 +1152,9 @@ class TradeManager:
 
 api_app = Flask(__name__)
 
+# Track when the TradeManager initialization finishes
+_ready_event = threading.Event()
+
 # For simple logging/testing of received orders
 POSITIONS = []
 
@@ -1226,26 +1229,41 @@ def create_trade_manager() -> TradeManager:
             _register_cleanup_handlers(trade_manager)
     return trade_manager
 
-# Initialize the trade manager once when the API app starts
-load_dotenv()
-if os.getenv("TEST_MODE") != "1":
+def _initialize_trade_manager() -> None:
+    """Background initialization for the TradeManager."""
+    global trade_manager
     try:
         trade_manager = create_trade_manager()
-    except Exception as exc:  # pragma: no cover - initialization failure
-        logger.exception("TradeManager initialization failed: %s", exc)
-        trade_manager = None
+        if trade_manager is not None:
+            threading.Thread(
+                target=lambda: asyncio.run(trade_manager.run()), daemon=True
+            ).start()
+    finally:
+        _ready_event.set()
+
+
+# Start initialization when the module is imported
+load_dotenv()
+if os.getenv("TEST_MODE") == "1":
+    _ready_event.set()
+else:
+    threading.Thread(target=_initialize_trade_manager, daemon=True).start()
+
+
 
 
 
 @api_app.route("/open_position", methods=["POST"])
 async def open_position_route():
+    """Open a new trade position."""
+    if not _ready_event.is_set() or trade_manager is None:
+        return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
     POSITIONS.append(info)
-    tm = trade_manager or create_trade_manager()
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
-    asyncio.create_task(tm.open_position(symbol, side, price, info))
+    asyncio.create_task(trade_manager.open_position(symbol, side, price, info))
     return jsonify({"status": "ok"})
 
 
@@ -1256,8 +1274,11 @@ def positions_route():
 
 @api_app.route("/start")
 def start_route():
-    tm = trade_manager or create_trade_manager()
-    threading.Thread(target=lambda: asyncio.run(tm.run()), daemon=True).start()
+    if not _ready_event.is_set() or trade_manager is None:
+        return jsonify({"error": "not ready"}), 503
+    threading.Thread(
+        target=lambda: asyncio.run(trade_manager.run()), daemon=True
+    ).start()
     return jsonify({"status": "started"})
 
 
@@ -1266,13 +1287,17 @@ def ping():
     return jsonify({"status": "ok"})
 
 
+@api_app.route("/ready")
+def ready() -> tuple:
+    """Return 200 once the TradeManager is initialized."""
+    if _ready_event.is_set() and trade_manager is not None:
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "initializing"}), 503
+
+
 if __name__ == "__main__":
     load_dotenv()
     port = int(os.environ.get("PORT", "8002"))
     host = os.environ.get("HOST", "0.0.0.0")
-    logger.info("Initializing TradeManager")
-    tm = create_trade_manager()
-    if tm is not None:
-        threading.Thread(target=lambda: asyncio.run(tm.run()), daemon=True).start()
     logger.info("Starting TradeManager service on %s:%s", host, port)
     api_app.run(host=host, port=port)
