@@ -13,8 +13,20 @@ try:
     import torch
 except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
+import inspect
 import ray
-from utils import logger, check_dataframe_empty_async as _check_df_async
+from utils import logger
+
+try:
+    from utils import check_dataframe_empty_async as _check_df_async
+except Exception:  # pragma: no cover - tests may stub this
+    from utils import check_dataframe_empty as _check_df_sync
+
+    async def _check_df_async(*a, **kw):
+        res = _check_df_sync(*a, **kw)
+        if inspect.isawaitable(res):
+            res = await res
+        return res
 from config import BotConfig
 from optuna.samplers import TPESampler
 try:
