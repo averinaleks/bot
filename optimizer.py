@@ -14,9 +14,8 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 import ray
-from utils import logger, check_dataframe_empty
+from utils import logger, check_dataframe_empty_async as _check_df_async
 from config import BotConfig
-import inspect
 from optuna.samplers import TPESampler
 try:
     from optuna.integration.mlflow import MLflowCallback
@@ -24,14 +23,6 @@ except ImportError:  # pragma: no cover - optional dependency may not be install
     MLflowCallback = None  # type: ignore
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
-
-
-async def _check_df_async(df, context: str = "") -> bool:
-    """Helper to handle possibly asynchronous check_dataframe_empty."""
-    result = check_dataframe_empty(df, context)
-    if inspect.isawaitable(result):
-        result = await result
-    return result
 
 
 @ray.remote(num_gpus=1 if torch and torch.cuda.is_available() else 0)
@@ -89,7 +80,9 @@ def _objective_remote(
                     },
                     test_df["close"].pct_change().std(),
                 )
-            result = check_dataframe_empty(indicators.df, f"objective {symbol}")
+            result = asyncio.run(
+                _check_df_async(indicators.df, f"objective {symbol}")
+            )
             if not indicators or result:
                 return 0.0
             returns = []
