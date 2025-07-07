@@ -255,6 +255,19 @@ executing `pytest`:
 pip install -r requirements-cpu.txt
 ```
 
+For a clean environment you can create a virtualenv and install the
+CPU requirements before running the tests:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-cpu.txt
+pytest
+```
+
+The `requirements-cpu.txt` file already bundles `pytest` and all other
+packages needed by the test suite.
+
 Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
