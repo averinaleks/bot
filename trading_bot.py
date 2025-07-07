@@ -41,23 +41,25 @@ def _load_env() -> dict:
 
 
 def check_services() -> None:
-    """Ensure dependent services respond to `/ping`."""
+    """Ensure dependent services are responsive."""
     env = _load_env()
     retries = int(os.getenv("SERVICE_CHECK_RETRIES", "5"))
     delay = float(os.getenv("SERVICE_CHECK_DELAY", "1"))
     services = {
-        "data_handler": env["data_handler_url"],
-        "model_builder": env["model_builder_url"],
-        "trade_manager": env["trade_manager_url"],
+        "data_handler": (env["data_handler_url"], "ping"),
+        "model_builder": (env["model_builder_url"], "ping"),
+        "trade_manager": (env["trade_manager_url"], "ready"),
     }
-    for name, url in services.items():
+    for name, (url, endpoint) in services.items():
         for attempt in range(retries):
             try:
-                resp = requests.get(f"{url}/ping", timeout=5)
+                resp = requests.get(f"{url}/{endpoint}", timeout=5)
                 if resp.status_code == 200:
                     break
             except requests.RequestException as exc:
-                logger.warning("Ping failed for %s (%s): %s", name, attempt + 1, exc)
+                logger.warning(
+                    "Ping failed for %s (%s): %s", name, attempt + 1, exc
+                )
             time.sleep(delay)
         else:
             logger.error("Service %s unreachable at %s", name, url)

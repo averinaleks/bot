@@ -55,6 +55,11 @@ def tm_ping():
     return jsonify({'status': 'ok'})
 
 
+@tm_app.route('/ready')
+def tm_ready():
+    return jsonify({'status': 'ok'})
+
+
 def _run_dh():
     host = os.environ.get("HOST", "0.0.0.0")
     dh_app.run(host=host, port=8000)
@@ -110,9 +115,12 @@ def test_service_availability_check():
         p.start()
     time.sleep(1)
     try:
-        for port in (8000, 8001, 8002):
-            resp = requests.get(f'http://localhost:{port}/ping', timeout=5)
-            assert resp.status_code == 200
+        resp = requests.get('http://localhost:8000/ping', timeout=5)
+        assert resp.status_code == 200
+        resp = requests.get('http://localhost:8001/ping', timeout=5)
+        assert resp.status_code == 200
+        resp = requests.get('http://localhost:8002/ready', timeout=5)
+        assert resp.status_code == 200
     finally:
         for p in processes:
             p.terminate()
