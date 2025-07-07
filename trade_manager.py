@@ -13,7 +13,7 @@ import numpy as np
 from tenacity import retry, wait_exponential, stop_after_attempt
 from utils import (
     logger,
-    check_dataframe_empty,
+    check_dataframe_empty_async as _check_df_async,
     TelegramLogger,
 )
 from config import BotConfig, load_config
@@ -23,7 +23,6 @@ try:
 except ImportError:  # pragma: no cover - tests provide stub without this func
     async def safe_api_call(exchange, method: str, *args, **kwargs):
         return await getattr(exchange, method)(*args, **kwargs)
-import inspect
 import torch
 import joblib
 import os
@@ -35,14 +34,8 @@ from flask import Flask, request, jsonify
 import threading
 
 # Determine computation device once
+
 device_type = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-async def _check_df_async(df, context: str = "") -> bool:
-    result = check_dataframe_empty(df, context)
-    if inspect.isawaitable(result):
-        result = await result
-    return result
 
 
 def _register_cleanup_handlers(tm: "TradeManager") -> None:
