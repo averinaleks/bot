@@ -37,6 +37,7 @@ utils_stub.logger = logging.getLogger('test')
 async def _cde_stub(*a, **kw):
     return False
 utils_stub.check_dataframe_empty = _cde_stub
+utils_stub.check_dataframe_empty_async = _cde_stub
 sys.modules['utils'] = utils_stub
 os.environ["TEST_MODE"] = "1"
 sys.modules.pop('trade_manager', None)
@@ -71,6 +72,7 @@ utils.logger = logging.getLogger('test')
 async def _cde(*a, **kw):
     return False
 utils.check_dataframe_empty = _cde
+utils.check_dataframe_empty_async = _cde
 sys.modules['utils'] = utils
 
 
@@ -316,6 +318,7 @@ def test_get_loss_streak():
         return await tm.get_loss_streak('BTCUSDT')
 
     import asyncio
+
     streak = asyncio.run(run())
     assert streak == 3
 
@@ -337,4 +340,6 @@ def test_get_win_streak():
     import asyncio
     streak = asyncio.run(run())
     assert streak == 3
+
+sys.modules.pop('utils', None)
 

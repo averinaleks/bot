@@ -52,6 +52,7 @@ utils.logger = logging.getLogger('test')
 async def _cde(*a, **kw):
     return False
 utils.check_dataframe_empty = _cde
+utils.check_dataframe_empty_async = _cde
 sys.modules['utils'] = utils
 
 scipy_mod = types.ModuleType('scipy')
@@ -92,3 +93,4 @@ def test_get_opt_interval_zero_threshold():
 sys.modules.pop('optuna', None)
 sys.modules.pop('optuna.exceptions', None)
 sys.modules.pop('optuna.samplers', None)
+sys.modules.pop('utils', None)
