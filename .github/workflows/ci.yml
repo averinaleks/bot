@@ -1,5 +1,9 @@
 name: CI
 
+# If a job fails with a temporary runner error, rerun the workflow.
+# Self-hosted runners are also supported. When contacting GitHub Support
+# include the correlation ID from the run's raw logs.
+
 on:
   push:
   pull_request:
