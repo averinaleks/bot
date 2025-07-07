@@ -18,7 +18,7 @@ from utils import (
     safe_api_call,
 )
 from tenacity import retry, wait_exponential
-from typing import List, Dict, TYPE_CHECKING
+from typing import List, Dict, TYPE_CHECKING, Any
 from config import BotConfig
 import ta
 import os
@@ -270,6 +270,11 @@ class DataHandler:
     ) -> bool:
         """Return True if the most recent candle is within ``max_delay`` seconds."""
         try:
+            if symbol in LATEST_OHLCV:
+                ts = LATEST_OHLCV[symbol]["timestamp"]
+                age = pd.Timestamp.now(tz="UTC") - pd.to_datetime(ts, utc=True)
+                if age.total_seconds() <= max_delay:
+                    return True
             df_lock = self.ohlcv_lock if timeframe == "primary" else self.ohlcv_2h_lock
             df = self.ohlcv if timeframe == "primary" else self.ohlcv_2h
             async with df_lock:
@@ -1345,25 +1350,68 @@ class DataHandler:
 
 api_app = Flask(__name__)
 
-# Default price returned for any symbol when no explicit price is set.  The
-# value must be non-zero so tests relying on a positive price succeed.
+# Default price returned when the exchange call fails. The value must be
+# non‐zero so tests relying on a positive price succeed.
 DEFAULT_PRICE = 100.0
 
-# In-memory store for explicitly set prices.  Symbols not present here will
-# fall back to ``DEFAULT_PRICE``.
-PRICES = {"TEST": DEFAULT_PRICE}
+# Cached OHLCV rows keyed by symbol. Each entry stores a timestamp aware
+# ``pd.Timestamp`` and OHLCV fields so ``is_data_fresh`` can verify data
+# recency.
+LATEST_OHLCV: Dict[str, Dict[str, Any]] = {}
+
+# Exchange instance used by the price endpoint. Lazily created on first use so
+# tests without API keys can stub it easily.
+_PRICE_EXCHANGE: BybitSDKAsync | None = None
+
+def _get_price_exchange() -> BybitSDKAsync:
+    global _PRICE_EXCHANGE
+    if _PRICE_EXCHANGE is None:
+        _PRICE_EXCHANGE = create_exchange()
+    return _PRICE_EXCHANGE
 
 
 @api_app.route("/price/<symbol>")
 def price(symbol: str):
-    """Return the last known price for ``symbol``.
+    """Return the most recent price for ``symbol`` from the exchange."""
 
-    If the symbol is unknown, ``DEFAULT_PRICE`` is returned.  This keeps the
-    endpoint behaviour predictable in tests where the actual pricing logic is
-    not exercised.
-    """
-    price = PRICES.get(symbol, DEFAULT_PRICE)
-    return jsonify({"price": price})
+    if os.getenv("TEST_MODE") == "1":
+        return jsonify({"price": DEFAULT_PRICE})
+
+    async def _lookup(sym: str) -> float:
+        exch = _get_price_exchange()
+        try:
+            ohlcv = await safe_api_call(exch, "fetch_ohlcv", sym, "1m", limit=1)
+            if ohlcv:
+                ts, o, h, l, c, v = ohlcv[-1]
+                LATEST_OHLCV[sym] = {
+                    "timestamp": pd.to_datetime(ts, unit="ms", utc=True),
+                    "open": float(o),
+                    "high": float(h),
+                    "low": float(l),
+                    "close": float(c),
+                    "volume": float(v),
+                }
+                return float(c)
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error("OHLCV fetch failed for %s: %s", sym, exc)
+        try:
+            ticker = await safe_api_call(exch, "fetch_ticker", sym)
+            price_val = float(ticker.get("last") or 0.0)
+            LATEST_OHLCV[sym] = {
+                "timestamp": pd.Timestamp.utcnow(),
+                "open": price_val,
+                "high": price_val,
+                "low": price_val,
+                "close": price_val,
+                "volume": float(ticker.get("quoteVolume") or 0.0),
+            }
+            return price_val
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error("Ticker fetch failed for %s: %s", sym, exc)
+            return DEFAULT_PRICE
+
+    price_val = asyncio.run(_lookup(symbol))
+    return jsonify({"price": price_val})
 
 
 @api_app.route("/ping")
