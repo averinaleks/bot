@@ -127,9 +127,7 @@ use these steps to diagnose the problem:
 
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
-4. If logs contain `gymnasium import failed`, the package is required.
-  Install it manually with `pip install gymnasium`.
-
+4. If logs contain `gymnasium import failed`, install the package manually with `pip install gymnasium`.
 5. When RL components start, they import `gymnasium`.
   If the package is missing, training will fail until you install it.
 6. If `gunicorn` logs show `WORKER TIMEOUT` messages, the service
