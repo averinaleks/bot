@@ -3,6 +3,7 @@ import os
 import types
 import asyncio
 import importlib.util
+import pytest
 import sys
 import threading
 import time
@@ -62,3 +63,32 @@ def test_worker_thread_stops_after_shutdown():
             break
         time.sleep(0.05)
     assert threading.active_count() <= start_threads
+
+
+@pytest.mark.asyncio
+async def test_long_message_split_into_parts():
+    os.environ["TEST_MODE"] = "1"
+
+    class CaptureBot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, chat_id, text):
+            self.sent.append(text)
+            return types.SimpleNamespace(message_id=len(self.sent))
+
+    bot = CaptureBot()
+    tl = TelegramLogger(bot, chat_id=1)
+
+    long_message = "x" * 600
+    await tl.send_telegram_message(long_message)
+
+    chat_id, text, urgent = TelegramLogger._queue.get_nowait()
+    await tl._send(text, chat_id, urgent)
+
+    await TelegramLogger.shutdown()
+
+    assert len(bot.sent) == 2
+    assert bot.sent[0] == long_message[:500]
+    assert bot.sent[1] == long_message[500:]
+    assert "".join(bot.sent) == long_message
