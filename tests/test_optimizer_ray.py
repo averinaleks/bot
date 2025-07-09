@@ -80,10 +80,26 @@ def make_df():
     return df.set_index(['symbol', df.index])
 
 
+def make_high_vol_df():
+    idx = pd.date_range('2020-01-01', periods=30, freq='min')
+    np.random.seed(0)
+    close = 1 + np.random.randn(len(idx)) * 0.1
+    df = pd.DataFrame({
+        'close': close,
+        'open': close,
+        'high': close + 0.1,
+        'low': close - 0.1,
+        'volume': np.ones(len(idx)),
+    }, index=idx)
+    df['symbol'] = 'BTCUSDT'
+    return df.set_index(['symbol', df.index])
+
+
+@pytest.mark.parametrize('df_builder', [make_df, make_high_vol_df])
 @pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
 @pytest.mark.asyncio
-async def test_optimize_returns_params():
-    df = make_df()
+async def test_optimize_returns_params(df_builder):
+    df = df_builder()
     config = BotConfig(
         timeframe='1m',
         optuna_trials=1,
@@ -132,6 +148,43 @@ async def test_optimize_zero_vol_threshold():
     params = await opt.optimize('BTCUSDT')
     assert isinstance(params, dict)
     assert 'ema30_period' in params
+
+
+@pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
+@pytest.mark.asyncio
+async def test_get_opt_interval_called(monkeypatch):
+    df = make_high_vol_df()
+    config = BotConfig(
+        timeframe='1m',
+        optuna_trials=1,
+        optimization_interval=1,
+        volatility_threshold=0.02,
+        ema30_period=30,
+        ema100_period=100,
+        ema200_period=200,
+        atr_period_default=14,
+        tp_multiplier=2.0,
+        sl_multiplier=1.0,
+        base_probability_threshold=0.5,
+        loss_streak_threshold=2,
+        win_streak_threshold=2,
+        threshold_adjustment=0.05,
+        mlflow_enabled=False,
+    )
+    opt = ParameterOptimizer(config, DummyDataHandler(df))
+    captured = {}
+
+    orig = opt.get_opt_interval
+
+    def spy(symbol, vol):
+        captured['args'] = (symbol, vol)
+        return orig(symbol, vol)
+
+    monkeypatch.setattr(opt, 'get_opt_interval', spy)
+    await opt.optimize('BTCUSDT')
+    expected = df['close'].pct_change().std()
+    assert captured['args'][0] == 'BTCUSDT'
+    assert captured['args'][1] == pytest.approx(expected)
 
 
 @pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
