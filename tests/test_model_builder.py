@@ -6,6 +6,7 @@ import pandas as pd
 import types
 import pytest
 import importlib.util
+import contextlib
 from config import BotConfig
 import asyncio
 
@@ -29,6 +30,7 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common"] = common
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
+import model_builder
 from model_builder import ModelBuilder, _train_model_remote
 
 class DummyIndicators:
@@ -95,3 +97,33 @@ def test_train_model_remote_returns_state_and_predictions(model_type):
     assert len(preds) == len(labels)
     assert isinstance(preds, list)
     assert isinstance(labels, list)
+
+
+@pytest.mark.asyncio
+async def test_training_loop_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir="/tmp", retrain_interval=0)
+    dh = types.SimpleNamespace(usdt_pairs=["BTCUSDT"])
+    mb = ModelBuilder(cfg, dh, DummyTradeManager())
+
+    call = {"n": 0}
+
+    async def fake_retrain(symbol):
+        call["n"] += 1
+        if call["n"] == 1:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(mb, "retrain_symbol", fake_retrain)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(model_builder.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(mb.train())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+
+    assert call["n"] >= 2
