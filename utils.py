@@ -377,6 +377,9 @@ class TelegramLogger(logging.Handler):
         # Telegram allows up to 4096 characters per message. The worker will
         # further split messages into 500 character chunks, so only trim to the
         # API limit here instead of the previous 512 characters.
+        if TelegramLogger._queue is None:
+            logger.warning("TelegramLogger queue is None, message dropped")
+            return
         msg = message[:4096]
         try:
             TelegramLogger._queue.put_nowait((self.chat_id, msg, urgent))

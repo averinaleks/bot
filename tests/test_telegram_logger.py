@@ -92,3 +92,18 @@ async def test_long_message_split_into_parts():
     assert bot.sent[0] == long_message[:500]
     assert bot.sent[1] == long_message[500:]
     assert "".join(bot.sent) == long_message
+
+
+@pytest.mark.asyncio
+async def test_send_after_shutdown_warning(caplog):
+    os.environ["TEST_MODE"] = "1"
+
+    bot = DummyBot()
+    tl = TelegramLogger(bot, chat_id=1)
+
+    await TelegramLogger.shutdown()
+
+    caplog.set_level(logging.WARNING)
+    await tl.send_telegram_message("test")
+
+    assert any(rec.levelno == logging.WARNING for rec in caplog.records)
