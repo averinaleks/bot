@@ -2,6 +2,8 @@ import os, sys
 import importlib
 import types
 import logging
+import asyncio
+import contextlib
 import pytest
 from config import BotConfig
 
@@ -78,3 +80,27 @@ def test_price_endpoint_returns_default():
         resp = client.get('/price/UNKNOWN')
         assert resp.status_code == 200
         assert resp.get_json() == {'price': DEFAULT_PRICE}
+
+
+@pytest.mark.asyncio
+async def test_load_from_disk_buffer_loop(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    loop_task = asyncio.create_task(dh.load_from_disk_buffer_loop())
+
+    item = (["BTCUSDT"], "message", "primary")
+    await dh.save_to_disk_buffer(1, item)
+
+    for _ in range(10):
+        if not dh.ws_queue.empty():
+            break
+        await asyncio.sleep(0.2)
+
+    assert not dh.ws_queue.empty()
+    priority, loaded = await dh.ws_queue.get()
+    assert priority == 1
+    assert loaded == item
+
+    loop_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await loop_task

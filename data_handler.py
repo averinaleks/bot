@@ -672,6 +672,11 @@ class DataHandler:
             except (OSError, ValueError) as e:
                 logger.error("Ошибка загрузки из дискового буфера: %s", e)
 
+    async def load_from_disk_buffer_loop(self):
+        while True:
+            await self.load_from_disk_buffer()
+            await asyncio.sleep(1)
+
     async def adjust_subscriptions(self):
         cpu_load = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
@@ -744,7 +749,7 @@ class DataHandler:
                     )
                     self.tasks.extend([t1, t2])
                 self.tasks.append(asyncio.create_task(self._process_ws_queue()))
-                self.tasks.append(asyncio.create_task(self.load_from_disk_buffer()))
+                self.tasks.append(asyncio.create_task(self.load_from_disk_buffer_loop()))
                 self.tasks.append(asyncio.create_task(self.monitor_load()))
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except Exception as e:
