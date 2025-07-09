@@ -4,6 +4,8 @@ import types
 import logging
 import asyncio
 import contextlib
+import json
+import pandas as pd
 import pytest
 from config import BotConfig
 
@@ -34,6 +36,7 @@ if 'optimizer' not in sys.modules:
 os.environ['TEST_MODE'] = '1'
 
 from data_handler import DataHandler
+import data_handler
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
@@ -104,3 +107,119 @@ async def test_load_from_disk_buffer_loop(tmp_path):
     loop_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await loop_task
+
+
+@pytest.mark.asyncio
+async def test_cleanup_old_data_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', data_cleanup_interval=0)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    call = {'n': 0}
+    orig_now = pd.Timestamp.now
+
+    def fake_now(*a, **k):
+        call['n'] += 1
+        if call['n'] == 1:
+            raise RuntimeError('boom')
+        return orig_now(*a, **k)
+
+    monkeypatch.setattr(pd.Timestamp, 'now', fake_now)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(dh.cleanup_old_data())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+
+    assert call['n'] >= 2
+
+
+@pytest.mark.asyncio
+async def test_monitor_load_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    call = {'n': 0}
+
+    async def fake_adjust():
+        call['n'] += 1
+        if call['n'] == 1:
+            raise RuntimeError('boom')
+
+    monkeypatch.setattr(dh, 'adjust_subscriptions', fake_adjust)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(dh.monitor_load())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+
+    assert call['n'] >= 2
+
+
+@pytest.mark.asyncio
+async def test_process_ws_queue_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    processed = []
+
+    async def fake_sync(symbol, df, fr, oi, ob, timeframe='primary'):
+        processed.append(symbol)
+
+    monkeypatch.setattr(dh, 'synchronize_and_update', fake_sync)
+
+    call = {'n': 0}
+    orig_loads = data_handler.json.loads
+
+    class StopLoop(BaseException):
+        pass
+
+    def fake_loads(s):
+        call['n'] += 1
+        if call['n'] == 1:
+            raise ValueError('boom')
+        if call['n'] == 3:
+            raise StopLoop()
+        return orig_loads(s)
+
+    monkeypatch.setattr(data_handler.json, 'loads', fake_loads)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    msg = json.dumps({
+        'topic': 'kline.1.BTCUSDT',
+        'data': [{
+            'start': int(pd.Timestamp.now(tz='UTC').timestamp() * 1000),
+            'open': 1, 'high': 2, 'low': 0.5, 'close': 1.5, 'volume': 1
+        }]
+    })
+
+    await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
+    await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
+    await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
+
+    task = asyncio.create_task(dh._process_ws_queue())
+    with contextlib.suppress(StopLoop):
+        await asyncio.wait_for(task, 0.1)
+    task.cancel()
+
+    assert processed == ['BTCUSDT']
+    assert call['n'] >= 2
