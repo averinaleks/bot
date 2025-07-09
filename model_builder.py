@@ -632,6 +632,8 @@ class ModelBuilder:
                     if time.time() - self.last_retrain_time.get(symbol, 0) >= self.config['retrain_interval']:
                         await self.retrain_symbol(symbol)
                 await asyncio.sleep(self.config['retrain_interval'])
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Ошибка цикла обучения: %s", e)
                 await asyncio.sleep(1)

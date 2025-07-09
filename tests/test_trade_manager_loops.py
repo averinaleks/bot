@@ -114,6 +114,8 @@ async def test_monitor_performance_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call['n'] >= 2
 
@@ -153,6 +155,8 @@ async def test_manage_positions_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call['n'] >= 2
 
@@ -179,6 +183,8 @@ async def test_process_symbol_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call['n'] >= 2
 

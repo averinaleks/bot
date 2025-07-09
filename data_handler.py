@@ -641,6 +641,8 @@ class DataHandler:
                                 del self.processed_timestamps_2h[symbol]
                     logger.info("Старые данные очищены")
                 await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Ошибка очистки данных: %s", e)
                 await asyncio.sleep(1)
@@ -762,6 +764,8 @@ class DataHandler:
             try:
                 await self.adjust_subscriptions()
                 await asyncio.sleep(300)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Ошибка мониторинга нагрузки: %s", e)
                 await asyncio.sleep(1)
@@ -1161,8 +1165,10 @@ class DataHandler:
     async def _process_ws_queue(self):
         last_latency_log = time.time()
         while True:
+            got_item = False
             try:
                 priority, (symbols, message, timeframe) = await self.ws_queue.get()
+                got_item = True
                 now = time.time()
                 self.process_rate_timestamps.append(now)
                 self.process_rate_timestamps = [
@@ -1306,12 +1312,15 @@ class DataHandler:
                         rate,
                     )
                     last_latency_log = time.time()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Ошибка обработки очереди WebSocket: %s", e)
                 await asyncio.sleep(0.1)
                 continue
             finally:
-                self.ws_queue.task_done()
+                if got_item:
+                    self.ws_queue.task_done()
 
     async def stop(self):
         """Gracefully cancel running tasks and close open connections."""

@@ -125,5 +125,7 @@ async def test_training_loop_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call["n"] >= 2
