@@ -39,6 +39,13 @@ def _stub_modules():
 
     sys.modules.setdefault("websockets", types.ModuleType("websockets"))
 
+    optimizer_mod = types.ModuleType("optimizer")
+    class _PO:
+        def __init__(self, *a, **k):
+            pass
+    optimizer_mod.ParameterOptimizer = _PO
+    sys.modules.setdefault("optimizer", optimizer_mod)
+
     class _RayRemoteFunction:
         def __init__(self, func):
             self._function = func

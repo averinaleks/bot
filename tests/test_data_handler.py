@@ -223,3 +223,22 @@ async def test_process_ws_queue_recovery(monkeypatch):
 
     assert processed == ['BTCUSDT']
     assert call['n'] >= 2
+
+
+@pytest.mark.asyncio
+async def test_stop_handles_close_errors():
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    class BadWS:
+        async def close(self):
+            raise RuntimeError('boom')
+
+    class BadPro:
+        async def close(self):
+            raise RuntimeError('boom')
+
+    dh.ws_pool = {'ws://': [BadWS()]}
+    dh.pro_exchange = BadPro()
+
+    await dh.stop()  # should not raise

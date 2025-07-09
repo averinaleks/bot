@@ -1338,7 +1338,7 @@ class DataHandler:
                     await ws.close()
                 except Exception as e:
                     logger.exception("Ошибка закрытия WebSocket %s: %s", url, e)
-                    raise
+                    continue
         self.ws_pool.clear()
 
         if self.pro_exchange is not None and hasattr(self.pro_exchange, "close"):
@@ -1346,7 +1346,7 @@ class DataHandler:
                 await self.pro_exchange.close()
             except Exception as e:
                 logger.exception("Ошибка закрытия ccxtpro: %s", e)
-                raise
+                pass
 
         await TelegramLogger.shutdown()
 
