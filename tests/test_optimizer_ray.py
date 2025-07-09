@@ -52,6 +52,7 @@ import builtins
 from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
 builtins.ExperimentalWarning = _OptunaExperimentalWarning
 
+sys.modules.pop('optimizer', None)
 from optimizer import ParameterOptimizer  # noqa: E402
 import optimizer
 

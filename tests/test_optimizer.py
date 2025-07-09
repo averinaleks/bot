@@ -43,8 +43,8 @@ sys.modules.setdefault('optuna.samplers', optuna_samplers)
 sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
 
-from optimizer import ParameterOptimizer  # noqa: E402
 sys.modules.pop("optimizer", None)
+from optimizer import ParameterOptimizer  # noqa: E402
 
 
 utils = types.ModuleType('utils')
