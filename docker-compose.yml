@@ -39,7 +39,9 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    command: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002 --timeout ${GUNICORN_TIMEOUT:-120} trade_manager:api_app
+    # Use the ASGI wrapper exported by trade_manager so UvicornWorker can
+    # serve the Flask app correctly.
+    command: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002 --timeout ${GUNICORN_TIMEOUT:-120} trade_manager:asgi_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8002:8002"

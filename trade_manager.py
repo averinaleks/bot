@@ -1167,6 +1167,13 @@ class TradeManager:
 
 api_app = Flask(__name__)
 
+# Expose an ASGI-compatible application for Gunicorn's UvicornWorker. Using
+# ``WSGIMiddleware`` avoids issues when Flask's built-in ``asgi_app`` attribute
+# is unavailable or behaves differently across versions.
+from uvicorn.middleware.wsgi import WSGIMiddleware
+
+asgi_app = WSGIMiddleware(api_app)
+
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
 
