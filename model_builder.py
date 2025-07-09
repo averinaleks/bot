@@ -634,8 +634,8 @@ class ModelBuilder:
                 await asyncio.sleep(self.config['retrain_interval'])
             except Exception as e:
                 logger.exception("Ошибка цикла обучения: %s", e)
-                await asyncio.sleep(60)
-                raise
+                await asyncio.sleep(1)
+                continue
 
     async def adjust_thresholds(self, symbol, prediction: float):
         base_long = self.config.get('base_probability_threshold', 0.6)
