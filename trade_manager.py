@@ -833,8 +833,8 @@ class TradeManager:
                 await asyncio.sleep(self.performance_window / 10)
             except Exception as e:
                 logger.exception("Performance monitoring error: %s", e)
-                await asyncio.sleep(60)
-                raise
+                await asyncio.sleep(1)
+                continue
 
     async def manage_positions(self):
         while True:
@@ -861,8 +861,8 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except Exception as e:
                 logger.exception("Error managing positions: %s", e)
-                await asyncio.sleep(60)
-                raise
+                await asyncio.sleep(1)
+                continue
 
     async def evaluate_ema_condition(self, symbol: str, signal: str) -> bool:
         try:
@@ -1151,8 +1151,8 @@ class TradeManager:
                 )
             except Exception as e:
                 logger.exception("Error processing %s: %s", symbol, e)
-                await asyncio.sleep(60)
-                raise
+                await asyncio.sleep(1)
+                continue
 
 
 # ----------------------------------------------------------------------
