@@ -643,8 +643,8 @@ class DataHandler:
                 await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
             except Exception as e:
                 logger.exception("Ошибка очистки данных: %s", e)
-                await asyncio.sleep(60)
-                raise
+                await asyncio.sleep(1)
+                continue
 
     async def save_to_disk_buffer(self, priority, item):
         try:
@@ -763,9 +763,9 @@ class DataHandler:
                 await self.adjust_subscriptions()
                 await asyncio.sleep(300)
             except Exception as e:
-                logger.error("Ошибка мониторинга нагрузки: %s", e)
-                await asyncio.sleep(60)
-                raise
+                logger.exception("Ошибка мониторинга нагрузки: %s", e)
+                await asyncio.sleep(1)
+                continue
 
     def fix_symbol(self, symbol: str) -> str:
         """Normalize symbol for Bybit futures REST requests.
@@ -1296,7 +1296,8 @@ class DataHandler:
                         )
                     except Exception as e:
                         logger.exception("Ошибка обработки данных для %s: %s", symbol, e)
-                        raise
+                        await asyncio.sleep(0.1)
+                        continue
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
                     logger.info(
@@ -1307,8 +1308,8 @@ class DataHandler:
                     last_latency_log = time.time()
             except Exception as e:
                 logger.exception("Ошибка обработки очереди WebSocket: %s", e)
-                await asyncio.sleep(2)
-                raise
+                await asyncio.sleep(0.1)
+                continue
             finally:
                 self.ws_queue.task_done()
 
