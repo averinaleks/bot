@@ -831,6 +831,8 @@ class TradeManager:
                                     f"⚠️ Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                                 )
                 await asyncio.sleep(self.performance_window / 10)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Performance monitoring error: %s", e)
                 await asyncio.sleep(1)
@@ -859,6 +861,8 @@ class TradeManager:
                     await self.check_stop_loss_take_profit(symbol, current_price)
                     await self.check_lstm_exit_signal(symbol, current_price)
                 await asyncio.sleep(self.check_interval)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Error managing positions: %s", e)
                 await asyncio.sleep(1)
@@ -1149,6 +1153,8 @@ class TradeManager:
                 await asyncio.sleep(
                     self.config["check_interval"] / len(self.data_handler.usdt_pairs)
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.exception("Error processing %s: %s", symbol, e)
                 await asyncio.sleep(1)

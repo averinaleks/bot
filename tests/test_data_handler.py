@@ -136,6 +136,8 @@ async def test_cleanup_old_data_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call['n'] >= 2
 
@@ -165,6 +167,8 @@ async def test_monitor_load_recovery(monkeypatch):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert call['n'] >= 2
 
@@ -184,15 +188,10 @@ async def test_process_ws_queue_recovery(monkeypatch):
     call = {'n': 0}
     orig_loads = data_handler.json.loads
 
-    class StopLoop(BaseException):
-        pass
-
     def fake_loads(s):
         call['n'] += 1
         if call['n'] == 1:
             raise ValueError('boom')
-        if call['n'] == 3:
-            raise StopLoop()
         return orig_loads(s)
 
     monkeypatch.setattr(data_handler.json, 'loads', fake_loads)
@@ -217,9 +216,11 @@ async def test_process_ws_queue_recovery(monkeypatch):
     await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
 
     task = asyncio.create_task(dh._process_ws_queue())
-    with contextlib.suppress(StopLoop):
-        await asyncio.wait_for(task, 0.1)
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
     task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert processed == ['BTCUSDT']
     assert call['n'] >= 2
