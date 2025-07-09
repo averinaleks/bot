@@ -202,13 +202,7 @@ class ParameterOptimizer:
                 volatility - self.last_volatility.get(symbol, 0.0)
             ) / max(self.last_volatility.get(symbol, 0.01), 0.01)
             self.last_volatility[symbol] = volatility
-            threshold = max(self.volatility_threshold, 1e-6)
-            optimization_interval = self.base_optimization_interval / (
-                1 + volatility / threshold
-            )
-            optimization_interval = max(
-                1800, min(self.base_optimization_interval * 2, optimization_interval)
-            )  # Минимум 30 минут
+            optimization_interval = self.get_opt_interval(symbol, volatility)
             if (
                 time.time() - self.last_optimization.get(symbol, 0)
                 < optimization_interval
