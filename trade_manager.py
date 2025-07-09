@@ -1167,6 +1167,15 @@ class TradeManager:
 
 api_app = Flask(__name__)
 
+# Expose an ASGI-compatible application so Gunicorn's UvicornWorker can run
+# this Flask app without raising "Flask.__call__() missing start_response".
+try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
+    asgi_app = api_app.asgi_app
+except AttributeError:  # pragma: no cover - older Flask versions
+    from uvicorn.middleware.wsgi import WSGIMiddleware
+
+    asgi_app = WSGIMiddleware(api_app)
+
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
 
