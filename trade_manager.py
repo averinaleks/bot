@@ -1262,9 +1262,13 @@ def _initialize_trade_manager() -> None:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.create_task(trade_manager.run())
+            _ready_event.set()
             loop.run_forever()
-    finally:
+        else:
+            _ready_event.set()
+    except Exception:
         _ready_event.set()
+        raise
 
 
 # Start initialization when the module is imported
