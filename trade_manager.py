@@ -1172,7 +1172,10 @@ api_app = Flask(__name__)
 try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
     asgi_app = api_app.asgi_app
 except AttributeError:  # pragma: no cover - older Flask versions
-    from uvicorn.middleware.wsgi import WSGIMiddleware
+    try:
+        from a2wsgi import WSGIMiddleware  # type: ignore
+    except Exception:  # pragma: no cover - fallback if a2wsgi isn't installed
+        from uvicorn.middleware.wsgi import WSGIMiddleware
 
     asgi_app = WSGIMiddleware(api_app)
 
