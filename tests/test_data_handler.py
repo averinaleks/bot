@@ -59,6 +59,19 @@ async def test_select_liquid_pairs_plain_symbol_included():
     assert 'BTCUSDT' in pairs
 
 
+@pytest.mark.asyncio
+async def test_select_liquid_pairs_prefers_highest_volume():
+    cfg = BotConfig(cache_dir='/tmp', max_symbols=5)
+    volumes = {'BTCUSDT': 1.0, 'BTC/USDT:USDT': 2.0}
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
+    markets = {
+        'BTCUSDT': {'active': True},
+        'BTC/USDT:USDT': {'active': True},
+    }
+    pairs = await dh.select_liquid_pairs(markets)
+    assert pairs == ['BTC/USDT:USDT']
+
+
 class DummyWS:
     def __init__(self):
         self.sent = []

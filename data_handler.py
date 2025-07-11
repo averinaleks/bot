@@ -372,9 +372,16 @@ class DataHandler:
         if tasks:
             pair_volumes.extend(await asyncio.gather(*tasks))
 
-        pair_volumes.sort(key=lambda x: x[1], reverse=True)
+        # Deduplicate entries using the canonical symbol
+        highest = {}
+        for sym, vol in pair_volumes:
+            canon = self.fix_ws_symbol(sym)
+            if canon not in highest or vol > highest[canon][1]:
+                highest[canon] = (sym, vol)
+
+        sorted_pairs = sorted(highest.values(), key=lambda x: x[1], reverse=True)
         top_limit = self.config.get("max_symbols", 50)
-        return [s for s, _ in pair_volumes[:top_limit]]
+        return [s for s, _ in sorted_pairs[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = "") -> tuple:
