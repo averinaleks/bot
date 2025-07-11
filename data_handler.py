@@ -886,16 +886,23 @@ class DataHandler:
             try:
                 if url not in self.ws_pool:
                     self.ws_pool[url] = []
-                if not self.ws_pool[url]:
+                ws = None
+                while self.ws_pool[url]:
+                    ws = self.ws_pool[url].pop(0)
+                    if ws.open:
+                        break
+                    try:
+                        await ws.close()
+                    except Exception:
+                        pass
+                    ws = None
+                if ws is None or not ws.open:
                     ws = await websockets.connect(
                         url,
                         ping_interval=20,
                         ping_timeout=30,
                         open_timeout=max(connection_timeout, 10),
                     )
-                    self.ws_pool[url].append(ws)
-                else:
-                    ws = self.ws_pool[url].pop(0)
                 logger.info("Подключение к WebSocket %s", url)
                 return ws
             except OSError as e:
