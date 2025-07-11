@@ -983,9 +983,9 @@ class DataHandler:
         connection_timeout: int,
     ):
         """Read messages from ``ws`` and enqueue them for processing."""
-        start_time = time.time()
         while True:
             try:
+                start_time = time.time()
                 message = await asyncio.wait_for(ws.recv(), timeout=connection_timeout)
                 latency = time.time() - start_time
                 for symbol in symbols:
