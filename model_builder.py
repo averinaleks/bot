@@ -922,7 +922,7 @@ class RLAgent:
             self.models[symbol] = model
         logger.info("RL-модель обучена для %s", symbol)
 
-    async def train(self):
+    async def train_rl(self):
         for symbol in self.data_handler.usdt_pairs:
             await self.train_symbol(symbol)
 
