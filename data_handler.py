@@ -1065,8 +1065,10 @@ class DataHandler:
         while True:
             current_url = urls[current_url_index % len(urls)]
             ws = None
+            connected = False
             try:
                 ws = await self._connect_ws(current_url, connection_timeout)
+                connected = True
                 self.active_subscriptions += len(symbols)
                 self.restart_attempts = 0
                 reconnect_attempts = 0
@@ -1158,7 +1160,8 @@ class DataHandler:
                             )
                             raise
             finally:
-                self.active_subscriptions -= len(symbols)
+                if connected:
+                    self.active_subscriptions -= len(symbols)
                 if ws and ws.open:
                     self.ws_pool[current_url].append(ws)
                 elif ws:
