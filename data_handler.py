@@ -22,7 +22,6 @@ from typing import List, Dict, TYPE_CHECKING, Any
 from config import BotConfig
 import ta
 import os
-from queue import Queue
 import joblib
 import psutil
 import ray
@@ -207,7 +206,10 @@ class DataHandler:
         self.process_rate_window = 1
         self.cleanup_task = None
         self.ws_queue = asyncio.PriorityQueue(maxsize=config.get("ws_queue_size", 10000))
-        self.disk_buffer = Queue(maxsize=config.get("disk_buffer_size", 10000))
+        # Use an asyncio.Queue so disk buffer operations never block the event loop
+        self.disk_buffer: asyncio.Queue[str] = asyncio.Queue(
+            maxsize=config.get("disk_buffer_size", 10000)
+        )
         self.buffer_dir = os.path.join(config["cache_dir"], "ws_buffer")
         os.makedirs(self.buffer_dir, exist_ok=True)
         self.processed_timestamps = {}
@@ -658,28 +660,32 @@ class DataHandler:
     async def save_to_disk_buffer(self, priority, item):
         try:
             filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.joblib")
-            joblib.dump((priority, item), filename)
-            self.disk_buffer.put(filename)
-            logger.info(
-                "Сообщение сохранено в дисковый буфер: %s",
-                filename,
-            )
+            await asyncio.to_thread(joblib.dump, (priority, item), filename)
+            try:
+                self.disk_buffer.put_nowait(filename)
+            except asyncio.QueueFull:
+                logger.warning("Очередь дискового буфера переполнена, сообщение пропущено")
+                await asyncio.to_thread(os.remove, filename)
+                return
+            logger.info("Сообщение сохранено в дисковый буфер: %s", filename)
         except (OSError, ValueError) as e:
             logger.error("Ошибка сохранения в дисковый буфер: %s", e)
 
     async def load_from_disk_buffer(self):
         while not self.disk_buffer.empty():
             try:
-                filename = self.disk_buffer.get()
-                priority, item = joblib.load(filename)
+                filename = self.disk_buffer.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            try:
+                priority, item = await asyncio.to_thread(joblib.load, filename)
                 await self.ws_queue.put((priority, item))
-                os.remove(filename)
-                logger.info(
-                    "Сообщение загружено из дискового буфера: %s",
-                    filename,
-                )
+                await asyncio.to_thread(os.remove, filename)
+                logger.info("Сообщение загружено из дискового буфера: %s", filename)
             except (OSError, ValueError) as e:
                 logger.error("Ошибка загрузки из дискового буфера: %s", e)
+            finally:
+                self.disk_buffer.task_done()
 
     async def load_from_disk_buffer_loop(self):
         while True:
