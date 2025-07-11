@@ -1021,20 +1021,15 @@ class DataHandler:
                                     timeframe=timeframe,
                                 )
                     break
+                data = json.loads(message)
+                topic = data.get("topic", "")
+                symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
+                priority = self.symbol_priority.get(symbol, 0)
                 try:
-                    data = json.loads(message)
-                    topic = data.get("topic", "")
-                    symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
-                    priority = self.symbol_priority.get(symbol, 0)
-                    try:
-                        await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
-                    except asyncio.TimeoutError:
-                        logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
-                        await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                    await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
                 except asyncio.TimeoutError:
                     logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
                     await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
-                    continue
             except asyncio.TimeoutError:
                 logger.warning(
                     "Тайм-аут WebSocket для %s (%s), отправка пинга",
