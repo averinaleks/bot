@@ -1311,9 +1311,13 @@ class DataHandler:
                         continue
                 if time.time() - last_latency_log > self.latency_log_interval:
                     rate = len(self.process_rate_timestamps) / self.process_rate_window
+                    if self.ws_latency:
+                        avg = sum(self.ws_latency.values()) / len(self.ws_latency)
+                    else:
+                        avg = 0.0
                     logger.info(
                         "Средняя задержка WebSocket: %.2f сек, скорость обработки: %.2f/с",
-                        sum(self.ws_latency.values()) / len(self.ws_latency),
+                        avg,
                         rate,
                     )
                     last_latency_log = time.time()
