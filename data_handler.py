@@ -358,7 +358,7 @@ class DataHandler:
                 try:
                     ticker = await safe_api_call(self.exchange, "fetch_ticker", sym)
                     volume = float(ticker.get("quoteVolume") or 0)
-                except (KeyError, ValueError) as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error("Ошибка получения тикера для %s: %s", sym, e)
                     volume = 0.0
                 return sym, volume
