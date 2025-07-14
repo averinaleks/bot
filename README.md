@@ -78,6 +78,17 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
+## Running tests
+
+Install the CPU requirements and execute `pytest`:
+
+```bash
+pip install -r requirements-cpu.txt
+pytest
+```
+
+The `requirements-cpu.txt` file already includes `pytest` and all other
+packages required by the test suite.
 ## Demo services
 
 The docker-compose configuration launches minimal placeholder services. `data_handler` exposes `/price/<symbol>` which always returns a fixed value (100 for `TEST`), and `model_builder` starts with no trained model. The bot will not open any real positions until these stubs are replaced with implementations that fetch live data and train a model.
@@ -257,8 +268,8 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Tests rely on the packages listed in `requirements-cpu.txt`. Install them before
-executing `pytest`:
+Tests rely on the packages listed in `requirements-cpu.txt`. Run this command to
+install everything required for `pytest`:
 
 ```bash
 pip install -r requirements-cpu.txt
