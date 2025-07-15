@@ -113,6 +113,12 @@ The data handler exposes two endpoints:
     data for symbols listed in ``STREAM_SYMBOLS``.  Cache lifetime is controlled
     by ``CACHE_TTL``.
 
+
+The reference scripts exist purely for demonstration and integration testing.
+They expose the same HTTP routes as the real services but avoid heavy
+dependencies.  Use them when you just want to verify the bot's basic workflow
+without setting up full ML libraries.
+
 The model builder maintains separate models per trading pair.  POST JSON data
 of the form::
 
@@ -136,6 +142,27 @@ trade_manager:
 ```
 
 Restore the Gunicorn commands when you want to launch the full services.
+
+### Running the full services
+
+Running these full modules requires TensorFlow, PyTorch and related
+libraries.  They may take noticeably longer to start while the frameworks
+initialise and will use a GPU if one is available.  Ensure the compose file
+sets `RUNTIME=nvidia` and that your system has the NVIDIA container runtime
+installed.  Without a GPU you can still run the services with
+`DOCKERFILE=Dockerfile.cpu` but startup will remain slower than the lightweight
+scripts above.
+
+The default `docker-compose.yml` already points to the full-featured
+implementations.  If you replaced the `command` entries with the minimal scripts
+earlier, simply revert those lines or copy the compose file from the repository
+again.  After restoring the Gunicorn commands, run:
+
+```bash
+docker compose up --build
+```
+
+so the heavy frameworks load and the services expose their production APIs.
 
 
 
