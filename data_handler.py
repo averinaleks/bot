@@ -42,11 +42,20 @@ except Exception as e:  # pragma: no cover - numba without cuda support
 
 
 def create_exchange() -> BybitSDKAsync:
-    """Create an authenticated Bybit SDK instance."""
-    return BybitSDKAsync(
-        api_key=os.environ.get("BYBIT_API_KEY", ""),
-        api_secret=os.environ.get("BYBIT_API_SECRET", ""),
-    )
+    """Create an authenticated Bybit SDK instance.
+
+    Raises
+    ------
+    RuntimeError
+        If required API credentials are missing.
+    """
+    api_key = os.environ.get("BYBIT_API_KEY", "")
+    api_secret = os.environ.get("BYBIT_API_SECRET", "")
+    if not api_key or not api_secret:
+        raise RuntimeError(
+            "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
+        )
+    return BybitSDKAsync(api_key=api_key, api_secret=api_secret)
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
