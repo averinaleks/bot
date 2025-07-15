@@ -78,18 +78,6 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
-## Running tests
-
-Install the CPU requirements and execute `pytest`:
-
-```bash
-pip install -r requirements-cpu.txt
-pytest
-```
-
-The `requirements-cpu.txt` file already includes `pytest` and all other
-packages required by the test suite.
-## Demo services
 
 Earlier revisions started lightweight stubs for the supporting services.  This
 repository now includes simple reference implementations in the `services`
