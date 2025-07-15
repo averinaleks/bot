@@ -11,10 +11,7 @@ load_dotenv()
 app = Flask(__name__)
 
 MODEL_FILE = os.getenv('MODEL_FILE', 'model.pkl')
-_model: LogisticRegression | None = None
 
-
-def _load_model() -> None:
     global _model
     if _model is None and os.path.exists(MODEL_FILE):
         try:
@@ -26,11 +23,7 @@ def _load_model() -> None:
 @app.route('/train', methods=['POST'])
 def train():
     data = request.get_json(force=True)
-    features = np.array(data.get('features', []))
-    labels = np.array(data.get('labels', []))
-    model = LogisticRegression(max_iter=100)
-    if features.size and labels.size:
-        model.fit(features, labels)
+
     joblib.dump(model, MODEL_FILE)
     global _model
     _model = model
@@ -40,14 +33,7 @@ def train():
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.get_json(force=True)
-    features = np.array(data.get('features', []))
-    # Accept either a single feature vector or a batch of vectors
-    features = np.atleast_2d(features)
-    _load_model()
-    if _model is None:
-        return jsonify({'error': 'model not trained'}), 400
-    prob = float(_model.predict_proba(features)[0, 1])
-    signal = 'buy' if prob >= 0.5 else 'sell'
+
     return jsonify({'signal': signal, 'prob': prob})
 
 

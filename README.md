@@ -172,6 +172,7 @@ so the heavy frameworks load and the services expose their production APIs.
 
 
 
+
 ## Docker Compose logs
 
 Просмотреть вывод контейнеров можно через `docker compose logs` (или
