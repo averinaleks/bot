@@ -122,8 +122,11 @@ def run_once() -> None:
     price = fetch_price(SYMBOL, env)
     if price is None:
         return
+    logger.info("Price for %s: %s", SYMBOL, price)
     signal = get_prediction(SYMBOL, price, env)
+    logger.info("Prediction: %s", signal)
     if signal:
+        logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
         send_trade(SYMBOL, signal, price, env)
 
 
