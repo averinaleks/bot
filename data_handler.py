@@ -184,6 +184,10 @@ class DataHandler:
             config.get("max_symbols"),
             GPU_AVAILABLE,
         )
+        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
+            logger.warning(
+                "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
+            )
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange

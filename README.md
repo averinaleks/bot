@@ -50,6 +50,9 @@
       нужны для уведомлений. Убедитесь, что все значения доступны
       контейнеру `trade_manager`, например через `env_file: .env` или через
       секцию `environment:` в `docker-compose.yml`.
+      `DataHandler` и `TradeManager` проверяют эти переменные при запуске и
+      выводят предупреждение, если они отсутствуют. В этом случае Telegram
+      уведомления отправляться не будут.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
@@ -259,6 +262,10 @@ trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
 
 You can limit the logger queue with `telegram_queue_size` in `config.json`.
 ```
+
+Both services check the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+variables at startup. If either variable is missing, a warning is logged and
+no Telegram alerts are sent.
 
 To avoid processing old updates after a restart, store the `update_id` and pass
 it to the `offset` parameter when calling `get_updates`. The helper class
