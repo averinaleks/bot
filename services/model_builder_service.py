@@ -26,12 +26,7 @@ def _load_model():
 @app.route('/train', methods=['POST'])
 def train():
     data = request.get_json(force=True)
-    prices = np.array(data.get('prices', []), dtype=np.float32).reshape(-1, 1)
-    labels = np.array(data.get('labels', []), dtype=np.float32)
-    if len(prices) == 0 or len(prices) != len(labels):
-        return jsonify({'error': 'invalid training data'}), 400
-    model = LogisticRegression()
-    model.fit(prices, labels)
+
     joblib.dump(model, MODEL_FILE)
     global _model
     _model = model
@@ -41,13 +36,7 @@ def train():
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.get_json(force=True)
-    price = float(data.get('price', 0))
-    _load_model()
-    if _model is None:
-        signal = 'buy' if price > 0 else None
-        prob = 1.0 if signal else 0.0
-    else:
-        prob = float(_model.predict_proba([[price]])[0, 1])
+
         signal = 'buy' if prob >= 0.5 else 'sell'
     return jsonify({'signal': signal, 'prob': prob})
 

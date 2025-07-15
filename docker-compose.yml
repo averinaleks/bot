@@ -5,8 +5,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    # Run the lightweight reference service under services/
-    command: gunicorn -w 2 -b 0.0.0.0:8000 --timeout ${GUNICORN_TIMEOUT:-120} services.data_handler_service:app
+
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8000:8000"
@@ -22,8 +21,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    # Run the lightweight reference service under services/
-    command: gunicorn -w 2 -b 0.0.0.0:8001 --timeout ${GUNICORN_TIMEOUT:-120} services.model_builder_service:app
+
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8001:8001"

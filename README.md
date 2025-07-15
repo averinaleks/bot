@@ -34,6 +34,17 @@
     ```
 
     Непрерывный вывод смотрите в файлах внутри `./logs/`.
+
+    Дополнительные переменные для вспомогательных сервисов:
+
+    - `STREAM_SYMBOLS` — список пар через запятую, которые `data_handler_service`
+      обновляет в фоне.
+    - `CACHE_TTL` и `UPDATE_INTERVAL` — время жизни кэша OHLCV и интервал
+      фонового обновления (в секундах).
+    - `MODEL_DIR` — каталог, где `model_builder_service` хранит обученные модели
+      по символам.
+    - `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи API, которые использует
+      `trade_manager_service` для размещения ордеров.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
@@ -57,7 +68,7 @@ python trading_bot.py
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
 Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
-Базовая конфигурация уже задействует примерные сервисы из каталога `services`, которые работают с реальными котировками и умеют обучать простую модель. Укажите свои API‑ключи в `.env`, и бот сможет открывать сделки.
+
 В зависимости от версии Docker команда может называться `docker compose` или
 `docker-compose`.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
@@ -78,25 +89,37 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
-## Running tests
-
-Install the CPU requirements and execute `pytest`:
-
-```bash
-pip install -r requirements-cpu.txt
-pytest
-```
-
-The `requirements-cpu.txt` file already includes `pytest` and all other
-packages required by the test suite.
-## Demo services
 
 Earlier revisions started lightweight stubs for the supporting services.  This
 repository now includes simple reference implementations in the `services`
 directory. `data_handler_service.py` fetches live prices from Bybit using
-`ccxt`, while `model_builder_service.py` trains a small logistic regression
-model when you POST data to `/train`.  Use these scripts as a starting point or
-replace them with more advanced versions for real trading.
+`ccxt`, `model_builder_service.py` trains a small logistic regression
+model when you POST data to `/train`, and `trade_manager_service.py` can
+place market orders on Bybit when you POST to `/open_position` or
+`/close_position`.  Start it with:
+
+```
+python services/trade_manager_service.py
+```
+It also exposes `/positions` and `/ping` routes for status checks.
+
+The data handler exposes two endpoints:
+
+``/price/<symbol>``
+    Return the latest ticker price.
+
+``/ohlcv/<symbol>``
+    Return cached OHLCV bars for ``symbol``. The service periodically refreshes
+    data for symbols listed in ``STREAM_SYMBOLS``.  Cache lifetime is controlled
+    by ``CACHE_TTL``.
+
+The model builder maintains separate models per trading pair.  POST JSON data
+of the form::
+
+    {"symbol": "BTC/USDT", "features": [[...], [...]], "labels": [0, 1]}
+
+
+
 
 
 ## Docker Compose logs
