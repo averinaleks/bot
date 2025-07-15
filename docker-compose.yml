@@ -5,8 +5,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    # Run the lightweight reference implementation instead of the full module
-    command: python services/data_handler_service.py
+
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8000:8000"
@@ -22,8 +21,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    # Run the lightweight reference implementation instead of the full module
-    command: python services/model_builder_service.py
+
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8001:8001"
