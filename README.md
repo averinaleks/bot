@@ -57,7 +57,7 @@ python trading_bot.py
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
 Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
-Эта конфигурация запускает упрощённые заглушки сервисов. Без их замены на реальные реализации бот не будет совершать сделки.
+Базовая конфигурация запускает полноценные версии `data_handler.py` и `model_builder.py`. Укажите свои API‑ключи в `.env`, и бот сможет открывать сделки. Облегчённые примеры остаются в каталоге `services/`.
 В зависимости от версии Docker команда может называться `docker compose` или
 `docker-compose`.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
@@ -91,7 +91,13 @@ The `requirements-cpu.txt` file already includes `pytest` and all other
 packages required by the test suite.
 ## Demo services
 
-The docker-compose configuration launches minimal placeholder services. `data_handler` exposes `/price/<symbol>` which always returns a fixed value (100 for `TEST`), and `model_builder` starts with no trained model. The bot will not open any real positions until these stubs are replaced with implementations that fetch live data and train a model.
+Earlier revisions started lightweight stubs for the supporting services.  This
+repository still ships those simplified examples in the `services/` directory.
+`data_handler_service.py` fetches live prices from Bybit using `ccxt`, while
+`model_builder_service.py` trains a small logistic regression model when you
+POST data to `/train`.  Docker Compose, however, runs the complete
+implementations `data_handler.py` and `model_builder.py` from the repository
+root. Use the demo scripts as a starting point or for integration tests.
 
 
 ## Docker Compose logs
