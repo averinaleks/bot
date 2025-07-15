@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-
+    command: gunicorn -w 2 -b 0.0.0.0:8000 --timeout ${GUNICORN_TIMEOUT:-120} data_handler:api_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8000:8000"
@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-
+    command: gunicorn -w 2 -b 0.0.0.0:8001 --timeout ${GUNICORN_TIMEOUT:-120} model_builder:api_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8001:8001"
