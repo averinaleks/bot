@@ -91,7 +91,12 @@ The `requirements-cpu.txt` file already includes `pytest` and all other
 packages required by the test suite.
 ## Demo services
 
-The docker-compose configuration launches minimal placeholder services. `data_handler` exposes `/price/<symbol>` which always returns a fixed value (100 for `TEST`), and `model_builder` starts with no trained model. The bot will not open any real positions until these stubs are replaced with implementations that fetch live data and train a model.
+Earlier revisions started lightweight stubs for the supporting services.  This
+repository now includes simple reference implementations in the `services`
+directory. `data_handler_service.py` fetches live prices from Bybit using
+`ccxt`, while `model_builder_service.py` trains a small logistic regression
+model when you POST data to `/train`.  Use these scripts as a starting point or
+replace them with more advanced versions for real trading.
 
 
 ## Docker Compose logs
