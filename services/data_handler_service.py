@@ -1,4 +1,7 @@
-
+"""Simple reference data handler service fetching real prices from Bybit."""
+from flask import Flask, jsonify
+import ccxt
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +13,6 @@ exchange = ccxt.bybit({
     'secret': os.getenv('BYBIT_API_SECRET', ''),
 })
 
-
 @app.route('/price/<symbol>')
 def price(symbol: str):
     try:
@@ -19,7 +21,6 @@ def price(symbol: str):
     except Exception as exc:  # pragma: no cover - network errors
         last = 0.0
     return jsonify({'price': last})
-
 
 @app.route('/ping')
 def ping():
