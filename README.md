@@ -34,6 +34,21 @@
     ```
 
     Непрерывный вывод смотрите в файлах внутри `./logs/`.
+
+    Дополнительные переменные для вспомогательных сервисов:
+
+    - `STREAM_SYMBOLS` — список пар через запятую, которые `data_handler_service`
+      обновляет в фоне.
+    - `CACHE_TTL` и `UPDATE_INTERVAL` — время жизни кэша OHLCV и интервал
+      фонового обновления (в секундах).
+    - `MODEL_DIR` — каталог, где `model_builder_service` хранит обученные модели
+      по символам.
+    - `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи API, которые использует
+      `trade_manager_service` для размещения ордеров. Переменные
+      `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` нужны для уведомлений.
+      Убедитесь, что эти значения доступны контейнеру `trade_manager`,
+      например через `env_file: .env` или через секцию `environment:` в
+      `docker-compose.yml`.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
@@ -57,7 +72,7 @@ python trading_bot.py
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
 Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
-Базовая конфигурация запускает полноценные версии `data_handler.py` и `model_builder.py`. Укажите свои API‑ключи в `.env`, и бот сможет открывать сделки. Облегчённые примеры остаются в каталоге `services/`.
+
 В зависимости от версии Docker команда может называться `docker compose` или
 `docker-compose`.
 По умолчанию используется образ с поддержкой GPU. Если она не требуется,
@@ -78,26 +93,84 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
-## Running tests
-
-Install the CPU requirements and execute `pytest`:
-
-```bash
-pip install -r requirements-cpu.txt
-pytest
-```
-
-The `requirements-cpu.txt` file already includes `pytest` and all other
-packages required by the test suite.
-## Demo services
 
 Earlier revisions started lightweight stubs for the supporting services.  This
-repository still ships those simplified examples in the `services/` directory.
-`data_handler_service.py` fetches live prices from Bybit using `ccxt`, while
-`model_builder_service.py` trains a small logistic regression model when you
-POST data to `/train`.  Docker Compose, however, runs the complete
-implementations `data_handler.py` and `model_builder.py` from the repository
-root. Use the demo scripts as a starting point or for integration tests.
+repository now includes simple reference implementations in the `services`
+directory. `data_handler_service.py` fetches live prices from Bybit using
+`ccxt`, `model_builder_service.py` trains a small logistic regression
+model when you POST data to `/train`, and `trade_manager_service.py` can
+place market orders on Bybit when you POST to `/open_position` or
+`/close_position`.  Start it with:
+
+```
+python services/trade_manager_service.py
+```
+It also exposes `/positions` and `/ping` routes for status checks.
+
+The data handler exposes two endpoints:
+
+``/price/<symbol>``
+    Return the latest ticker price.
+
+``/ohlcv/<symbol>``
+    Return cached OHLCV bars for ``symbol``. The service periodically refreshes
+    data for symbols listed in ``STREAM_SYMBOLS``.  Cache lifetime is controlled
+    by ``CACHE_TTL``.
+
+
+The reference scripts exist purely for demonstration and integration testing.
+They expose the same HTTP routes as the real services but avoid heavy
+dependencies.  Use them when you just want to verify the bot's basic workflow
+without setting up full ML libraries.
+
+The model builder maintains separate models per trading pair.  POST JSON data
+of the form::
+
+    {"symbol": "BTC/USDT", "features": [[...], [...]], "labels": [0, 1]}
+
+### Switching implementations
+
+`docker-compose.yml` uses the full implementations in `data_handler.py` and
+`model_builder.py`. They depend on heavy packages like TensorFlow and PyTorch
+which are installed in the Docker image. For lightweight testing you can run
+the reference services instead. Replace the `command` entries for each service
+with the scripts from the `services` directory:
+
+```yaml
+data_handler:
+  command: python services/data_handler_service.py
+model_builder:
+  command: python services/model_builder_service.py
+trade_manager:
+  command: python services/trade_manager_service.py
+```
+
+Restore the Gunicorn commands when you want to launch the full services.
+
+### Running the full services
+
+Running these full modules requires TensorFlow, PyTorch and related
+libraries.  They may take noticeably longer to start while the frameworks
+initialise and will use a GPU if one is available.  Ensure the compose file
+sets `RUNTIME=nvidia` and that your system has the NVIDIA container runtime
+installed.  Without a GPU you can still run the services with
+`DOCKERFILE=Dockerfile.cpu` but startup will remain slower than the lightweight
+scripts above.
+
+The default `docker-compose.yml` already points to the full-featured
+implementations.  If you replaced the `command` entries with the minimal scripts
+earlier, simply revert those lines or copy the compose file from the repository
+again.  After restoring the Gunicorn commands, run:
+
+```bash
+docker compose up --build
+```
+
+so the heavy frameworks load and the services expose their production APIs.
+
+
+
+
 
 
 ## Docker Compose logs
