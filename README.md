@@ -44,7 +44,11 @@
     - `MODEL_DIR` — каталог, где `model_builder_service` хранит обученные модели
       по символам.
     - `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи API, которые использует
-      `trade_manager_service` для размещения ордеров.
+      `trade_manager_service` для размещения ордеров. Переменные
+      `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` нужны для уведомлений.
+      Убедитесь, что эти значения доступны контейнеру `trade_manager`,
+      например через `env_file: .env` или через секцию `environment:` в
+      `docker-compose.yml`.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
