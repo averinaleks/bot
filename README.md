@@ -34,6 +34,15 @@
     ```
 
     Непрерывный вывод смотрите в файлах внутри `./logs/`.
+
+    Дополнительные переменные для вспомогательных сервисов:
+
+    - `STREAM_SYMBOLS` — список пар через запятую, которые `data_handler_service`
+      обновляет в фоне.
+    - `CACHE_TTL` и `UPDATE_INTERVAL` — время жизни кэша OHLCV и интервал
+      фонового обновления (в секундах).
+    - `MODEL_DIR` — каталог, где `model_builder_service` хранит обученные модели
+      по символам.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
@@ -83,8 +92,25 @@ Earlier revisions started lightweight stubs for the supporting services.  This
 repository now includes simple reference implementations in the `services`
 directory. `data_handler_service.py` fetches live prices from Bybit using
 `ccxt`, while `model_builder_service.py` trains a small logistic regression
-model when you POST data to `/train`.  Use these scripts as a starting point or
-replace them with more advanced versions for real trading.
+model when you POST data to `/train`.
+
+The data handler exposes two endpoints:
+
+``/price/<symbol>``
+    Return the latest ticker price.
+
+``/ohlcv/<symbol>``
+    Return cached OHLCV bars for ``symbol``. The service periodically refreshes
+    data for symbols listed in ``STREAM_SYMBOLS``.  Cache lifetime is controlled
+    by ``CACHE_TTL``.
+
+The model builder maintains separate models per trading pair.  POST JSON data
+of the form::
+
+    {"symbol": "BTC/USDT", "features": [[...], [...]], "labels": [0, 1]}
+
+to ``/train`` and send similar ``features`` with ``symbol`` to ``/predict`` to
+receive buy/sell signals.
 
 
 ## Docker Compose logs
