@@ -43,6 +43,8 @@
       фонового обновления (в секундах).
     - `MODEL_DIR` — каталог, где `model_builder_service` хранит обученные модели
       по символам.
+    - `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи API, которые использует
+      `trade_manager_service` для размещения ордеров.
 3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
@@ -91,8 +93,15 @@ entirely.
 Earlier revisions started lightweight stubs for the supporting services.  This
 repository now includes simple reference implementations in the `services`
 directory. `data_handler_service.py` fetches live prices from Bybit using
-`ccxt`, while `model_builder_service.py` trains a small logistic regression
-model when you POST data to `/train`.
+`ccxt`, `model_builder_service.py` trains a small logistic regression
+model when you POST data to `/train`, and `trade_manager_service.py` can
+place market orders on Bybit when you POST to `/open_position` or
+`/close_position`.  Start it with:
+
+```
+python services/trade_manager_service.py
+```
+It also exposes `/positions` and `/ping` routes for status checks.
 
 The data handler exposes two endpoints:
 
