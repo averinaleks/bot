@@ -831,6 +831,7 @@ class DataHandler:
         """Watch OHLCV updates for a single symbol using CCXT Pro with automatic reconnection."""
         reconnect_attempts = 0
         max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
+        limit_exceeded_logged = False
         while True:
             try:
                 ohlcv = await self.pro_exchange.watch_ohlcv(symbol, timeframe)
@@ -859,6 +860,13 @@ class DataHandler:
                     timeframe=label,
                 )
                 reconnect_attempts = 0
+                if limit_exceeded_logged:
+                    logger.info(
+                        "Подписка CCXT Pro для %s (%s) восстановлена",
+                        symbol,
+                        label,
+                    )
+                    limit_exceeded_logged = False
             except Exception as e:
                 reconnect_attempts += 1
                 delay = min(2**reconnect_attempts, 60)
@@ -871,14 +879,14 @@ class DataHandler:
                     delay,
                     e,
                 )
-                await asyncio.sleep(delay)
-                if reconnect_attempts >= max_reconnect_attempts:
-                    logger.error(
-                        "Не удалось восстановить подписку CCXT Pro для %s (%s)",
+                if reconnect_attempts == max_reconnect_attempts and not limit_exceeded_logged:
+                    logger.warning(
+                        "Превышено максимальное количество попыток CCXT Pro для %s (%s). Продолжаем попытки с экспоненциальной задержкой",
                         symbol,
                         label,
                     )
-                    raise
+                    limit_exceeded_logged = True
+                await asyncio.sleep(delay)
 
     async def _subscribe_with_ccxtpro(self, symbols: List[str]):
         self.tasks = []
