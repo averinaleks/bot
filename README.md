@@ -118,6 +118,25 @@ of the form::
 
     {"symbol": "BTC/USDT", "features": [[...], [...]], "labels": [0, 1]}
 
+### Switching implementations
+
+`docker-compose.yml` uses the full implementations in `data_handler.py` and
+`model_builder.py`. They depend on heavy packages like TensorFlow and PyTorch
+which are installed in the Docker image. For lightweight testing you can run
+the reference services instead. Replace the `command` entries for each service
+with the scripts from the `services` directory:
+
+```yaml
+data_handler:
+  command: python services/data_handler_service.py
+model_builder:
+  command: python services/model_builder_service.py
+trade_manager:
+  command: python services/trade_manager_service.py
+```
+
+Restore the Gunicorn commands when you want to launch the full services.
+
 
 
 
