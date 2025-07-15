@@ -45,12 +45,18 @@ services:
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8002:8002"
+    env_file: .env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
       interval: 5s
       timeout: 2s
       retries: 12
       start_period: 5s
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./config.json:/app/config.json
     networks:
       - trading_bot_default
   trading_bot:
