@@ -368,12 +368,16 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 
 ## Running tests
 
-Tests rely on the packages listed in `requirements-cpu.txt`. Run this command to
-install everything required for `pytest`:
+Running `pytest` requires the packages listed in `requirements-cpu.txt`.
+Install them with:
 
 ```bash
 pip install -r requirements-cpu.txt
 ```
+
+If you skip this step and run `pytest` anyway, common imports like
+`pandas`, `numpy` or `scipy` will be missing and the tests will abort
+with `ModuleNotFoundError` errors.
 
 For a clean environment you can create a virtualenv and install the
 CPU requirements before running the tests:
@@ -393,8 +397,8 @@ This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
 As noted above, make sure to run `pip install -r requirements-cpu.txt` before
-executing `pytest`; otherwise imports such as `numpy`, `pandas` and `requests`
-will fail.
+executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
+`requests` will fail.
 
 Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
