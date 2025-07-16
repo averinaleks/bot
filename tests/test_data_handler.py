@@ -256,3 +256,29 @@ async def test_stop_handles_close_errors():
     dh.pro_exchange = BadPro()
 
     await dh.stop()  # should not raise
+@pytest.mark.asyncio
+async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
+    class DummyExchange2:
+        async def load_markets(self):
+            return {'BTCUSDT': {'active': True}}
+        async def fetch_ticker(self, symbol):
+            return {'quoteVolume': 1.0}
+    cfg = BotConfig(cache_dir=str(tmp_path), max_symbols=1, min_data_length=1, timeframe='1m', secondary_timeframe='1m')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange2())
+    async def fake_orderbook(symbol):
+        return {'bids': [[1,1]], 'asks': [[1,1]]}
+    async def fake_history(symbol, timeframe, limit, cache_prefix=""):
+        df = pd.DataFrame({'open':[1],'high':[1],'low':[1],'close':[1],'volume':[1]}, index=[pd.Timestamp.now(tz='UTC')])
+        return symbol, df
+    async def fake_rate(symbol):
+        return 0.0
+    async def fake_oi(symbol):
+        return 0.0
+    monkeypatch.setattr(dh, 'fetch_orderbook', fake_orderbook)
+    monkeypatch.setattr(dh, 'fetch_ohlcv_history', fake_history)
+    monkeypatch.setattr(dh, 'fetch_funding_rate', fake_rate)
+    monkeypatch.setattr(dh, 'fetch_open_interest', fake_oi)
+    monkeypatch.setattr(data_handler, 'check_dataframe_empty', lambda df, context='': False)
+    await dh.load_initial()  # should not raise
+    assert dh.usdt_pairs == ['BTCUSDT']
+
