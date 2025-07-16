@@ -97,6 +97,35 @@ class BybitSDKAsync:
         self.last_http_status = 200
         self.last_response_headers = {}
 
+    async def load_markets(self) -> Dict[str, Dict]:
+        """Return a dictionary of available USDT-margined futures markets."""
+
+        def _sync() -> Dict[str, Dict]:
+            res = self.client.get_instruments_info(category="linear")
+            instruments = res.get("result", {}).get("list", [])
+            markets: Dict[str, Dict] = {}
+            for info in instruments:
+                symbol = info.get("symbol")
+                if not symbol:
+                    continue
+                base = info.get("baseCoin")
+                quote = info.get("quoteCoin")
+                settle = info.get("settleCoin")
+                key = (
+                    f"{base}/{quote}:{settle}" if base and quote and settle else symbol
+                )
+                markets[key] = {
+                    "id": symbol,
+                    "symbol": key,
+                    "base": base,
+                    "quote": quote,
+                    "settle": settle,
+                    "active": str(info.get("status", "")).lower() == "trading",
+                }
+            return markets
+
+        return await asyncio.to_thread(_sync)
+
     async def fetch_ticker(self, symbol: str) -> Dict:
         def _sync():
             res = self.client.get_tickers(category="linear", symbol=symbol.replace(":USDT", "USDT"))
