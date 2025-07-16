@@ -1468,7 +1468,13 @@ def price(symbol: str):
             logger.error("Ticker fetch failed for %s: %s", sym, exc)
             return DEFAULT_PRICE
 
-    price_val = asyncio.run(_lookup(symbol))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        price_val = asyncio.run(_lookup(symbol))
+    else:
+        fut = asyncio.run_coroutine_threadsafe(_lookup(symbol), loop)
+        price_val = fut.result()
     return jsonify({"price": price_val})
 
 
