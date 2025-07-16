@@ -1192,7 +1192,7 @@ POSITIONS = []
 trade_manager: TradeManager | None = None
 
 
-def create_trade_manager() -> TradeManager:
+async def create_trade_manager() -> TradeManager:
     """Instantiate the TradeManager using config.json."""
     global trade_manager
     if trade_manager is None:
@@ -1229,6 +1229,8 @@ def create_trade_manager() -> TradeManager:
         try:
             dh = DataHandler(cfg, telegram_bot, chat_id)
             logger.info("DataHandler created successfully")
+            await dh.load_initial()
+            asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
         except Exception as exc:
             logger.exception("Failed to create DataHandler: %s", exc)
             raise
@@ -1237,6 +1239,7 @@ def create_trade_manager() -> TradeManager:
         try:
             mb = ModelBuilder(cfg, dh, None)
             logger.info("ModelBuilder created successfully")
+            asyncio.create_task(mb.train())
         except Exception as exc:
             logger.exception("Failed to create ModelBuilder: %s", exc)
             raise
@@ -1264,10 +1267,10 @@ def _initialize_trade_manager() -> None:
     """Background initialization for the TradeManager."""
     global trade_manager
     try:
-        trade_manager = create_trade_manager()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        trade_manager = loop.run_until_complete(create_trade_manager())
         if trade_manager is not None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             loop.create_task(trade_manager.run())
             _ready_event.set()
             loop.run_forever()
