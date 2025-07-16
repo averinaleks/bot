@@ -97,6 +97,12 @@ class BybitSDKAsync:
         self.last_http_status = 200
         self.last_response_headers = {}
 
+    @staticmethod
+    def _format_symbol(symbol: str) -> str:
+        """Convert ``BASE/QUOTE:SETTLE`` to ``BASEQUOTE`` for REST calls."""
+        symbol = symbol.split(":", 1)[0]
+        return symbol.replace("/", "")
+
     async def load_markets(self) -> Dict[str, Dict]:
         """Return a dictionary of available USDT-margined futures markets."""
 
@@ -128,7 +134,8 @@ class BybitSDKAsync:
 
     async def fetch_ticker(self, symbol: str) -> Dict:
         def _sync():
-            res = self.client.get_tickers(category="linear", symbol=symbol.replace(":USDT", "USDT"))
+            sym = self._format_symbol(symbol)
+            res = self.client.get_tickers(category="linear", symbol=sym)
             return res.get("result", {}).get("list", [{}])[0]
 
         return await asyncio.to_thread(_sync)
@@ -139,7 +146,7 @@ class BybitSDKAsync:
         def _sync():
             params = {
                 "category": "linear",
-                "symbol": symbol.replace(":USDT", "USDT"),
+                "symbol": self._format_symbol(symbol),
                 "interval": timeframe,
                 "limit": limit,
             }
@@ -163,7 +170,8 @@ class BybitSDKAsync:
 
     async def fetch_order_book(self, symbol: str, limit: int = 10) -> Dict:
         def _sync():
-            res = self.client.get_orderbook(category="linear", symbol=symbol.replace(":USDT", "USDT"))
+            sym = self._format_symbol(symbol)
+            res = self.client.get_orderbook(category="linear", symbol=sym)
             ob = res.get("result", {})
             return {
                 "bids": [[float(p), float(q)] for p, q, *_ in ob.get("b", [])][:limit],
@@ -176,7 +184,7 @@ class BybitSDKAsync:
         def _sync():
             res = self.client.get_funding_rate_history(
                 category="linear",
-                symbol=symbol.replace(":USDT", "USDT"),
+                symbol=self._format_symbol(symbol),
                 limit=1,
             )
             items = res.get("result", {}).get("list", [])
@@ -189,7 +197,7 @@ class BybitSDKAsync:
         def _sync():
             res = self.client.get_open_interest(
                 category="linear",
-                symbol=symbol.replace(":USDT", "USDT"),
+                symbol=self._format_symbol(symbol),
                 intervalTime="5min",
             )
             items = res.get("result", {}).get("list", [])
@@ -210,7 +218,7 @@ class BybitSDKAsync:
         def _sync():
             payload = {
                 "category": "linear",
-                "symbol": symbol.replace(":USDT", "USDT"),
+                "symbol": self._format_symbol(symbol),
                 "side": side.capitalize(),
                 "orderType": order_type.capitalize(),
                 "qty": amount,
@@ -237,7 +245,7 @@ class BybitSDKAsync:
         def _sync():
             payload = {
                 "category": "linear",
-                "symbol": symbol.replace(":USDT", "USDT"),
+                "symbol": self._format_symbol(symbol),
                 "side": side.capitalize(),
                 "orderType": order_type.capitalize(),
                 "qty": amount,
