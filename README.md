@@ -87,7 +87,7 @@ TRADE_MANAGER_URL=http://localhost:8002 \
 python trading_bot.py
 ```
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
-Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`.
+Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`. По умолчанию бот делает 30 попыток с задержкой 2 секунды.
 Также можно использовать `docker-compose up --build` для запуска в контейнере.
 
 В зависимости от версии Docker команда может называться `docker compose` или
@@ -241,7 +241,7 @@ use these steps to diagnose the problem:
 
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
-   The defaults are 30 retries and a 2‑second delay.
+   By default, the bot performs 30 retries with a 2‑second delay.
 4. If logs contain `gymnasium import failed`, install the package manually with `pip install gymnasium`.
 5. When RL components start, they import `gymnasium`.
   If the package is missing, training will fail until you install it.

@@ -12,6 +12,10 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 INTERVAL = float(os.getenv("INTERVAL", "5"))
 
+# Default retry values for service availability checks
+DEFAULT_SERVICE_CHECK_RETRIES = 30
+DEFAULT_SERVICE_CHECK_DELAY = 2.0
+
 
 def _load_env() -> dict:
     """Load service URLs from environment variables.
@@ -43,8 +47,12 @@ def _load_env() -> dict:
 def check_services() -> None:
     """Ensure dependent services are responsive."""
     env = _load_env()
-    retries = int(os.getenv("SERVICE_CHECK_RETRIES", "30"))
-    delay = float(os.getenv("SERVICE_CHECK_DELAY", "2"))
+    retries = int(
+        os.getenv("SERVICE_CHECK_RETRIES", str(DEFAULT_SERVICE_CHECK_RETRIES))
+    )
+    delay = float(
+        os.getenv("SERVICE_CHECK_DELAY", str(DEFAULT_SERVICE_CHECK_DELAY))
+    )
     services = {
         "data_handler": (env["data_handler_url"], "ping"),
         "model_builder": (env["model_builder_url"], "ping"),
