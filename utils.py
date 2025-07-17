@@ -39,6 +39,29 @@ except Exception:  # pragma: no cover - allow missing telegram package
         pass
 from pybit.unified_trading import HTTP
 
+# Mapping from ccxt/ccxtpro style timeframes to Bybit interval strings
+_BYBIT_INTERVALS = {
+    "1m": "1",
+    "3m": "3",
+    "5m": "5",
+    "15m": "15",
+    "30m": "30",
+    "1h": "60",
+    "2h": "120",
+    "4h": "240",
+    "6h": "360",
+    "12h": "720",
+    "1d": "D",
+    "1w": "W",
+    "1M": "M",
+}
+
+
+def bybit_interval(timeframe: str) -> str:
+    """Return the interval string accepted by Bybit APIs."""
+
+    return _BYBIT_INTERVALS.get(timeframe, timeframe)
+
 
 async def handle_rate_limits(exchange) -> None:
     """Sleep if Bybit rate limit is close to exhaustion."""
@@ -147,7 +170,7 @@ class BybitSDKAsync:
             params = {
                 "category": "linear",
                 "symbol": self._format_symbol(symbol),
-                "interval": timeframe,
+                "interval": bybit_interval(timeframe),
                 "limit": limit,
             }
             if since is not None:
