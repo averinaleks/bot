@@ -241,6 +241,7 @@ use these steps to diagnose the problem:
 
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
+   The defaults are 30 retries and a 2‑second delay.
 4. If logs contain `gymnasium import failed`, install the package manually with `pip install gymnasium`.
 5. When RL components start, they import `gymnasium`.
   If the package is missing, training will fail until you install it.
