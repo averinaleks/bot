@@ -16,6 +16,11 @@ def test_telegramlogger_injection_order():
     async def _cde(*a, **k):
         return False
     utils_stub.check_dataframe_empty = _cde
+    utils_stub.check_dataframe_empty_async = _cde
+    utils_stub.is_cuda_available = lambda: False
+    async def _safe_api_call(exchange, method: str, *args, **kwargs):
+        return await getattr(exchange, method)(*args, **kwargs)
+    utils_stub.safe_api_call = _safe_api_call
     sys.modules['utils'] = utils_stub
 
     tm = importlib.import_module('trade_manager')

@@ -15,31 +15,11 @@ import inspect
 from utils import (
     logger,
     TelegramLogger,
+    is_cuda_available,
+    check_dataframe_empty_async as _check_df_async,
+    safe_api_call,
 )
-
-try:
-    from utils import is_cuda_available  # type: ignore
-except Exception:  # pragma: no cover - tests may stub this
-    def is_cuda_available() -> bool:
-        return False
-
-try:
-    from utils import check_dataframe_empty_async as _check_df_async
-except Exception:  # pragma: no cover - tests may stub this
-    from utils import check_dataframe_empty as _check_df_sync
-
-    async def _check_df_async(*a, **kw):
-        res = _check_df_sync(*a, **kw)
-        if inspect.isawaitable(res):
-            res = await res
-        return res
 from config import BotConfig, load_config
-
-try:
-    from utils import safe_api_call
-except ImportError:  # pragma: no cover - tests provide stub without this func
-    async def safe_api_call(exchange, method: str, *args, **kwargs):
-        return await getattr(exchange, method)(*args, **kwargs)
 import torch
 import joblib
 import os

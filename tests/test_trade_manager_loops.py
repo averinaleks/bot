@@ -40,6 +40,10 @@ async def _cde_stub(*a, **kw):
     return False
 utils_stub.check_dataframe_empty = _cde_stub
 utils_stub.check_dataframe_empty_async = _cde_stub
+utils_stub.is_cuda_available = lambda: False
+async def _safe_api_call(exchange, method: str, *args, **kwargs):
+    return await getattr(exchange, method)(*args, **kwargs)
+utils_stub.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils_stub
 os.environ['TEST_MODE'] = '1'
 sys.modules.pop('trade_manager', None)
