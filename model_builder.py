@@ -13,6 +13,11 @@ from config import BotConfig
 from collections import deque
 import ray
 from utils import logger, check_dataframe_empty, HistoricalDataCache
+try:
+    from utils import is_cuda_available  # type: ignore
+except Exception:  # pragma: no cover - tests may stub this
+    def is_cuda_available() -> bool:
+        return False
 from dotenv import load_dotenv
 try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
@@ -210,7 +215,7 @@ def _train_model_lightning(X, y, batch_size, model_type):
     CNNGRU = torch_mods["CNNGRU"]
     CNNLSTM = torch_mods["CNNLSTM"]
     import pytorch_lightning as pl
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if is_cuda_available() else "cpu")
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     val_size = max(1, int(0.1 * len(X_tensor)))
@@ -255,7 +260,12 @@ def _train_model_lightning(X, y, batch_size, model_type):
             return torch.optim.Adam(self.parameters(), lr=1e-3)
 
     wrapper = LightningWrapper(net)
-    trainer = pl.Trainer(max_epochs=20, logger=False, enable_checkpointing=False, devices=1 if torch.cuda.is_available() else None)
+    trainer = pl.Trainer(
+        max_epochs=20,
+        logger=False,
+        enable_checkpointing=False,
+        devices=1 if is_cuda_available() else None,
+    )
     trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
     wrapper.eval()
     preds = []
@@ -287,7 +297,7 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
     CNNGRU = torch_mods["CNNGRU"]
     CNNLSTM = torch_mods["CNNLSTM"]
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if is_cuda_available() else 'cpu')
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     val_size = max(1, int(0.1 * len(X_tensor)))
@@ -359,7 +369,7 @@ class ModelBuilder:
         if self.nn_framework in {'pytorch', 'lightning'}:
             torch_mods = _get_torch_modules()
             torch = torch_mods['torch']
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device = torch.device('cuda' if is_cuda_available() else 'cpu')
         else:
             self.device = 'cpu'
         logger.info(
@@ -537,7 +547,7 @@ class ModelBuilder:
         if self.nn_framework in {'pytorch', 'lightning'}:
             torch_mods = _get_torch_modules()
             torch = torch_mods['torch']
-            train_task = _train_model_remote.options(num_gpus=1 if torch.cuda.is_available() else 0)
+            train_task = _train_model_remote.options(num_gpus=1 if is_cuda_available() else 0)
         logger.debug("Dispatching _train_model_remote for %s", symbol)
         model_state, val_preds, val_labels = ray.get(
             train_task.remote(
