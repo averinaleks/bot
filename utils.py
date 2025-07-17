@@ -610,6 +610,8 @@ def _calculate_volume_profile(prices, volumes, bins=50):
     volume_profile = np.zeros(bins)
     for i in prange(len(prices)):
         bin_idx = np.searchsorted(bin_edges, prices[i], side="right") - 1
+        if bin_idx == bins:
+            bin_idx -= 1
         if 0 <= bin_idx < bins:
             volume_profile[bin_idx] += volumes[i]
     return volume_profile / (np.sum(volume_profile) + 1e-6)
