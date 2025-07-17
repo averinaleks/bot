@@ -30,7 +30,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
 
 
-@ray.remote(num_gpus=1 if is_cuda_available() else 0)
+@ray.remote
 def _objective_remote(
     df,
     symbol,
@@ -335,7 +335,12 @@ class ParameterOptimizer:
             atr_period_default = trial.suggest_int("atr_period_default", 5, 20)
             # Stop loss and take profit multipliers are now taken
             # directly from the configuration and are not optimized.
-            obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+            if hasattr(_objective_remote, "options"):
+                obj_fn = _objective_remote.options(
+                    num_gpus=1 if is_cuda_available() else 0
+                ).remote
+            else:
+                obj_fn = getattr(_objective_remote, "remote", _objective_remote)
             return obj_fn(
                 df,
                 symbol,
@@ -361,7 +366,12 @@ class ParameterOptimizer:
                 self.n_splits = n_splits
 
             def fit(self, X=None, y=None):
-                obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+                if hasattr(_objective_remote, "options"):
+                    obj_fn = _objective_remote.options(
+                        num_gpus=1 if is_cuda_available() else 0
+                    ).remote
+                else:
+                    obj_fn = getattr(_objective_remote, "remote", _objective_remote)
                 logger.debug(
                     "Dispatching _objective_remote for grid search %s", self.symbol
                 )
