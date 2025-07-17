@@ -101,6 +101,9 @@ RUNTIME= DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABIL
 
 Set `RUNTIME=` if you want to run these CPU images without the NVIDIA runtime.
 
+The `trade_manager` container needs extra shared memory. The compose file
+allocates 2GB via `shm_size: '2gb'` to enlarge `/dev/shm`.
+
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
 GPU warnings. Adjust or remove this variable if you need more detailed logs.
 
