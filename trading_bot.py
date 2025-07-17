@@ -43,8 +43,8 @@ def _load_env() -> dict:
 def check_services() -> None:
     """Ensure dependent services are responsive."""
     env = _load_env()
-    retries = int(os.getenv("SERVICE_CHECK_RETRIES", "5"))
-    delay = float(os.getenv("SERVICE_CHECK_DELAY", "1"))
+    retries = int(os.getenv("SERVICE_CHECK_RETRIES", "30"))
+    delay = float(os.getenv("SERVICE_CHECK_DELAY", "2"))
     services = {
         "data_handler": (env["data_handler_url"], "ping"),
         "model_builder": (env["model_builder_url"], "ping"),
