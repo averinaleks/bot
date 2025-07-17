@@ -16,6 +16,7 @@ from utils import (
     TelegramLogger,
     calculate_volume_profile as utils_volume_profile,
     safe_api_call,
+    bybit_interval,
 )
 from tenacity import retry, wait_exponential
 from typing import List, Dict, TYPE_CHECKING, Any
@@ -968,8 +969,9 @@ class DataHandler:
                             await asyncio.sleep(1)
                             self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
                         ws_symbol = self.fix_ws_symbol(symbol)
+                        interval = bybit_interval(selected_timeframe)
                         await ws.send(
-                            json.dumps({"op": "subscribe", "args": [f"kline.{selected_timeframe}.{ws_symbol}"]})
+                            json.dumps({"op": "subscribe", "args": [f"kline.{interval}.{ws_symbol}"]})
                         )
                         rate = max(self.config.get("ws_rate_limit", 1), 1)
                         await asyncio.sleep(1 / rate)
