@@ -53,6 +53,7 @@ async def _cde(*a, **kw):
     return False
 utils.check_dataframe_empty = _cde
 utils.check_dataframe_empty_async = _cde
+utils.is_cuda_available = lambda: False
 sys.modules['utils'] = utils
 
 scipy_mod = types.ModuleType('scipy')

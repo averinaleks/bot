@@ -12,12 +12,7 @@ import asyncio
 from config import BotConfig
 from collections import deque
 import ray
-from utils import logger, check_dataframe_empty, HistoricalDataCache
-try:
-    from utils import is_cuda_available  # type: ignore
-except Exception:  # pragma: no cover - tests may stub this
-    def is_cuda_available() -> bool:
-        return False
+from utils import logger, check_dataframe_empty, HistoricalDataCache, is_cuda_available
 from dotenv import load_dotenv
 try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
