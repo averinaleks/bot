@@ -60,6 +60,7 @@ services:
       - ./models:/app/models
       - ./cache:/app/cache
       - ./config.json:/app/config.json
+    shm_size: '2gb'
     networks:
       - trading_bot_default
   trading_bot:
