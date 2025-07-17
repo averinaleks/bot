@@ -57,6 +57,19 @@ _BYBIT_INTERVALS = {
 }
 
 
+def is_cuda_available() -> bool:
+    """Safely check whether CUDA is available via PyTorch."""
+
+    try:  # Lazy import to avoid heavy initialization when unused
+        import torch  # type: ignore
+        return torch.cuda.is_available()
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logging.getLogger("TradingBot").warning(
+            "CUDA availability check failed: %s", exc
+        )
+        return False
+
+
 def bybit_interval(timeframe: str) -> str:
     """Return the interval string accepted by Bybit APIs."""
 

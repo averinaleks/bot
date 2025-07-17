@@ -18,6 +18,12 @@ import ray
 from utils import logger
 
 try:
+    from utils import is_cuda_available  # type: ignore
+except Exception:  # pragma: no cover - tests may stub this
+    def is_cuda_available() -> bool:
+        return False
+
+try:
     from utils import check_dataframe_empty_async as _check_df_async
 except Exception:  # pragma: no cover - tests may stub this
     from utils import check_dataframe_empty as _check_df_sync
@@ -37,7 +43,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
 
 
-@ray.remote(num_gpus=1 if torch and torch.cuda.is_available() else 0)
+@ray.remote(num_gpus=1 if is_cuda_available() else 0)
 def _objective_remote(
     df,
     symbol,

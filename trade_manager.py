@@ -18,6 +18,12 @@ from utils import (
 )
 
 try:
+    from utils import is_cuda_available  # type: ignore
+except Exception:  # pragma: no cover - tests may stub this
+    def is_cuda_available() -> bool:
+        return False
+
+try:
     from utils import check_dataframe_empty_async as _check_df_async
 except Exception:  # pragma: no cover - tests may stub this
     from utils import check_dataframe_empty as _check_df_sync
@@ -46,7 +52,7 @@ import threading
 
 # Determine computation device once
 
-device_type = "cuda" if torch.cuda.is_available() else "cpu"
+device_type = "cuda" if is_cuda_available() else "cpu"
 
 
 def _register_cleanup_handlers(tm: "TradeManager") -> None:
