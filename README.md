@@ -375,10 +375,10 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Running `pytest` requires the packages listed in `requirements-cpu.txt`.
-Install them with:
+Install them with the helper script (which also installs `flake8`):
 
 ```bash
-pip install -r requirements-cpu.txt
+./scripts/install-test-deps.sh
 ```
 
 If you skip this step and run `pytest` anyway, common imports like
@@ -389,10 +389,10 @@ For a clean environment you can create a virtualenv and install the
 CPU requirements before running the tests:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-cpu.txt
-pytest
+    python3 -m venv venv
+    source venv/bin/activate
+    ./scripts/install-test-deps.sh
+    pytest
 ```
 
 The `requirements-cpu.txt` file already bundles `pytest` and all other
@@ -402,7 +402,7 @@ Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
-As noted above, make sure to run `pip install -r requirements-cpu.txt` before
+As noted above, make sure to run `./scripts/install-test-deps.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 `requests` will fail.
 
@@ -412,10 +412,10 @@ executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 Пример полного процесса:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-cpu.txt
-pytest
+    python3 -m venv venv
+    source venv/bin/activate
+    ./scripts/install-test-deps.sh
+    pytest
 ```
 
 Если у вас есть GPU и установленный CUDA, можно установить полный список зависимостей из `requirements.txt` и затем запустить те же тесты.
@@ -483,11 +483,12 @@ pre-commit run --all-files
 Linting configuration is stored in `.flake8`. Run the checker manually:
 
 ```bash
-flake8
+python -m flake8
 ```
 
 ## Continuous integration
 
 All pushes and pull requests trigger a GitHub Actions workflow that installs
-dependencies from `requirements-cpu.txt`, runs `flake8`, and executes `pytest`.
+dependencies via `scripts/install-test-deps.sh` (which also installs `flake8`),
+runs `python -m flake8`, and executes `pytest`.
 This ensures style checks and tests run automatically.
