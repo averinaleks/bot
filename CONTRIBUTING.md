@@ -4,7 +4,7 @@ Thank you for your interest in contributing to this project!
 
 ## Development workflow
 
-1. Install dependencies in a virtual environment using the helper script:
+
 
    ```bash
    ./scripts/install-test-deps.sh

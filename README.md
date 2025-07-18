@@ -375,7 +375,7 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Running `pytest` requires the packages listed in `requirements-cpu.txt`.
-Install them with the helper script:
+
 
 ```bash
 ./scripts/install-test-deps.sh
