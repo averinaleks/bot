@@ -4,8 +4,12 @@ Thank you for your interest in contributing to this project!
 
 ## Development workflow
 
-1. Install dependencies from `requirements-cpu.txt` in a virtual environment.
-2. Run `flake8` and `pytest` before submitting a pull request. These tests are
+1. Install dependencies in a virtual environment using the helper script:
+
+   ```bash
+   ./scripts/install-test-deps.sh
+   ```
+2. Run `python -m flake8` and `pytest` before submitting a pull request. These tests are
    also executed automatically by `pre-commit`.
 
 ## CI troubleshooting
