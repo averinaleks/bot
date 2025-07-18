@@ -60,8 +60,18 @@ _BYBIT_INTERVALS = {
 def is_cuda_available() -> bool:
     """Safely check whether CUDA is available via PyTorch."""
 
+    # Allow forcing CPU mode via environment variables before importing torch
+    if os.environ.get("FORCE_CPU") == "1":
+        return False
+
+    nvd = os.environ.get("NVIDIA_VISIBLE_DEVICES")
+    if nvd is not None and (nvd == "" or nvd.lower() == "none"):
+        return False
+
     try:  # Lazy import to avoid heavy initialization when unused
         import torch  # type: ignore
+        if not torch.backends.cuda.is_built():
+            return False
         return torch.cuda.is_available()
     except Exception as exc:  # pragma: no cover - optional dependency
         logging.getLogger("TradingBot").warning(
