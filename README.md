@@ -483,11 +483,11 @@ pre-commit run --all-files
 Linting configuration is stored in `.flake8`. Run the checker manually:
 
 ```bash
-flake8
+python -m flake8
 ```
 
 ## Continuous integration
 
 All pushes and pull requests trigger a GitHub Actions workflow that installs
-dependencies via `scripts/install-test-deps.sh`, runs `flake8`, and executes `pytest`.
+
 This ensures style checks and tests run automatically.

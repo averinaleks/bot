@@ -9,7 +9,7 @@ Thank you for your interest in contributing to this project!
    ```bash
    ./scripts/install-test-deps.sh
    ```
-2. Run `flake8` and `pytest` before submitting a pull request. These tests are
+
    also executed automatically by `pre-commit`.
 
 ## CI troubleshooting

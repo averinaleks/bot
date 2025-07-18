@@ -28,6 +28,6 @@ jobs:
           python -m pip install --upgrade pip
           ./scripts/install-test-deps.sh
       - name: Lint
-        run: flake8
+        run: python -m flake8
       - name: Test
         run: pytest
