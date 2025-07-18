@@ -597,6 +597,8 @@ class DataHandler:
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             cache_key = f"{symbol}_{timeframe}"
             if timeframe == "primary":
+                fetch_needed = False
+                obj_ref = None
                 async with self.ohlcv_lock:
                     if cache_key not in self.indicators_cache:
                         logger.debug(
@@ -605,15 +607,24 @@ class DataHandler:
                         obj_ref = calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "primary"
                         )
-                        self.indicators_cache[cache_key] = ray.get(obj_ref)
-                        logger.debug(
-                            "calc_indicators completed for %s %s (key=%s)",
-                            symbol,
-                            timeframe,
-                            cache_key,
-                        )
-                    self.indicators[symbol] = self.indicators_cache[cache_key]
+                        fetch_needed = True
+                    else:
+                        self.indicators[symbol] = self.indicators_cache[cache_key]
+
+                if fetch_needed and obj_ref is not None:
+                    result = await asyncio.to_thread(ray.get, obj_ref)
+                    logger.debug(
+                        "calc_indicators completed for %s %s (key=%s)",
+                        symbol,
+                        timeframe,
+                        cache_key,
+                    )
+                    async with self.ohlcv_lock:
+                        self.indicators_cache[cache_key] = result
+                        self.indicators[symbol] = result
             else:
+                fetch_needed = False
+                obj_ref = None
                 async with self.ohlcv_2h_lock:
                     if cache_key not in self.indicators_cache_2h:
                         logger.debug(
@@ -622,14 +633,21 @@ class DataHandler:
                         obj_ref = calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "secondary"
                         )
-                        self.indicators_cache_2h[cache_key] = ray.get(obj_ref)
-                        logger.debug(
-                            "calc_indicators completed for %s %s (key=%s)",
-                            symbol,
-                            timeframe,
-                            cache_key,
-                        )
-                    self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
+                        fetch_needed = True
+                    else:
+                        self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
+
+                if fetch_needed and obj_ref is not None:
+                    result = await asyncio.to_thread(ray.get, obj_ref)
+                    logger.debug(
+                        "calc_indicators completed for %s %s (key=%s)",
+                        symbol,
+                        timeframe,
+                        cache_key,
+                    )
+                    async with self.ohlcv_2h_lock:
+                        self.indicators_cache_2h[cache_key] = result
+                        self.indicators_2h[symbol] = result
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка синхронизации данных для %s (%s): %s", symbol, timeframe, e)
