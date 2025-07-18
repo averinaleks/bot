@@ -489,5 +489,5 @@ python -m flake8
 ## Continuous integration
 
 All pushes and pull requests trigger a GitHub Actions workflow that installs
-dependencies via `scripts/install-test-deps.sh`, runs `python -m flake8`, and executes `pytest`.
+
 This ensures style checks and tests run automatically.
