@@ -11,9 +11,9 @@
    python3 -m venv venv
    source venv/bin/activate
    # Вариант с GPU (по умолчанию)
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    # Или CPU‑сборки без CUDA
-   pip install -r requirements-cpu.txt
+   python -m pip install -r requirements-cpu.txt
    ```
    Список `requirements-cpu.txt` содержит версии `torch` и `tensorflow` без поддержки GPU. Его можно использовать для установки зависимостей и запуска тестов на машинах без CUDA.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
