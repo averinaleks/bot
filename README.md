@@ -375,10 +375,12 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Running `pytest` requires the packages listed in `requirements-cpu.txt`.
-Install them with the helper script (which also installs `flake8`):
+Install them with the helper script (which also installs `flake8`).
+Pass `--full` to install the GPU-enabled packages from `requirements.txt`:
 
 ```bash
-./scripts/install-test-deps.sh
+./scripts/install-test-deps.sh         # CPU packages only
+./scripts/install-test-deps.sh --full  # full requirements.txt
 ```
 
 If you skip this step and run `pytest` anyway, common imports like
@@ -418,7 +420,9 @@ executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
     pytest
 ```
 
-Если у вас есть GPU и установленный CUDA, можно установить полный список зависимостей из `requirements.txt` и затем запустить те же тесты.
+Если у вас есть GPU и установленный CUDA, можно установить полный список
+зависимостей командой `./scripts/install-test-deps.sh --full` и затем
+запустить те же тесты.
 
 The `requirements.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
