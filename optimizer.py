@@ -234,7 +234,7 @@ class ParameterOptimizer:
                 obj_ref = self.objective(trial, symbol, df)
                 obj_refs.append(obj_ref)
                 trials.append(trial)
-            results = ray.get(obj_refs)
+            results = await asyncio.to_thread(ray.get, obj_refs)
             for t in trials:
                 logger.debug(
                     "Received result for %s trial %s", symbol, t.number
