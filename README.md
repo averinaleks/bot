@@ -11,9 +11,9 @@
    python3 -m venv venv
    source venv/bin/activate
    # Вариант с GPU (по умолчанию)
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    # Или CPU‑сборки без CUDA
-   pip install -r requirements-cpu.txt
+   python -m pip install -r requirements-cpu.txt
    ```
    Список `requirements-cpu.txt` содержит версии `torch` и `tensorflow` без поддержки GPU. Его можно использовать для установки зависимостей и запуска тестов на машинах без CUDA.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
@@ -375,7 +375,7 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Running `pytest` requires the packages listed in `requirements-cpu.txt`.
-Install them with the helper script (which also installs `flake8`):
+
 
 ```bash
 ./scripts/install-test-deps.sh
@@ -489,6 +489,5 @@ python -m flake8
 ## Continuous integration
 
 All pushes and pull requests trigger a GitHub Actions workflow that installs
-dependencies via `scripts/install-test-deps.sh` (which also installs `flake8`),
-runs `python -m flake8`, and executes `pytest`.
+
 This ensures style checks and tests run automatically.

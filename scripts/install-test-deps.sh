@@ -2,5 +2,4 @@
 set -e
 # Install Python packages needed for running the test suite.
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-python -m pip install -r "$REPO_ROOT/requirements-cpu.txt"
-python -m pip install flake8
+
