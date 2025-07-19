@@ -194,7 +194,7 @@ class IndicatorsCache:
             return None
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, num_gpus=1 if GPU_AVAILABLE else 0)
 def calc_indicators(
     df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str
 ):
