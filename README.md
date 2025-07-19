@@ -101,6 +101,16 @@ RUNTIME= DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABIL
 
 Set `RUNTIME=` if you want to run these CPU images without the NVIDIA runtime.
 
+GPU acceleration with Numba requires the `libnvvm.so` library. The default
+`Dockerfile` uses the `nvidia/cuda:*‑cudnn-devel` image so NVVM is available
+at runtime. If you switch to a runtime-only base (for example
+`*-runtime` or `*-cudnn-runtime`), copy the NVVM libraries from the build stage
+or Numba will fall back to CPU mode. Build and run the GPU image with:
+
+```bash
+DOCKERFILE=Dockerfile docker compose up --build
+```
+
 Setting `FORCE_CPU=1` disables all CUDA checks, which helps avoid crashes such as
 `free(): double free detected in tcache 2` when CUDA drivers are missing or
 misconfigured.
