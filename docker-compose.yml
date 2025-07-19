@@ -32,6 +32,7 @@ services:
       - "8001:8001"
     environment:
       - TF_CPP_MIN_LOG_LEVEL=3
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
       interval: 5s
@@ -54,7 +55,7 @@ services:
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/ready"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -96,6 +97,8 @@ services:
       - LOG_DIR=/app/logs
       - MODEL_SAVE_PATH=/app/models
       - CONFIG_PATH=/app/config.json
+      - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
+      - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
