@@ -38,6 +38,8 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
 
 # Этап выполнения
 FROM nvidia/cuda:12.5.1-cudnn-devel-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
 
 WORKDIR /app
 
