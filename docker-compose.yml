@@ -11,6 +11,8 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 5s
@@ -49,6 +51,8 @@ services:
     ports:
       - "8002:8002"
     env_file: .env
+    environment:
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
       interval: 5s
