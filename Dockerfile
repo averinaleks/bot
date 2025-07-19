@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
     find /app/venv -type f -name '*.pyc' -delete
 
 # Этап выполнения
-FROM nvidia/cuda:12.5.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.5.1-cudnn-devel-ubuntu22.04
 
 WORKDIR /app
 
