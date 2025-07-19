@@ -39,14 +39,16 @@ if os.environ.get("FORCE_CPU") == "1":
     cuda = None  # type: ignore
     GPU_AVAILABLE = False
 else:
-    try:
-        from numba import cuda  # type: ignore
-
-        GPU_AVAILABLE = hasattr(cuda, "is_available") and cuda.is_available()
-    except Exception as e:  # pragma: no cover - numba without cuda support
-        logger.warning("CUDA initialization failed: %s", e)
+    GPU_AVAILABLE = is_cuda_available()
+    if GPU_AVAILABLE:
+        try:
+            from numba import cuda  # type: ignore
+        except Exception as e:  # pragma: no cover - numba without cuda support
+            logger.warning("Numba CUDA import failed: %s", e)
+            cuda = None  # type: ignore
+            GPU_AVAILABLE = False
+    else:
         cuda = None  # type: ignore
-        GPU_AVAILABLE = False
 
 
 def create_exchange() -> BybitSDKAsync:
