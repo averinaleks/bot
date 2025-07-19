@@ -105,6 +105,13 @@ Setting `FORCE_CPU=1` disables all CUDA checks, which helps avoid crashes such a
 `free(): double free detected in tcache 2` when CUDA drivers are missing or
 misconfigured.
 
+When running with GPUs the `trade_manager` service automatically configures
+Python's multiprocessing start method to ``"spawn"``. Forking workers can lead to
+CUDA initialization errors, so the module switches to ``"spawn"`` on import. The
+default should work for most setups, but you may call
+``multiprocessing.set_start_method()`` yourself before launching the service if
+you need a different policy.
+
 The `trade_manager` container needs extra shared memory. The compose file
 allocates 8GB via `shm_size: '8gb'` to enlarge `/dev/shm`.
 
