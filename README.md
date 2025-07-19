@@ -377,12 +377,16 @@ MLFLOW_TRACKING_URI=mlruns python trading_bot.py
 ## Running tests
 
 Running `pytest` requires the packages listed in `requirements-cpu.txt`.
-Install them with the helper script (which also installs `flake8`).
-Pass `--full` to install the GPU-enabled packages from `requirements.txt`:
+Install them using the helper script:
 
 ```bash
-./scripts/install-test-deps.sh         # CPU packages only
-./scripts/install-test-deps.sh --full  # full requirements.txt
+./scripts/setup-tests.sh        # CPU packages only
+```
+
+To install the GPU-enabled packages from `requirements.txt` instead, run:
+
+```bash
+./scripts/install-test-deps.sh --full
 ```
 
 If you skip this step and run `pytest` anyway, common imports like
@@ -395,7 +399,7 @@ CPU requirements before running the tests:
 ```bash
     python3 -m venv venv
     source venv/bin/activate
-    ./scripts/install-test-deps.sh
+    ./scripts/setup-tests.sh
     pytest
 ```
 
@@ -406,7 +410,7 @@ Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
-As noted above, make sure to run `./scripts/install-test-deps.sh` before
+As noted above, make sure to run `./scripts/setup-tests.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 `requests` will fail.
 
@@ -418,13 +422,13 @@ executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 ```bash
     python3 -m venv venv
     source venv/bin/activate
-    ./scripts/install-test-deps.sh
+    ./scripts/setup-tests.sh
     pytest
 ```
 
 Если у вас есть GPU и установленный CUDA, можно установить полный список
 зависимостей командой `./scripts/install-test-deps.sh --full` и затем
-запустить те же тесты.
+  запустить те же тесты.
 
 The `requirements.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
