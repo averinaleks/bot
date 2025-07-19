@@ -1,4 +1,5 @@
 """Collects market data and serves it through a Flask REST API."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +18,7 @@ from utils import (
     calculate_volume_profile as utils_volume_profile,
     safe_api_call,
     bybit_interval,
+    is_cuda_available,
 )
 from tenacity import retry, wait_exponential
 from typing import List, Dict, TYPE_CHECKING, Any
@@ -33,13 +35,18 @@ from dotenv import load_dotenv
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
 
-try:
-    from numba import cuda  # type: ignore
-    GPU_AVAILABLE = hasattr(cuda, "is_available") and cuda.is_available()
-except Exception as e:  # pragma: no cover - numba without cuda support
-    logger.warning("CUDA initialization failed: %s", e)
+if os.environ.get("FORCE_CPU") == "1":
     cuda = None  # type: ignore
     GPU_AVAILABLE = False
+else:
+    try:
+        from numba import cuda  # type: ignore
+
+        GPU_AVAILABLE = hasattr(cuda, "is_available") and cuda.is_available()
+    except Exception as e:  # pragma: no cover - numba without cuda support
+        logger.warning("CUDA initialization failed: %s", e)
+        cuda = None  # type: ignore
+        GPU_AVAILABLE = False
 
 
 def create_exchange() -> BybitSDKAsync:
@@ -84,7 +91,9 @@ def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarra
     return result
 
 
-def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int) -> np.ndarray:
+def atr_fast(
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int
+) -> np.ndarray:
     """Compute ATR using Wilder's smoothing with optional GPU acceleration."""
     high = np.asarray(high, dtype=np.float64)
     low = np.asarray(low, dtype=np.float64)
@@ -105,7 +114,14 @@ def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int) 
 
 class IndicatorsCache:
     """Container for computed technical indicators."""
-    def __init__(self, df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str = "primary"):
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        config: BotConfig,
+        volatility: float,
+        timeframe: str = "primary",
+    ):
         self.df = df
         self.config = config
         self.volatility = volatility
@@ -118,28 +134,50 @@ class IndicatorsCache:
                 close_np = df["close"].to_numpy()
                 high_np = df["high"].to_numpy()
                 low_np = df["low"].to_numpy()
-                self.ema30 = pd.Series(ema_fast(close_np, config["ema30_period"]), index=df.index)
-                self.ema100 = pd.Series(ema_fast(close_np, config["ema100_period"]), index=df.index)
-                self.ema200 = pd.Series(ema_fast(close_np, config["ema200_period"]), index=df.index)
+                self.ema30 = pd.Series(
+                    ema_fast(close_np, config["ema30_period"]), index=df.index
+                )
+                self.ema100 = pd.Series(
+                    ema_fast(close_np, config["ema100_period"]), index=df.index
+                )
+                self.ema200 = pd.Series(
+                    ema_fast(close_np, config["ema200_period"]), index=df.index
+                )
                 self.atr = pd.Series(
-                    atr_fast(high_np, low_np, close_np, config["atr_period_default"]), index=df.index
+                    atr_fast(high_np, low_np, close_np, config["atr_period_default"]),
+                    index=df.index,
                 )
                 self.rsi = ta.momentum.rsi(df["close"], window=14, fillna=True)
-                self.adx = ta.trend.adx(df["high"], df["low"], df["close"], window=14, fillna=True)
-                self.macd = ta.trend.macd_diff(df["close"], window_slow=26, window_fast=12, window_sign=9, fillna=True)
+                self.adx = ta.trend.adx(
+                    df["high"], df["low"], df["close"], window=14, fillna=True
+                )
+                self.macd = ta.trend.macd_diff(
+                    df["close"],
+                    window_slow=26,
+                    window_fast=12,
+                    window_sign=9,
+                    fillna=True,
+                )
             elif timeframe == "secondary":
                 close_np = df["close"].to_numpy()
-                self.ema30 = pd.Series(ema_fast(close_np, config["ema30_period"]), index=df.index)
-                self.ema100 = pd.Series(ema_fast(close_np, config["ema100_period"]), index=df.index)
+                self.ema30 = pd.Series(
+                    ema_fast(close_np, config["ema30_period"]), index=df.index
+                )
+                self.ema100 = pd.Series(
+                    ema_fast(close_np, config["ema100_period"]), index=df.index
+                )
             self.volume_profile = None
-            if len(df) - self.last_volume_profile_update >= self.volume_profile_update_interval:
+            if (
+                len(df) - self.last_volume_profile_update
+                >= self.volume_profile_update_interval
+            ):
                 self.volume_profile = self.calculate_volume_profile(df)
                 self.last_volume_profile_update = len(df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
-            self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = self.macd = (
-                self.volume_profile
-            ) = None
+            self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
+                self.macd
+            ) = self.volume_profile = None
             raise
 
     def calculate_volume_profile(self, df: pd.DataFrame) -> pd.Series:
@@ -155,7 +193,9 @@ class IndicatorsCache:
 
 
 @ray.remote(num_cpus=1)
-def calc_indicators(df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str):
+def calc_indicators(
+    df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str
+):
     return IndicatorsCache(df, config, volatility, timeframe)
 
 
@@ -176,16 +216,23 @@ class DataHandler:
         ccxtpro client for WebSocket data.
     """
 
-    def __init__(self, config: BotConfig, telegram_bot, chat_id,
-                 exchange: BybitSDKAsync | None = None,
-                 pro_exchange: "ccxtpro.bybit" | None = None):
+    def __init__(
+        self,
+        config: BotConfig,
+        telegram_bot,
+        chat_id,
+        exchange: BybitSDKAsync | None = None,
+        pro_exchange: "ccxtpro.bybit" | None = None,
+    ):
         logger.info(
             "Starting DataHandler initialization: timeframe=%s, max_symbols=%s, GPU available=%s",
             config.timeframe,
             config.get("max_symbols"),
             GPU_AVAILABLE,
         )
-        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
+        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get(
+            "TELEGRAM_CHAT_ID"
+        ):
             logger.warning(
                 "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
             )
@@ -219,7 +266,9 @@ class DataHandler:
         self.ws_min_process_rate = config.get("ws_min_process_rate", 30)
         self.process_rate_window = 1
         self.cleanup_task = None
-        self.ws_queue = asyncio.PriorityQueue(maxsize=config.get("ws_queue_size", 10000))
+        self.ws_queue = asyncio.PriorityQueue(
+            maxsize=config.get("ws_queue_size", 10000)
+        )
         # Use an asyncio.Queue so disk buffer operations never block the event loop
         self.disk_buffer: asyncio.Queue[str] = asyncio.Queue(
             maxsize=config.get("disk_buffer_size", 10000)
@@ -240,7 +289,9 @@ class DataHandler:
         # Start with the configured limit for dynamic adjustments
         self.max_subscriptions = self.max_symbols
         # Number of symbols to subscribe per WebSocket connection
-        self.ws_subscription_batch_size = config.get("max_subscriptions_per_connection", 30)
+        self.ws_subscription_batch_size = config.get(
+            "max_subscriptions_per_connection", 30
+        )
         self.active_subscriptions = 0
         self.load_threshold = config.get("load_threshold", 0.8)
         self.ws_pool = {}
@@ -294,7 +345,9 @@ class DataHandler:
             df_lock = self.ohlcv_lock if timeframe == "primary" else self.ohlcv_2h_lock
             df = self.ohlcv if timeframe == "primary" else self.ohlcv_2h
             async with df_lock:
-                if "symbol" in df.index.names and symbol in df.index.get_level_values("symbol"):
+                if "symbol" in df.index.names and symbol in df.index.get_level_values(
+                    "symbol"
+                ):
                     sub_df = df.xs(symbol, level="symbol", drop_level=False)
                 else:
                     return False
@@ -319,14 +372,29 @@ class DataHandler:
             history_limit = self.config.get("min_data_length", 200)
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
-                bid_volume = sum([bid[1] for bid in orderbook.get("bids", [])[:5]]) if orderbook.get("bids") else 0
-                ask_volume = sum([ask[1] for ask in orderbook.get("asks", [])[:5]]) if orderbook.get("asks") else 0
+                bid_volume = (
+                    sum([bid[1] for bid in orderbook.get("bids", [])[:5]])
+                    if orderbook.get("bids")
+                    else 0
+                )
+                ask_volume = (
+                    sum([ask[1] for ask in orderbook.get("asks", [])[:5]])
+                    if orderbook.get("asks")
+                    else 0
+                )
                 liquidity = min(bid_volume, ask_volume)
                 self.symbol_priority[symbol] = -liquidity
-                tasks.append(self.fetch_ohlcv_history(symbol, self.config["timeframe"], history_limit, cache_prefix=""))
                 tasks.append(
                     self.fetch_ohlcv_history(
-                        symbol, self.config["secondary_timeframe"], history_limit, cache_prefix="2h_"
+                        symbol, self.config["timeframe"], history_limit, cache_prefix=""
+                    )
+                )
+                tasks.append(
+                    self.fetch_ohlcv_history(
+                        symbol,
+                        self.config["secondary_timeframe"],
+                        history_limit,
+                        cache_prefix="2h_",
                     )
                 )
                 tasks.append(self.fetch_funding_rate(symbol))
@@ -342,7 +410,9 @@ class DataHandler:
                         timeframe = self.config["secondary_timeframe"]
                     else:
                         continue
-                    if not check_dataframe_empty(df, f"load_initial {symbol} {timeframe}"):
+                    if not check_dataframe_empty(
+                        df, f"load_initial {symbol} {timeframe}"
+                    ):
                         df["symbol"] = symbol
                         df = df.set_index(["symbol", df.index])
                         await self.synchronize_and_update(
@@ -351,17 +421,23 @@ class DataHandler:
                             self.funding_rates.get(symbol, 0.0),
                             self.open_interest.get(symbol, 0.0),
                             {"imbalance": 0.0, "timestamp": time.time()},
-                            timeframe="primary" if timeframe == self.config["timeframe"] else "secondary",
+                            timeframe=(
+                                "primary"
+                                if timeframe == self.config["timeframe"]
+                                else "secondary"
+                            ),
                         )
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка загрузки начальных данных: %s", e)
-            await self.telegram_logger.send_telegram_message(f"Ошибка загрузки данных: {e}")
+            await self.telegram_logger.send_telegram_message(
+                f"Ошибка загрузки данных: {e}"
+            )
 
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
         """Return top liquid USDT futures pairs only.
 
         Filters out spot markets by selecting futures symbols. Both plain
-        notation like ``BTCUSDT`` and the colon-delimited form 
+        notation like ``BTCUSDT`` and the colon-delimited form
         ``BTC/USDT:USDT`` are supported. Volume ranking and the configured
         top limit remain unchanged.
         """
@@ -382,7 +458,11 @@ class DataHandler:
         tasks = []
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols
-            if market.get("active") and symbol.endswith("USDT") and ((":" in symbol) or ("/" not in symbol)):
+            if (
+                market.get("active")
+                and symbol.endswith("USDT")
+                and ((":" in symbol) or ("/" not in symbol))
+            ):
                 tasks.append(asyncio.create_task(fetch_volume(symbol)))
 
         if tasks:
@@ -400,7 +480,9 @@ class DataHandler:
         return [s for s, _ in sorted_pairs[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def fetch_ohlcv_single(self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = "") -> tuple:
+    async def fetch_ohlcv_single(
+        self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = ""
+    ) -> tuple:
         try:
             ohlcv = await safe_api_call(
                 self.exchange,
@@ -418,7 +500,9 @@ class DataHandler:
                     limit,
                 )
                 return symbol, pd.DataFrame()
-            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df = pd.DataFrame(
+                ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+            )
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
             df = df.set_index("timestamp")
             for col in ["open", "high", "low", "close", "volume"]:
@@ -452,7 +536,9 @@ class DataHandler:
             logger.error("Ошибка получения OHLCV для %s (%s): %s", symbol, timeframe, e)
             return symbol, pd.DataFrame()
 
-    async def fetch_ohlcv_history(self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = "") -> tuple:
+    async def fetch_ohlcv_history(
+        self, symbol: str, timeframe: str, total_limit: int, cache_prefix: str = ""
+    ) -> tuple:
         """Fetch extended OHLCV history by performing multiple requests."""
         try:
             all_data = []
@@ -473,7 +559,10 @@ class DataHandler:
                 )
                 if not ohlcv:
                     break
-                df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+                df = pd.DataFrame(
+                    ohlcv,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
                 df = df.set_index("timestamp")
                 all_data.append(df)
@@ -559,7 +648,9 @@ class DataHandler:
         timeframe: str = "primary",
     ):
         try:
-            if check_dataframe_empty(df, f"synchronize_and_update {symbol} {timeframe}"):
+            if check_dataframe_empty(
+                df, f"synchronize_and_update {symbol} {timeframe}"
+            ):
                 logger.warning(
                     "Пустой DataFrame для %s (%s), пропуск синхронизации",
                     symbol,
@@ -583,17 +674,25 @@ class DataHandler:
             else:
                 async with self.ohlcv_2h_lock:
                     if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
-                        base = self.ohlcv_2h.drop(symbol, level="symbol", errors="ignore")
+                        base = self.ohlcv_2h.drop(
+                            symbol, level="symbol", errors="ignore"
+                        )
                     else:
                         base = self.ohlcv_2h
-                    self.ohlcv_2h = pd.concat([base, df], ignore_index=False).sort_index()
+                    self.ohlcv_2h = pd.concat(
+                        [base, df], ignore_index=False
+                    ).sort_index()
             async with self.funding_lock:
                 self.funding_rates[symbol] = funding_rate
             async with self.oi_lock:
                 self.open_interest[symbol] = open_interest
             async with self.orderbook_lock:
-                orderbook_df = pd.DataFrame([orderbook | {"symbol": symbol, "timestamp": time.time()}])
-                self.orderbook = pd.concat([self.orderbook, orderbook_df], ignore_index=False)
+                orderbook_df = pd.DataFrame(
+                    [orderbook | {"symbol": symbol, "timestamp": time.time()}]
+                )
+                self.orderbook = pd.concat(
+                    [self.orderbook, orderbook_df], ignore_index=False
+                )
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             cache_key = f"{symbol}_{timeframe}"
             if timeframe == "primary":
@@ -650,7 +749,9 @@ class DataHandler:
                         self.indicators_2h[symbol] = result
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError) as e:
-            logger.error("Ошибка синхронизации данных для %s (%s): %s", symbol, timeframe, e)
+            logger.error(
+                "Ошибка синхронизации данных для %s (%s): %s", symbol, timeframe, e
+            )
 
     async def cleanup_old_data(self):
         while True:
@@ -659,18 +760,30 @@ class DataHandler:
                     current_time = pd.Timestamp.now(tz="UTC")
                     async with self.ohlcv_lock:
                         if not self.ohlcv.empty:
-                            threshold = current_time - pd.Timedelta(seconds=self.config["forget_window"])
-                            self.ohlcv = self.ohlcv[self.ohlcv.index.get_level_values("timestamp") >= threshold]
+                            threshold = current_time - pd.Timedelta(
+                                seconds=self.config["forget_window"]
+                            )
+                            self.ohlcv = self.ohlcv[
+                                self.ohlcv.index.get_level_values("timestamp")
+                                >= threshold
+                            ]
                     async with self.ohlcv_2h_lock:
                         if not self.ohlcv_2h.empty:
-                            threshold = current_time - pd.Timedelta(seconds=self.config["forget_window"])
+                            threshold = current_time - pd.Timedelta(
+                                seconds=self.config["forget_window"]
+                            )
                             self.ohlcv_2h = self.ohlcv_2h[
-                                self.ohlcv_2h.index.get_level_values("timestamp") >= threshold
+                                self.ohlcv_2h.index.get_level_values("timestamp")
+                                >= threshold
                             ]
                     async with self.orderbook_lock:
-                        if not self.orderbook.empty and "timestamp" in self.orderbook.columns:
+                        if (
+                            not self.orderbook.empty
+                            and "timestamp" in self.orderbook.columns
+                        ):
                             self.orderbook = self.orderbook[
-                                self.orderbook["timestamp"] >= time.time() - self.config["forget_window"]
+                                self.orderbook["timestamp"]
+                                >= time.time() - self.config["forget_window"]
                             ]
                     async with self.ohlcv_lock:
                         for symbol in list(self.processed_timestamps.keys()):
@@ -696,7 +809,9 @@ class DataHandler:
             try:
                 self.disk_buffer.put_nowait(filename)
             except asyncio.QueueFull:
-                logger.warning("Очередь дискового буфера переполнена, сообщение пропущено")
+                logger.warning(
+                    "Очередь дискового буфера переполнена, сообщение пропущено"
+                )
                 await asyncio.to_thread(os.remove, filename)
                 return
             logger.info("Сообщение сохранено в дисковый буфер: %s", filename)
@@ -733,7 +848,10 @@ class DataHandler:
             if self.process_rate_timestamps
             else self.ws_min_process_rate
         )
-        if cpu_load > self.load_threshold * 100 or memory_load > self.load_threshold * 100:
+        if (
+            cpu_load > self.load_threshold * 100
+            or memory_load > self.load_threshold * 100
+        ):
             new_max = max(10, self.max_subscriptions // 2)
             logger.warning(
                 "Высокая нагрузка (CPU: %s%%, Memory: %s%%), уменьшение подписок до %s",
@@ -796,7 +914,9 @@ class DataHandler:
                     )
                     self.tasks.extend([t1, t2])
                 self.tasks.append(asyncio.create_task(self._process_ws_queue()))
-                self.tasks.append(asyncio.create_task(self.load_from_disk_buffer_loop()))
+                self.tasks.append(
+                    asyncio.create_task(self.load_from_disk_buffer_loop())
+                )
                 self.tasks.append(asyncio.create_task(self.monitor_load()))
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except Exception as e:
@@ -858,16 +978,18 @@ class DataHandler:
                     continue
                 last = ohlcv[-1]
                 kline_timestamp = pd.to_datetime(int(last[0]), unit="ms", utc=True)
-                df = pd.DataFrame([
-                    {
-                        "timestamp": kline_timestamp,
-                        "open": np.float32(last[1]),
-                        "high": np.float32(last[2]),
-                        "low": np.float32(last[3]),
-                        "close": np.float32(last[4]),
-                        "volume": np.float32(last[5]),
-                    }
-                ])
+                df = pd.DataFrame(
+                    [
+                        {
+                            "timestamp": kline_timestamp,
+                            "open": np.float32(last[1]),
+                            "high": np.float32(last[2]),
+                            "low": np.float32(last[3]),
+                            "close": np.float32(last[4]),
+                            "volume": np.float32(last[5]),
+                        }
+                    ]
+                )
                 df["symbol"] = symbol
                 df = df.set_index(["symbol", "timestamp"])
                 await self.synchronize_and_update(
@@ -898,7 +1020,10 @@ class DataHandler:
                     delay,
                     e,
                 )
-                if reconnect_attempts == max_reconnect_attempts and not limit_exceeded_logged:
+                if (
+                    reconnect_attempts == max_reconnect_attempts
+                    and not limit_exceeded_logged
+                ):
                     logger.warning(
                         "Превышено максимальное количество попыток CCXT Pro для %s (%s). Продолжаем попытки с экспоненциальной задержкой",
                         symbol,
@@ -953,7 +1078,7 @@ class DataHandler:
                 return ws
             except OSError as e:
                 attempts += 1
-                delay = min(2 ** attempts, 60)
+                delay = min(2**attempts, 60)
                 logger.error(
                     "Ошибка подключения к WebSocket %s, попытка %s/%s, ожидание %s секунд: %s",
                     url,
@@ -971,7 +1096,9 @@ class DataHandler:
         attempts = 0
         max_attempts = self.config.get("max_reconnect_attempts", 10)
         selected_timeframe = (
-            self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
+            self.config["timeframe"]
+            if timeframe == "primary"
+            else self.config["secondary_timeframe"]
         )
         batch_size = self.ws_subscription_batch_size
         while True:
@@ -981,15 +1108,28 @@ class DataHandler:
                     for symbol in batch:
                         current_time = time.time()
                         self.ws_rate_timestamps.append(current_time)
-                        self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
+                        self.ws_rate_timestamps = [
+                            t for t in self.ws_rate_timestamps if current_time - t < 1
+                        ]
                         if len(self.ws_rate_timestamps) > self.config["ws_rate_limit"]:
-                            logger.warning("Превышен лимит подписок WebSocket, ожидание")
+                            logger.warning(
+                                "Превышен лимит подписок WebSocket, ожидание"
+                            )
                             await asyncio.sleep(1)
-                            self.ws_rate_timestamps = [t for t in self.ws_rate_timestamps if current_time - t < 1]
+                            self.ws_rate_timestamps = [
+                                t
+                                for t in self.ws_rate_timestamps
+                                if current_time - t < 1
+                            ]
                         ws_symbol = self.fix_ws_symbol(symbol)
                         interval = bybit_interval(selected_timeframe)
                         await ws.send(
-                            json.dumps({"op": "subscribe", "args": [f"kline.{interval}.{ws_symbol}"]})
+                            json.dumps(
+                                {
+                                    "op": "subscribe",
+                                    "args": [f"kline.{interval}.{ws_symbol}"],
+                                }
+                            )
                         )
                         rate = max(self.config.get("ws_rate_limit", 1), 1)
                         await asyncio.sleep(1 / rate)
@@ -998,7 +1138,10 @@ class DataHandler:
                 confirmations = 0
                 startup_messages = []
                 start_confirm = time.time()
-                while confirmations < confirmations_needed and time.time() - start_confirm < confirmations_needed * 5:
+                while (
+                    confirmations < confirmations_needed
+                    and time.time() - start_confirm < confirmations_needed * 5
+                ):
                     try:
                         response = await asyncio.wait_for(ws.recv(), timeout=5)
                         data = json.loads(response)
@@ -1013,7 +1156,7 @@ class DataHandler:
                 return startup_messages
             except Exception as e:
                 attempts += 1
-                delay = min(2 ** attempts, 60)
+                delay = min(2**attempts, 60)
                 logger.error(
                     "Ошибка подписки на WebSocket для %s (%s), попытка %s/%s, ожидание %s секунд: %s",
                     symbols,
@@ -1063,7 +1206,9 @@ class DataHandler:
                         )
                         if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
                             _, df = symbol_df
-                            if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
+                            if not check_dataframe_empty(
+                                df, f"subscribe_to_klines {symbol} {timeframe}"
+                            ):
                                 df["symbol"] = symbol
                                 df = df.set_index(["symbol", df.index])
                                 await self.synchronize_and_update(
@@ -1080,10 +1225,16 @@ class DataHandler:
                 symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                 priority = self.symbol_priority.get(symbol, 0)
                 try:
-                    await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
+                    await self.ws_queue.put(
+                        (priority, (symbols, message, timeframe)), timeout=5
+                    )
                 except asyncio.TimeoutError:
-                    logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
-                    await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                    logger.warning(
+                        "Очередь WebSocket переполнена, сохранение в дисковый буфер"
+                    )
+                    await self.save_to_disk_buffer(
+                        priority, (symbols, message, timeframe)
+                    )
             except asyncio.TimeoutError:
                 logger.warning(
                     "Тайм-аут WebSocket для %s (%s), отправка пинга",
@@ -1109,13 +1260,19 @@ class DataHandler:
                 )
                 raise
 
-    async def _subscribe_chunk(self, symbols, ws_url, connection_timeout, timeframe: str = "primary"):
+    async def _subscribe_chunk(
+        self, symbols, ws_url, connection_timeout, timeframe: str = "primary"
+    ):
         """Subscribe to kline data for a chunk of symbols."""
         reconnect_attempts = 0
         max_reconnect_attempts = self.config.get("max_reconnect_attempts", 10)
         urls = [ws_url] + self.backup_ws_urls
         current_url_index = 0
-        selected_timeframe = self.config["timeframe"] if timeframe == "primary" else self.config["secondary_timeframe"]
+        selected_timeframe = (
+            self.config["timeframe"]
+            if timeframe == "primary"
+            else self.config["secondary_timeframe"]
+        )
         while True:
             current_url = urls[current_url_index % len(urls)]
             ws = None
@@ -1128,7 +1285,9 @@ class DataHandler:
                 reconnect_attempts = 0
                 current_url_index = 0
 
-                startup_messages = await self._send_subscriptions(ws, symbols, timeframe)
+                startup_messages = await self._send_subscriptions(
+                    ws, symbols, timeframe
+                )
                 for message in startup_messages:
                     try:
                         data = json.loads(message)
@@ -1136,14 +1295,22 @@ class DataHandler:
                         symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                         priority = self.symbol_priority.get(symbol, 0)
                         try:
-                            await self.ws_queue.put((priority, (symbols, message, timeframe)), timeout=5)
+                            await self.ws_queue.put(
+                                (priority, (symbols, message, timeframe)), timeout=5
+                            )
                         except asyncio.TimeoutError:
-                            logger.warning("Очередь WebSocket переполнена, сохранение в дисковый буфер")
-                            await self.save_to_disk_buffer(priority, (symbols, message, timeframe))
+                            logger.warning(
+                                "Очередь WebSocket переполнена, сохранение в дисковый буфер"
+                            )
+                            await self.save_to_disk_buffer(
+                                priority, (symbols, message, timeframe)
+                            )
                     except (json.JSONDecodeError, KeyError, ValueError):
                         continue
 
-                await self._read_messages(ws, symbols, timeframe, selected_timeframe, connection_timeout)
+                await self._read_messages(
+                    ws, symbols, timeframe, selected_timeframe, connection_timeout
+                )
             except Exception as e:
                 reconnect_attempts += 1
                 current_url_index += 1
@@ -1197,7 +1364,9 @@ class DataHandler:
                             )
                             if isinstance(symbol_df, tuple) and len(symbol_df) == 2:
                                 _, df = symbol_df
-                                if not check_dataframe_empty(df, f"subscribe_to_klines {symbol} {timeframe}"):
+                                if not check_dataframe_empty(
+                                    df, f"subscribe_to_klines {symbol} {timeframe}"
+                                ):
                                     df["symbol"] = symbol
                                     df = df.set_index(["symbol", df.index])
                                     await self.synchronize_and_update(
@@ -1210,7 +1379,10 @@ class DataHandler:
                                     )
                         except Exception as rest_e:
                             logger.error(
-                                "Ошибка REST API для %s (%s): %s", symbol, timeframe, rest_e
+                                "Ошибка REST API для %s (%s): %s",
+                                symbol,
+                                timeframe,
+                                rest_e,
                             )
                             raise
             finally:
@@ -1231,11 +1403,14 @@ class DataHandler:
                 now = time.time()
                 self.process_rate_timestamps.append(now)
                 self.process_rate_timestamps = [
-                    t for t in self.process_rate_timestamps if now - t < self.process_rate_window
+                    t
+                    for t in self.process_rate_timestamps
+                    if now - t < self.process_rate_window
                 ]
                 if (
                     len(self.process_rate_timestamps) > self.ws_min_process_rate
-                    and (len(self.process_rate_timestamps) / self.process_rate_window) < self.ws_min_process_rate
+                    and (len(self.process_rate_timestamps) / self.process_rate_window)
+                    < self.ws_min_process_rate
                 ):
                     await self.adjust_subscriptions()
                 data = json.loads(message)
@@ -1260,7 +1435,14 @@ class DataHandler:
                     )
                     continue
                 for entry in data["data"]:
-                    required_fields = ["start", "open", "high", "low", "close", "volume"]
+                    required_fields = [
+                        "start",
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                    ]
                     if not all(field in entry for field in required_fields):
                         logger.warning(
                             "Invalid kline data (%s): %s",
@@ -1269,7 +1451,9 @@ class DataHandler:
                         )
                         continue
                     try:
-                        kline_timestamp = pd.to_datetime(int(entry["start"]), unit="ms", utc=True)
+                        kline_timestamp = pd.to_datetime(
+                            int(entry["start"]), unit="ms", utc=True
+                        )
                         open_price = float(entry["open"])
                         high_price = float(entry["high"])
                         low_price = float(entry["low"])
@@ -1284,9 +1468,15 @@ class DataHandler:
                         )
                         continue
                     timestamp_dict = (
-                        self.processed_timestamps if timeframe == "primary" else self.processed_timestamps_2h
+                        self.processed_timestamps
+                        if timeframe == "primary"
+                        else self.processed_timestamps_2h
                     )
-                    lock = self.ohlcv_lock if timeframe == "primary" else self.ohlcv_2h_lock
+                    lock = (
+                        self.ohlcv_lock
+                        if timeframe == "primary"
+                        else self.ohlcv_2h_lock
+                    )
                     async with lock:
                         if symbol not in timestamp_dict:
                             timestamp_dict[symbol] = set()
@@ -1300,7 +1490,9 @@ class DataHandler:
                             continue
                         timestamp_dict[symbol].add(entry["start"])
                         if len(timestamp_dict[symbol]) > 1000:
-                            timestamp_dict[symbol] = set(list(timestamp_dict[symbol])[-500:])
+                            timestamp_dict[symbol] = set(
+                                list(timestamp_dict[symbol])[-500:]
+                            )
                     current_time = pd.Timestamp.now(tz="UTC")
                     if (current_time - kline_timestamp).total_seconds() > 5:
                         logger.warning(
@@ -1334,10 +1526,21 @@ class DataHandler:
                             continue
                         df["symbol"] = symbol
                         df = df.set_index(["symbol", "timestamp"])
-                        time_diffs = df.index.get_level_values("timestamp").to_series().diff().dt.total_seconds()
+                        time_diffs = (
+                            df.index.get_level_values("timestamp")
+                            .to_series()
+                            .diff()
+                            .dt.total_seconds()
+                        )
                         max_gap = (
                             pd.Timedelta(
-                                self.config["timeframe" if timeframe == "primary" else "secondary_timeframe"]
+                                self.config[
+                                    (
+                                        "timeframe"
+                                        if timeframe == "primary"
+                                        else "secondary_timeframe"
+                                    )
+                                ]
                             ).total_seconds()
                             * 2
                         )
@@ -1360,7 +1563,9 @@ class DataHandler:
                             timeframe=timeframe,
                         )
                     except Exception as e:
-                        logger.exception("Ошибка обработки данных для %s: %s", symbol, e)
+                        logger.exception(
+                            "Ошибка обработки данных для %s: %s", symbol, e
+                        )
                         await asyncio.sleep(0.1)
                         continue
                 if time.time() - last_latency_log > self.latency_log_interval:
@@ -1422,6 +1627,7 @@ class DataHandler:
 
         await TelegramLogger.shutdown()
 
+
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------
@@ -1440,6 +1646,7 @@ LATEST_OHLCV: Dict[str, Dict[str, Any]] = {}
 # Exchange instance used by the price endpoint. Lazily created on first use so
 # tests without API keys can stub it easily.
 _PRICE_EXCHANGE: BybitSDKAsync | None = None
+
 
 def _get_price_exchange() -> BybitSDKAsync:
     global _PRICE_EXCHANGE

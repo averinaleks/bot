@@ -101,7 +101,9 @@ RUNTIME= DOCKERFILE=Dockerfile.cpu NVIDIA_VISIBLE_DEVICES= NVIDIA_DRIVER_CAPABIL
 
 Set `RUNTIME=` if you want to run these CPU images without the NVIDIA runtime.
 
-Setting `FORCE_CPU=1` disables all CUDA checks, useful when running GPU images on machines without working drivers.
+Setting `FORCE_CPU=1` disables all CUDA checks, which helps avoid crashes such as
+`free(): double free detected in tcache 2` when CUDA drivers are missing or
+misconfigured.
 
 The `trade_manager` container needs extra shared memory. The compose file
 allocates 8GB via `shm_size: '8gb'` to enlarge `/dev/shm`.
