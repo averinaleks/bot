@@ -337,8 +337,8 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
                     val_X = val_X.view(val_X.size(0), -1)
                 val_y = val_y.to(device)
                 outputs = model(val_X).squeeze()
-                preds.extend(outputs.cpu().numpy())
-                labels.extend(val_y.cpu().numpy())
+                preds.extend(outputs.cpu().numpy().reshape(-1))
+                labels.extend(val_y.cpu().numpy().reshape(-1))
                 val_loss += criterion(outputs, val_y).item()
         val_loss /= len(val_loader)
         if val_loss + 1e-4 < best_loss:

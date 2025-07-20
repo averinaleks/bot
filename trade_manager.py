@@ -1283,7 +1283,7 @@ else:
 
 
 @api_app.route("/open_position", methods=["POST"])
-async def open_position_route():
+def open_position_route():
     """Open a new trade position."""
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
@@ -1302,7 +1302,7 @@ def positions_route():
 
 
 @api_app.route("/start")
-async def start_route():
+def start_route():
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
     asyncio.create_task(trade_manager.run())
