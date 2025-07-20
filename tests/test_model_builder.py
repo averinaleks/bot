@@ -47,8 +47,9 @@ class DummyIndicators:
 class DummyDataHandler:
     def __init__(self, df):
         self.ohlcv = df
-        self.funding_rates = {"BTCUSDT": 0.1}
-        self.open_interest = {"BTCUSDT": 0.2}
+        n = len(df)
+        self.funding_rates = {"BTCUSDT": np.linspace(0.1, 0.2, n)}
+        self.open_interest = {"BTCUSDT": np.linspace(0.2, 0.3, n)}
         self.usdt_pairs = ["BTCUSDT"]
 
 class DummyTradeManager:
