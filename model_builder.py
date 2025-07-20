@@ -600,16 +600,26 @@ class ModelBuilder:
                 model = CNNLSTM(X.shape[2], 64, 2, 0.2)
             model.load_state_dict(model_state)
             model.to(self.device)
-        calibrator = LogisticRegression()
-        calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
-        self.calibrators[symbol] = calibrator
+        unique_labels = np.unique(val_labels)
         brier = brier_score_loss(val_labels, val_preds)
-        prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
-        self.calibration_metrics[symbol] = {
-            'brier_score': float(brier),
-            'prob_true': prob_true.tolist(),
-            'prob_pred': prob_pred.tolist()
-        }
+        if unique_labels.size < 2:
+            logger.warning(
+                "Калибровка пропущена для %s: валидационные метки содержат только класс %s",
+                symbol,
+                unique_labels[0] if unique_labels.size == 1 else 'unknown',
+            )
+            self.calibrators[symbol] = None
+            self.calibration_metrics[symbol] = {'brier_score': float(brier)}
+        else:
+            calibrator = LogisticRegression()
+            calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
+            self.calibrators[symbol] = calibrator
+            prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
+            self.calibration_metrics[symbol] = {
+                'brier_score': float(brier),
+                'prob_true': prob_true.tolist(),
+                'prob_pred': prob_pred.tolist()
+            }
         if self.config.get("mlflow_enabled", False) and mlflow is not None:
             mlflow.set_tracking_uri(self.config.get("mlflow_tracking_uri", "mlruns"))
             with mlflow.start_run(run_name=f"{symbol}_retrain"):
