@@ -487,13 +487,20 @@ class ModelBuilder:
         features_df = df[['close', 'open', 'high', 'low', 'volume']].copy()
         features_df['funding'] = self.data_handler.funding_rates.get(symbol, 0.0)
         features_df['open_interest'] = self.data_handler.open_interest.get(symbol, 0.0)
-        features_df['ema30'] = indicators.ema30[-len(df):].values
-        features_df['ema100'] = indicators.ema100[-len(df):].values
-        features_df['ema200'] = indicators.ema200[-len(df):].values
-        features_df['rsi'] = indicators.rsi[-len(df):].values
-        features_df['adx'] = indicators.adx[-len(df):].values
-        features_df['macd'] = indicators.macd[-len(df):].values
-        features_df['atr'] = indicators.atr[-len(df):].values
+        def _align(series: pd.Series) -> np.ndarray:
+            """Return values aligned to ``df.index`` and forward filled."""
+            if not isinstance(series, pd.Series):
+                return np.full(len(df), 0.0, dtype=float)
+            aligned = series.reindex(df.index).bfill().ffill()
+            return aligned.to_numpy(dtype=float)
+
+        features_df['ema30'] = _align(indicators.ema30)
+        features_df['ema100'] = _align(indicators.ema100)
+        features_df['ema200'] = _align(indicators.ema200)
+        features_df['rsi'] = _align(indicators.rsi)
+        features_df['adx'] = _align(indicators.adx)
+        features_df['macd'] = _align(indicators.macd)
+        features_df['atr'] = _align(indicators.atr)
         scaler = self.scalers.get(symbol)
         if scaler is None:
             scaler = StandardScaler()
@@ -845,13 +852,18 @@ class RLAgent:
         features_df = df[["close", "open", "high", "low", "volume"]].copy()
         features_df["funding"] = self.data_handler.funding_rates.get(symbol, 0.0)
         features_df["open_interest"] = self.data_handler.open_interest.get(symbol, 0.0)
-        features_df["ema30"] = indicators.ema30[-len(df) :].values
-        features_df["ema100"] = indicators.ema100[-len(df) :].values
-        features_df["ema200"] = indicators.ema200[-len(df) :].values
-        features_df["rsi"] = indicators.rsi[-len(df) :].values
-        features_df["adx"] = indicators.adx[-len(df) :].values
-        features_df["macd"] = indicators.macd[-len(df) :].values
-        features_df["atr"] = indicators.atr[-len(df) :].values
+        def _align(series: pd.Series) -> np.ndarray:
+            if not isinstance(series, pd.Series):
+                return np.full(len(df), 0.0, dtype=float)
+            return series.reindex(df.index).bfill().ffill().to_numpy(dtype=float)
+
+        features_df["ema30"] = _align(indicators.ema30)
+        features_df["ema100"] = _align(indicators.ema100)
+        features_df["ema200"] = _align(indicators.ema200)
+        features_df["rsi"] = _align(indicators.rsi)
+        features_df["adx"] = _align(indicators.adx)
+        features_df["macd"] = _align(indicators.macd)
+        features_df["atr"] = _align(indicators.atr)
         return features_df.reset_index(drop=True)
 
     async def train_symbol(self, symbol: str):
