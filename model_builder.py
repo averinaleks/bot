@@ -271,8 +271,8 @@ def _train_model_lightning(X, y, batch_size, model_type):
             if model_type == "mlp":
                 val_x = val_x.view(val_x.size(0), -1)
             out = wrapper(val_x).squeeze()
-            preds.extend(out.cpu().numpy())
-            labels.extend(val_y.numpy())
+            preds.extend(out.cpu().numpy().reshape(-1))
+            labels.extend(val_y.numpy().reshape(-1))
     return net.state_dict(), preds, labels
 
 
