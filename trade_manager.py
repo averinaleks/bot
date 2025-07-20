@@ -1292,7 +1292,13 @@ def open_position_route():
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
-    asyncio.create_task(trade_manager.open_position(symbol, side, price, info))
+    if getattr(trade_manager, "loop", None):
+        trade_manager.loop.call_soon_threadsafe(
+            asyncio.create_task,
+            trade_manager.open_position(symbol, side, price, info),
+        )
+    else:
+        return jsonify({"error": "loop not running"}), 503
     return jsonify({"status": "ok"})
 
 
@@ -1305,8 +1311,13 @@ def positions_route():
 def start_route():
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
-    asyncio.create_task(trade_manager.run())
-    return jsonify({"status": "started"})
+    if getattr(trade_manager, "loop", None):
+        trade_manager.loop.call_soon_threadsafe(
+            asyncio.create_task,
+            trade_manager.run(),
+        )
+        return jsonify({"status": "started"})
+    return jsonify({"error": "loop not running"}), 503
 
 
 @api_app.route("/ping")
