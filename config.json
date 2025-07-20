@@ -1,6 +1,6 @@
 {
     "exchange": "bybit",
-    "timeframe": "1m",
+    "timeframe": "2h",
     "secondary_timeframe": "2h",
     "ws_url": "wss://stream.bybit.com/v5/public/linear",
     "private_ws_url": "wss://stream.bybit.com/v5/private",
