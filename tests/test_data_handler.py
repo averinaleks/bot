@@ -320,3 +320,23 @@ async def test_fetch_ohlcv_history_empty_not_cached(tmp_path, monkeypatch):
     assert df.empty
     assert not (tmp_path / 'BTCUSDT_1m.pkl.gz').exists()
 
+
+@pytest.mark.asyncio
+async def test_fetch_open_interest_sets_change():
+    class Ex:
+        def __init__(self):
+            self.val = 100.0
+        async def fetch_open_interest(self, symbol):
+            self.val += 10.0
+            return {"openInterest": self.val}
+
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=Ex())
+
+    first = await dh.fetch_open_interest('BTCUSDT')
+    assert first == 110.0
+    assert dh.open_interest_change['BTCUSDT'] == 0.0
+    second = await dh.fetch_open_interest('BTCUSDT')
+    expected = (second - first) / first
+    assert pytest.approx(dh.open_interest_change['BTCUSDT']) == expected
+
