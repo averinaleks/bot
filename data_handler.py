@@ -69,10 +69,14 @@ def create_exchange() -> BybitSDKAsync:
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
-    """Compute EMA using GPU if available, otherwise CPU."""
+    """Compute EMA using GPU if beneficial, otherwise CPU.
+
+    GPU acceleration is skipped for small arrays because the transfer
+    overhead generally outweighs any performance gains.
+    """
     values = np.asarray(values, dtype=np.float64)
     alpha = (1 / window) if wilder else 2 / (window + 1)
-    if cuda is not None and GPU_AVAILABLE:
+    if cuda is not None and GPU_AVAILABLE and len(values) >= 1024:
         values_dev = cuda.to_device(values)
         result_dev = cuda.device_array_like(values)
 
