@@ -973,17 +973,6 @@ class TradeManager:
                 volatility = df["close"].pct_change().std()
             else:
                 volatility = self.config.get("volatility_threshold", 0.02)
-            loss_streak = await self.get_loss_streak(symbol)
-            if (
-                indicators.adx.iloc[-1] < 20
-                and volatility > self.config.get("volatility_threshold", 0.02)
-                and loss_streak >= 2
-            ):
-                logger.info(
-                    "Skipping signal for %s: weak trend and loss streak",
-                    symbol,
-                )
-                return None
             features = await self.model_builder.prepare_lstm_features(
                 symbol, indicators
             )
