@@ -483,6 +483,7 @@ class DataHandler:
                 len(self.usdt_pairs),
             )
             tasks = []
+            history_tasks = []
             history_limit = self.config.get("min_data_length", 200)
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
@@ -500,30 +501,33 @@ class DataHandler:
                 self.symbol_priority[symbol] = -liquidity
                 tasks.append(
                     self.fetch_ohlcv_history(
-                        symbol, self.config["timeframe"], history_limit, cache_prefix=""
-                    )
-                )
-                tasks.append(
-                    self.fetch_ohlcv_history(
                         symbol,
-                        self.config["secondary_timeframe"],
+                        self.config["timeframe"],
                         history_limit,
-                        cache_prefix="2h_",
+                        cache_prefix="",
                     )
                 )
+                history_tasks.append((symbol, self.config["timeframe"]))
+                if self.config["secondary_timeframe"] != self.config["timeframe"]:
+                    tasks.append(
+                        self.fetch_ohlcv_history(
+                            symbol,
+                            self.config["secondary_timeframe"],
+                            history_limit,
+                            cache_prefix="2h_",
+                        )
+                    )
+                    history_tasks.append((symbol, self.config["secondary_timeframe"]))
                 tasks.append(self.fetch_funding_rate(symbol))
                 tasks.append(self.fetch_open_interest(symbol))
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
+            hist_idx = 0
+            for result in results:
                 if isinstance(result, tuple) and len(result) == 2:
                     symbol, df = result
-                    mod = i % 4
-                    if mod == 0:
-                        timeframe = self.config["timeframe"]
-                    elif mod == 1:
-                        timeframe = self.config["secondary_timeframe"]
-                    else:
-                        continue
+                    symbol_tf = history_tasks[hist_idx]
+                    hist_idx += 1
+                    timeframe = symbol_tf[1]
                     if not check_dataframe_empty(
                         df, f"load_initial {symbol} {timeframe}"
                     ):
@@ -1078,15 +1082,20 @@ class DataHandler:
                             timeframe="primary",
                         )
                     )
-                    t2 = asyncio.create_task(
-                        self._subscribe_chunk(
-                            chunk,
-                            self.config["ws_url"],
-                            self.config["ws_reconnect_interval"],
-                            timeframe="secondary",
+                    self.tasks.append(t1)
+                    if (
+                        self.config["secondary_timeframe"]
+                        != self.config["timeframe"]
+                    ):
+                        t2 = asyncio.create_task(
+                            self._subscribe_chunk(
+                                chunk,
+                                self.config["ws_url"],
+                                self.config["ws_reconnect_interval"],
+                                timeframe="secondary",
+                            )
                         )
-                    )
-                    self.tasks.extend([t1, t2])
+                        self.tasks.append(t2)
                 self.tasks.append(asyncio.create_task(self._process_ws_queue()))
                 self.tasks.append(
                     asyncio.create_task(self.load_from_disk_buffer_loop())
@@ -1214,12 +1223,19 @@ class DataHandler:
                     symbol, self.config["timeframe"], "primary"
                 )
             )
-            t2 = asyncio.create_task(
-                self._subscribe_symbol_ccxtpro(
-                    symbol, self.config["secondary_timeframe"], "secondary"
+            self.tasks.append(t1)
+            if (
+                self.config["secondary_timeframe"]
+                != self.config["timeframe"]
+            ):
+                t2 = asyncio.create_task(
+                    self._subscribe_symbol_ccxtpro(
+                        symbol,
+                        self.config["secondary_timeframe"],
+                        "secondary",
+                    )
                 )
-            )
-            self.tasks.extend([t1, t2])
+                self.tasks.append(t2)
         self.tasks.append(asyncio.create_task(self.monitor_load()))
         await asyncio.gather(*self.tasks, return_exceptions=True)
 

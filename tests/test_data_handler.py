@@ -372,3 +372,26 @@ async def test_process_ws_queue_no_warning_on_unconfirmed(caplog):
 
     assert not any('Получены устаревшие данные' in rec.getMessage() for rec in caplog.records)
 
+
+@pytest.mark.asyncio
+async def test_subscribe_to_klines_single_timeframe(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', timeframe='1m', secondary_timeframe='1m')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    call = {'n': 0}
+
+    async def fake_subscribe_chunk(*a, **k):
+        call['n'] += 1
+
+    async def fake_task(*a, **k):
+        return None
+
+    monkeypatch.setattr(dh, '_subscribe_chunk', fake_subscribe_chunk)
+    monkeypatch.setattr(dh, '_process_ws_queue', fake_task)
+    monkeypatch.setattr(dh, 'load_from_disk_buffer_loop', fake_task)
+    monkeypatch.setattr(dh, 'monitor_load', fake_task)
+    monkeypatch.setattr(dh, 'cleanup_old_data', fake_task)
+
+    await dh.subscribe_to_klines(['BTCUSDT'])
+    assert call['n'] == 1
+
