@@ -807,9 +807,13 @@ class ModelBuilder:
 class TradingEnv(gym.Env if gym else object):
     """Simple trading environment for offline training."""
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, config: BotConfig | None = None):
         self.df = df.reset_index(drop=True)
+        self.config = config or BotConfig()
         self.current_step = 0
+        self.balance = 0.0
+        self.max_balance = 0.0
+        self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
         self.action_space = spaces.Discrete(3)  # hold, buy, sell
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -837,6 +841,15 @@ class TradingEnv(gym.Env if gym else object):
                 reward = price_diff
             elif action == 2:  # sell
                 reward = -price_diff
+            self.balance += reward
+            if self.balance > self.max_balance:
+                self.max_balance = self.balance
+            drawdown = (
+                (self.max_balance - self.balance) / self.max_balance
+                if self.max_balance > 0
+                else 0.0
+            )
+            reward -= self.drawdown_penalty * drawdown
         self.current_step += 1
         if self.current_step >= len(self.df) - 1:
             done = True
@@ -896,14 +909,14 @@ class RLAgent:
                     from ray.rllib.algorithms.dqn import DQNConfig
                     cfg = (
                         DQNConfig()
-                        .environment(lambda _: TradingEnv(features_df))
+                        .environment(lambda _: TradingEnv(features_df, self.config))
                         .rollouts(num_rollout_workers=0)
                     )
                 else:
                     from ray.rllib.algorithms.ppo import PPOConfig
                     cfg = (
                         PPOConfig()
-                        .environment(lambda _: TradingEnv(features_df))
+                        .environment(lambda _: TradingEnv(features_df, self.config))
                         .rollouts(num_rollout_workers=0)
                     )
                 trainer = cfg.build()
@@ -943,7 +956,7 @@ class RLAgent:
                     symbol,
                 )
                 return
-            env = DummyVecEnv([lambda: TradingEnv(features_df)])
+            env = DummyVecEnv([lambda: TradingEnv(features_df, self.config)])
             if algo == "DQN":
                 model = DQN("MlpPolicy", env, verbose=0)
             else:
