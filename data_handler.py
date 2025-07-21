@@ -340,7 +340,10 @@ class DataHandler:
         self.cleanup_lock = asyncio.Lock()
         self.ws_rate_timestamps = []
         self.process_rate_timestamps = []
-        self.ws_min_process_rate = config.get("ws_min_process_rate", 30)
+        self.ws_min_process_rate = config.get("ws_min_process_rate", 1)
+        if self.ws_min_process_rate <= 1:
+            tf_seconds = pd.Timedelta(config.timeframe).total_seconds()
+            self.ws_min_process_rate = max(1, int(1800 / tf_seconds))
         self.process_rate_window = 1
         self.cleanup_task = None
         self.ws_queue = asyncio.PriorityQueue(
