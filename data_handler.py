@@ -255,6 +255,7 @@ class DataHandler:
         self.ohlcv_2h = pd.DataFrame()
         self.funding_rates = {}
         self.open_interest = {}
+        self.open_interest_change = {}
         self.orderbook = pd.DataFrame()
         self.indicators = {}
         self.indicators_cache = {}
@@ -636,6 +637,11 @@ class DataHandler:
             )
             interest = float(oi.get("openInterest", 0.0))
             async with self.oi_lock:
+                prev = self.open_interest.get(symbol)
+                if prev and prev != 0:
+                    self.open_interest_change[symbol] = (interest - prev) / prev
+                else:
+                    self.open_interest_change[symbol] = 0.0
                 self.open_interest[symbol] = interest
             return interest
         except (KeyError, ValueError) as e:
@@ -709,6 +715,11 @@ class DataHandler:
             async with self.funding_lock:
                 self.funding_rates[symbol] = funding_rate
             async with self.oi_lock:
+                prev = self.open_interest.get(symbol)
+                if prev and prev != 0:
+                    self.open_interest_change[symbol] = (open_interest - prev) / prev
+                else:
+                    self.open_interest_change[symbol] = 0.0
                 self.open_interest[symbol] = open_interest
             async with self.orderbook_lock:
                 orderbook_df = pd.DataFrame(

@@ -50,6 +50,7 @@ class DummyDataHandler:
         n = len(df)
         self.funding_rates = {"BTCUSDT": np.linspace(0.1, 0.2, n)}
         self.open_interest = {"BTCUSDT": np.linspace(0.2, 0.3, n)}
+        self.open_interest_change = {"BTCUSDT": np.linspace(0.0, 0.1, n)}
         self.usdt_pairs = ["BTCUSDT"]
 
 class DummyTradeManager:
@@ -86,7 +87,7 @@ def test_prepare_lstm_features_shape():
     indicators = DummyIndicators(len(df))
     features = asyncio.run(mb.prepare_lstm_features("BTCUSDT", indicators))
     assert isinstance(features, np.ndarray)
-    assert features.shape == (len(df), 14)
+    assert features.shape == (len(df), 15)
 
 
 def test_prepare_lstm_features_with_short_indicators():
@@ -95,7 +96,7 @@ def test_prepare_lstm_features_with_short_indicators():
     indicators = DummyIndicators(len(df) - 2)
     features = asyncio.run(mb.prepare_lstm_features("BTCUSDT", indicators))
     assert isinstance(features, np.ndarray)
-    assert features.shape == (len(df), 14)
+    assert features.shape == (len(df), 15)
 
 @pytest.mark.parametrize("model_type", ["cnn_lstm", "mlp"])
 def test_train_model_remote_returns_state_and_predictions(model_type):

@@ -487,6 +487,7 @@ class ModelBuilder:
         features_df = df[['close', 'open', 'high', 'low', 'volume']].copy()
         features_df['funding'] = self.data_handler.funding_rates.get(symbol, 0.0)
         features_df['open_interest'] = self.data_handler.open_interest.get(symbol, 0.0)
+        features_df['oi_change'] = self.data_handler.open_interest_change.get(symbol, 0.0)
         def _align(series: pd.Series) -> np.ndarray:
             """Return values aligned to ``df.index`` and forward filled."""
             if not isinstance(series, pd.Series):
@@ -733,7 +734,7 @@ class ModelBuilder:
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
                 'close', 'open', 'high', 'low', 'volume', 'funding',
-                'open_interest', 'ema30', 'ema100', 'ema200', 'rsi',
+                'open_interest', 'oi_change', 'ema30', 'ema100', 'ema200', 'rsi',
                 'adx', 'macd', 'atr'
             ]
             top_idx = np.argsort(mean_abs)[-3:][::-1]
