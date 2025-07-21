@@ -107,7 +107,7 @@ class BotConfig:
     retrain_interval: int = _get_default("retrain_interval", 86400)
     min_liquidity: int = _get_default("min_liquidity", 1000000)
     ws_queue_size: int = _get_default("ws_queue_size", 10000)
-    ws_min_process_rate: int = _get_default("ws_min_process_rate", 30)
+    ws_min_process_rate: int = _get_default("ws_min_process_rate", 1)
     disk_buffer_size: int = _get_default("disk_buffer_size", 10000)
     prediction_history_size: int = _get_default("prediction_history_size", 100)
     telegram_queue_size: int = _get_default("telegram_queue_size", 100)

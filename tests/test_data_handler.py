@@ -47,6 +47,11 @@ class DummyExchange:
     async def fetch_ticker(self, symbol):
         return {'quoteVolume': self.volumes.get(symbol, 0)}
 
+
+def _expected_rate(tf: str) -> int:
+    sec = pd.Timedelta(tf).total_seconds()
+    return max(1, int(1800 / sec))
+
 @pytest.mark.asyncio
 async def test_select_liquid_pairs_plain_symbol_included():
     cfg = BotConfig(cache_dir='/tmp', max_symbols=5)
@@ -70,6 +75,18 @@ async def test_select_liquid_pairs_prefers_highest_volume():
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert pairs == ['BTC/USDT:USDT']
+
+
+def test_dynamic_ws_min_process_rate_short_tf():
+    cfg = BotConfig(cache_dir='/tmp', timeframe='1m')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    assert dh.ws_min_process_rate == _expected_rate('1m')
+
+
+def test_dynamic_ws_min_process_rate_long_tf():
+    cfg = BotConfig(cache_dir='/tmp', timeframe='2h')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    assert dh.ws_min_process_rate == _expected_rate('2h')
 
 
 class DummyWS:
