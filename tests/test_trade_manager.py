@@ -289,6 +289,48 @@ def test_open_position_failed_order_not_recorded():
     assert len(tm.positions) == 0
 
 
+def test_open_position_skips_when_atr_zero():
+    class ZeroAtrDataHandler(DummyDataHandler):
+        async def get_atr(self, symbol: str) -> float:
+            return 0.0
+
+    dh = ZeroAtrDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    import asyncio
+    asyncio.run(run())
+
+    assert dh.exchange.orders == []
+    assert len(tm.positions) == 0
+
+
+def test_open_position_skips_when_data_stale():
+    dh = DummyDataHandler(fresh=False)
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    import asyncio
+    asyncio.run(run())
+
+    assert dh.exchange.orders == []
+    assert len(tm.positions) == 0
+
+
 def test_is_data_fresh():
     fresh_dh = DummyDataHandler(fresh=True)
     stale_dh = DummyDataHandler(fresh=False)
