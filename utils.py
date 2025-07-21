@@ -9,13 +9,18 @@ import asyncio
 import time
 import inspect
 import threading
+import warnings
 from typing import Dict, List, Optional
 from scipy.stats import zscore
 import gzip
 import psutil
 import shutil
+
+# Hide verbose TensorFlow logs and Numba performance warnings
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 try:
-    from numba import jit, prange  # type: ignore
+    from numba import jit, prange, NumbaPerformanceWarning  # type: ignore
+    warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except Exception:  # pragma: no cover - allow missing numba package
     def jit(*a, **k):
         def wrapper(f):

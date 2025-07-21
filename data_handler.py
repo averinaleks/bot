@@ -1320,8 +1320,9 @@ class DataHandler:
                         symbol = topic.split(".")[-1] if isinstance(topic, str) else ""
                         priority = self.symbol_priority.get(symbol, 0)
                         try:
-                            await self.ws_queue.put(
-                                (priority, (symbols, message, timeframe)), timeout=5
+                            await asyncio.wait_for(
+                                self.ws_queue.put((priority, (symbols, message, timeframe))),
+                                timeout=5,
                             )
                         except asyncio.TimeoutError:
                             logger.warning(
