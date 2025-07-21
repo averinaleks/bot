@@ -317,6 +317,35 @@ class ParameterOptimizer:
             ):
                 return False
 
+            if not (
+                0.1
+                <= params.get(
+                    "risk_sharpe_loss_factor",
+                    self.config.get("risk_sharpe_loss_factor", 0.5),
+                )
+                <= 1.0
+            ):
+                return False
+
+            if not (
+                1.0
+                <= params.get(
+                    "risk_sharpe_win_factor",
+                    self.config.get("risk_sharpe_win_factor", 1.5),
+                )
+                <= 2.0
+            ):
+                return False
+
+            vol_min = params.get(
+                "risk_vol_min", self.config.get("risk_vol_min", 0.5)
+            )
+            vol_max = params.get(
+                "risk_vol_max", self.config.get("risk_vol_max", 2.0)
+            )
+            if not (0.1 <= vol_min < vol_max <= 3.0):
+                return False
+
             return True
         except Exception as e:
             logger.exception("Ошибка валидации параметров: %s", e)
@@ -333,6 +362,13 @@ class ParameterOptimizer:
             ema_periods.sort()
             ema30_period, ema100_period, ema200_period = ema_periods
             atr_period_default = trial.suggest_int("atr_period_default", 5, 20)
+            trial.suggest_int("loss_streak_threshold", 2, 5)
+            trial.suggest_int("win_streak_threshold", 2, 5)
+            trial.suggest_float("threshold_adjustment", 0.01, 0.1)
+            trial.suggest_float("risk_sharpe_loss_factor", 0.1, 1.0)
+            trial.suggest_float("risk_sharpe_win_factor", 1.0, 2.0)
+            trial.suggest_float("risk_vol_min", 0.1, 1.0)
+            trial.suggest_float("risk_vol_max", 1.0, 3.0)
             # Stop loss and take profit multipliers are now taken
             # directly from the configuration and are not optimized.
             if hasattr(_objective_remote, "options"):

@@ -122,6 +122,16 @@ async def test_optimize_returns_params(df_builder):
     params = await opt.optimize('BTCUSDT')
     assert isinstance(params, dict)
     assert 'ema30_period' in params
+    for key in [
+        'loss_streak_threshold',
+        'win_streak_threshold',
+        'threshold_adjustment',
+        'risk_sharpe_loss_factor',
+        'risk_sharpe_win_factor',
+        'risk_vol_min',
+        'risk_vol_max',
+    ]:
+        assert key in params
 
 
 @pytest.mark.filterwarnings("ignore:.*multivariate.*:ExperimentalWarning")
