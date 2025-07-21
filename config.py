@@ -116,6 +116,7 @@ class BotConfig:
     loss_streak_threshold: int = _get_default("loss_streak_threshold", 3)
     win_streak_threshold: int = _get_default("win_streak_threshold", 3)
     threshold_adjustment: float = _get_default("threshold_adjustment", 0.05)
+    threshold_decay_rate: float = _get_default("threshold_decay_rate", 0.1)
     target_change_threshold: float = _get_default("target_change_threshold", 0.001)
     backtest_interval: int = _get_default("backtest_interval", 604800)
     rl_model: str = _get_default("rl_model", "PPO")
