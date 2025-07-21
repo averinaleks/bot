@@ -340,3 +340,35 @@ async def test_fetch_open_interest_sets_change():
     expected = (second - first) / first
     assert pytest.approx(dh.open_interest_change['BTCUSDT']) == expected
 
+
+@pytest.mark.asyncio
+async def test_process_ws_queue_no_warning_on_unconfirmed(caplog):
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    caplog.set_level(logging.WARNING)
+    ts = int((pd.Timestamp.now(tz='UTC') - pd.Timedelta(minutes=2)).timestamp() * 1000)
+    msg = json.dumps({
+        'topic': 'kline.1.BTCUSDT',
+        'data': [{
+            'start': ts,
+            'open': 1,
+            'high': 2,
+            'low': 0.5,
+            'close': 1.5,
+            'volume': 1,
+            'confirm': False,
+        }]
+    })
+
+    await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
+
+    task = asyncio.create_task(dh._process_ws_queue())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not any('Получены устаревшие данные' in rec.getMessage() for rec in caplog.records)
+

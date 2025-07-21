@@ -1653,10 +1653,11 @@ class DataHandler:
                         if timeframe == "primary"
                         else self.ohlcv_2h_lock
                     )
+                    confirm = entry.get("confirm", True)
                     async with lock:
                         if symbol not in timestamp_dict:
                             timestamp_dict[symbol] = set()
-                        if entry["start"] in timestamp_dict[symbol]:
+                        if confirm and entry["start"] in timestamp_dict[symbol]:
                             logger.debug(
                                 "Дубликат сообщения для %s (%s) с временной меткой %s",
                                 symbol,
@@ -1664,13 +1665,19 @@ class DataHandler:
                                 kline_timestamp,
                             )
                             continue
-                        timestamp_dict[symbol].add(entry["start"])
-                        if len(timestamp_dict[symbol]) > 1000:
-                            timestamp_dict[symbol] = set(
-                                list(timestamp_dict[symbol])[-500:]
-                            )
+                        if confirm:
+                            timestamp_dict[symbol].add(entry["start"])
+                            if len(timestamp_dict[symbol]) > 1000:
+                                timestamp_dict[symbol] = set(
+                                    list(timestamp_dict[symbol])[-500:]
+                                )
                     current_time = pd.Timestamp.now(tz="UTC")
-                    if (current_time - kline_timestamp).total_seconds() > 5:
+                    interval = pd.Timedelta(
+                        self.config[
+                            "timeframe" if timeframe == "primary" else "secondary_timeframe"
+                        ]
+                    ).total_seconds()
+                    if confirm and (current_time - kline_timestamp).total_seconds() > interval:
                         logger.warning(
                             "Получены устаревшие данные для %s (%s): %s",
                             symbol,
