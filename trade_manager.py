@@ -158,12 +158,16 @@ class TradeManager:
             else 0.0
         )
         if sharpe < 0:
-            base_risk *= 0.5
+            base_risk *= self.config.get("risk_sharpe_loss_factor", 0.5)
         elif sharpe > 1:
-            base_risk *= 1.5
+            base_risk *= self.config.get("risk_sharpe_win_factor", 1.5)
         threshold = max(self.config.get("volatility_threshold", 0.02), 1e-6)
         vol_coeff = volatility / threshold
-        base_risk *= max(0.5, min(2.0, vol_coeff))
+        vol_coeff = max(
+            self.config.get("risk_vol_min", 0.5),
+            min(self.config.get("risk_vol_max", 2.0), vol_coeff),
+        )
+        base_risk *= vol_coeff
         return min(self.max_risk_per_trade, max(self.min_risk_per_trade, base_risk))
 
     async def get_sharpe_ratio(self, symbol: str) -> float:

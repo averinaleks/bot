@@ -9,6 +9,7 @@ import pandas as pd
 import os
 import time
 import asyncio
+import sys
 from config import BotConfig
 from collections import deque
 import ray
@@ -34,6 +35,29 @@ except ImportError as e:  # pragma: no cover - optional dependency
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
 from flask import Flask, request, jsonify
+if os.getenv("TEST_MODE") == "1":
+    import types
+    sb3 = types.ModuleType("stable_baselines3")
+    class DummyModel:
+        def __init__(self, *a, **k):
+            pass
+        def learn(self, *a, **k):
+            return self
+        def predict(self, obs, deterministic=True):
+            return np.array([1]), None
+    sb3.PPO = DummyModel
+    sb3.DQN = DummyModel
+    common = types.ModuleType("stable_baselines3.common")
+    vec_env = types.ModuleType("stable_baselines3.common.vec_env")
+    class DummyVecEnv:
+        def __init__(self, env_fns):
+            self.envs = [fn() for fn in env_fns]
+    vec_env.DummyVecEnv = DummyVecEnv
+    common.vec_env = vec_env
+    sb3.common = common
+    sys.modules["stable_baselines3"] = sb3
+    sys.modules["stable_baselines3.common"] = common
+    sys.modules["stable_baselines3.common.vec_env"] = vec_env
 try:
     from stable_baselines3 import PPO, DQN
     from stable_baselines3.common.vec_env import DummyVecEnv
