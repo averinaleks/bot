@@ -282,3 +282,41 @@ async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
     await dh.load_initial()  # should not raise
     assert dh.usdt_pairs == ['BTCUSDT']
 
+
+@pytest.mark.asyncio
+async def test_fetch_ohlcv_single_empty_not_cached(tmp_path, monkeypatch):
+    class Ex:
+        async def fetch_ohlcv(self, symbol, timeframe, limit=200, since=None):
+            return []
+
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=Ex())
+
+    async def fake_call(exchange, method, *args, **kwargs):
+        return await getattr(exchange, method)(*args, **kwargs)
+
+    monkeypatch.setattr(data_handler, 'safe_api_call', fake_call)
+
+    _, df = await dh.fetch_ohlcv_single('BTCUSDT', '1m', limit=5)
+    assert df.empty
+    assert not (tmp_path / 'BTCUSDT_1m.pkl.gz').exists()
+
+
+@pytest.mark.asyncio
+async def test_fetch_ohlcv_history_empty_not_cached(tmp_path, monkeypatch):
+    class Ex:
+        async def fetch_ohlcv(self, symbol, timeframe, limit=200, since=None):
+            return []
+
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=Ex())
+
+    async def fake_call(exchange, method, *args, **kwargs):
+        return await getattr(exchange, method)(*args, **kwargs)
+
+    monkeypatch.setattr(data_handler, 'safe_api_call', fake_call)
+
+    _, df = await dh.fetch_ohlcv_history('BTCUSDT', '1m', total_limit=5)
+    assert df.empty
+    assert not (tmp_path / 'BTCUSDT_1m.pkl.gz').exists()
+

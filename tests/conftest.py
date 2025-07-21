@@ -1,6 +1,9 @@
 import os
 import sys
 import types
+import sklearn  # ensure real scikit-learn loaded before tests may stub it
+import sklearn.model_selection  # preload submodules used in tests
+import sklearn.base
 
 import pytest
 
