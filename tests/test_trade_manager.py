@@ -4,6 +4,7 @@ import sys
 import types
 import logging
 import os
+import math
 from config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -348,6 +349,26 @@ def test_get_win_streak():
     import asyncio
     streak = asyncio.run(run())
     assert streak == 3
+
+
+@pytest.mark.asyncio
+async def test_close_position_updates_returns_and_sharpe_ratio():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "buy", 100, {})
+    await tm.close_position("BTCUSDT", 110, "Manual")
+
+    assert len(tm.returns_by_symbol["BTCUSDT"]) == 1
+    profit = tm.returns_by_symbol["BTCUSDT"][0][1]
+    expected = profit / (1e-6) * math.sqrt(365 * 24 * 60 * 60 / tm.performance_window)
+    sharpe = await tm.get_sharpe_ratio("BTCUSDT")
+    assert sharpe == pytest.approx(expected)
 
 sys.modules.pop('utils', None)
 
