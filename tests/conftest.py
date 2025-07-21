@@ -6,6 +6,7 @@ import sklearn.model_selection  # preload submodules used in tests
 import sklearn.base
 
 import pytest
+import pandas as pd
 
 # Ensure the project root is available before tests import project modules
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -92,3 +93,17 @@ def _add_root_and_stub_modules(monkeypatch):
     """Ensure stubs exist for each test."""
     _stub_modules()
     yield
+
+
+@pytest.fixture
+def sample_ohlcv():
+    """Small OHLCV dataframe for simple tests."""
+    return pd.DataFrame(
+        {
+            "close": [1.0, 2.0, 1.0],
+            "open": [1.0, 2.0, 1.0],
+            "high": [1.0, 2.0, 1.0],
+            "low": [1.0, 2.0, 1.0],
+            "volume": [0.0, 0.0, 0.0],
+        }
+    )
