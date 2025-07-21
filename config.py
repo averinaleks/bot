@@ -117,6 +117,7 @@ class BotConfig:
     rl_model: str = _get_default("rl_model", "PPO")
     rl_framework: str = _get_default("rl_framework", "stable_baselines3")
     rl_timesteps: int = _get_default("rl_timesteps", 10000)
+    rl_use_imitation: bool = _get_default("rl_use_imitation", False)
     drawdown_penalty: float = _get_default("drawdown_penalty", 0.0)
     mlflow_tracking_uri: str = _get_default("mlflow_tracking_uri", "mlruns")
     mlflow_enabled: bool = _get_default("mlflow_enabled", False)
