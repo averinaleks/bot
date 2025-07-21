@@ -7,6 +7,10 @@ import json
 import time
 import pandas as pd
 import numpy as np
+try:  # optional dependency
+    import polars as pl  # type: ignore
+except Exception:  # pragma: no cover - allow missing polars
+    pl = None
 import websockets
 from utils import (
     BybitSDKAsync,
@@ -257,8 +261,10 @@ class IndicatorsCache:
 
 @ray.remote(num_cpus=1, num_gpus=1 if GPU_AVAILABLE else 0)
 def calc_indicators(
-    df: pd.DataFrame, config: BotConfig, volatility: float, timeframe: str
+    df: pd.DataFrame | "pl.DataFrame", config: BotConfig, volatility: float, timeframe: str
 ):
+    if pl is not None and isinstance(df, pl.DataFrame):
+        df = df.to_pandas().set_index("timestamp")
     return IndicatorsCache(df, config, volatility, timeframe)
 
 
@@ -308,8 +314,15 @@ class DataHandler:
             max_queue_size=config.get("telegram_queue_size"),
         )
         self.cache = HistoricalDataCache(config["cache_dir"])
-        self.ohlcv = pd.DataFrame()
-        self.ohlcv_2h = pd.DataFrame()
+        self.use_polars = config.get("use_polars", False)
+        if self.use_polars:
+            if pl is None:
+                raise RuntimeError("Polars is required when use_polars=True")
+            self._ohlcv = pl.DataFrame()
+            self._ohlcv_2h = pl.DataFrame()
+        else:
+            self._ohlcv = pd.DataFrame()
+            self._ohlcv_2h = pd.DataFrame()
         self.funding_rates = {}
         self.open_interest = {}
         self.open_interest_change = {}
@@ -362,6 +375,42 @@ class DataHandler:
         self.tasks = []
         self.parameter_optimizer = ParameterOptimizer(self.config, self)
 
+    # ------------------------------------------------------------------
+    # Properties to expose OHLCV data as pandas when using Polars
+    @property
+    def ohlcv(self) -> pd.DataFrame:
+        if self.use_polars:
+            if self._ohlcv.height == 0:
+                return pd.DataFrame()
+            df = self._ohlcv.to_pandas()
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+            return df.set_index(["symbol", "timestamp"]).sort_index()
+        return self._ohlcv
+
+    @ohlcv.setter
+    def ohlcv(self, value: pd.DataFrame) -> None:
+        if self.use_polars:
+            self._ohlcv = pl.from_pandas(value.reset_index()) if isinstance(value, pd.DataFrame) else value
+        else:
+            self._ohlcv = value
+
+    @property
+    def ohlcv_2h(self) -> pd.DataFrame:
+        if self.use_polars:
+            if self._ohlcv_2h.height == 0:
+                return pd.DataFrame()
+            df = self._ohlcv_2h.to_pandas()
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+            return df.set_index(["symbol", "timestamp"]).sort_index()
+        return self._ohlcv_2h
+
+    @ohlcv_2h.setter
+    def ohlcv_2h(self, value: pd.DataFrame) -> None:
+        if self.use_polars:
+            self._ohlcv_2h = pl.from_pandas(value.reset_index()) if isinstance(value, pd.DataFrame) else value
+        else:
+            self._ohlcv_2h = value
+
     async def get_atr(self, symbol: str) -> float:
         """Return the latest ATR value for a symbol, recalculating if missing."""
         indicators = self.indicators.get(symbol)
@@ -373,11 +422,12 @@ class DataHandler:
             except (IndexError, ValueError) as exc:
                 logger.error("get_atr failed for %s: %s", symbol, exc)
         async with self.ohlcv_lock:
+            df = self.ohlcv
             if (
-                "symbol" in self.ohlcv.index.names
-                and symbol in self.ohlcv.index.get_level_values("symbol")
+                "symbol" in df.index.names
+                and symbol in df.index.get_level_values("symbol")
             ):
-                df = self.ohlcv.xs(symbol, level="symbol", drop_level=False)
+                df = df.xs(symbol, level="symbol", drop_level=False)
             else:
                 return 0.0
         if df.empty:
@@ -753,22 +803,34 @@ class DataHandler:
                 return
             if timeframe == "primary":
                 async with self.ohlcv_lock:
-                    if isinstance(self.ohlcv.index, pd.MultiIndex):
-                        base = self.ohlcv.drop(symbol, level="symbol", errors="ignore")
+                    if self.use_polars:
+                        df_pl = pl.from_pandas(df.reset_index()) if isinstance(df, pd.DataFrame) else df
+                        base = self._ohlcv.filter(pl.col("symbol") != symbol) if self._ohlcv.height > 0 else self._ohlcv
+                        self._ohlcv = pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        self._ohlcv = self._ohlcv.sort(["symbol", "timestamp"])
                     else:
-                        base = self.ohlcv
-                    self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
+                        if isinstance(self.ohlcv.index, pd.MultiIndex):
+                            base = self.ohlcv.drop(symbol, level="symbol", errors="ignore")
+                        else:
+                            base = self.ohlcv
+                        self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
             else:
                 async with self.ohlcv_2h_lock:
-                    if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
-                        base = self.ohlcv_2h.drop(
-                            symbol, level="symbol", errors="ignore"
-                        )
+                    if self.use_polars:
+                        df_pl = pl.from_pandas(df.reset_index()) if isinstance(df, pd.DataFrame) else df
+                        base = self._ohlcv_2h.filter(pl.col("symbol") != symbol) if self._ohlcv_2h.height > 0 else self._ohlcv_2h
+                        self._ohlcv_2h = pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        self._ohlcv_2h = self._ohlcv_2h.sort(["symbol", "timestamp"])
                     else:
-                        base = self.ohlcv_2h
-                    self.ohlcv_2h = pd.concat(
-                        [base, df], ignore_index=False
-                    ).sort_index()
+                        if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
+                            base = self.ohlcv_2h.drop(
+                                symbol, level="symbol", errors="ignore"
+                            )
+                        else:
+                            base = self.ohlcv_2h
+                        self.ohlcv_2h = pd.concat(
+                            [base, df], ignore_index=False
+                        ).sort_index()
             async with self.funding_lock:
                 self.funding_rates[symbol] = funding_rate
             async with self.oi_lock:
@@ -855,7 +917,15 @@ class DataHandler:
                 async with self.cleanup_lock:
                     current_time = pd.Timestamp.now(tz="UTC")
                     async with self.ohlcv_lock:
-                        if not self.ohlcv.empty:
+                        if self.use_polars:
+                            if self._ohlcv.height > 0:
+                                threshold = current_time - pd.Timedelta(
+                                    seconds=self.config["forget_window"]
+                                )
+                                self._ohlcv = self._ohlcv.filter(
+                                    pl.col("timestamp") >= threshold
+                                )
+                        elif not self.ohlcv.empty:
                             threshold = current_time - pd.Timedelta(
                                 seconds=self.config["forget_window"]
                             )
@@ -864,7 +934,15 @@ class DataHandler:
                                 >= threshold
                             ]
                     async with self.ohlcv_2h_lock:
-                        if not self.ohlcv_2h.empty:
+                        if self.use_polars:
+                            if self._ohlcv_2h.height > 0:
+                                threshold = current_time - pd.Timedelta(
+                                    seconds=self.config["forget_window"]
+                                )
+                                self._ohlcv_2h = self._ohlcv_2h.filter(
+                                    pl.col("timestamp") >= threshold
+                                )
+                        elif not self.ohlcv_2h.empty:
                             threshold = current_time - pd.Timedelta(
                                 seconds=self.config["forget_window"]
                             )

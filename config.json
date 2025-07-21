@@ -85,5 +85,6 @@
     "rl_use_imitation": false,
     "drawdown_penalty": 0.0,
     "mlflow_tracking_uri": "mlruns",
-    "mlflow_enabled": false
+    "mlflow_enabled": false,
+    "use_polars": false
 }
