@@ -532,7 +532,16 @@ class DataHandler:
                 )
                 return symbol, pd.DataFrame()
             df = df.interpolate(method="time", limit_direction="both")
-            self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
+            if df.empty:
+                logger.warning(
+                    "Skipping cache for %s (%s) — no data",
+                    symbol,
+                    timeframe,
+                )
+            else:
+                self.cache.save_cached_data(
+                    f"{cache_prefix}{symbol}", timeframe, df
+                )
             return symbol, pd.DataFrame(df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка получения OHLCV для %s (%s): %s", symbol, timeframe, e)
@@ -575,7 +584,16 @@ class DataHandler:
             if not all_data:
                 return symbol, pd.DataFrame()
             df = pd.concat(all_data).sort_index().drop_duplicates()
-            self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
+            if df.empty:
+                logger.warning(
+                    "Skipping cache for %s (%s) — no data",
+                    symbol,
+                    timeframe,
+                )
+            else:
+                self.cache.save_cached_data(
+                    f"{cache_prefix}{symbol}", timeframe, df
+                )
             return symbol, pd.DataFrame(df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error(
