@@ -153,6 +153,10 @@ class IndicatorsCache:
                     atr_fast(high_np, low_np, close_np, config["atr_period_default"]),
                     index=df.index,
                 )
+                self._alpha_ema30 = 2 / (config["ema30_period"] + 1)
+                self._alpha_ema100 = 2 / (config["ema100_period"] + 1)
+                self._alpha_ema200 = 2 / (config["ema200_period"] + 1)
+                self._atr_period = config["atr_period_default"]
                 self.rsi = ta.momentum.rsi(df["close"], window=14, fillna=True)
                 self.adx = ta.trend.adx(
                     df["high"], df["low"], df["close"], window=14, fillna=True
@@ -172,6 +176,8 @@ class IndicatorsCache:
                 self.ema100 = pd.Series(
                     ema_fast(close_np, config["ema100_period"]), index=df.index
                 )
+                self._alpha_ema30 = 2 / (config["ema30_period"] + 1)
+                self._alpha_ema100 = 2 / (config["ema100_period"] + 1)
             self.volume_profile = None
             if (
                 len(df) - self.last_volume_profile_update
@@ -179,6 +185,11 @@ class IndicatorsCache:
             ):
                 self.volume_profile = self.calculate_volume_profile(df)
                 self.last_volume_profile_update = len(df)
+            self.last_close = float(df["close"].iloc[-1]) if not df.empty else None
+            self.last_ema30 = float(self.ema30.iloc[-1]) if self.ema30 is not None else None
+            self.last_ema100 = float(self.ema100.iloc[-1]) if self.ema100 is not None else None
+            self.last_ema200 = float(self.ema200.iloc[-1]) if hasattr(self, "ema200") and self.ema200 is not None else None
+            self.last_atr = float(self.atr.iloc[-1]) if hasattr(self, "atr") and self.atr is not None else None
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
@@ -196,6 +207,52 @@ class IndicatorsCache:
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета Volume Profile: %s", e)
             return None
+
+    def _update_volume_profile(self) -> None:
+        if (
+            len(self.df) - self.last_volume_profile_update
+            >= self.volume_profile_update_interval
+        ):
+            self.volume_profile = self.calculate_volume_profile(self.df)
+            self.last_volume_profile_update = len(self.df)
+
+    def update(self, new_df: pd.DataFrame) -> None:
+        """Incrementally update EMA and ATR with ``new_df``."""
+        if new_df.empty:
+            return
+        for ts, row in new_df.iterrows():
+            close = float(row["close"])
+            high = float(row.get("high", close))
+            low = float(row.get("low", close))
+            if self.last_ema30 is not None:
+                self.last_ema30 = self._alpha_ema30 * close + (1 - self._alpha_ema30) * self.last_ema30
+            else:
+                self.last_ema30 = close
+            if self.last_ema100 is not None:
+                self.last_ema100 = self._alpha_ema100 * close + (1 - self._alpha_ema100) * self.last_ema100
+            else:
+                self.last_ema100 = close
+            if hasattr(self, "_alpha_ema200"):
+                if self.last_ema200 is not None:
+                    self.last_ema200 = self._alpha_ema200 * close + (1 - self._alpha_ema200) * self.last_ema200
+                else:
+                    self.last_ema200 = close
+            if hasattr(self, "_atr_period") and self.last_atr is not None and self.last_close is not None:
+                tr = max(high - low, abs(high - self.last_close), abs(low - self.last_close))
+                self.last_atr = (self.last_atr * (self._atr_period - 1) + tr) / self._atr_period
+            elif hasattr(self, "_atr_period"):
+                self.last_atr = max(high - low, abs(high - close), abs(low - close))
+            if self.ema30 is not None:
+                self.ema30.loc[ts] = self.last_ema30
+            if self.ema100 is not None:
+                self.ema100.loc[ts] = self.last_ema100
+            if hasattr(self, "ema200") and self.ema200 is not None:
+                self.ema200.loc[ts] = self.last_ema200
+            if hasattr(self, "atr") and self.atr is not None and self.last_atr is not None:
+                self.atr.loc[ts] = self.last_atr
+            self.last_close = close
+        self.df = pd.concat([self.df, new_df])
+        self._update_volume_profile()
 
 
 @ray.remote(num_cpus=1, num_gpus=1 if GPU_AVAILABLE else 0)
@@ -743,7 +800,9 @@ class DataHandler:
                         )
                         fetch_needed = True
                     else:
-                        self.indicators[symbol] = self.indicators_cache[cache_key]
+                        cache_obj = self.indicators_cache[cache_key]
+                        cache_obj.update(df.droplevel("symbol"))
+                        self.indicators[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
                     result = await asyncio.to_thread(ray.get, obj_ref)
@@ -769,7 +828,9 @@ class DataHandler:
                         )
                         fetch_needed = True
                     else:
-                        self.indicators_2h[symbol] = self.indicators_cache_2h[cache_key]
+                        cache_obj = self.indicators_cache_2h[cache_key]
+                        cache_obj.update(df.droplevel("symbol"))
+                        self.indicators_2h[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
                     result = await asyncio.to_thread(ray.get, obj_ref)
