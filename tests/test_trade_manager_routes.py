@@ -82,6 +82,7 @@ def test_open_position_route_schedules_task(monkeypatch):
     assert cb is asyncio.create_task
     assert inspect.iscoroutine(args[0])
     assert args[0].cr_code is dummy_coroutine.__code__
+    args[0].close()
 
 
 def test_start_route_schedules_run(monkeypatch):
@@ -94,3 +95,4 @@ def test_start_route_schedules_run(monkeypatch):
     assert cb is asyncio.create_task
     assert inspect.iscoroutine(args[0])
     assert args[0].cr_code is dummy_coroutine.__code__
+    args[0].close()
