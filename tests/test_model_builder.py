@@ -140,3 +140,47 @@ async def test_training_loop_recovery(monkeypatch):
         await task
 
     assert call["n"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_threshold_offset_decay():
+    cfg = BotConfig(
+        cache_dir="/tmp",
+        threshold_adjustment=0.05,
+        threshold_decay_rate=0.1,
+        loss_streak_threshold=3,
+        win_streak_threshold=3,
+        base_probability_threshold=0.6,
+        prediction_history_size=5,
+    )
+    dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
+
+    class TM:
+        def __init__(self):
+            self.loss = 3
+            self.win = 0
+            self.last_volatility = {}
+
+        async def get_loss_streak(self, _):
+            return self.loss
+
+        async def get_win_streak(self, _):
+            return self.win
+
+        async def get_sharpe_ratio(self, _):
+            return 0.0
+
+    tm = TM()
+    mb = ModelBuilder(cfg, dh, tm)
+    long1, short1 = await mb.adjust_thresholds("BTCUSDT", 0.6)
+    first_offset = mb.threshold_offset["BTCUSDT"]
+    assert first_offset == pytest.approx(0.05 * 0.9)
+    assert long1 == pytest.approx(0.6 + first_offset)
+    assert short1 == pytest.approx(1 - long1)
+
+    tm.loss = 0
+    long2, _ = await mb.adjust_thresholds("BTCUSDT", 0.6)
+    second_offset = mb.threshold_offset["BTCUSDT"]
+    assert second_offset == pytest.approx(first_offset * 0.9)
+    assert long2 == pytest.approx(0.6 + second_offset)
+

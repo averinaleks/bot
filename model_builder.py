@@ -404,6 +404,7 @@ class ModelBuilder:
         self.save_interval = 900
         self.scalers = {}
         self.prediction_history = {}
+        self.threshold_offset = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.calibrators = {}
         self.calibration_metrics = {}
         self.shap_cache_times = {}
@@ -426,6 +427,7 @@ class ModelBuilder:
                 'lstm_models': models_state,
                 'scalers': self.scalers,
                 'last_retrain_time': self.last_retrain_time,
+                'threshold_offset': self.threshold_offset,
             }
             with open(self.state_file, 'wb') as f:
                 joblib.dump(state, f)
@@ -485,6 +487,7 @@ class ModelBuilder:
                         model.set_weights(weights)
                         self.lstm_models[symbol] = model
                 self.last_retrain_time = state.get('last_retrain_time', self.last_retrain_time)
+                self.threshold_offset.update(state.get('threshold_offset', {}))
                 logger.info("Состояние ModelBuilder загружено")
         except Exception as e:
             logger.exception("Ошибка загрузки состояния ModelBuilder: %s", e)
@@ -689,12 +692,17 @@ class ModelBuilder:
     async def adjust_thresholds(self, symbol, prediction: float):
         base_long = self.config.get('base_probability_threshold', 0.6)
         adjust_step = self.config.get('threshold_adjustment', 0.05)
+        decay = self.config.get('threshold_decay_rate', 0.1)
         loss_streak = await self.trade_manager.get_loss_streak(symbol)
         win_streak = await self.trade_manager.get_win_streak(symbol)
+        offset = self.threshold_offset.get(symbol, 0.0)
         if loss_streak >= self.config.get('loss_streak_threshold', 3):
-            base_long = min(base_long + adjust_step, 0.9)
+            offset += adjust_step
         elif win_streak >= self.config.get('win_streak_threshold', 3):
-            base_long = max(base_long - adjust_step, 0.5)
+            offset -= adjust_step
+        offset *= 1 - decay
+        self.threshold_offset[symbol] = offset
+        base_long = float(np.clip(base_long + offset, 0.5, 0.9))
         base_short = 1 - base_long
         history_size = self.config.get('prediction_history_size', 100)
         hist = self.prediction_history.setdefault(symbol, deque(maxlen=history_size))
