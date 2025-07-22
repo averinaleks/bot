@@ -35,6 +35,7 @@ import psutil
 import ray
 from flask import Flask, jsonify
 from optimizer import ParameterOptimizer
+from strategy_optimizer import StrategyOptimizer
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
@@ -426,6 +427,11 @@ class DataHandler:
         self.ws_pool = {}
         self.tasks = []
         self.parameter_optimizer = ParameterOptimizer(self.config, self)
+        self.strategy_optimizer = (
+            StrategyOptimizer(self.config, self)
+            if self.config.get("use_strategy_optimizer", False)
+            else None
+        )
 
     # ------------------------------------------------------------------
     # Properties to expose OHLCV data as pandas when using Polars

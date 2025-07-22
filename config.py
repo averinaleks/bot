@@ -126,6 +126,8 @@ class BotConfig:
     drawdown_penalty: float = _get_default("drawdown_penalty", 0.0)
     mlflow_tracking_uri: str = _get_default("mlflow_tracking_uri", "mlruns")
     mlflow_enabled: bool = _get_default("mlflow_enabled", False)
+    use_strategy_optimizer: bool = _get_default("use_strategy_optimizer", False)
+    portfolio_metric: str = _get_default("portfolio_metric", "sharpe")
     use_polars: bool = _get_default("use_polars", False)
 
     def __getitem__(self, key: str) -> Any:
