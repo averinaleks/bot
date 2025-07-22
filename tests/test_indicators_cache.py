@@ -81,3 +81,10 @@ def test_incremental_update():
     assert np.isclose(ind.last_ema100, expected_ema100)
     assert np.isclose(ind.last_ema200, expected_ema200)
     assert np.isclose(ind.last_atr, expected_atr)
+
+
+def test_short_dataframe_no_value_error():
+    cfg = BotConfig()
+    df = make_df(5)
+    ind = IndicatorsCache(df, cfg, 0.1)
+    assert ind.adx.isna().all()
