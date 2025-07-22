@@ -662,11 +662,14 @@ class HistoricalDataCache:
             raise PermissionError(
                 f"Нет прав на запись в директорию кэша: {self.cache_dir}"
             )
-        self.max_cache_size_mb = 512
+        # Allow a larger on-disk cache by default to reduce re-fetches
+        self.max_cache_size_mb = 2048
         self.cache_ttl = 86400 * 7
         self.current_cache_size_mb = self._calculate_cache_size()
-        self.memory_threshold = 0.8
-        self.max_buffer_size_mb = 512
+        # Permit using slightly more memory before triggering cleanup
+        self.memory_threshold = 0.9
+        # Allow disk buffer to grow in proportion to the larger cache size
+        self.max_buffer_size_mb = 2048
 
     def _calculate_cache_size(self):
         total_size = 0

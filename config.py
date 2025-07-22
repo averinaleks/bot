@@ -68,7 +68,7 @@ class BotConfig:
     retrain_volatility_threshold: float = _get_default(
         "retrain_volatility_threshold", 0.02
     )
-    forget_window: int = _get_default("forget_window", 86400)
+    forget_window: int = _get_default("forget_window", 259200)
     trailing_stop_multiplier: float = _get_default("trailing_stop_multiplier", 1.0)
     tp_multiplier: float = _get_default("tp_multiplier", 2.0)
     sl_multiplier: float = _get_default("sl_multiplier", 1.0)
