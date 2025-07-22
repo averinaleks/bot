@@ -88,5 +88,7 @@
     "mlflow_enabled": false,
     "use_strategy_optimizer": false,
     "portfolio_metric": "sharpe",
-    "use_polars": false
+    "use_polars": false,
+    "fine_tune_epochs": 5,
+    "use_transfer_learning": false
 }

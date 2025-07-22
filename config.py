@@ -129,6 +129,8 @@ class BotConfig:
     use_strategy_optimizer: bool = _get_default("use_strategy_optimizer", False)
     portfolio_metric: str = _get_default("portfolio_metric", "sharpe")
     use_polars: bool = _get_default("use_polars", False)
+    fine_tune_epochs: int = _get_default("fine_tune_epochs", 5)
+    use_transfer_learning: bool = _get_default("use_transfer_learning", False)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
