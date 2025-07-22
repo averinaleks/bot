@@ -230,6 +230,67 @@ def _get_torch_modules():
         def l2_regularization(self):
             return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
+    class PositionalEncoding(nn.Module):
+        """Standard sinusoidal positional encoding."""
+
+        def __init__(self, d_model, dropout=0.1, max_len=5000):
+            super().__init__()
+            self.dropout = nn.Dropout(p=dropout)
+            pe = torch.zeros(max_len, d_model)
+            position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+            div_term = torch.exp(
+                torch.arange(0, d_model, 2, dtype=torch.float)
+                * (-(np.log(10000.0) / d_model))
+            )
+            pe[:, 0::2] = torch.sin(position * div_term)
+            pe[:, 1::2] = torch.cos(position * div_term)
+            pe = pe.unsqueeze(0)
+            self.register_buffer("pe", pe)
+
+        def forward(self, x):
+            x = x + self.pe[:, : x.size(1)]
+            return self.dropout(x)
+
+    class TemporalFusionTransformer(nn.Module):
+        """Transformer encoder with positional encoding."""
+
+        def __init__(
+            self,
+            input_size,
+            d_model=64,
+            nhead=4,
+            num_layers=2,
+            dropout=0.1,
+            l2_lambda=1e-5,
+        ):
+            super().__init__()
+            self.l2_lambda = l2_lambda
+            self.input_proj = nn.Linear(input_size, d_model)
+            self.pos_encoder = PositionalEncoding(d_model, dropout)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=nhead,
+                dim_feedforward=d_model * 4,
+                dropout=dropout,
+                batch_first=True,
+            )
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
+            self.dropout = nn.Dropout(dropout)
+            self.fc = nn.Linear(d_model, 1)
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x):
+            x = self.input_proj(x)
+            x = self.pos_encoder(x)
+            x = self.transformer(x)
+            x = x.mean(dim=1)
+            x = self.dropout(x)
+            x = self.fc(x)
+            return self.sigmoid(x)
+
+        def l2_regularization(self):
+            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
+
     _torch_modules = {
         "torch": torch,
         "nn": nn,
@@ -237,6 +298,7 @@ def _get_torch_modules():
         "TensorDataset": TensorDataset,
         "CNNLSTM": CNNLSTM,
         "CNNGRU": CNNGRU,
+        "TemporalFusionTransformer": TemporalFusionTransformer,
         "Net": Net,
     }
     return _torch_modules
@@ -261,11 +323,17 @@ def _train_model_keras(X, y, batch_size, model_type, initial_state=None, epochs=
         x = keras.layers.Dropout(0.2)(x)
         if model_type == "gru":
             x = keras.layers.GRU(64, return_sequences=True)(x)
+            attn = keras.layers.Dense(1, activation="softmax")(x)
+            x = keras.layers.Multiply()([x, attn])
+            x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+        elif model_type in {"tft", "transformer"}:
+            attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+            x = keras.layers.GlobalAveragePooling1D()(attn)
         else:
             x = keras.layers.LSTM(64, return_sequences=True)(x)
-        attn = keras.layers.Dense(1, activation="softmax")(x)
-        x = keras.layers.Multiply()([x, attn])
-        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+            attn = keras.layers.Dense(1, activation="softmax")(x)
+            x = keras.layers.Multiply()([x, attn])
+            x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
     outputs = keras.layers.Dense(1, activation="sigmoid")(x)
     model = keras.Model(inputs, outputs)
     model.compile(optimizer="adam", loss="binary_crossentropy")
@@ -295,6 +363,7 @@ def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epo
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
     CNNLSTM = torch_mods["CNNLSTM"]
+    TFT = torch_mods["TemporalFusionTransformer"]
     import pytorch_lightning as pl
 
     device = torch.device("cuda" if is_cuda_available() else "cpu")
@@ -310,6 +379,8 @@ def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epo
         net = Net(input_dim)
     elif model_type == "gru":
         net = CNNGRU(X.shape[2], 64, 2, 0.2)
+    elif model_type in {"tft", "transformer"}:
+        net = TFT(X.shape[2])
     else:
         net = CNNLSTM(X.shape[2], 64, 2, 0.2)
 
@@ -391,6 +462,7 @@ def _train_model_remote(
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
     CNNLSTM = torch_mods["CNNLSTM"]
+    TFT = torch_mods["TemporalFusionTransformer"]
 
     cuda_available = is_cuda_available()
     device = torch.device("cuda" if cuda_available else "cpu")
@@ -409,6 +481,8 @@ def _train_model_remote(
         model = Net(input_dim)
     elif model_type == "gru":
         model = CNNGRU(X.shape[2], 64, 2, 0.2)
+    elif model_type in {"tft", "transformer"}:
+        model = TFT(X.shape[2])
     else:
         model = CNNLSTM(X.shape[2], 64, 2, 0.2)
     if initial_state is not None:
@@ -533,6 +607,7 @@ class ModelBuilder:
                     Net = torch_mods["Net"]
                     CNNGRU = torch_mods["CNNGRU"]
                     CNNLSTM = torch_mods["CNNLSTM"]
+                    TFT = torch_mods["TemporalFusionTransformer"]
                     for symbol, sd in state.get("lstm_models", {}).items():
                         scaler = self.scalers.get(symbol)
                         input_size = (
@@ -545,6 +620,8 @@ class ModelBuilder:
                             model = Net(input_size * self.config["lstm_timesteps"])
                         elif mt == "gru":
                             model = CNNGRU(input_size, 64, 2, 0.2)
+                        elif mt in {"tft", "transformer"}:
+                            model = TFT(input_size)
                         else:
                             model = CNNLSTM(input_size, 64, 2, 0.2)
                         model.load_state_dict(sd)
@@ -577,13 +654,21 @@ class ModelBuilder:
                             x = keras.layers.Dropout(0.2)(x)
                             if self.model_type == "gru":
                                 x = keras.layers.GRU(64, return_sequences=True)(x)
+                                attn = keras.layers.Dense(1, activation="softmax")(x)
+                                x = keras.layers.Multiply()([x, attn])
+                                x = keras.layers.Lambda(
+                                    lambda t: keras.backend.sum(t, axis=1)
+                                )(x)
+                            elif self.model_type in {"tft", "transformer"}:
+                                attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                                x = keras.layers.GlobalAveragePooling1D()(attn)
                             else:
                                 x = keras.layers.LSTM(64, return_sequences=True)(x)
-                            attn = keras.layers.Dense(1, activation="softmax")(x)
-                            x = keras.layers.Multiply()([x, attn])
-                            x = keras.layers.Lambda(
-                                lambda t: keras.backend.sum(t, axis=1)
-                            )(x)
+                                attn = keras.layers.Dense(1, activation="softmax")(x)
+                                x = keras.layers.Multiply()([x, attn])
+                                x = keras.layers.Lambda(
+                                    lambda t: keras.backend.sum(t, axis=1)
+                                )(x)
                         outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                         model = keras.Model(inputs, outputs)
                         model.set_weights(weights)
@@ -728,11 +813,17 @@ class ModelBuilder:
                     x = keras.layers.Dropout(0.2)(x)
                     if self.model_type == "gru":
                         x = keras.layers.GRU(64, return_sequences=True)(x)
+                        attn = keras.layers.Dense(1, activation="softmax")(x)
+                        x = keras.layers.Multiply()([x, attn])
+                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                    elif self.model_type in {"tft", "transformer"}:
+                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                        x = keras.layers.GlobalAveragePooling1D()(attn)
                     else:
                         x = keras.layers.LSTM(64, return_sequences=True)(x)
-                    attn = keras.layers.Dense(1, activation="softmax")(x)
-                    x = keras.layers.Multiply()([x, attn])
-                    x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                        attn = keras.layers.Dense(1, activation="softmax")(x)
+                        x = keras.layers.Multiply()([x, attn])
+                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
                 outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                 return keras.Model(inputs, outputs)
 
@@ -743,10 +834,14 @@ class ModelBuilder:
             Net = torch_mods["Net"]
             CNNGRU = torch_mods["CNNGRU"]
             CNNLSTM = torch_mods["CNNLSTM"]
+            TFT = torch_mods["TemporalFusionTransformer"]
+            TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
                 model = Net(X.shape[1] * X.shape[2])
             elif self.model_type == "gru":
                 model = CNNGRU(X.shape[2], 64, 2, 0.2)
+            elif self.model_type in {"tft", "transformer"}:
+                model = TFT(X.shape[2])
             else:
                 model = CNNLSTM(X.shape[2], 64, 2, 0.2)
             model.load_state_dict(model_state)
@@ -885,11 +980,17 @@ class ModelBuilder:
                     x = keras.layers.Dropout(0.2)(x)
                     if self.model_type == "gru":
                         x = keras.layers.GRU(64, return_sequences=True)(x)
+                        attn = keras.layers.Dense(1, activation="softmax")(x)
+                        x = keras.layers.Multiply()([x, attn])
+                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                    elif self.model_type in {"tft", "transformer"}:
+                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                        x = keras.layers.GlobalAveragePooling1D()(attn)
                     else:
                         x = keras.layers.LSTM(64, return_sequences=True)(x)
-                    attn = keras.layers.Dense(1, activation="softmax")(x)
-                    x = keras.layers.Multiply()([x, attn])
-                    x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                        attn = keras.layers.Dense(1, activation="softmax")(x)
+                        x = keras.layers.Multiply()([x, attn])
+                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
                 outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                 return keras.Model(inputs, outputs)
 
@@ -900,10 +1001,13 @@ class ModelBuilder:
             Net = torch_mods["Net"]
             CNNGRU = torch_mods["CNNGRU"]
             CNNLSTM = torch_mods["CNNLSTM"]
+            TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
                 model = Net(X.shape[1] * X.shape[2])
             elif self.model_type == "gru":
                 model = CNNGRU(X.shape[2], 64, 2, 0.2)
+            elif self.model_type in {"tft", "transformer"}:
+                model = TFT(X.shape[2])
             else:
                 model = CNNLSTM(X.shape[2], 64, 2, 0.2)
             model.load_state_dict(model_state)
