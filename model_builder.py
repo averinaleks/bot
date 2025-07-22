@@ -316,7 +316,11 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
     CNNGRU = torch_mods["CNNGRU"]
     CNNLSTM = torch_mods["CNNLSTM"]
 
-    device = torch.device('cuda' if is_cuda_available() else 'cpu')
+    cuda_available = is_cuda_available()
+    device = torch.device('cuda' if cuda_available else 'cpu')
+    if cuda_available:
+        torch.backends.cudnn.benchmark = True
+    scaler = torch.cuda.amp.GradScaler(enabled=cuda_available)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     val_size = max(1, int(0.1 * len(X_tensor)))
@@ -346,10 +350,12 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
                 batch_X = batch_X.view(batch_X.size(0), -1)
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
-            outputs = model(batch_X).squeeze()
-            loss = criterion(outputs, batch_y) + model.l2_regularization()
-            loss.backward()
-            optimizer.step()
+            with torch.cuda.amp.autocast(enabled=cuda_available):
+                outputs = model(batch_X).squeeze()
+                loss = criterion(outputs, batch_y) + model.l2_regularization()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
         model.eval()
         val_loss = 0.0
         preds = []
@@ -360,7 +366,8 @@ def _train_model_remote(X, y, batch_size, model_type="cnn_lstm", framework="pyto
                 if model_type == "mlp":
                     val_X = val_X.view(val_X.size(0), -1)
                 val_y = val_y.to(device)
-                outputs = model(val_X).squeeze()
+                with torch.cuda.amp.autocast(enabled=cuda_available):
+                    outputs = model(val_X).squeeze()
                 preds.extend(outputs.cpu().numpy().reshape(-1))
                 labels.extend(val_y.cpu().numpy().reshape(-1))
                 val_loss += criterion(outputs, val_y).item()
