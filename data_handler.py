@@ -7,6 +7,7 @@ import json
 import time
 import pandas as pd
 import numpy as np
+
 try:  # optional dependency
     import polars as pl  # type: ignore
 except Exception:  # pragma: no cover - allow missing polars
@@ -40,19 +41,19 @@ if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
 
 if os.environ.get("FORCE_CPU") == "1":
-    cuda = None  # type: ignore
     GPU_AVAILABLE = False
+    cp = np  # type: ignore
 else:
     GPU_AVAILABLE = is_cuda_available()
     if GPU_AVAILABLE:
         try:
-            from numba import cuda  # type: ignore
-        except Exception as e:  # pragma: no cover - numba without cuda support
-            logger.warning("Numba CUDA import failed: %s", e)
-            cuda = None  # type: ignore
+            import cupy as cp  # type: ignore
+        except Exception as e:  # pragma: no cover - allow missing cupy
+            logger.warning("CuPy import failed: %s", e)
             GPU_AVAILABLE = False
+            cp = np  # type: ignore
     else:
-        cuda = None  # type: ignore
+        cp = np  # type: ignore
 
 
 def create_exchange() -> BybitSDKAsync:
@@ -73,26 +74,18 @@ def create_exchange() -> BybitSDKAsync:
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
-    """Compute EMA using GPU if beneficial, otherwise CPU.
+    """Compute EMA using CuPy when CUDA is available, otherwise NumPy."""
 
-    GPU acceleration is skipped for small arrays because the transfer
-    overhead generally outweighs any performance gains.
-    """
     values = np.asarray(values, dtype=np.float64)
     alpha = (1 / window) if wilder else 2 / (window + 1)
-    if cuda is not None and GPU_AVAILABLE and len(values) >= 1024:
-        values_dev = cuda.to_device(values)
-        result_dev = cuda.device_array_like(values)
 
-        @cuda.jit
-        def _ema_kernel(v, a, out):
-            if cuda.threadIdx.x == 0 and cuda.blockIdx.x == 0:
-                out[0] = v[0]
-                for i in range(1, v.size):
-                    out[i] = a * v[i] + (1 - a) * out[i - 1]
-
-        _ema_kernel[1, 1](values_dev, alpha, result_dev)
-        return result_dev.copy_to_host()
+    if GPU_AVAILABLE and len(values) >= 1024:
+        v_gpu = cp.asarray(values)
+        result_gpu = cp.empty_like(v_gpu)
+        result_gpu[0] = v_gpu[0]
+        for i in range(1, len(v_gpu)):
+            result_gpu[i] = alpha * v_gpu[i] + (1 - alpha) * result_gpu[i - 1]
+        return cp.asnumpy(result_gpu)
 
     result = np.empty_like(values)
     result[0] = values[0]
@@ -105,6 +98,7 @@ def atr_fast(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int
 ) -> np.ndarray:
     """Compute ATR using Wilder's smoothing with optional GPU acceleration."""
+
     high = np.asarray(high, dtype=np.float64)
     low = np.asarray(low, dtype=np.float64)
     close = np.asarray(close, dtype=np.float64)
@@ -113,6 +107,14 @@ def atr_fast(
     tr2 = np.abs(high - prev_close)
     tr3 = np.abs(low - prev_close)
     tr = np.maximum(np.maximum(tr1, tr2), tr3)
+
+    if GPU_AVAILABLE and len(tr) >= 1024:
+        tr_gpu = cp.asarray(tr)
+        atr_gpu = cp.zeros_like(tr_gpu)
+        atr_gpu[window - 1] = cp.mean(tr_gpu[:window])
+        for i in range(window, len(tr)):
+            atr_gpu[i] = (atr_gpu[i - 1] * (window - 1) + tr_gpu[i]) / float(window)
+        return cp.asnumpy(atr_gpu)
 
     atr = np.zeros_like(tr)
     if len(tr) >= window:
@@ -162,9 +164,7 @@ class IndicatorsCache:
                 self._alpha_ema200 = 2 / (config["ema200_period"] + 1)
                 self._atr_period = config["atr_period_default"]
                 rsi_window = config.get("rsi_window", 14)
-                self.rsi = ta.momentum.rsi(
-                    df["close"], window=rsi_window, fillna=True
-                )
+                self.rsi = ta.momentum.rsi(df["close"], window=rsi_window, fillna=True)
 
                 adx_window = config.get("adx_window", 14)
                 if len(df) >= adx_window:
@@ -176,9 +176,7 @@ class IndicatorsCache:
                         fillna=True,
                     )
                 else:
-                    self.adx = pd.Series(
-                        [np.nan] * len(df), index=df.index
-                    )
+                    self.adx = pd.Series([np.nan] * len(df), index=df.index)
 
                 self.macd = ta.trend.macd_diff(
                     df["close"],
@@ -205,10 +203,22 @@ class IndicatorsCache:
                 self.volume_profile = self.calculate_volume_profile(df)
                 self.last_volume_profile_update = len(df)
             self.last_close = float(df["close"].iloc[-1]) if not df.empty else None
-            self.last_ema30 = float(self.ema30.iloc[-1]) if self.ema30 is not None else None
-            self.last_ema100 = float(self.ema100.iloc[-1]) if self.ema100 is not None else None
-            self.last_ema200 = float(self.ema200.iloc[-1]) if hasattr(self, "ema200") and self.ema200 is not None else None
-            self.last_atr = float(self.atr.iloc[-1]) if hasattr(self, "atr") and self.atr is not None else None
+            self.last_ema30 = (
+                float(self.ema30.iloc[-1]) if self.ema30 is not None else None
+            )
+            self.last_ema100 = (
+                float(self.ema100.iloc[-1]) if self.ema100 is not None else None
+            )
+            self.last_ema200 = (
+                float(self.ema200.iloc[-1])
+                if hasattr(self, "ema200") and self.ema200 is not None
+                else None
+            )
+            self.last_atr = (
+                float(self.atr.iloc[-1])
+                if hasattr(self, "atr") and self.atr is not None
+                else None
+            )
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
@@ -244,21 +254,38 @@ class IndicatorsCache:
             high = float(row.get("high", close))
             low = float(row.get("low", close))
             if self.last_ema30 is not None:
-                self.last_ema30 = self._alpha_ema30 * close + (1 - self._alpha_ema30) * self.last_ema30
+                self.last_ema30 = (
+                    self._alpha_ema30 * close
+                    + (1 - self._alpha_ema30) * self.last_ema30
+                )
             else:
                 self.last_ema30 = close
             if self.last_ema100 is not None:
-                self.last_ema100 = self._alpha_ema100 * close + (1 - self._alpha_ema100) * self.last_ema100
+                self.last_ema100 = (
+                    self._alpha_ema100 * close
+                    + (1 - self._alpha_ema100) * self.last_ema100
+                )
             else:
                 self.last_ema100 = close
             if hasattr(self, "_alpha_ema200"):
                 if self.last_ema200 is not None:
-                    self.last_ema200 = self._alpha_ema200 * close + (1 - self._alpha_ema200) * self.last_ema200
+                    self.last_ema200 = (
+                        self._alpha_ema200 * close
+                        + (1 - self._alpha_ema200) * self.last_ema200
+                    )
                 else:
                     self.last_ema200 = close
-            if hasattr(self, "_atr_period") and self.last_atr is not None and self.last_close is not None:
-                tr = max(high - low, abs(high - self.last_close), abs(low - self.last_close))
-                self.last_atr = (self.last_atr * (self._atr_period - 1) + tr) / self._atr_period
+            if (
+                hasattr(self, "_atr_period")
+                and self.last_atr is not None
+                and self.last_close is not None
+            ):
+                tr = max(
+                    high - low, abs(high - self.last_close), abs(low - self.last_close)
+                )
+                self.last_atr = (
+                    self.last_atr * (self._atr_period - 1) + tr
+                ) / self._atr_period
             elif hasattr(self, "_atr_period"):
                 self.last_atr = max(high - low, abs(high - close), abs(low - close))
             if self.ema30 is not None:
@@ -267,7 +294,11 @@ class IndicatorsCache:
                 self.ema100.loc[ts] = self.last_ema100
             if hasattr(self, "ema200") and self.ema200 is not None:
                 self.ema200.loc[ts] = self.last_ema200
-            if hasattr(self, "atr") and self.atr is not None and self.last_atr is not None:
+            if (
+                hasattr(self, "atr")
+                and self.atr is not None
+                and self.last_atr is not None
+            ):
                 self.atr.loc[ts] = self.last_atr
             self.last_close = close
         self.df = pd.concat([self.df, new_df])
@@ -276,7 +307,10 @@ class IndicatorsCache:
 
 @ray.remote(num_cpus=1, num_gpus=1 if GPU_AVAILABLE else 0)
 def calc_indicators(
-    df: pd.DataFrame | "pl.DataFrame", config: BotConfig, volatility: float, timeframe: str
+    df: pd.DataFrame | "pl.DataFrame",
+    config: BotConfig,
+    volatility: float,
+    timeframe: str,
 ):
     if pl is not None and isinstance(df, pl.DataFrame):
         df = df.to_pandas().set_index("timestamp")
@@ -408,7 +442,11 @@ class DataHandler:
     @ohlcv.setter
     def ohlcv(self, value: pd.DataFrame) -> None:
         if self.use_polars:
-            self._ohlcv = pl.from_pandas(value.reset_index()) if isinstance(value, pd.DataFrame) else value
+            self._ohlcv = (
+                pl.from_pandas(value.reset_index())
+                if isinstance(value, pd.DataFrame)
+                else value
+            )
         else:
             self._ohlcv = value
 
@@ -425,7 +463,11 @@ class DataHandler:
     @ohlcv_2h.setter
     def ohlcv_2h(self, value: pd.DataFrame) -> None:
         if self.use_polars:
-            self._ohlcv_2h = pl.from_pandas(value.reset_index()) if isinstance(value, pd.DataFrame) else value
+            self._ohlcv_2h = (
+                pl.from_pandas(value.reset_index())
+                if isinstance(value, pd.DataFrame)
+                else value
+            )
         else:
             self._ohlcv_2h = value
 
@@ -441,9 +483,8 @@ class DataHandler:
                 logger.error("get_atr failed for %s: %s", symbol, exc)
         async with self.ohlcv_lock:
             df = self.ohlcv
-            if (
-                "symbol" in df.index.names
-                and symbol in df.index.get_level_values("symbol")
+            if "symbol" in df.index.names and symbol in df.index.get_level_values(
+                "symbol"
             ):
                 df = df.xs(symbol, level="symbol", drop_level=False)
             else:
@@ -673,9 +714,7 @@ class DataHandler:
                     timeframe,
                 )
             else:
-                self.cache.save_cached_data(
-                    f"{cache_prefix}{symbol}", timeframe, df
-                )
+                self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка получения OHLCV для %s (%s): %s", symbol, timeframe, e)
@@ -725,9 +764,7 @@ class DataHandler:
                     timeframe,
                 )
             else:
-                self.cache.save_cached_data(
-                    f"{cache_prefix}{symbol}", timeframe, df
-                )
+                self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error(
@@ -826,22 +863,46 @@ class DataHandler:
             if timeframe == "primary":
                 async with self.ohlcv_lock:
                     if self.use_polars:
-                        df_pl = pl.from_pandas(df.reset_index()) if isinstance(df, pd.DataFrame) else df
-                        base = self._ohlcv.filter(pl.col("symbol") != symbol) if self._ohlcv.height > 0 else self._ohlcv
-                        self._ohlcv = pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        df_pl = (
+                            pl.from_pandas(df.reset_index())
+                            if isinstance(df, pd.DataFrame)
+                            else df
+                        )
+                        base = (
+                            self._ohlcv.filter(pl.col("symbol") != symbol)
+                            if self._ohlcv.height > 0
+                            else self._ohlcv
+                        )
+                        self._ohlcv = (
+                            pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        )
                         self._ohlcv = self._ohlcv.sort(["symbol", "timestamp"])
                     else:
                         if isinstance(self.ohlcv.index, pd.MultiIndex):
-                            base = self.ohlcv.drop(symbol, level="symbol", errors="ignore")
+                            base = self.ohlcv.drop(
+                                symbol, level="symbol", errors="ignore"
+                            )
                         else:
                             base = self.ohlcv
-                        self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
+                        self.ohlcv = pd.concat(
+                            [base, df], ignore_index=False
+                        ).sort_index()
             else:
                 async with self.ohlcv_2h_lock:
                     if self.use_polars:
-                        df_pl = pl.from_pandas(df.reset_index()) if isinstance(df, pd.DataFrame) else df
-                        base = self._ohlcv_2h.filter(pl.col("symbol") != symbol) if self._ohlcv_2h.height > 0 else self._ohlcv_2h
-                        self._ohlcv_2h = pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        df_pl = (
+                            pl.from_pandas(df.reset_index())
+                            if isinstance(df, pd.DataFrame)
+                            else df
+                        )
+                        base = (
+                            self._ohlcv_2h.filter(pl.col("symbol") != symbol)
+                            if self._ohlcv_2h.height > 0
+                            else self._ohlcv_2h
+                        )
+                        self._ohlcv_2h = (
+                            pl.concat([base, df_pl]) if base.height > 0 else df_pl
+                        )
                         self._ohlcv_2h = self._ohlcv_2h.sort(["symbol", "timestamp"])
                     else:
                         if isinstance(self.ohlcv_2h.index, pd.MultiIndex):
@@ -1101,10 +1162,7 @@ class DataHandler:
                         )
                     )
                     self.tasks.append(t1)
-                    if (
-                        self.config["secondary_timeframe"]
-                        != self.config["timeframe"]
-                    ):
+                    if self.config["secondary_timeframe"] != self.config["timeframe"]:
                         t2 = asyncio.create_task(
                             self._subscribe_chunk(
                                 chunk,
@@ -1242,10 +1300,7 @@ class DataHandler:
                 )
             )
             self.tasks.append(t1)
-            if (
-                self.config["secondary_timeframe"]
-                != self.config["timeframe"]
-            ):
+            if self.config["secondary_timeframe"] != self.config["timeframe"]:
                 t2 = asyncio.create_task(
                     self._subscribe_symbol_ccxtpro(
                         symbol,
@@ -1505,7 +1560,9 @@ class DataHandler:
                         priority = self.symbol_priority.get(symbol, 0)
                         try:
                             await asyncio.wait_for(
-                                self.ws_queue.put((priority, (symbols, message, timeframe))),
+                                self.ws_queue.put(
+                                    (priority, (symbols, message, timeframe))
+                                ),
                                 timeout=5,
                             )
                         except asyncio.TimeoutError:
@@ -1708,10 +1765,17 @@ class DataHandler:
                     current_time = pd.Timestamp.now(tz="UTC")
                     interval = pd.Timedelta(
                         self.config[
-                            "timeframe" if timeframe == "primary" else "secondary_timeframe"
+                            (
+                                "timeframe"
+                                if timeframe == "primary"
+                                else "secondary_timeframe"
+                            )
                         ]
                     ).total_seconds()
-                    if confirm and (current_time - kline_timestamp).total_seconds() > interval:
+                    if (
+                        confirm
+                        and (current_time - kline_timestamp).total_seconds() > interval
+                    ):
                         logger.warning(
                             "Получены устаревшие данные для %s (%s): %s",
                             symbol,
