@@ -1264,11 +1264,22 @@ def _initialize_trade_manager() -> None:
         raise
 
 
-# Start initialization when the module is imported
+# Load environment variables when the module is imported
 load_dotenv()
 if os.getenv("TEST_MODE") == "1":
     _ready_event.set()
-else:
+
+
+_startup_launched = False
+
+
+@api_app.before_request
+def _start_trade_manager() -> None:
+    """Launch trade manager initialization in a background thread."""
+    global _startup_launched
+    if _startup_launched or os.getenv("TEST_MODE") == "1":
+        return
+    _startup_launched = True
     threading.Thread(target=_initialize_trade_manager, daemon=True).start()
 
 
