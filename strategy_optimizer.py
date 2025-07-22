@@ -21,12 +21,21 @@ def _portfolio_backtest_remote(
     metric: str = "sharpe",
     n_splits: int = 5,
 ) -> float:
-    """Evaluate parameters on the whole portfolio."""
+    """Evaluate parameters on the whole portfolio.
+
+    This simple backtest simulates a basic EMA crossover strategy and
+    adjusts returns using the provided risk parameters. It outputs either
+    the portfolio Sharpe or Sortino ratio.
+    """
     try:
-        ratios = []
+        ratios: list[float] = []
         for df in df_dict.values():
             if df is None or df.empty:
                 continue
+            vol = df["close"].pct_change().std()
+            threshold = max(0.02, 1e-6)
+            vol_coeff = vol / threshold
+            vol_coeff = max(params["risk_vol_min"], min(params["risk_vol_max"], vol_coeff))
             train_size = int(0.6 * len(df))
             test_size = int(0.2 * len(df))
             for i in range(n_splits):
@@ -45,11 +54,23 @@ def _portfolio_backtest_remote(
                 ).mean()
                 returns = []
                 for j in range(1, len(test_df)):
+                    delta = abs(ema_fast.iloc[j] - ema_slow.iloc[j]) / ema_slow.iloc[j]
+                    if delta < params["base_probability_threshold"]:
+                        continue
                     signal = 1 if ema_fast.iloc[j] > ema_slow.iloc[j] else -1
                     ret = (
                         test_df["close"].iloc[j] - test_df["close"].iloc[j - 1]
                     ) / test_df["close"].iloc[j - 1]
-                    returns.append(ret * signal)
+                    ret *= vol_coeff
+                    if ret < 0:
+                        ret *= params["risk_sharpe_loss_factor"]
+                    else:
+                        ret *= params["risk_sharpe_win_factor"]
+                    ret = max(
+                        -params["sl_multiplier"] * 0.01,
+                        min(params["tp_multiplier"] * 0.01, ret * signal),
+                    )
+                    returns.append(ret)
                 if not returns:
                     continue
                 returns_np = np.array(returns, dtype=np.float32)
