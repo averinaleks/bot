@@ -161,15 +161,30 @@ class IndicatorsCache:
                 self._alpha_ema100 = 2 / (config["ema100_period"] + 1)
                 self._alpha_ema200 = 2 / (config["ema200_period"] + 1)
                 self._atr_period = config["atr_period_default"]
-                self.rsi = ta.momentum.rsi(df["close"], window=14, fillna=True)
-                self.adx = ta.trend.adx(
-                    df["high"], df["low"], df["close"], window=14, fillna=True
+                rsi_window = config.get("rsi_window", 14)
+                self.rsi = ta.momentum.rsi(
+                    df["close"], window=rsi_window, fillna=True
                 )
+
+                adx_window = config.get("adx_window", 14)
+                if len(df) >= adx_window:
+                    self.adx = ta.trend.adx(
+                        df["high"],
+                        df["low"],
+                        df["close"],
+                        window=adx_window,
+                        fillna=True,
+                    )
+                else:
+                    self.adx = pd.Series(
+                        [np.nan] * len(df), index=df.index
+                    )
+
                 self.macd = ta.trend.macd_diff(
                     df["close"],
-                    window_slow=26,
-                    window_fast=12,
-                    window_sign=9,
+                    window_slow=config.get("macd_window_slow", 26),
+                    window_fast=config.get("macd_window_fast", 12),
+                    window_sign=config.get("macd_window_sign", 9),
                     fillna=True,
                 )
             elif timeframe == "secondary":
