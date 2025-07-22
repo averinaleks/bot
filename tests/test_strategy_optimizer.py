@@ -6,6 +6,7 @@ from config import BotConfig
 
 sys.modules.pop('strategy_optimizer', None)
 from strategy_optimizer import StrategyOptimizer, _portfolio_backtest_remote
+from portfolio_backtest import portfolio_backtest
 
 
 class DummyDataHandler:
@@ -33,7 +34,7 @@ async def test_strategy_optimizer_returns_params(monkeypatch):
     config = BotConfig(timeframe='1m', optuna_trials=1, portfolio_metric='sharpe')
     captured = {}
 
-    def dummy_remote(df_dict, params, timeframe, metric, n_splits):
+    def dummy_remote(df_dict, params, timeframe, metric, max_positions):
         captured['metric'] = metric
         return 0.1
 
@@ -43,3 +44,16 @@ async def test_strategy_optimizer_returns_params(monkeypatch):
     assert isinstance(params, dict)
     assert 'ema30_period' in params
     assert captured['metric'] == 'sharpe'
+
+
+def test_portfolio_backtest_runs():
+    df_dict = {'BTCUSDT': make_df('BTCUSDT'), 'ETHUSDT': make_df('ETHUSDT')}
+    params = {
+        'ema30_period': 3,
+        'ema100_period': 5,
+        'tp_multiplier': 1.0,
+        'sl_multiplier': 1.0,
+        'base_probability_threshold': 0.6,
+    }
+    ratio = portfolio_backtest(df_dict, params, '1m', max_positions=1)
+    assert isinstance(ratio, float)

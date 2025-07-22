@@ -11,6 +11,7 @@ import ray
 
 from utils import logger
 from config import BotConfig
+from portfolio_backtest import portfolio_backtest
 
 
 @ray.remote
@@ -19,56 +20,13 @@ def _portfolio_backtest_remote(
     params: dict,
     timeframe: str,
     metric: str = "sharpe",
-    n_splits: int = 5,
+    max_positions: int = 5,
 ) -> float:
     """Evaluate parameters on the whole portfolio."""
     try:
-        ratios = []
-        for df in df_dict.values():
-            if df is None or df.empty:
-                continue
-            train_size = int(0.6 * len(df))
-            test_size = int(0.2 * len(df))
-            for i in range(n_splits):
-                start = i * test_size
-                end = start + train_size + test_size
-                if end > len(df):
-                    break
-                test_df = df.iloc[start + train_size : end].droplevel("symbol")
-                if len(test_df) < 14:
-                    continue
-                ema_fast = test_df["close"].ewm(
-                    span=params["ema30_period"], adjust=False
-                ).mean()
-                ema_slow = test_df["close"].ewm(
-                    span=params["ema100_period"], adjust=False
-                ).mean()
-                returns = []
-                for j in range(1, len(test_df)):
-                    signal = 1 if ema_fast.iloc[j] > ema_slow.iloc[j] else -1
-                    ret = (
-                        test_df["close"].iloc[j] - test_df["close"].iloc[j - 1]
-                    ) / test_df["close"].iloc[j - 1]
-                    returns.append(ret * signal)
-                if not returns:
-                    continue
-                returns_np = np.array(returns, dtype=np.float32)
-                if metric == "sortino":
-                    neg = returns_np[returns_np < 0]
-                    denom = np.std(neg) + 1e-6
-                else:
-                    denom = np.std(returns_np) + 1e-6
-                ratio = (
-                    np.mean(returns_np)
-                    / denom
-                    * np.sqrt(
-                        365 * 24 * 60
-                        / pd.Timedelta(timeframe).total_seconds()
-                    )
-                )
-                if np.isfinite(ratio):
-                    ratios.append(ratio)
-        return float(np.mean(ratios)) if ratios else 0.0
+        return portfolio_backtest(
+            df_dict, params, timeframe, metric=metric, max_positions=max_positions
+        )
     except Exception as e:  # pragma: no cover - log
         logger.exception("Error in _portfolio_backtest_remote: %s", e)
         raise
@@ -124,7 +82,11 @@ class StrategyOptimizer:
                 "risk_vol_max": trial.suggest_float("risk_vol_max", 1.0, 3.0),
             }
             obj_ref = _portfolio_backtest_remote.remote(
-                df_dict, params, self.config["timeframe"], self.metric, self.n_splits
+                df_dict,
+                params,
+                self.config["timeframe"],
+                self.metric,
+                self.config.get("max_positions", 5),
             )
             obj_refs.append(obj_ref)
             trials.append((trial, params))
