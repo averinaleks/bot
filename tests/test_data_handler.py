@@ -439,3 +439,55 @@ async def test_feature_callback_invoked(tmp_path):
     await asyncio.sleep(0)
     assert called == [symbol]
 
+
+@pytest.mark.asyncio
+async def test_process_ws_queue_callback_after_sync(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp')
+    order = []
+
+    async def fake_sync(symbol, df, fr, oi, ob, timeframe='primary'):
+        order.append('sync')
+
+    async def cb(sym):
+        order.append('cb')
+
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}), feature_callback=cb)
+    monkeypatch.setattr(dh, 'synchronize_and_update', fake_sync)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    created = []
+    orig_create = asyncio.create_task
+
+    def record_create(coro):
+        created.append('cb')
+        return orig_create(coro)
+
+    monkeypatch.setattr(asyncio, 'create_task', record_create)
+
+    msg = json.dumps({
+        'topic': 'kline.1.BTCUSDT',
+        'data': [{
+            'start': int(pd.Timestamp.now(tz='UTC').timestamp() * 1000),
+            'open': 1, 'high': 2, 'low': 0.5, 'close': 1.5, 'volume': 1
+        }]
+    })
+
+    await dh.ws_queue.put((1, (['BTCUSDT'], msg, 'primary')))
+
+    task = asyncio.create_task(dh._process_ws_queue())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+
+    assert order == ['sync']
+    assert created == ['cb']
+
