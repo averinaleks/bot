@@ -543,7 +543,10 @@ class ModelBuilder:
         self.trade_manager = trade_manager
         self.model_type = config.get("model_type", "cnn_lstm")
         self.nn_framework = config.get("nn_framework", "pytorch").lower()
-        self.lstm_models = {}
+        # Predictive models such as CNN-LSTM for each trading symbol
+        self.predictive_models = {}
+        # Backwards compatibility alias
+        self.lstm_models = self.predictive_models
         if self.nn_framework in {"pytorch", "lightning"}:
             torch_mods = _get_torch_modules()
             torch = torch_mods["torch"]
@@ -579,9 +582,9 @@ class ModelBuilder:
             return
         try:
             if self.nn_framework == "pytorch":
-                models_state = {k: v.state_dict() for k, v in self.lstm_models.items()}
+                models_state = {k: v.state_dict() for k, v in self.predictive_models.items()}
             else:
-                models_state = {k: v.get_weights() for k, v in self.lstm_models.items()}
+                models_state = {k: v.get_weights() for k, v in self.predictive_models.items()}
             state = {
                 "lstm_models": models_state,
                 "scalers": self.scalers,
@@ -626,7 +629,7 @@ class ModelBuilder:
                             model = CNNLSTM(input_size, 64, 2, 0.2)
                         model.load_state_dict(sd)
                         model.to(self.device)
-                        self.lstm_models[symbol] = model
+                        self.predictive_models[symbol] = model
                 else:
                     from tensorflow import keras
 
@@ -672,7 +675,7 @@ class ModelBuilder:
                         outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                         model = keras.Model(inputs, outputs)
                         model.set_weights(weights)
-                        self.lstm_models[symbol] = model
+                        self.predictive_models[symbol] = model
                 self.last_retrain_time = state.get(
                     "last_retrain_time", self.last_retrain_time
                 )
@@ -732,7 +735,7 @@ class ModelBuilder:
         return features.astype(np.float32)
 
     async def retrain_symbol(self, symbol):
-        if self.config.get("use_transfer_learning") and symbol in self.lstm_models:
+        if self.config.get("use_transfer_learning") and symbol in self.predictive_models:
             await self.fine_tune_symbol(symbol)
             return
         indicators = self.data_handler.indicators.get(symbol)
@@ -883,7 +886,7 @@ class ModelBuilder:
                     mlflow.tensorflow.log_model(model, "model")
                 else:
                     mlflow.pytorch.log_model(model, "model")
-        self.lstm_models[symbol] = model
+        self.predictive_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         await self.compute_shap_values(symbol, model, X)
@@ -937,7 +940,7 @@ class ModelBuilder:
         pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
         thr = self.config.get("target_change_threshold", 0.001)
         y = (pct_change > thr).astype(np.float32)
-        existing = self.lstm_models.get(symbol)
+        existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
             if self.nn_framework in {"keras", "tensorflow"}:
@@ -1049,7 +1052,7 @@ class ModelBuilder:
                     mlflow.tensorflow.log_model(model, "model")
                 else:
                     mlflow.pytorch.log_model(model, "model")
-        self.lstm_models[symbol] = model
+        self.predictive_models[symbol] = model
         self.last_retrain_time[symbol] = time.time()
         self.save_state()
         await self.compute_shap_values(symbol, model, X)
@@ -1190,7 +1193,7 @@ class ModelBuilder:
 
     async def simple_backtest(self, symbol):
         try:
-            model = self.lstm_models.get(symbol)
+            model = self.predictive_models.get(symbol)
             indicators = self.data_handler.indicators.get(symbol)
             ohlcv = self.data_handler.ohlcv
             if not model or not indicators:
@@ -1366,7 +1369,7 @@ class RLAgent:
             return
         bc_dataset = None
         if self.config.get("rl_use_imitation", False):
-            lstm_model = self.model_builder.lstm_models.get(symbol)
+            lstm_model = self.model_builder.predictive_models.get(symbol)
             if lstm_model is not None:
                 lstm_feats = await self.model_builder.prepare_lstm_features(
                     symbol, indicators

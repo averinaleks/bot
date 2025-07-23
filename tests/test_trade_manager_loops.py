@@ -86,7 +86,8 @@ class DummyDataHandler:
 
 class DummyModelBuilder:
     def __init__(self):
-        self.lstm_models = {'BTCUSDT': object()}
+        self.predictive_models = {'BTCUSDT': object()}
+        self.lstm_models = self.predictive_models
     async def retrain_symbol(self, symbol):
         pass
 
