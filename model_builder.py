@@ -503,7 +503,7 @@ def _train_model_remote(
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
             with torch.cuda.amp.autocast(enabled=cuda_available):
-                outputs = model(batch_X).squeeze()
+                outputs = model(batch_X).view(-1)
                 loss = criterion(outputs, batch_y) + model.l2_regularization()
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -519,7 +519,7 @@ def _train_model_remote(
                     val_X = val_X.view(val_X.size(0), -1)
                 val_y = val_y.to(device)
                 with torch.cuda.amp.autocast(enabled=cuda_available):
-                    outputs = model(val_X).squeeze()
+                    outputs = model(val_X).view(-1)
                 preds.extend(outputs.cpu().numpy().reshape(-1))
                 labels.extend(val_y.cpu().numpy().reshape(-1))
                 val_loss += criterion(outputs, val_y).item()
