@@ -78,7 +78,7 @@ class BotConfig:
     min_data_length: int = _get_default("min_data_length", 1000)
     lstm_timesteps: int = _get_default("lstm_timesteps", 60)
     lstm_batch_size: int = _get_default("lstm_batch_size", 32)
-    model_type: str = _get_default("model_type", "cnn_lstm")
+    model_type: str = _get_default("model_type", "tft")
     nn_framework: str = _get_default("nn_framework", "pytorch")
     ema30_period: int = _get_default("ema30_period", 30)
     ema100_period: int = _get_default("ema100_period", 100)
