@@ -95,6 +95,11 @@
     Он лучше выявляет долгосрочные зависимости в финансовых рядах. При большой истории
     увеличьте `d_model` и `num_layers` в `model_builder.py`, а для малых выборок
     оставьте значения по умолчанию, чтобы избежать переобучения.
+  - После расчёта индикаторов `DataHandler` кэширует признаки в памяти. Если
+    установить его параметр `feature_callback`, например `ModelBuilder.precompute_features`,
+    признаки заранее сохраняются в `feature_cache`. Это снижает задержки при
+    обучении и прогнозах, поскольку готовые данные не приходится вычислять
+    заново.
 4. Запустите бота. При локальном запуске без Docker Compose задайте адреса сервисов переменными `DATA_HANDLER_URL`, `MODEL_BUILDER_URL` и `TRADE_MANAGER_URL`:
 ```bash
 DATA_HANDLER_URL=http://localhost:8000 \
@@ -315,6 +320,9 @@ model_builder = ModelBuilder(cfg, data_handler, None)
 trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
 
 You can limit the logger queue with `telegram_queue_size` in `config.json`.
+# Optionally cache features ahead of time
+# data_handler = DataHandler(cfg, bot, chat_id,
+#                            feature_callback=model_builder.precompute_features)
 ```
 
 Both services check the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
