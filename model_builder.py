@@ -569,6 +569,7 @@ class ModelBuilder:
         self.threshold_offset = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.calibrators = {}
         self.calibration_metrics = {}
+        self.feature_cache = {}
         self.shap_cache_times = {}
         self.shap_cache_duration = config.get("shap_cache_duration", 86400)
         self.last_backtest_time = 0
@@ -733,6 +734,18 @@ class ModelBuilder:
             self.scalers[symbol] = scaler
         features = scaler.transform(features_df)
         return features.astype(np.float32)
+
+    async def precompute_features(self, symbol):
+        """Precompute and cache LSTM features for ``symbol``."""
+        indicators = self.data_handler.indicators.get(symbol)
+        if not indicators:
+            return
+        feats = await self.prepare_lstm_features(symbol, indicators)
+        self.feature_cache[symbol] = feats
+
+    def get_cached_features(self, symbol):
+        """Return cached LSTM features for ``symbol`` if available."""
+        return self.feature_cache.get(symbol)
 
     async def retrain_symbol(self, symbol):
         if self.config.get("use_transfer_learning") and symbol in self.predictive_models:
