@@ -39,6 +39,18 @@ if mp.get_start_method(allow_none=True) != "spawn":
 device_type = "cuda" if is_cuda_available() else "cpu"
 
 
+def _predict_model(model, tensor) -> np.ndarray:
+    """Run model forward pass in a worker thread."""
+    model.eval()
+    with torch.no_grad(), torch.amp.autocast(device_type):
+        return model(tensor).squeeze().float().cpu().numpy()
+
+
+def _calibrate_output(calibrator, value: float) -> float:
+    """Run calibrator prediction in a worker thread."""
+    return calibrator.predict_proba([[value]])[0, 1]
+
+
 def _register_cleanup_handlers(tm: "TradeManager") -> None:
     """Register atexit and signal handlers for graceful shutdown."""
 
@@ -737,12 +749,12 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            model.eval()
-            with torch.no_grad(), torch.amp.autocast(device_type):
-                prediction = model(X_tensor).squeeze().float().cpu().numpy()
+            prediction = await asyncio.to_thread(_predict_model, model, X_tensor)
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
-                prediction = calibrator.predict_proba([[prediction]])[0, 1]
+                prediction = await asyncio.to_thread(
+                    _calibrate_output, calibrator, float(prediction)
+                )
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
@@ -992,12 +1004,12 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            model.eval()
-            with torch.no_grad(), torch.amp.autocast(device_type):
-                prediction = model(X_tensor).squeeze().float().cpu().numpy()
+            prediction = await asyncio.to_thread(_predict_model, model, X_tensor)
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
-                prediction = calibrator.predict_proba([[prediction]])[0, 1]
+                prediction = await asyncio.to_thread(
+                    _calibrate_output, calibrator, float(prediction)
+                )
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
