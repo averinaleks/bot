@@ -9,6 +9,7 @@ import importlib.util
 import contextlib
 from config import BotConfig
 import asyncio
+from sklearn.preprocessing import StandardScaler
 
 try:  # require functional torch installation for these tests
     import torch
@@ -98,7 +99,7 @@ def test_prepare_lstm_features_with_short_indicators():
     assert isinstance(features, np.ndarray)
     assert features.shape == (len(df), 15)
 
-@pytest.mark.parametrize("model_type", ["cnn_lstm", "mlp"])
+@pytest.mark.parametrize("model_type", ["cnn_lstm", "mlp", "tft"])
 def test_train_model_remote_returns_state_and_predictions(model_type):
     X = np.random.rand(20, 3, 2).astype(np.float32)
     y = (np.random.rand(20) > 0.5).astype(np.float32)
@@ -231,4 +232,35 @@ async def test_loss_and_win_streak_adjustment():
     after_win = mb.threshold_offset["BTCUSDT"]
     dec = after_win / (1 - cfg.threshold_decay_rate) - after_loss
     assert dec == pytest.approx(-cfg.threshold_adjustment)
+
+
+def test_save_and_load_state_transformer(tmp_path):
+    df = make_df()
+    cfg = BotConfig(
+        cache_dir=str(tmp_path),
+        min_data_length=len(df),
+        lstm_timesteps=2,
+        lstm_batch_size=2,
+        model_type="tft",
+        nn_framework="pytorch",
+    )
+    dh = DummyDataHandler(df)
+    tm = DummyTradeManager()
+    mb = ModelBuilder(cfg, dh, tm)
+    torch_mods = model_builder._get_torch_modules()
+    TFT = torch_mods["TemporalFusionTransformer"]
+    torch = torch_mods["torch"]
+    model = TFT(15)
+    mb.lstm_models["BTCUSDT"] = model
+    scaler = StandardScaler().fit(np.random.rand(3, 15))
+    mb.scalers["BTCUSDT"] = scaler
+    mb.last_save_time = 0
+    mb.save_state()
+
+    mb2 = ModelBuilder(cfg, dh, tm)
+    mb2.load_state()
+    state1 = mb.lstm_models["BTCUSDT"].state_dict()
+    state2 = mb2.lstm_models["BTCUSDT"].state_dict()
+    for k in state1:
+        assert torch.allclose(state1[k], state2[k])
 
