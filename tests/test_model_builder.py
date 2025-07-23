@@ -111,6 +111,15 @@ def test_train_model_remote_returns_state_and_predictions(model_type):
     assert isinstance(labels, list)
 
 
+def test_train_model_remote_tft_predictions():
+    X = np.random.rand(12, 3, 2).astype(np.float32)
+    y = (np.random.rand(12) > 0.5).astype(np.float32)
+    func = getattr(_train_model_remote, "_function", _train_model_remote)
+    state, preds, labels = func(X, y, batch_size=2, model_type="tft")
+    assert isinstance(state, dict)
+    assert len(preds) == len(labels) > 0
+
+
 @pytest.mark.asyncio
 async def test_training_loop_recovery(monkeypatch):
     cfg = BotConfig(cache_dir="/tmp", retrain_interval=0)
