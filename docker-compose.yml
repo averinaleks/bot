@@ -19,6 +19,7 @@ services:
       timeout: 2s
       retries: 12
       start_period: 5s
+    shm_size: '8gb'
     networks:
       - trading_bot_default
   model_builder:
@@ -39,6 +40,7 @@ services:
       timeout: 2s
       retries: 12
       start_period: 5s
+    shm_size: '8gb'
     networks:
       - trading_bot_default
   trade_manager:

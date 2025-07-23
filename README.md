@@ -143,8 +143,9 @@ default should work for most setups, but you may call
 ``multiprocessing.set_start_method()`` yourself before launching the service if
 you need a different policy.
 
-The `trade_manager` container needs extra shared memory. The compose file
-allocates 8GB via `shm_size: '8gb'` to enlarge `/dev/shm`.
+The services may build large data sets in memory. Compose allocates
+8GB of shared memory for each container via `shm_size: '8gb'` so Polars
+and other libraries do not run into the default `/dev/shm` limit.
 
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
 GPU warnings. Adjust or remove this variable if you need more detailed logs.
