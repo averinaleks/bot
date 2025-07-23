@@ -73,6 +73,13 @@ def is_cuda_available() -> bool:
     if nvd is not None and (nvd == "" or nvd.lower() == "none"):
         return False
 
+    # Avoid importing torch when no NVIDIA driver is present. "nvidia-smi" will
+    # normally be available only on systems with working CUDA drivers. This
+    # short-circuit prevents crashes like "free(): double free detected" that can
+    # happen when torch tries to initialise CUDA in a broken environment.
+    if shutil.which("nvidia-smi") is None:
+        return False
+
     try:  # Lazy import to avoid heavy initialization when unused
         import torch  # type: ignore
         if not torch.backends.cuda.is_built():
