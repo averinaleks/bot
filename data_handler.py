@@ -26,7 +26,7 @@ from utils import (
     is_cuda_available,
 )
 from tenacity import retry, wait_exponential
-from typing import List, Dict, TYPE_CHECKING, Any
+from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
 from config import BotConfig
 import ta
 import os
@@ -342,6 +342,7 @@ class DataHandler:
         chat_id,
         exchange: BybitSDKAsync | None = None,
         pro_exchange: "ccxtpro.bybit" | None = None,
+        feature_callback: Callable[[str], Awaitable[Any]] | None = None,
     ):
         logger.info(
             "Starting DataHandler initialization: timeframe=%s, max_symbols=%s, GPU available=%s",
@@ -363,6 +364,7 @@ class DataHandler:
             chat_id,
             max_queue_size=config.get("telegram_queue_size"),
         )
+        self.feature_callback = feature_callback
         self.cache = HistoricalDataCache(config["cache_dir"])
         self.use_polars = config.get("use_polars", False)
         if self.use_polars:
@@ -994,6 +996,8 @@ class DataHandler:
                     async with self.ohlcv_2h_lock:
                         self.indicators_cache_2h[cache_key] = result
                         self.indicators_2h[symbol] = result
+            if self.feature_callback:
+                asyncio.create_task(self.feature_callback(symbol))
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error(

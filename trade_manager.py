@@ -1212,8 +1212,6 @@ async def create_trade_manager() -> TradeManager:
         try:
             dh = DataHandler(cfg, telegram_bot, chat_id)
             logger.info("DataHandler created successfully")
-            await dh.load_initial()
-            asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
         except Exception as exc:
             logger.exception("Failed to create DataHandler: %s", exc)
             raise
@@ -1221,8 +1219,11 @@ async def create_trade_manager() -> TradeManager:
         logger.info("Creating ModelBuilder")
         try:
             mb = ModelBuilder(cfg, dh, None)
+            dh.feature_callback = mb.precompute_features
             logger.info("ModelBuilder created successfully")
             asyncio.create_task(mb.train())
+            await dh.load_initial()
+            asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
         except Exception as exc:
             logger.exception("Failed to create ModelBuilder: %s", exc)
             raise

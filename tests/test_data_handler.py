@@ -5,6 +5,7 @@ import logging
 import asyncio
 import contextlib
 import json
+import time
 import pandas as pd
 import pytest
 from config import BotConfig
@@ -411,4 +412,30 @@ async def test_subscribe_to_klines_single_timeframe(monkeypatch):
 
     await dh.subscribe_to_klines(['BTCUSDT'])
     assert call['n'] == 1
+
+
+@pytest.mark.asyncio
+async def test_feature_callback_invoked(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    called = []
+
+    async def cb(sym):
+        called.append(sym)
+
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}), feature_callback=cb)
+    symbol = 'BTCUSDT'
+    ts = pd.Timestamp.now(tz='UTC')
+    df = pd.DataFrame({'open': [1], 'high': [1], 'low': [1], 'close': [1], 'volume': [1]}, index=[ts])
+    df['symbol'] = symbol
+    df = df.set_index(['symbol', df.index])
+
+    class DummyInd:
+        def update(self, _):
+            pass
+
+    dh.indicators_cache[f'{symbol}_primary'] = DummyInd()
+
+    await dh.synchronize_and_update(symbol, df, 0.0, 0.0, {'imbalance': 0.0, 'timestamp': time.time()})
+    await asyncio.sleep(0)
+    assert called == [symbol]
 
