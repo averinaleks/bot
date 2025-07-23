@@ -61,7 +61,6 @@ class DummyModelBuilder:
     def __init__(self):
         self.device = "cpu"
         self.predictive_models = {}
-        self.lstm_models = self.predictive_models
 
     async def preprocess(self, df, symbol):
         return df
