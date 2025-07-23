@@ -1,10 +1,12 @@
 import pandas as pd
+import numpy as np
 import pytest
 import sys
 import types
 import logging
 import os
 import math
+import contextlib
 from config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -411,6 +413,112 @@ async def test_close_position_updates_returns_and_sharpe_ratio():
     expected = profit / (1e-6) * math.sqrt(365 * 24 * 60 * 60 / tm.performance_window)
     sharpe = await tm.get_sharpe_ratio("BTCUSDT")
     assert sharpe == pytest.approx(expected)
+
+
+class DummyModel:
+    def eval(self):
+        pass
+
+    def __call__(self, *_):
+        class _Out:
+            def squeeze(self):
+                return self
+
+            def float(self):
+                return self
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return 0.6
+
+        return _Out()
+
+
+@pytest.mark.asyncio
+async def test_evaluate_signal_uses_cached_features(monkeypatch):
+    dh = DummyDataHandler()
+    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {"BTCUSDT": DummyModel()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    monkeypatch.setattr(tm, "evaluate_ema_condition", lambda *a, **k: True)
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert signal in ("buy", "sell", None)
+
+
+@pytest.mark.asyncio
+async def test_check_lstm_exit_signal_uses_cached_features(monkeypatch):
+    dh = DummyDataHandler()
+    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {"BTCUSDT": DummyModel()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    idx = pd.MultiIndex.from_tuples([
+        ("BTCUSDT", pd.Timestamp("2020-01-01"))
+    ], names=["symbol", "timestamp"])
+    tm.positions = pd.DataFrame({
+        "side": ["buy"],
+        "size": [1],
+        "entry_price": [100],
+        "tp_multiplier": [2],
+        "sl_multiplier": [1],
+        "highest_price": [100],
+        "lowest_price": [0],
+        "breakeven_triggered": [False],
+    }, index=idx)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    monkeypatch.setattr(tm, "close_position", lambda *a, **k: None)
+
+    await tm.check_lstm_exit_signal("BTCUSDT", 100)
+
 
 sys.modules.pop('utils', None)
 

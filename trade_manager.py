@@ -725,9 +725,12 @@ class TradeManager:
             )
             if not indicators or empty:
                 return
-            features = await self.model_builder.prepare_lstm_features(
-                symbol, indicators
-            )
+            features = self.model_builder.get_cached_features(symbol)
+            if features is None or len(features) < self.config["lstm_timesteps"]:
+                features = await self.model_builder.prepare_lstm_features(
+                    symbol, indicators
+                )
+                self.model_builder.feature_cache[symbol] = features
             if len(features) < self.config["lstm_timesteps"]:
                 return
             X = np.array([features[-self.config["lstm_timesteps"] :]])
@@ -977,9 +980,12 @@ class TradeManager:
                 volatility = df["close"].pct_change().std()
             else:
                 volatility = self.config.get("volatility_threshold", 0.02)
-            features = await self.model_builder.prepare_lstm_features(
-                symbol, indicators
-            )
+            features = self.model_builder.get_cached_features(symbol)
+            if features is None or len(features) < self.config["lstm_timesteps"]:
+                features = await self.model_builder.prepare_lstm_features(
+                    symbol, indicators
+                )
+                self.model_builder.feature_cache[symbol] = features
             if len(features) < self.config["lstm_timesteps"]:
                 return None
             X = np.array([features[-self.config["lstm_timesteps"] :]])
