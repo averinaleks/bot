@@ -706,7 +706,7 @@ class TradeManager:
 
     async def check_lstm_exit_signal(self, symbol: str, current_price: float):
         try:
-            model = self.model_builder.lstm_models.get(symbol)
+            model = self.model_builder.predictive_models.get(symbol)
             if not model:
                 logger.debug("Model for %s not found", symbol)
                 return
@@ -950,7 +950,7 @@ class TradeManager:
 
     async def evaluate_signal(self, symbol: str):
         try:
-            model = self.model_builder.lstm_models.get(symbol)
+            model = self.model_builder.predictive_models.get(symbol)
             if not model:
                 logger.debug("Model for %s not yet trained", symbol)
                 return None
@@ -1109,7 +1109,7 @@ class TradeManager:
                 pass
 
     async def process_symbol(self, symbol: str):
-        while symbol not in self.model_builder.lstm_models:
+        while symbol not in self.model_builder.predictive_models:
             logger.debug("Waiting for model for %s", symbol)
             await asyncio.sleep(30)
         while True:

@@ -251,7 +251,7 @@ def test_save_and_load_state_transformer(tmp_path):
     TFT = torch_mods["TemporalFusionTransformer"]
     torch = torch_mods["torch"]
     model = TFT(15)
-    mb.lstm_models["BTCUSDT"] = model
+    mb.predictive_models["BTCUSDT"] = model
     scaler = StandardScaler().fit(np.random.rand(3, 15))
     mb.scalers["BTCUSDT"] = scaler
     mb.last_save_time = 0
@@ -259,8 +259,8 @@ def test_save_and_load_state_transformer(tmp_path):
 
     mb2 = ModelBuilder(cfg, dh, tm)
     mb2.load_state()
-    state1 = mb.lstm_models["BTCUSDT"].state_dict()
-    state2 = mb2.lstm_models["BTCUSDT"].state_dict()
+    state1 = mb.predictive_models["BTCUSDT"].state_dict()
+    state2 = mb2.predictive_models["BTCUSDT"].state_dict()
     for k in state1:
         assert torch.allclose(state1[k], state2[k])
 
