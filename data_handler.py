@@ -41,14 +41,28 @@ from dotenv import load_dotenv
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
 
-if os.environ.get("FORCE_CPU") == "1":
-    GPU_AVAILABLE = False
-    cp = np  # type: ignore
-else:
+# GPU availability is determined lazily to avoid initializing CUDA in every
+# Ray worker at import time.
+GPU_AVAILABLE = False
+cp = np  # type: ignore
+
+
+def _init_cuda() -> None:
+    """Initialize GPU support if available."""
+
+    global GPU_AVAILABLE, cp
+
+    if os.environ.get("FORCE_CPU") == "1":
+        GPU_AVAILABLE = False
+        cp = np  # type: ignore
+        return
+
     GPU_AVAILABLE = is_cuda_available()
     if GPU_AVAILABLE:
         try:
-            import cupy as cp  # type: ignore
+            import cupy as cupy_mod  # type: ignore
+
+            cp = cupy_mod
         except Exception as e:  # pragma: no cover - allow missing cupy
             logger.warning("CuPy import failed: %s", e)
             GPU_AVAILABLE = False
@@ -306,16 +320,22 @@ class IndicatorsCache:
         self._update_volume_profile()
 
 
-@ray.remote(num_cpus=1, num_gpus=1 if GPU_AVAILABLE else 0)
-def calc_indicators(
-    df: pd.DataFrame | "pl.DataFrame",
-    config: BotConfig,
-    volatility: float,
-    timeframe: str,
-):
-    if pl is not None and isinstance(df, pl.DataFrame):
-        df = df.to_pandas().set_index("timestamp")
-    return IndicatorsCache(df, config, volatility, timeframe)
+
+def _make_calc_indicators_remote(use_gpu: bool):
+    """Return a Ray remote function for indicator calculation."""
+
+    @ray.remote(num_cpus=1, num_gpus=1 if use_gpu else 0)
+    def _calc_indicators(
+        df: pd.DataFrame | "pl.DataFrame",
+        config: BotConfig,
+        volatility: float,
+        timeframe: str,
+    ):
+        if pl is not None and isinstance(df, pl.DataFrame):
+            df = df.to_pandas().set_index("timestamp")
+        return IndicatorsCache(df, config, volatility, timeframe)
+
+    return _calc_indicators
 
 
 class DataHandler:
@@ -344,6 +364,7 @@ class DataHandler:
         pro_exchange: "ccxtpro.bybit" | None = None,
         feature_callback: Callable[[str], Awaitable[Any]] | None = None,
     ):
+        _init_cuda()
         logger.info(
             "Starting DataHandler initialization: timeframe=%s, max_symbols=%s, GPU available=%s",
             config.timeframe,
@@ -366,6 +387,7 @@ class DataHandler:
         )
         self.feature_callback = feature_callback
         self.cache = HistoricalDataCache(config["cache_dir"])
+        self.calc_indicators = _make_calc_indicators_remote(GPU_AVAILABLE)
         self.use_polars = config.get("use_polars", False)
         if self.use_polars:
             if pl is None:
@@ -948,7 +970,7 @@ class DataHandler:
                         logger.debug(
                             "Dispatching calc_indicators for %s %s", symbol, timeframe
                         )
-                        obj_ref = calc_indicators.remote(
+                        obj_ref = self.calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "primary"
                         )
                         fetch_needed = True
@@ -976,7 +998,7 @@ class DataHandler:
                         logger.debug(
                             "Dispatching calc_indicators for %s %s", symbol, timeframe
                         )
-                        obj_ref = calc_indicators.remote(
+                        obj_ref = self.calc_indicators.remote(
                             df.droplevel("symbol"), self.config, volatility, "secondary"
                         )
                         fetch_needed = True
