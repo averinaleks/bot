@@ -716,7 +716,7 @@ class TradeManager:
                 logger.exception("Failed SL/TP check for %s: %s", symbol, e)
                 raise
 
-    async def check_lstm_exit_signal(self, symbol: str, current_price: float):
+    async def check_exit_signal(self, symbol: str, current_price: float):
         try:
             model = self.model_builder.predictive_models.get(symbol)
             if not model:
@@ -733,7 +733,7 @@ class TradeManager:
             position = position.iloc[0]
             indicators = self.data_handler.indicators.get(symbol)
             empty = await _check_df_async(
-                indicators.df, f"check_lstm_exit_signal {symbol}"
+                indicators.df, f"check_exit_signal {symbol}"
             )
             if not indicators or empty:
                 return
@@ -760,22 +760,22 @@ class TradeManager:
             )
             if position["side"] == "buy" and prediction < short_threshold:
                 logger.info(
-                    "CNN-LSTM exit long signal for %s: pred=%.4f, threshold=%.2f",
+                    "Model exit long signal for %s: pred=%.4f, threshold=%.2f",
                     symbol,
                     prediction,
                     short_threshold,
                 )
-                await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
+                await self.close_position(symbol, current_price, "Model Exit Signal")
             elif position["side"] == "sell" and prediction > long_threshold:
                 logger.info(
-                    "CNN-LSTM exit short signal for %s: pred=%.4f, threshold=%.2f",
+                    "Model exit short signal for %s: pred=%.4f, threshold=%.2f",
                     symbol,
                     prediction,
                     long_threshold,
                 )
-                await self.close_position(symbol, current_price, "CNN-LSTM Exit Signal")
+                await self.close_position(symbol, current_price, "Model Exit Signal")
         except Exception as e:
-            logger.exception("Failed to check CNN-LSTM signal for %s: %s", symbol, e)
+            logger.exception("Failed to check model signal for %s: %s", symbol, e)
             raise
 
     async def monitor_performance(self):
@@ -872,7 +872,7 @@ class TradeManager:
                     current_price = df["close"].iloc[-1]
                     await self.check_trailing_stop(symbol, current_price)
                     await self.check_stop_loss_take_profit(symbol, current_price)
-                    await self.check_lstm_exit_signal(symbol, current_price)
+                    await self.check_exit_signal(symbol, current_price)
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
@@ -1028,7 +1028,7 @@ class TradeManager:
 
             if signal:
                 logger.info(
-                    "CNN-LSTM signal for %s: %s (pred %.4f, thresholds %.2f/%.2f)",
+                    "Model signal for %s: %s (pred %.4f, thresholds %.2f/%.2f)",
                     symbol,
                     signal,
                     prediction,
@@ -1052,7 +1052,7 @@ class TradeManager:
                 if signal == rl_signal:
                     return signal
                 logger.info(
-                    "Signal mismatch for %s: CNN-LSTM %s, RL %s",
+                    "Signal mismatch for %s: model %s, RL %s",
                     symbol,
                     signal,
                     rl_signal,

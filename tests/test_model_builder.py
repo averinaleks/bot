@@ -63,7 +63,7 @@ def create_model_builder(df):
         min_data_length=len(df),
         lstm_timesteps=2,
         lstm_batch_size=2,
-        model_type="cnn_lstm",
+        model_type="tft",
     )
     data_handler = DummyDataHandler(df)
     trade_manager = DummyTradeManager()
@@ -99,7 +99,7 @@ def test_prepare_lstm_features_with_short_indicators():
     assert isinstance(features, np.ndarray)
     assert features.shape == (len(df), 15)
 
-@pytest.mark.parametrize("model_type", ["cnn_lstm", "mlp", "tft"])
+@pytest.mark.parametrize("model_type", ["mlp", "tft"])
 def test_train_model_remote_returns_state_and_predictions(model_type):
     X = np.random.rand(20, 3, 2).astype(np.float32)
     y = (np.random.rand(20) > 0.5).astype(np.float32)

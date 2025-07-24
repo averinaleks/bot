@@ -40,7 +40,7 @@
     "min_data_length": 1000,
     "lstm_timesteps": 60,
     "lstm_batch_size": 32,
-    "model_type": "tft",
+    "model_type": "transformer",
     "nn_framework": "pytorch",
     "ema30_period": 30,
     "ema100_period": 100,

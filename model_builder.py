@@ -93,61 +93,6 @@ def _get_torch_modules():
     import torch.nn as nn
     from torch.utils.data import DataLoader, TensorDataset
 
-    class CNNLSTM(nn.Module):
-        """Neural network that combines 1D convolution and LSTM layers."""
-
-        def __init__(
-            self,
-            input_size,
-            hidden_size,
-            num_layers,
-            dropout,
-            conv_channels=32,
-            kernel_size=3,
-            l2_lambda=1e-5,
-        ):
-            super().__init__()
-            self.hidden_size = hidden_size
-            self.num_layers = num_layers
-            self.l2_lambda = l2_lambda
-            padding = kernel_size // 2
-            self.conv = nn.Conv1d(
-                input_size, conv_channels, kernel_size=kernel_size, padding=padding
-            )
-            self.relu = nn.ReLU()
-            self.dropout = nn.Dropout(dropout)
-            self.lstm = nn.LSTM(
-                conv_channels,
-                hidden_size,
-                num_layers,
-                batch_first=True,
-                dropout=dropout,
-            )
-            self.attn = nn.Linear(hidden_size, 1)
-            self.fc = nn.Linear(hidden_size, 1)
-            self.sigmoid = nn.Sigmoid()
-
-        def forward(self, x):
-            x = x.permute(0, 2, 1)
-            x = self.conv(x)
-            x = self.relu(x)
-            x = self.dropout(x)
-            x = x.permute(0, 2, 1)
-            h0 = torch.zeros(
-                self.num_layers, x.size(0), self.hidden_size, device=x.device
-            )
-            c0 = torch.zeros(
-                self.num_layers, x.size(0), self.hidden_size, device=x.device
-            )
-            out, _ = self.lstm(x, (h0, c0))
-            attn_weights = torch.softmax(self.attn(out), dim=1)
-            context = (out * attn_weights).sum(dim=1)
-            context = self.dropout(context)
-            out = self.fc(context)
-            return self.sigmoid(out)
-
-        def l2_regularization(self):
-            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
 
     class CNNGRU(nn.Module):
         """Conv1D + GRU variant."""
@@ -296,7 +241,6 @@ def _get_torch_modules():
         "nn": nn,
         "DataLoader": DataLoader,
         "TensorDataset": TensorDataset,
-        "CNNLSTM": CNNLSTM,
         "CNNGRU": CNNGRU,
         "TemporalFusionTransformer": TemporalFusionTransformer,
         "Net": Net,
@@ -330,10 +274,8 @@ def _train_model_keras(X, y, batch_size, model_type, initial_state=None, epochs=
             attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
             x = keras.layers.GlobalAveragePooling1D()(attn)
         else:
-            x = keras.layers.LSTM(64, return_sequences=True)(x)
-            attn = keras.layers.Dense(1, activation="softmax")(x)
-            x = keras.layers.Multiply()([x, attn])
-            x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+            attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+            x = keras.layers.GlobalAveragePooling1D()(attn)
     outputs = keras.layers.Dense(1, activation="sigmoid")(x)
     model = keras.Model(inputs, outputs)
     model.compile(optimizer="adam", loss="binary_crossentropy")
@@ -362,7 +304,6 @@ def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epo
     TensorDataset = torch_mods["TensorDataset"]
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
-    CNNLSTM = torch_mods["CNNLSTM"]
     TFT = torch_mods["TemporalFusionTransformer"]
     import pytorch_lightning as pl
 
@@ -382,7 +323,7 @@ def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epo
     elif model_type in {"tft", "transformer"}:
         net = TFT(X.shape[2])
     else:
-        net = CNNLSTM(X.shape[2], 64, 2, 0.2)
+        net = TFT(X.shape[2])
 
     class LightningWrapper(pl.LightningModule):
         def __init__(self, model):
@@ -442,7 +383,7 @@ def _train_model_remote(
     X,
     y,
     batch_size,
-    model_type="cnn_lstm",
+    model_type="transformer",
     framework="pytorch",
     initial_state=None,
     epochs=20,
@@ -461,7 +402,6 @@ def _train_model_remote(
     TensorDataset = torch_mods["TensorDataset"]
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
-    CNNLSTM = torch_mods["CNNLSTM"]
     TFT = torch_mods["TemporalFusionTransformer"]
 
     cuda_available = is_cuda_available()
@@ -484,7 +424,7 @@ def _train_model_remote(
     elif model_type in {"tft", "transformer"}:
         model = TFT(X.shape[2])
     else:
-        model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+        model = TFT(X.shape[2])
     if initial_state is not None:
         model.load_state_dict(initial_state)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -541,9 +481,9 @@ class ModelBuilder:
         self.config = config
         self.data_handler = data_handler
         self.trade_manager = trade_manager
-        self.model_type = config.get("model_type", "cnn_lstm")
+        self.model_type = config.get("model_type", "transformer")
         self.nn_framework = config.get("nn_framework", "pytorch").lower()
-        # Predictive models such as CNN-LSTM for each trading symbol
+        # Predictive models for each trading symbol
         self.predictive_models = {}
         # Backwards compatibility alias
         self.lstm_models = self.predictive_models
@@ -610,7 +550,6 @@ class ModelBuilder:
                     torch_mods = _get_torch_modules()
                     Net = torch_mods["Net"]
                     CNNGRU = torch_mods["CNNGRU"]
-                    CNNLSTM = torch_mods["CNNLSTM"]
                     TFT = torch_mods["TemporalFusionTransformer"]
                     for symbol, sd in state.get("lstm_models", {}).items():
                         scaler = self.scalers.get(symbol)
@@ -627,7 +566,7 @@ class ModelBuilder:
                         elif mt in {"tft", "transformer"}:
                             model = TFT(input_size)
                         else:
-                            model = CNNLSTM(input_size, 64, 2, 0.2)
+                            model = TFT(input_size)
                         model.load_state_dict(sd)
                         model.to(self.device)
                         self.predictive_models[symbol] = model
@@ -667,12 +606,8 @@ class ModelBuilder:
                                 attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
                                 x = keras.layers.GlobalAveragePooling1D()(attn)
                             else:
-                                x = keras.layers.LSTM(64, return_sequences=True)(x)
-                                attn = keras.layers.Dense(1, activation="softmax")(x)
-                                x = keras.layers.Multiply()([x, attn])
-                                x = keras.layers.Lambda(
-                                    lambda t: keras.backend.sum(t, axis=1)
-                                )(x)
+                                attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                                x = keras.layers.GlobalAveragePooling1D()(attn)
                         outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                         model = keras.Model(inputs, outputs)
                         model.set_weights(weights)
@@ -836,10 +771,8 @@ class ModelBuilder:
                         attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
                         x = keras.layers.GlobalAveragePooling1D()(attn)
                     else:
-                        x = keras.layers.LSTM(64, return_sequences=True)(x)
-                        attn = keras.layers.Dense(1, activation="softmax")(x)
-                        x = keras.layers.Multiply()([x, attn])
-                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                        x = keras.layers.GlobalAveragePooling1D()(attn)
                 outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                 return keras.Model(inputs, outputs)
 
@@ -849,7 +782,6 @@ class ModelBuilder:
             torch_mods = _get_torch_modules()
             Net = torch_mods["Net"]
             CNNGRU = torch_mods["CNNGRU"]
-            CNNLSTM = torch_mods["CNNLSTM"]
             TFT = torch_mods["TemporalFusionTransformer"]
             TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
@@ -859,7 +791,7 @@ class ModelBuilder:
             elif self.model_type in {"tft", "transformer"}:
                 model = TFT(X.shape[2])
             else:
-                model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+                model = TFT(X.shape[2])
             model.load_state_dict(model_state)
             model.to(self.device)
         unique_labels = np.unique(val_labels)
@@ -1003,10 +935,8 @@ class ModelBuilder:
                         attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
                         x = keras.layers.GlobalAveragePooling1D()(attn)
                     else:
-                        x = keras.layers.LSTM(64, return_sequences=True)(x)
-                        attn = keras.layers.Dense(1, activation="softmax")(x)
-                        x = keras.layers.Multiply()([x, attn])
-                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
+                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                        x = keras.layers.GlobalAveragePooling1D()(attn)
                 outputs = keras.layers.Dense(1, activation="sigmoid")(x)
                 return keras.Model(inputs, outputs)
 
@@ -1016,7 +946,6 @@ class ModelBuilder:
             torch_mods = _get_torch_modules()
             Net = torch_mods["Net"]
             CNNGRU = torch_mods["CNNGRU"]
-            CNNLSTM = torch_mods["CNNLSTM"]
             TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
                 model = Net(X.shape[1] * X.shape[2])
@@ -1025,7 +954,7 @@ class ModelBuilder:
             elif self.model_type in {"tft", "transformer"}:
                 model = TFT(X.shape[2])
             else:
-                model = CNNLSTM(X.shape[2], 64, 2, 0.2)
+                model = TFT(X.shape[2])
             model.load_state_dict(model_state)
             model.to(self.device)
         unique_labels = np.unique(val_labels)
@@ -1382,8 +1311,8 @@ class RLAgent:
             return
         bc_dataset = None
         if self.config.get("rl_use_imitation", False):
-            lstm_model = self.model_builder.predictive_models.get(symbol)
-            if lstm_model is not None:
+            base_model = self.model_builder.predictive_models.get(symbol)
+            if base_model is not None:
                 lstm_feats = await self.model_builder.prepare_lstm_features(
                     symbol, indicators
                 )
@@ -1399,10 +1328,10 @@ class RLAgent:
                     torch_mods = _get_torch_modules()
                     torch = torch_mods["torch"]
                     device = self.model_builder.device
-                    lstm_model.eval()
+                    base_model.eval()
                     with torch.no_grad():
                         preds = (
-                            lstm_model(
+                            base_model(
                                 torch.tensor(seqs, dtype=torch.float32, device=device)
                             )
                             .squeeze()
