@@ -473,7 +473,7 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_lstm_exit_signal_uses_cached_features(monkeypatch):
+async def test_check_exit_signal_uses_cached_features(monkeypatch):
     dh = DummyDataHandler()
     dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
 
@@ -517,7 +517,7 @@ async def test_check_lstm_exit_signal_uses_cached_features(monkeypatch):
 
     monkeypatch.setattr(tm, "close_position", lambda *a, **k: None)
 
-    await tm.check_lstm_exit_signal("BTCUSDT", 100)
+    await tm.check_exit_signal("BTCUSDT", 100)
 
 
 sys.modules.pop('utils', None)

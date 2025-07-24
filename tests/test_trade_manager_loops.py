@@ -148,7 +148,7 @@ async def test_manage_positions_recovery(monkeypatch):
             raise RuntimeError('boom')
     monkeypatch.setattr(tm, 'check_trailing_stop', fake_check)
     monkeypatch.setattr(tm, 'check_stop_loss_take_profit', lambda *a, **k: None)
-    monkeypatch.setattr(tm, 'check_lstm_exit_signal', lambda *a, **k: None)
+    monkeypatch.setattr(tm, 'check_exit_signal', lambda *a, **k: None)
 
     orig_sleep = asyncio.sleep
     async def fast_sleep(_):

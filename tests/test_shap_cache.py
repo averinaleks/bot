@@ -28,7 +28,7 @@ class DummyExplainer:
 async def test_shap_cache_file_safe_symbol(tmp_path, monkeypatch):
     cfg = BotConfig(
         cache_dir=str(tmp_path),
-        model_type="cnn_lstm",
+        model_type="tft",
         nn_framework="pytorch",
         min_data_length=1,
         lstm_timesteps=1,
