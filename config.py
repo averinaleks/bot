@@ -95,7 +95,7 @@ class BotConfig:
     model_save_path: str = _get_default("model_save_path", "/app/models")
     cache_dir: str = _get_default("cache_dir", "/app/cache")
     log_dir: str = _get_default("log_dir", "/app/logs")
-    ray_num_cpus: int = _get_default("ray_num_cpus", 32)
+    ray_num_cpus: int = _get_default("ray_num_cpus", 8)
     max_recovery_attempts: int = _get_default("max_recovery_attempts", 3)
     n_splits: int = _get_default("n_splits", 5)
     optimization_interval: int = _get_default("optimization_interval", 7200)
