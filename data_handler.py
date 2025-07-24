@@ -331,6 +331,12 @@ def _make_calc_indicators_remote(use_gpu: bool):
         volatility: float,
         timeframe: str,
     ):
+        if use_gpu:
+            # Lazily initialize CUDA on each Ray worker so the global
+            # ``cp`` variable points to CuPy when GPU acceleration is
+            # requested. This ensures GPU-based functions work correctly
+            # even when workers are started on demand.
+            _init_cuda()
         if pl is not None and isinstance(df, pl.DataFrame):
             df = df.to_pandas().set_index("timestamp")
         return IndicatorsCache(df, config, volatility, timeframe)
