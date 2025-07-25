@@ -788,6 +788,16 @@ class TradeManager:
                     short_threshold,
                 )
                 await self.close_position(symbol, current_price, "Model Exit Signal")
+                if prediction <= short_threshold - self.config.get("reversal_margin", 0.05):
+                    opposite = "sell"
+                    ema_ok = await self.evaluate_ema_condition(symbol, opposite)
+                    if ema_ok:
+                        if (
+                            "symbol" not in self.positions.index.names
+                            or symbol not in self.positions.index.get_level_values("symbol")
+                        ):
+                            params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                            await self.open_position(symbol, opposite, current_price, params)
             elif position["side"] == "sell" and prediction > long_threshold:
                 logger.info(
                     "Model exit short signal for %s: pred=%.4f, threshold=%.2f",
@@ -796,6 +806,16 @@ class TradeManager:
                     long_threshold,
                 )
                 await self.close_position(symbol, current_price, "Model Exit Signal")
+                if prediction >= long_threshold + self.config.get("reversal_margin", 0.05):
+                    opposite = "buy"
+                    ema_ok = await self.evaluate_ema_condition(symbol, opposite)
+                    if ema_ok:
+                        if (
+                            "symbol" not in self.positions.index.names
+                            or symbol not in self.positions.index.get_level_values("symbol")
+                        ):
+                            params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                            await self.open_position(symbol, opposite, current_price, params)
         except Exception as e:
             logger.exception("Failed to check model signal for %s: %s", symbol, e)
             raise

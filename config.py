@@ -133,6 +133,7 @@ class BotConfig:
     use_transfer_learning: bool = _get_default("use_transfer_learning", False)
     order_retry_attempts: int = _get_default("order_retry_attempts", 3)
     order_retry_delay: float = _get_default("order_retry_delay", 1.0)
+    reversal_margin: float = _get_default("reversal_margin", 0.05)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)

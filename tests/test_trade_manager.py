@@ -122,6 +122,9 @@ class DummyDataHandler:
         self.ohlcv = pd.DataFrame({'close': [100]}, index=idx)
         self.indicators = {'BTCUSDT': DummyIndicators()}
         self.fresh = fresh
+        async def _opt(symbol):
+            return {}
+        self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
 
     async def get_atr(self, symbol: str) -> float:
         ind = self.indicators.get(symbol)
@@ -143,6 +146,7 @@ def make_config():
         tp_multiplier=2.0,
         order_retry_attempts=3,
         order_retry_delay=0,
+        reversal_margin=0.05,
     )
 
 def test_position_calculations():
@@ -562,6 +566,81 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
     monkeypatch.setattr(tm, "close_position", lambda *a, **k: None)
 
     await tm.check_exit_signal("BTCUSDT", 100)
+
+
+@pytest.mark.asyncio
+async def test_exit_signal_triggers_reverse_trade(monkeypatch):
+    dh = DummyDataHandler()
+    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            class Model:
+                def eval(self):
+                    pass
+                def __call__(self, *_):
+                    class _Out:
+                        def squeeze(self):
+                            return self
+                        def float(self):
+                            return self
+                        def cpu(self):
+                            return self
+                        def numpy(self):
+                            return 0.2
+                    return _Out()
+            self.predictive_models = {"BTCUSDT": Model()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    idx = pd.MultiIndex.from_tuples([
+        ("BTCUSDT", pd.Timestamp("2020-01-01"))
+    ], names=["symbol", "timestamp"])
+    tm.positions = pd.DataFrame({
+        "side": ["buy"],
+        "size": [1],
+        "entry_price": [100],
+        "tp_multiplier": [2],
+        "sl_multiplier": [1],
+        "highest_price": [100],
+        "lowest_price": [0],
+        "breakeven_triggered": [False],
+    }, index=idx)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    opened = {"side": None}
+
+    async def fake_close(symbol, price, reason=""):
+        tm.positions = tm.positions.drop(symbol, level="symbol")
+
+    async def fake_open(symbol, side, price, params):
+        opened["side"] = side
+
+    monkeypatch.setattr(tm, "close_position", fake_close)
+    monkeypatch.setattr(tm, "open_position", fake_open)
+    async def _ema(*a, **k):
+        return True
+    monkeypatch.setattr(tm, "evaluate_ema_condition", _ema)
+
+    await tm.check_exit_signal("BTCUSDT", 100)
+
+    assert opened["side"] == "sell"
 
 
 sys.modules.pop('utils', None)

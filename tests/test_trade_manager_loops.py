@@ -97,6 +97,7 @@ def make_config():
         check_interval=1,
         performance_window=1,
         order_retry_delay=0,
+        reversal_margin=0.05,
     )
 
 @pytest.mark.asyncio

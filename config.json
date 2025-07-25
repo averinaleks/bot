@@ -92,5 +92,6 @@
     "fine_tune_epochs": 5,
     "use_transfer_learning": false,
     "order_retry_attempts": 3,
-    "order_retry_delay": 1.0
+    "order_retry_delay": 1.0,
+    "reversal_margin": 0.05
 }
