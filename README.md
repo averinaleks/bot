@@ -54,6 +54,8 @@
       `environment:` в `docker-compose.yml`. `DataHandler` и `TradeManager`
       проверяют эти переменные при запуске и выводят предупреждение, если они
       отсутствуют. В этом случае Telegram уведомления отправляться не будут.
+    - `TRADE_RISK_USD` — величина риска в долларах для расчёта размера позиции,
+      если `/open_position` получает только `price`.
 
     Пример `docker-compose` с передачей этих переменных обоим сервисам:
 
@@ -172,6 +174,9 @@ place market orders on Bybit when you POST to `/open_position` or
 python services/trade_manager_service.py
 ```
 It also exposes `/positions` and `/ping` routes for status checks.
+The `/open_position` endpoint accepts either `amount` or `price`. When only
+`price` is sent the service calculates the position size using the
+`TRADE_RISK_USD` environment variable.
 
 The data handler exposes two endpoints:
 
