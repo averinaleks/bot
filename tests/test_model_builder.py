@@ -10,6 +10,8 @@ import contextlib
 from config import BotConfig
 import asyncio
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import brier_score_loss
+from collections import deque
 
 try:  # require functional torch installation for these tests
     import torch
@@ -272,4 +274,52 @@ def test_save_and_load_state_transformer(tmp_path):
     state2 = mb2.predictive_models["BTCUSDT"].state_dict()
     for k in state1:
         assert torch.allclose(state1[k], state2[k])
+
+
+def test_compute_prediction_metrics():
+    cfg = BotConfig(cache_dir="/tmp", performance_window=3)
+    dh = types.SimpleNamespace(usdt_pairs=["BTCUSDT"])
+    mb = ModelBuilder(cfg, dh, DummyTradeManager())
+    mb.prediction_history["BTCUSDT"] = deque([(0.9, 1), (0.1, 0), (0.2, 1)], maxlen=3)
+    metrics = mb.compute_prediction_metrics("BTCUSDT")
+    assert metrics is not None
+    assert metrics["accuracy"] == pytest.approx(2 / 3)
+    expected_brier = brier_score_loss([1, 0, 1], [0.9, 0.1, 0.2])
+    assert metrics["brier_score"] == pytest.approx(expected_brier)
+
+
+@pytest.mark.asyncio
+async def test_performance_based_retraining(monkeypatch):
+    cfg = BotConfig(
+        cache_dir="/tmp",
+        retrain_interval=1000,
+        retrain_threshold=0.8,
+        performance_window=3,
+    )
+    dh = types.SimpleNamespace(usdt_pairs=["BTCUSDT"])
+    mb = ModelBuilder(cfg, dh, DummyTradeManager())
+    mb.prediction_history["BTCUSDT"] = deque([(0.9, 1), (0.1, 0), (0.2, 1)], maxlen=3)
+
+    call = {"n": 0}
+
+    async def fake_retrain(symbol):
+        call["n"] += 1
+
+    monkeypatch.setattr(mb, "retrain_symbol", fake_retrain)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(model_builder.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(mb.train())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call["n"] >= 1
 

@@ -509,11 +509,32 @@ class ModelBuilder:
         self.threshold_offset = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.calibrators = {}
         self.calibration_metrics = {}
+        self.performance_metrics = {}
         self.feature_cache = {}
         self.shap_cache_times = {}
         self.shap_cache_duration = config.get("shap_cache_duration", 86400)
         self.last_backtest_time = 0
         logger.info("ModelBuilder initialization complete")
+
+    def compute_prediction_metrics(self, symbol: str):
+        """Return accuracy and Brier score over recent predictions."""
+        window = self.config.get("performance_window", 100)
+        hist = list(self.prediction_history.get(symbol, []))[-window:]
+        if not hist:
+            return None
+        if not isinstance(hist[0], tuple):
+            return None
+        pairs = [(float(p), int(l)) for p, l in hist if l is not None]
+        if not pairs:
+            return None
+        preds, labels = zip(*pairs)
+        acc = float(np.mean([(p >= 0.5) == l for p, l in zip(preds, labels)]))
+        try:
+            brier = float(brier_score_loss(labels, preds))
+        except ValueError:
+            brier = float(np.mean((np.array(labels) - np.array(preds)) ** 2))
+        self.performance_metrics[symbol] = {"accuracy": acc, "brier_score": brier}
+        return self.performance_metrics[symbol]
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -1013,6 +1034,10 @@ class ModelBuilder:
         while True:
             try:
                 for symbol in self.data_handler.usdt_pairs:
+                    metrics = self.compute_prediction_metrics(symbol)
+                    if metrics and metrics.get("accuracy", 1.0) < self.config.get("retrain_threshold", 0.1):
+                        await self.retrain_symbol(symbol)
+                        continue
                     if (
                         time.time() - self.last_retrain_time.get(symbol, 0)
                         >= self.config["retrain_interval"]
@@ -1043,7 +1068,8 @@ class ModelBuilder:
         base_short = 1 - base_long
         history_size = self.config.get("prediction_history_size", 100)
         hist = self.prediction_history.setdefault(symbol, deque(maxlen=history_size))
-        hist.append(float(prediction))
+        hist.append((float(prediction), None))
+        self.compute_prediction_metrics(symbol)
         if len(hist) < 10:
             return base_long, base_short
         mean_pred = float(np.mean(hist))
