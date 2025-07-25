@@ -450,32 +450,54 @@ class TradeManager:
                     "takeProfitPrice": take_profit_price,
                     "tpslMode": "full",
                 }
-                order = await self.place_order(
-                    symbol, side, size, price, order_params, use_lock=False
-                )
-                if not order:
-                    logger.error(
-                        "Order failed for %s: no confirmation returned",
+                max_attempts = self.config.get("order_retry_attempts", 3)
+                retry_delay = self.config.get("order_retry_delay", 1)
+                order = None
+                for attempt in range(max_attempts):
+                    if attempt > 0:
+                        logger.info(
+                            "Retrying order for %s (attempt %s/%s)",
+                            symbol,
+                            attempt + 1,
+                            max_attempts,
+                        )
+                        await asyncio.sleep(retry_delay)
+                    order = await self.place_order(
+                        symbol, side, size, price, order_params, use_lock=False
+                    )
+                    ret_code = None
+                    if isinstance(order, dict):
+                        ret_code = order.get("retCode") or order.get("ret_code")
+                    if order and (ret_code is None or ret_code == 0):
+                        break
+                    logger.warning(
+                        "Order attempt %s for %s failed: %s",
+                        attempt + 1,
                         symbol,
+                        order,
+                    )
+                else:
+                    logger.error(
+                        "Order failed for %s after %s attempts",
+                        symbol,
+                        max_attempts,
                     )
                     await self.telegram_logger.send_telegram_message(
-                        f"❌ Order failed {symbol}: no confirmation"
+                        f"❌ Order failed {symbol}: retries exhausted"
                     )
                     return
-                if isinstance(order, dict):
-                    ret_code = order.get("retCode") or order.get("ret_code")
-                    if ret_code is not None and ret_code != 0:
-                        logger.error("Order error for %s: %s", symbol, order)
-                        await self.telegram_logger.send_telegram_message(
-                            f"❌ Order error {symbol}: retCode {ret_code}"
-                        )
-                        return
-                    if not (order.get("id") or order.get("orderId") or order.get("result")):
-                        logger.error("Order confirmation missing id for %s: %s", symbol, order)
-                        await self.telegram_logger.send_telegram_message(
-                            f"❌ Order confirmation missing id {symbol}"
-                        )
-                        return
+                if isinstance(order, dict) and not (
+                    order.get("id") or order.get("orderId") or order.get("result")
+                ):
+                    logger.error(
+                        "Order confirmation missing id for %s: %s",
+                        symbol,
+                        order,
+                    )
+                    await self.telegram_logger.send_telegram_message(
+                        f"❌ Order confirmation missing id {symbol}"
+                    )
+                    return
                 new_position = {
                     "symbol": symbol,
                     "side": side,

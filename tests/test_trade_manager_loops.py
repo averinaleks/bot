@@ -92,7 +92,12 @@ class DummyModelBuilder:
 
 
 def make_config():
-    return BotConfig(cache_dir='/tmp', check_interval=1, performance_window=1)
+    return BotConfig(
+        cache_dir='/tmp',
+        check_interval=1,
+        performance_window=1,
+        order_retry_delay=0,
+    )
 
 @pytest.mark.asyncio
 async def test_monitor_performance_recovery(monkeypatch):

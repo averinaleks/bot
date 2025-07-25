@@ -131,6 +131,8 @@ class BotConfig:
     use_polars: bool = _get_default("use_polars", False)
     fine_tune_epochs: int = _get_default("fine_tune_epochs", 5)
     use_transfer_learning: bool = _get_default("use_transfer_learning", False)
+    order_retry_attempts: int = _get_default("order_retry_attempts", 3)
+    order_retry_delay: float = _get_default("order_retry_delay", 1.0)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)

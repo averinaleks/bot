@@ -141,6 +141,8 @@ def make_config():
         performance_window=60,
         sl_multiplier=1.0,
         tp_multiplier=2.0,
+        order_retry_attempts=3,
+        order_retry_delay=0,
     )
 
 def test_position_calculations():
@@ -289,6 +291,48 @@ def test_open_position_failed_order_not_recorded():
     asyncio.run(run())
 
     assert len(tm.positions) == 0
+    assert len(dh.exchange.orders) == tm.config.order_retry_attempts
+
+
+def test_open_position_retries_until_success(monkeypatch):
+    dh = DummyDataHandler()
+    attempts = {"n": 0}
+
+    async def fail_then_succeed(symbol, type, side, amount, price, tp, sl, params):
+        attempts["n"] += 1
+        dh.exchange.orders.append({
+            'method': 'create_order_with_tp_sl',
+            'symbol': symbol,
+            'type': type,
+            'side': side,
+            'amount': amount,
+            'price': price,
+            'tp': tp,
+            'sl': sl,
+            'params': params,
+        })
+        if attempts["n"] < 2:
+            return {"retCode": 1}
+        return {"id": "2"}
+
+    monkeypatch.setattr(
+        dh.exchange,
+        'create_order_with_take_profit_and_stop_loss',
+        fail_then_succeed,
+    )
+
+    tm = TradeManager(make_config(), dh, None, None, None)
+    async def fake_compute(symbol, vol):
+        return 0.01
+    tm.compute_risk_per_trade = fake_compute
+
+    async def run():
+        await tm.open_position('BTCUSDT', 'buy', 100, {})
+
+    asyncio.run(run())
+
+    assert len(tm.positions) == 1
+    assert attempts["n"] == 2
 
 
 def test_open_position_skips_when_atr_zero():
