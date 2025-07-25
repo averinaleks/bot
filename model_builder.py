@@ -248,11 +248,22 @@ def _get_torch_modules():
     return _torch_modules
 
 
+def generate_time_series_splits(X, y, n_splits):
+    """Yield train/validation indices for time series cross-validation."""
+    from sklearn.model_selection import TimeSeriesSplit
+
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    for train_idx, val_idx in tscv.split(X):
+        yield train_idx, val_idx
+
+
 # Reduce verbose TensorFlow logs before any TF import
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
-def _train_model_keras(X, y, batch_size, model_type, initial_state=None, epochs=20):
+def _train_model_keras(
+    X, y, batch_size, model_type, initial_state=None, epochs=20, n_splits=5
+):
     import tensorflow as tf
     from tensorflow import keras
 
@@ -281,22 +292,30 @@ def _train_model_keras(X, y, batch_size, model_type, initial_state=None, epochs=
     model.compile(optimizer="adam", loss="binary_crossentropy")
     if initial_state is not None:
         model.set_weights(initial_state)
-    val_split = 0.1
-    model.fit(
-        X,
-        y,
-        batch_size=batch_size,
-        epochs=epochs,
-        verbose=0,
-        validation_split=val_split,
-    )
-    val_start = int((1 - val_split) * len(X))
-    val_preds = model.predict(X[val_start:]).reshape(-1)
-    val_labels = y[val_start:]
-    return model.get_weights(), val_preds.tolist(), val_labels.tolist()
+    preds: list[float] = []
+    labels: list[float] = []
+    for train_idx, val_idx in generate_time_series_splits(X, y, n_splits):
+        fold_model = keras.models.clone_model(model)
+        fold_model.compile(optimizer="adam", loss="binary_crossentropy")
+        if initial_state is not None:
+            fold_model.set_weights(initial_state)
+        fold_model.fit(
+            X[train_idx],
+            y[train_idx],
+            batch_size=batch_size,
+            epochs=epochs,
+            verbose=0,
+        )
+        fold_preds = fold_model.predict(X[val_idx]).reshape(-1)
+        preds.extend(fold_preds)
+        labels.extend(y[val_idx])
+        model = fold_model
+    return model.get_weights(), preds, labels
 
 
-def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epochs=20):
+def _train_model_lightning(
+    X, y, batch_size, model_type, initial_state=None, epochs=20, n_splits=5
+):
     torch_mods = _get_torch_modules()
     torch = torch_mods["torch"]
     nn = torch_mods["nn"]
@@ -310,72 +329,80 @@ def _train_model_lightning(X, y, batch_size, model_type, initial_state=None, epo
     device = torch.device("cuda" if is_cuda_available() else "cpu")
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
-    val_size = max(1, int(0.1 * len(X_tensor)))
-    train_ds = TensorDataset(X_tensor[:-val_size], y_tensor[:-val_size])
-    val_ds = TensorDataset(X_tensor[-val_size:], y_tensor[-val_size:])
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-    if model_type == "mlp":
-        input_dim = X.shape[1] * X.shape[2]
-        net = Net(input_dim)
-    elif model_type == "gru":
-        net = CNNGRU(X.shape[2], 64, 2, 0.2)
-    elif model_type in {"tft", "transformer"}:
-        net = TFT(X.shape[2])
-    else:
-        net = TFT(X.shape[2])
 
-    class LightningWrapper(pl.LightningModule):
-        def __init__(self, model):
-            super().__init__()
-            self.model = model
-            self.criterion = nn.BCELoss()
+    preds: list[float] = []
+    labels: list[float] = []
+    state = None
 
-        def forward(self, x):
-            return self.model(x)
+    for train_idx, val_idx in generate_time_series_splits(X_tensor, y_tensor, n_splits):
+        train_ds = TensorDataset(X_tensor[train_idx], y_tensor[train_idx])
+        val_ds = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-        def training_step(self, batch, batch_idx):
-            x, y = batch
-            if model_type == "mlp":
-                x = x.view(x.size(0), -1)
-            y_hat = self(x).squeeze()
-            loss = self.criterion(y_hat, y) + self.model.l2_regularization()
-            return loss
+        if model_type == "mlp":
+            input_dim = X.shape[1] * X.shape[2]
+            net = Net(input_dim)
+        elif model_type == "gru":
+            net = CNNGRU(X.shape[2], 64, 2, 0.2)
+        elif model_type in {"tft", "transformer"}:
+            net = TFT(X.shape[2])
+        else:
+            net = TFT(X.shape[2])
 
-        def validation_step(self, batch, batch_idx):
-            x, y = batch
-            if model_type == "mlp":
-                x = x.view(x.size(0), -1)
-            y_hat = self(x).squeeze()
-            loss = self.criterion(y_hat, y)
-            self.log("val_loss", loss, prog_bar=True)
+        class LightningWrapper(pl.LightningModule):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+                self.criterion = nn.BCELoss()
 
-        def configure_optimizers(self):
-            return torch.optim.Adam(self.parameters(), lr=1e-3)
+            def forward(self, x):
+                return self.model(x)
 
-    wrapper = LightningWrapper(net)
-    if initial_state is not None:
-        net.load_state_dict(initial_state)
+            def training_step(self, batch, batch_idx):
+                x, y = batch
+                if model_type == "mlp":
+                    x = x.view(x.size(0), -1)
+                y_hat = self(x).squeeze()
+                loss = self.criterion(y_hat, y) + self.model.l2_regularization()
+                return loss
 
-    trainer = pl.Trainer(
-        max_epochs=epochs,
-        logger=False,
-        enable_checkpointing=False,
-        devices=1 if is_cuda_available() else None,
-    )
-    trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    wrapper.eval()
-    preds = []
-    labels = []
-    with torch.no_grad():
-        for val_x, val_y in val_loader:
-            val_x = val_x.to(device)
-            if model_type == "mlp":
-                val_x = val_x.view(val_x.size(0), -1)
-            out = wrapper(val_x).squeeze()
-            preds.extend(out.cpu().numpy().reshape(-1))
-            labels.extend(val_y.numpy().reshape(-1))
-    return net.state_dict(), preds, labels
+            def validation_step(self, batch, batch_idx):
+                x, y = batch
+                if model_type == "mlp":
+                    x = x.view(x.size(0), -1)
+                y_hat = self(x).squeeze()
+                loss = self.criterion(y_hat, y)
+                self.log("val_loss", loss, prog_bar=True)
+
+            def configure_optimizers(self):
+                return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+        wrapper = LightningWrapper(net)
+        if initial_state is not None:
+            net.load_state_dict(initial_state)
+
+        trainer = pl.Trainer(
+            max_epochs=epochs,
+            logger=False,
+            enable_checkpointing=False,
+            devices=1 if is_cuda_available() else None,
+        )
+        trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        wrapper.eval()
+
+        with torch.no_grad():
+            for val_x, val_y in val_loader:
+                val_x = val_x.to(device)
+                if model_type == "mlp":
+                    val_x = val_x.view(val_x.size(0), -1)
+                out = wrapper(val_x).squeeze()
+                preds.extend(out.cpu().numpy().reshape(-1))
+                labels.extend(val_y.numpy().reshape(-1))
+
+        state = net.state_dict()
+
+    return state if state is not None else {}, preds, labels
 
 
 @ray.remote
@@ -387,12 +414,15 @@ def _train_model_remote(
     framework="pytorch",
     initial_state=None,
     epochs=20,
+    n_splits=5,
 ):
     if framework in {"keras", "tensorflow"}:
-        return _train_model_keras(X, y, batch_size, model_type, initial_state, epochs)
+        return _train_model_keras(
+            X, y, batch_size, model_type, initial_state, epochs, n_splits
+        )
     if framework == "lightning":
         return _train_model_lightning(
-            X, y, batch_size, model_type, initial_state, epochs
+            X, y, batch_size, model_type, initial_state, epochs, n_splits
         )
 
     torch_mods = _get_torch_modules()
@@ -411,67 +441,72 @@ def _train_model_remote(
     scaler = torch.cuda.amp.GradScaler(enabled=cuda_available)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
-    val_size = max(1, int(0.1 * len(X_tensor)))
-    train_dataset = TensorDataset(X_tensor[:-val_size], y_tensor[:-val_size])
-    val_dataset = TensorDataset(X_tensor[-val_size:], y_tensor[-val_size:])
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    if model_type == "mlp":
-        input_dim = X.shape[1] * X.shape[2]
-        model = Net(input_dim)
-    elif model_type == "gru":
-        model = CNNGRU(X.shape[2], 64, 2, 0.2)
-    elif model_type in {"tft", "transformer"}:
-        model = TFT(X.shape[2])
-    else:
-        model = TFT(X.shape[2])
-    if initial_state is not None:
-        model.load_state_dict(initial_state)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCELoss()
-    model.to(device)
-    best_loss = float("inf")
-    epochs_no_improve = 0
-    max_epochs = epochs
-    patience = 3
-    for _ in range(max_epochs):
-        model.train()
-        for batch_X, batch_y in train_loader:
-            batch_X = batch_X.to(device)
-            if model_type == "mlp":
-                batch_X = batch_X.view(batch_X.size(0), -1)
-            batch_y = batch_y.to(device)
-            optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=cuda_available):
-                outputs = model(batch_X).view(-1)
-                loss = criterion(outputs, batch_y) + model.l2_regularization()
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        model.eval()
-        val_loss = 0.0
-        preds = []
-        labels = []
-        with torch.no_grad():
-            for val_X, val_y in val_loader:
-                val_X = val_X.to(device)
-                if model_type == "mlp":
-                    val_X = val_X.view(val_X.size(0), -1)
-                val_y = val_y.to(device)
-                with torch.cuda.amp.autocast(enabled=cuda_available):
-                    outputs = model(val_X).view(-1)
-                preds.extend(outputs.cpu().numpy().reshape(-1))
-                labels.extend(val_y.cpu().numpy().reshape(-1))
-                val_loss += criterion(outputs, val_y).item()
-        val_loss /= len(val_loader)
-        if val_loss + 1e-4 < best_loss:
-            best_loss = val_loss
-            epochs_no_improve = 0
+    preds: list[float] = []
+    labels: list[float] = []
+    state = None
+
+    for train_idx, val_idx in generate_time_series_splits(X_tensor, y_tensor, n_splits):
+        train_dataset = TensorDataset(X_tensor[train_idx], y_tensor[train_idx])
+        val_dataset = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+        if model_type == "mlp":
+            input_dim = X.shape[1] * X.shape[2]
+            model = Net(input_dim)
+        elif model_type == "gru":
+            model = CNNGRU(X.shape[2], 64, 2, 0.2)
+        elif model_type in {"tft", "transformer"}:
+            model = TFT(X.shape[2])
         else:
-            epochs_no_improve += 1
-            if epochs_no_improve >= patience:
-                break
-    return model.state_dict(), preds, labels
+            model = TFT(X.shape[2])
+        if initial_state is not None:
+            model.load_state_dict(initial_state)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        criterion = nn.BCELoss()
+        model.to(device)
+        best_loss = float("inf")
+        epochs_no_improve = 0
+        max_epochs = epochs
+        patience = 3
+        for _ in range(max_epochs):
+            model.train()
+            for batch_X, batch_y in train_loader:
+                batch_X = batch_X.to(device)
+                if model_type == "mlp":
+                    batch_X = batch_X.view(batch_X.size(0), -1)
+                batch_y = batch_y.to(device)
+                optimizer.zero_grad()
+                with torch.cuda.amp.autocast(enabled=cuda_available):
+                    outputs = model(batch_X).view(-1)
+                    loss = criterion(outputs, batch_y) + model.l2_regularization()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            model.eval()
+            val_loss = 0.0
+            with torch.no_grad():
+                for val_X, val_y in val_loader:
+                    val_X = val_X.to(device)
+                    if model_type == "mlp":
+                        val_X = val_X.view(val_X.size(0), -1)
+                    val_y = val_y.to(device)
+                    with torch.cuda.amp.autocast(enabled=cuda_available):
+                        outputs = model(val_X).view(-1)
+                    preds.extend(outputs.cpu().numpy().reshape(-1))
+                    labels.extend(val_y.cpu().numpy().reshape(-1))
+                    val_loss += criterion(outputs, val_y).item()
+            val_loss /= len(val_loader)
+            if val_loss + 1e-4 < best_loss:
+                best_loss = val_loss
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    break
+        state = model.state_dict()
+
+    return state if state is not None else {}, preds, labels
 
 
 class ModelBuilder:
@@ -764,6 +799,9 @@ class ModelBuilder:
                 self.config["lstm_batch_size"],
                 self.model_type,
                 self.nn_framework,
+                None,
+                20,
+                self.config.get("n_splits", 5),
             )
         )
         logger.debug("_train_model_remote completed for %s", symbol)
@@ -928,6 +966,7 @@ class ModelBuilder:
                 self.nn_framework,
                 init_state,
                 self.config.get("fine_tune_epochs", 5),
+                self.config.get("n_splits", 5),
             )
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
