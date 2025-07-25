@@ -93,5 +93,8 @@
     "use_transfer_learning": false,
     "order_retry_attempts": 3,
     "order_retry_delay": 1.0,
+    "transformer_weight": 0.5,
+    "rl_weight": 0.3,
+    "ema_weight": 0.2,
     "reversal_margin": 0.05
 }

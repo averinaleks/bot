@@ -134,6 +134,9 @@ class BotConfig:
     order_retry_attempts: int = _get_default("order_retry_attempts", 3)
     order_retry_delay: float = _get_default("order_retry_delay", 1.0)
     reversal_margin: float = _get_default("reversal_margin", 0.05)
+    transformer_weight: float = _get_default("transformer_weight", 0.5)
+    rl_weight: float = _get_default("rl_weight", 0.3)
+    ema_weight: float = _get_default("ema_weight", 0.2)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
