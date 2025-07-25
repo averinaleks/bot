@@ -87,6 +87,7 @@ def _run_tm():
     import sys
     sys.modules['ccxt'] = ccxt
     os.environ['HOST'] = '127.0.0.1'
+    os.environ.setdefault('TRADE_RISK_USD', '10')
     from services import trade_manager_service
     trade_manager_service.app.run(host='127.0.0.1', port=8002)
 
@@ -118,6 +119,32 @@ def test_trade_manager_service_endpoints():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 2
+    finally:
+        p.terminate()
+        p.join()
+
+
+def test_trade_manager_service_price_only():
+    p = ctx.Process(target=_run_tm)
+    p.start()
+    try:
+        for _ in range(50):
+            try:
+                resp = requests.get('http://127.0.0.1:8002/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        resp = requests.post(
+            'http://127.0.0.1:8002/open_position',
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        resp = requests.get('http://127.0.0.1:8002/positions', timeout=5)
+        assert resp.status_code == 200
+        data = resp.json()['positions']
+        assert len(data) == 1
     finally:
         p.terminate()
         p.join()

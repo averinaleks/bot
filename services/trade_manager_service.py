@@ -37,7 +37,12 @@ def open_position() -> tuple:
     data = request.get_json(force=True)
     symbol = data.get('symbol')
     side = str(data.get('side', 'buy')).lower()
+    price = float(data.get('price', 0) or 0)
     amount = float(data.get('amount', 0))
+    if amount <= 0:
+        risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
+        if risk_usd > 0 and price > 0:
+            amount = risk_usd / price
     if not symbol or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     try:
