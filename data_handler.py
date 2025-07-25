@@ -139,6 +139,47 @@ def atr_fast(
     return atr
 
 
+def calculate_imbalance(orderbook: Dict, n: int = 5) -> float:
+    """Return the buy/sell volume imbalance of the orderbook."""
+
+    bids = orderbook.get("bids", [])[:n]
+    asks = orderbook.get("asks", [])[:n]
+    bid_sum = sum(v for _, v in bids)
+    ask_sum = sum(v for _, v in asks)
+    denom = bid_sum + ask_sum
+    if denom == 0:
+        return 0.0
+    return (bid_sum - ask_sum) / denom
+
+
+def detect_clusters(
+    orderbook: Dict, threshold: float, distance: float = 1.0
+) -> List[tuple[float, float]]:
+    """Group nearby price levels with large aggregated volume."""
+
+    levels = orderbook.get("bids", []) + orderbook.get("asks", [])
+    if not levels:
+        return []
+    levels.sort(key=lambda x: x[0])
+    total_volume = sum(v for _, v in levels)
+    clusters = []
+    start_price, last_price = levels[0][0], levels[0][0]
+    agg_volume = levels[0][1]
+    for price, vol in levels[1:]:
+        if abs(price - last_price) <= distance:
+            agg_volume += vol
+            last_price = price
+        else:
+            if agg_volume >= threshold * total_volume:
+                clusters.append(((start_price + last_price) / 2, agg_volume))
+            start_price = price
+            last_price = price
+            agg_volume = vol
+    if agg_volume >= threshold * total_volume:
+        clusters.append(((start_price + last_price) / 2, agg_volume))
+    return clusters
+
+
 class IndicatorsCache:
     """Container for computed technical indicators."""
 
@@ -407,6 +448,8 @@ class DataHandler:
         self.open_interest = {}
         self.open_interest_change = {}
         self.orderbook = pd.DataFrame()
+        self.orderbook_imbalance: Dict[str, float] = {}
+        self.order_clusters: Dict[str, List[tuple[float, float]]] = {}
         self.indicators = {}
         self.indicators_cache = {}
         self.indicators_2h = {}
@@ -966,6 +1009,12 @@ class DataHandler:
                 self.orderbook = pd.concat(
                     [self.orderbook, orderbook_df], ignore_index=False
                 )
+                self.orderbook_imbalance[symbol] = calculate_imbalance(orderbook)
+                self.order_clusters[symbol] = detect_clusters(
+                    orderbook, DEFAULT_CLUSTER_THRESHOLD
+                )
+                LATEST_IMBALANCE[symbol] = self.orderbook_imbalance[symbol]
+                LATEST_CLUSTERS[symbol] = self.order_clusters[symbol]
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             cache_key = f"{symbol}_{timeframe}"
             if timeframe == "primary":
@@ -1957,10 +2006,19 @@ api_app = Flask(__name__)
 # non‐zero so tests relying on a positive price succeed.
 DEFAULT_PRICE = 100.0
 
+# Minimum share of total volume required for a cluster
+DEFAULT_CLUSTER_THRESHOLD = 0.1
+
 # Cached OHLCV rows keyed by symbol. Each entry stores a timestamp aware
 # ``pd.Timestamp`` and OHLCV fields so ``is_data_fresh`` can verify data
 # recency.
 LATEST_OHLCV: Dict[str, Dict[str, Any]] = {}
+
+# Latest orderbook imbalance values keyed by symbol
+LATEST_IMBALANCE: Dict[str, float] = {}
+
+# Detected orderbook clusters keyed by symbol
+LATEST_CLUSTERS: Dict[str, List[tuple[float, float]]] = {}
 
 # Exchange instance used by the price endpoint. Lazily created on first use so
 # tests without API keys can stub it easily.
@@ -2022,6 +2080,22 @@ def price(symbol: str):
         fut = asyncio.run_coroutine_threadsafe(_lookup(symbol), loop)
         price_val = fut.result()
     return jsonify({"price": price_val})
+
+
+@api_app.route("/imbalance/<symbol>")
+def imbalance(symbol: str):
+    """Return the latest orderbook imbalance for ``symbol``."""
+
+    value = LATEST_IMBALANCE.get(symbol, 0.0)
+    return jsonify({"imbalance": value})
+
+
+@api_app.route("/clusters/<symbol>")
+def clusters(symbol: str):
+    """Return detected orderbook clusters for ``symbol``."""
+
+    value = LATEST_CLUSTERS.get(symbol, [])
+    return jsonify({"clusters": value})
 
 
 @api_app.route("/ping")
