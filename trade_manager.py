@@ -1055,6 +1055,7 @@ class TradeManager:
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
+            # Determine individual signals
             signal = None
             if prediction > long_threshold:
                 signal = "buy"
@@ -1068,45 +1069,50 @@ class TradeManager:
                 if rl_signal:
                     logger.info("RL signal for %s: %s", symbol, rl_signal)
 
-            if signal:
-                logger.info(
-                    "Model signal for %s: %s (pred %.4f, thresholds %.2f/%.2f)",
-                    symbol,
-                    signal,
-                    prediction,
-                    long_threshold,
-                    short_threshold,
-                )
-                ema_condition_met = await self.evaluate_ema_condition(symbol, signal)
-                if not ema_condition_met:
-                    logger.info(
-                        "EMA conditions not met for %s, signal rejected",
-                        symbol,
-                    )
-                    return None
-                logger.info(
-                    "All conditions met for %s, confirmed signal: %s",
-                    symbol,
-                    signal,
-                )
+            ema_signal = None
+            check = self.evaluate_ema_condition(symbol, "buy")
+            ema_buy = await check if inspect.iscoroutine(check) else check
+            if ema_buy:
+                ema_signal = "buy"
+            else:
+                check = self.evaluate_ema_condition(symbol, "sell")
+                ema_sell = await check if inspect.iscoroutine(check) else check
+                if ema_sell:
+                    ema_signal = "sell"
 
-            if signal and rl_signal:
-                if signal == rl_signal:
-                    return signal
+            weights = {
+                "transformer": self.config.get("transformer_weight", 0.5),
+                "rl": self.config.get("rl_weight", 0.3),
+                "ema": self.config.get("ema_weight", 0.2),
+            }
+            scores = {"buy": 0.0, "sell": 0.0}
+            scores["buy"] += weights["transformer"] * float(prediction)
+            scores["sell"] += weights["transformer"] * (1.0 - float(prediction))
+            if rl_signal == "buy":
+                scores["buy"] += weights["rl"]
+            elif rl_signal == "sell":
+                scores["sell"] += weights["rl"]
+            if ema_signal == "buy":
+                scores["buy"] += weights["ema"]
+            elif ema_signal == "sell":
+                scores["sell"] += weights["ema"]
+
+            total_weight = sum(weights.values())
+            if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
+                final = "buy"
+            elif scores["sell"] > scores["buy"] and scores["sell"] >= total_weight / 2:
+                final = "sell"
+            else:
+                final = None
+            if final:
                 logger.info(
-                    "Signal mismatch for %s: model %s, RL %s",
+                    "Voting result for %s -> %s (scores %.2f/%.2f)",
                     symbol,
-                    signal,
-                    rl_signal,
+                    final,
+                    scores["buy"],
+                    scores["sell"],
                 )
-                return None
-            if signal:
-                return signal
-            if rl_signal:
-                ema_condition_met = await self.evaluate_ema_condition(symbol, rl_signal)
-                if ema_condition_met:
-                    return rl_signal
-            return None
+            return final
         except Exception as e:
             logger.exception("Failed to evaluate signal for %s: %s", symbol, e)
             raise

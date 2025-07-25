@@ -521,6 +521,75 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_weighted_voting_prefers_transformer(monkeypatch):
+    dh = DummyDataHandler()
+    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            class Model(DummyModel):
+                def __call__(self, *_):
+                    class _Out:
+                        def squeeze(self):
+                            return self
+
+                        def float(self):
+                            return self
+
+                        def cpu(self):
+                            return self
+
+                        def numpy(self):
+                            return 0.9
+
+                    return _Out()
+
+            self.predictive_models = {"BTCUSDT": Model()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+
+    class RL:
+        def __init__(self):
+            self.models = {"BTCUSDT": object()}
+
+        def predict(self, symbol, obs):
+            return "sell"
+
+    rl = RL()
+    cfg = BotConfig(
+        lstm_timesteps=2,
+        cache_dir="/tmp",
+        transformer_weight=0.7,
+        rl_weight=0.2,
+        ema_weight=0.1,
+    )
+    tm = TradeManager(cfg, dh, mb, None, None, rl)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    monkeypatch.setattr(tm, "evaluate_ema_condition", lambda *a, **k: True)
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert signal == "buy"
+
+
+@pytest.mark.asyncio
 async def test_check_exit_signal_uses_cached_features(monkeypatch):
     dh = DummyDataHandler()
     dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
