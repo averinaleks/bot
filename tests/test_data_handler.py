@@ -491,3 +491,46 @@ async def test_process_ws_queue_callback_after_sync(monkeypatch):
     assert order == ['sync']
     assert created == ['cb']
 
+
+def test_calculate_imbalance():
+    ob = {
+        'bids': [[100, 10], [99, 5]],
+        'asks': [[101, 8], [102, 1]],
+    }
+    expected = (15 - 9) / (15 + 9)
+    assert pytest.approx(data_handler.calculate_imbalance(ob)) == expected
+
+
+def test_detect_clusters():
+    ob = {
+        'bids': [[100, 10], [99, 5]],
+        'asks': [[101, 8], [102, 1]],
+    }
+    clusters = data_handler.detect_clusters(ob, data_handler.DEFAULT_CLUSTER_THRESHOLD)
+    assert clusters
+
+
+@pytest.mark.asyncio
+async def test_sync_updates_metrics(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    ts = pd.Timestamp.now(tz='UTC')
+    df = pd.DataFrame({'open':[1], 'high':[1], 'low':[1], 'close':[1], 'volume':[1]}, index=[ts])
+    df['symbol'] = 'BTCUSDT'
+    df = df.set_index(['symbol', df.index])
+    ob = {
+        'bids': [[100, 10], [99, 5]],
+        'asks': [[101, 8], [102, 1]],
+    }
+    await dh.synchronize_and_update('BTCUSDT', df, 0.0, 0.0, ob)
+    assert 'BTCUSDT' in dh.orderbook_imbalance
+    assert 'BTCUSDT' in dh.order_clusters
+
+    with data_handler.api_app.test_client() as client:
+        resp = client.get('/imbalance/BTCUSDT')
+        assert resp.status_code == 200
+        assert 'imbalance' in resp.get_json()
+        resp = client.get('/clusters/BTCUSDT')
+        assert resp.status_code == 200
+        assert 'clusters' in resp.get_json()
+
