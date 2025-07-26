@@ -1358,6 +1358,7 @@ async def create_trade_manager() -> TradeManager:
             dh.feature_callback = mb.precompute_features
             logger.info("ModelBuilder created successfully")
             asyncio.create_task(mb.train())
+            asyncio.create_task(mb.backtest_loop())
             await dh.load_initial()
             asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
         except Exception as exc:

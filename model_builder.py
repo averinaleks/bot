@@ -638,6 +638,7 @@ class ModelBuilder:
         self.shap_cache_times = {}
         self.shap_cache_duration = config.get("shap_cache_duration", 86400)
         self.last_backtest_time = 0
+        self.backtest_results = {}
         logger.info("ModelBuilder initialization complete")
 
     def compute_prediction_metrics(self, symbol: str):
@@ -1362,6 +1363,29 @@ class ModelBuilder:
                 results[symbol] = sharpe
         self.last_backtest_time = time.time()
         return results
+
+    async def backtest_loop(self):
+        """Periodically backtest all symbols and emit warnings."""
+        interval = self.config.get("backtest_interval", 3600)
+        threshold = self.config.get("min_sharpe_ratio", 0.5)
+        while True:
+            try:
+                self.backtest_results = await self.backtest_all()
+                for sym, ratio in self.backtest_results.items():
+                    if ratio < threshold:
+                        msg = (
+                            f"⚠️ Sharpe ratio for {sym} below {threshold}: {ratio:.2f}"
+                        )
+                        logger.warning(msg)
+                        await self.data_handler.telegram_logger.send_telegram_message(
+                            msg
+                        )
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("Backtest loop error: %s", e)
+                await asyncio.sleep(1)
 
 
 class TradingEnv(gym.Env if gym else object):
