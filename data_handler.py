@@ -241,6 +241,13 @@ class IndicatorsCache:
                     window_sign=config.get("macd_window_sign", 9),
                     fillna=True,
                 )
+                df["ema30"] = self.ema30
+                df["ema100"] = self.ema100
+                df["ema200"] = self.ema200
+                df["atr"] = self.atr
+                df["rsi"] = self.rsi
+                df["adx"] = self.adx
+                df["macd"] = self.macd
             elif timeframe == "secondary":
                 close_np = df["close"].to_numpy()
                 self.ema30 = pd.Series(
@@ -251,6 +258,8 @@ class IndicatorsCache:
                 )
                 self._alpha_ema30 = 2 / (config["ema30_period"] + 1)
                 self._alpha_ema100 = 2 / (config["ema100_period"] + 1)
+                df["ema30"] = self.ema30
+                df["ema100"] = self.ema100
             self.volume_profile = None
             if (
                 len(df) - self.last_volume_profile_update
@@ -356,6 +365,12 @@ class IndicatorsCache:
                 and self.last_atr is not None
             ):
                 self.atr.loc[ts] = self.last_atr
+            new_df.loc[ts, "ema30"] = self.last_ema30
+            new_df.loc[ts, "ema100"] = self.last_ema100
+            if hasattr(self, "ema200"):
+                new_df.loc[ts, "ema200"] = self.last_ema200
+            if hasattr(self, "atr"):
+                new_df.loc[ts, "atr"] = self.last_atr
             self.last_close = close
         self.df = pd.concat([self.df, new_df])
         self._update_volume_profile()
@@ -552,34 +567,38 @@ class DataHandler:
 
     async def get_atr(self, symbol: str) -> float:
         """Return the latest ATR value for a symbol, recalculating if missing."""
-        indicators = self.indicators.get(symbol)
-        if indicators and getattr(indicators, "atr", None) is not None:
+        async with self.ohlcv_lock:
+            df = self.ohlcv
+            if "symbol" in df.index.names and symbol in df.index.get_level_values("symbol"):
+                sub_df = df.xs(symbol, level="symbol", drop_level=False)
+            else:
+                return 0.0
+        if sub_df.empty:
+            return 0.0
+        if "atr" in sub_df.columns:
             try:
-                value = float(indicators.atr.iloc[-1])
+                value = float(sub_df["atr"].iloc[-1])
                 if value > 0:
                     return value
             except (IndexError, ValueError) as exc:
                 logger.error("get_atr failed for %s: %s", symbol, exc)
-        async with self.ohlcv_lock:
-            df = self.ohlcv
-            if "symbol" in df.index.names and symbol in df.index.get_level_values(
-                "symbol"
-            ):
-                df = df.xs(symbol, level="symbol", drop_level=False)
-            else:
-                return 0.0
-        if df.empty:
-            return 0.0
         try:
             new_ind = IndicatorsCache(
-                df.droplevel("symbol"),
+                sub_df.droplevel("symbol"),
                 self.config,
-                df["close"].pct_change().std(),
+                sub_df["close"].pct_change().std(),
                 "primary",
             )
             self.indicators[symbol] = new_ind
-            if new_ind.atr is not None and not new_ind.atr.empty:
-                return float(new_ind.atr.iloc[-1])
+            for col in new_ind.df.columns:
+                if col not in sub_df.columns:
+                    sub_df[col] = new_ind.df[col]
+                else:
+                    sub_df[col].update(new_ind.df[col])
+            async with self.ohlcv_lock:
+                self.ohlcv.loc[sub_df.index, sub_df.columns] = sub_df
+            if "atr" in new_ind.df.columns and not new_ind.df["atr"].empty:
+                return float(new_ind.df["atr"].iloc[-1])
         except (KeyError, ValueError) as e:
             logger.error("Ошибка расчета ATR для %s: %s", symbol, e)
         return 0.0
@@ -1032,6 +1051,9 @@ class DataHandler:
                     else:
                         cache_obj = self.indicators_cache[cache_key]
                         cache_obj.update(df.droplevel("symbol"))
+                        for col in cache_obj.df.columns:
+                            df[col] = cache_obj.df.loc[df.droplevel("symbol").index, col].values
+                            self.ohlcv.loc[df.index, col] = df[col].values
                         self.indicators[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1045,6 +1067,9 @@ class DataHandler:
                     async with self.ohlcv_lock:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
+                        for col in result.df.columns:
+                            df[col] = result.df[col].values
+                            self.ohlcv.loc[df.index, col] = df[col].values
             else:
                 fetch_needed = False
                 obj_ref = None
@@ -1060,6 +1085,9 @@ class DataHandler:
                     else:
                         cache_obj = self.indicators_cache_2h[cache_key]
                         cache_obj.update(df.droplevel("symbol"))
+                        for col in cache_obj.df.columns:
+                            df[col] = cache_obj.df.loc[df.droplevel("symbol").index, col].values
+                            self.ohlcv_2h.loc[df.index, col] = df[col].values
                         self.indicators_2h[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1073,6 +1101,9 @@ class DataHandler:
                     async with self.ohlcv_2h_lock:
                         self.indicators_cache_2h[cache_key] = result
                         self.indicators_2h[symbol] = result
+                        for col in result.df.columns:
+                            df[col] = result.df[col].values
+                            self.ohlcv_2h.loc[df.index, col] = df[col].values
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
