@@ -28,6 +28,12 @@ except ImportError:  # pragma: no cover - optional dependency may not be install
     MLflowCallback = None  # type: ignore
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
+try:
+    from skopt import Optimizer as SkOptimizer
+    from skopt.space import Integer, Real
+except Exception:  # pragma: no cover - optional dependency
+    SkOptimizer = None  # type: ignore
+    Integer = Real = None  # type: ignore
 
 
 @ray.remote
@@ -146,6 +152,8 @@ class ParameterOptimizer:
             symbol: 0.0 for symbol in data_handler.usdt_pairs
         }  # Для отслеживания изменений волатильности
         self.max_trials = config.get("optuna_trials", 20)
+        self.optimizer_method = config.get("optimizer_method", "tpe")
+        self.holdout_warning_ratio = config.get("holdout_warning_ratio", 0.3)
         self.n_splits = config.get("n_splits", 5)
         self.mlflow_enabled = config.get("mlflow_enabled", False)
         self.mlflow_tracking_uri = config.get("mlflow_tracking_uri", "mlruns")
@@ -207,43 +215,92 @@ class ParameterOptimizer:
                     optimization_interval - (time.time() - self.last_optimization.get(symbol, 0)),
                 )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
-            # Использование TPESampler с multivariate=True для учета корреляций
-            study = optuna.create_study(
-                direction="maximize",
-                sampler=TPESampler(
-                    n_startup_trials=10,
-                    multivariate=True,
-                    warn_independent_sampling=False,
-                ),
-            )
-            callbacks = []
-            if self.mlflow_enabled:
-                callbacks.append(
-                    MLflowCallback(
-                        tracking_uri=self.mlflow_tracking_uri,
-                        metric_name="sharpe_ratio",
+            method = self.optimizer_method
+            best_value = 0.0
+            if method == "gp" and SkOptimizer is not None:
+                dims = [
+                    Integer(10, 50, name="ema30_period"),
+                    Integer(50, 200, name="ema100_period"),
+                    Integer(100, 300, name="ema200_period"),
+                    Integer(5, 20, name="atr_period_default"),
+                    Integer(2, 5, name="loss_streak_threshold"),
+                    Integer(2, 5, name="win_streak_threshold"),
+                    Real(0.01, 0.1, name="threshold_adjustment"),
+                    Real(0.1, 1.0, name="risk_sharpe_loss_factor"),
+                    Real(1.0, 2.0, name="risk_sharpe_win_factor"),
+                    Real(0.1, 1.0, name="risk_vol_min"),
+                    Real(1.0, 3.0, name="risk_vol_max"),
+                ]
+                optimizer = SkOptimizer(dims)
+                obj_refs = []
+                params_list = []
+                for _ in range(self.max_trials):
+                    suggestion = optimizer.ask()
+                    param_dict = {
+                        dim.name: val for dim, val in zip(dims, suggestion)
+                    }
+                    ema_periods = [
+                        param_dict["ema30_period"],
+                        param_dict["ema100_period"],
+                        param_dict["ema200_period"],
+                    ]
+                    ema_periods.sort()
+                    (
+                        param_dict["ema30_period"],
+                        param_dict["ema100_period"],
+                        param_dict["ema200_period"],
+                    ) = ema_periods
+                    obj_ref = self._evaluate_params(param_dict, symbol, df)
+                    obj_refs.append(obj_ref)
+                    params_list.append((suggestion, param_dict))
+                results = await asyncio.to_thread(ray.get, obj_refs)
+                for (sugg, _), val in zip(params_list, results):
+                    optimizer.tell(sugg, val)
+                idx = int(np.argmax(results)) if results else 0
+                best_value = results[idx] if results else 0.0
+                best_params = {**self.config.asdict(), **params_list[idx][1]}
+            else:
+                # Использование TPESampler с multivariate=True для учета корреляций
+                study = optuna.create_study(
+                    direction="maximize",
+                    sampler=TPESampler(
+                        n_startup_trials=10,
+                        multivariate=True,
+                        warn_independent_sampling=False,
+                    ),
+                )
+                callbacks = []
+                if self.mlflow_enabled:
+                    callbacks.append(
+                        MLflowCallback(
+                            tracking_uri=self.mlflow_tracking_uri,
+                            metric_name="sharpe_ratio",
+                        )
                     )
-                )
-            obj_refs = []
-            trials = []
-            for _ in range(self.max_trials):
-                trial = study.ask()
-                logger.debug(
-                    "Dispatching _objective_remote for %s trial %s", symbol, trial.number
-                )
-                obj_ref = self.objective(trial, symbol, df)
-                obj_refs.append(obj_ref)
-                trials.append(trial)
-            results = await asyncio.to_thread(ray.get, obj_refs)
-            for t in trials:
-                logger.debug(
-                    "Received result for %s trial %s", symbol, t.number
-                )
-            for trial, value in zip(trials, results):
-                study.tell(trial, value)
-                for cb in callbacks:
-                    cb(study, trial)
-            best_params = {**self.config.asdict(), **study.best_params}
+                obj_refs = []
+                trials = []
+                for _ in range(self.max_trials):
+                    trial = study.ask()
+                    logger.debug(
+                        "Dispatching _objective_remote for %s trial %s",
+                        symbol,
+                        trial.number,
+                    )
+                    obj_ref = self.objective(trial, symbol, df)
+                    obj_refs.append(obj_ref)
+                    trials.append(trial)
+                results = await asyncio.to_thread(ray.get, obj_refs)
+                for t in trials:
+                    logger.debug(
+                        "Received result for %s trial %s", symbol, t.number
+                    )
+                for trial, value in zip(trials, results):
+                    study.tell(trial, value)
+                    for cb in callbacks:
+                        cb(study, trial)
+                best_value = study.best_value
+                best_params = {**self.config.asdict(), **study.best_params}
+
             if self.enable_grid_search:
                 try:
                     best_params = self._grid_search(df, symbol, best_params)
@@ -258,6 +315,33 @@ class ParameterOptimizer:
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
             self.best_params_by_symbol[symbol] = best_params
             self.last_optimization[symbol] = time.time()
+
+            # Hold-out evaluation
+            try:
+                start = int(len(df) * 0.8)
+                holdout_df = df.iloc[start:]
+                if not holdout_df.empty:
+                    holdout_score = ray.get(
+                        self._evaluate_params(best_params, symbol, holdout_df)
+                    )
+                    if best_value and holdout_score < best_value * (1 - self.holdout_warning_ratio):
+                        logger.warning(
+                            "Sharpe ratio on hold-out for %s dropped from %.3f to %.3f",
+                            symbol,
+                            best_value,
+                            holdout_score,
+                        )
+                        tl = getattr(self.data_handler, "telegram_logger", None)
+                        if tl is not None:
+                            try:
+                                await tl.send_telegram_message(
+                                    f"Sharpe ratio drop for {symbol}: {holdout_score:.3f} vs {best_value:.3f}"
+                                )
+                            except Exception:
+                                logger.exception("Failed to send Telegram warning")
+            except Exception as e:
+                logger.exception("Ошибка hold-out проверки для %s: %s", symbol, e)
+
             logger.info(
                 "Оптимизация для %s завершена, лучшие параметры: %s",
                 symbol,
@@ -350,6 +434,25 @@ class ParameterOptimizer:
         except Exception as e:
             logger.exception("Ошибка валидации параметров: %s", e)
             raise
+
+    def _evaluate_params(self, params: dict, symbol: str, df: pd.DataFrame):
+        """Helper to evaluate a parameter set using the remote objective."""
+        if hasattr(_objective_remote, "options"):
+            obj_fn = _objective_remote.options(
+                num_gpus=1 if is_cuda_available() else 0
+            ).remote
+        else:
+            obj_fn = getattr(_objective_remote, "remote", _objective_remote)
+        return obj_fn(
+            df,
+            symbol,
+            params["ema30_period"],
+            params["ema100_period"],
+            params["ema200_period"],
+            params["atr_period_default"],
+            self.config["timeframe"],
+            self.n_splits,
+        )
 
     def objective(self, trial, symbol, df):
         # Целевая функция для оптимизации

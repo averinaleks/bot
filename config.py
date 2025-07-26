@@ -112,6 +112,8 @@ class BotConfig:
     prediction_history_size: int = _get_default("prediction_history_size", 100)
     telegram_queue_size: int = _get_default("telegram_queue_size", 100)
     optuna_trials: int = _get_default("optuna_trials", 20)
+    optimizer_method: str = _get_default("optimizer_method", "tpe")
+    holdout_warning_ratio: float = _get_default("holdout_warning_ratio", 0.3)
     enable_grid_search: bool = _get_default("enable_grid_search", False)
     loss_streak_threshold: int = _get_default("loss_streak_threshold", 3)
     win_streak_threshold: int = _get_default("win_streak_threshold", 3)
