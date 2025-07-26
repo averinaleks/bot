@@ -262,7 +262,14 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def _train_model_keras(
-    X, y, batch_size, model_type, initial_state=None, epochs=20, n_splits=5
+    X,
+    y,
+    batch_size,
+    model_type,
+    initial_state=None,
+    epochs=20,
+    n_splits=5,
+    early_stopping_patience=3,
 ):
     import tensorflow as tf
     from tensorflow import keras
@@ -299,12 +306,19 @@ def _train_model_keras(
         fold_model.compile(optimizer="adam", loss="binary_crossentropy")
         if initial_state is not None:
             fold_model.set_weights(initial_state)
+        early_stop = keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=early_stopping_patience,
+            restore_best_weights=True,
+        )
         fold_model.fit(
             X[train_idx],
             y[train_idx],
             batch_size=batch_size,
             epochs=epochs,
             verbose=0,
+            validation_data=(X[val_idx], y[val_idx]),
+            callbacks=[early_stop],
         )
         fold_preds = fold_model.predict(X[val_idx]).reshape(-1)
         preds.extend(fold_preds)
@@ -314,7 +328,14 @@ def _train_model_keras(
 
 
 def _train_model_lightning(
-    X, y, batch_size, model_type, initial_state=None, epochs=20, n_splits=5
+    X,
+    y,
+    batch_size,
+    model_type,
+    initial_state=None,
+    epochs=20,
+    n_splits=5,
+    early_stopping_patience=3,
 ):
     torch_mods = _get_torch_modules()
     torch = torch_mods["torch"]
@@ -382,11 +403,17 @@ def _train_model_lightning(
         if initial_state is not None:
             net.load_state_dict(initial_state)
 
+        early_stop = pl.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=early_stopping_patience,
+            mode="min",
+        )
         trainer = pl.Trainer(
             max_epochs=epochs,
             logger=False,
             enable_checkpointing=False,
             devices=1 if is_cuda_available() else None,
+            callbacks=[early_stop],
         )
         trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
         wrapper.eval()
@@ -415,14 +442,29 @@ def _train_model_remote(
     initial_state=None,
     epochs=20,
     n_splits=5,
+    early_stopping_patience=3,
 ):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(
-            X, y, batch_size, model_type, initial_state, epochs, n_splits
+            X,
+            y,
+            batch_size,
+            model_type,
+            initial_state,
+            epochs,
+            n_splits,
+            early_stopping_patience,
         )
     if framework == "lightning":
         return _train_model_lightning(
-            X, y, batch_size, model_type, initial_state, epochs, n_splits
+            X,
+            y,
+            batch_size,
+            model_type,
+            initial_state,
+            epochs,
+            n_splits,
+            early_stopping_patience,
         )
 
     torch_mods = _get_torch_modules()
@@ -468,7 +510,7 @@ def _train_model_remote(
         best_loss = float("inf")
         epochs_no_improve = 0
         max_epochs = epochs
-        patience = 3
+        patience = early_stopping_patience
         for _ in range(max_epochs):
             model.train()
             for batch_X, batch_y in train_loader:
@@ -802,6 +844,7 @@ class ModelBuilder:
                 None,
                 20,
                 self.config.get("n_splits", 5),
+                self.config.get("early_stopping_patience", 3),
             )
         )
         logger.debug("_train_model_remote completed for %s", symbol)
@@ -967,6 +1010,7 @@ class ModelBuilder:
                 init_state,
                 self.config.get("fine_tune_epochs", 5),
                 self.config.get("n_splits", 5),
+                self.config.get("early_stopping_patience", 3),
             )
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)

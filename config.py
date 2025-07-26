@@ -137,6 +137,7 @@ class BotConfig:
     transformer_weight: float = _get_default("transformer_weight", 0.5)
     rl_weight: float = _get_default("rl_weight", 0.3)
     ema_weight: float = _get_default("ema_weight", 0.2)
+    early_stopping_patience: int = _get_default("early_stopping_patience", 3)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
