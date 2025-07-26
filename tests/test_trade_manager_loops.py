@@ -194,4 +194,39 @@ async def test_process_symbol_recovery(monkeypatch):
 
     assert call['n'] >= 2
 
+
+@pytest.mark.asyncio
+async def test_process_symbol_data_fresh_error(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    call = {'n': 0}
+
+    async def fake_eval(symbol):
+        call['n'] += 1
+        return 'buy'
+
+    async def raise_conn_error(*a, **k):
+        raise ConnectionError('offline')
+
+    monkeypatch.setattr(tm, 'evaluate_signal', fake_eval)
+    monkeypatch.setattr(dh, 'is_data_fresh', raise_conn_error)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(tm.process_symbol('BTCUSDT'))
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call['n'] >= 2
+    assert dh.exchange.orders == []
+
 sys.modules.pop('utils', None)
