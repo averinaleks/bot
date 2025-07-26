@@ -222,6 +222,7 @@ class TradeManager:
         self.save_interval = 900
         self.positions_changed = False
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
+        self.last_stats_day = int(time.time() // 86400)
         self.load_state()
 
     async def compute_risk_per_trade(self, symbol: str, volatility: float) -> float:
@@ -288,6 +289,33 @@ class TradeManager:
             else:
                 break
         return count
+
+    async def compute_stats(self) -> Dict[str, float]:
+        """Return overall win rate, average profit/loss and max drawdown."""
+        async with self.returns_lock:
+            all_returns = [r for vals in self.returns_by_symbol.values() for _, r in vals]
+        total = len(all_returns)
+        win_rate = sum(1 for r in all_returns if r > 0) / total if total else 0.0
+        avg_pnl = float(np.mean(all_returns)) if all_returns else 0.0
+        if all_returns:
+            cum = np.cumsum(all_returns)
+            running_max = np.maximum.accumulate(cum)
+            drawdowns = running_max - cum
+            max_dd = float(np.max(drawdowns))
+        else:
+            max_dd = 0.0
+        return {
+            "win_rate": win_rate,
+            "avg_pnl": avg_pnl,
+            "max_drawdown": max_dd,
+        }
+
+    def get_stats(self) -> Dict[str, float]:
+        """Synchronous wrapper for :py:meth:`compute_stats`."""
+        if self.loop and self.loop.is_running():
+            fut = asyncio.run_coroutine_threadsafe(self.compute_stats(), self.loop)
+            return fut.result()
+        return asyncio.run(self.compute_stats())
 
     def save_state(self):
         if not self.positions_changed or (
@@ -955,6 +983,16 @@ class TradeManager:
                                 await self.telegram_logger.send_telegram_message(
                                     f"⚠️ Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                                 )
+                current_day = int(current_time // 86400)
+                if current_day != self.last_stats_day:
+                    stats = await self.compute_stats()
+                    logger.info(
+                        "Daily stats: win_rate=%.2f%% avg_pnl=%.2f max_drawdown=%.2f",
+                        stats["win_rate"] * 100,
+                        stats["avg_pnl"],
+                        stats["max_drawdown"],
+                    )
+                    self.last_stats_day = current_day
                 await asyncio.sleep(self.performance_window / 10)
             except asyncio.CancelledError:
                 raise
@@ -1447,6 +1485,14 @@ def open_position_route():
 @api_app.route("/positions")
 def positions_route():
     return jsonify({"positions": POSITIONS})
+
+
+@api_app.route("/stats")
+def stats_route():
+    if not _ready_event.is_set() or trade_manager is None:
+        return jsonify({"error": "not ready"}), 503
+    stats = trade_manager.get_stats()
+    return jsonify({"stats": stats})
 
 
 @api_app.route("/start")

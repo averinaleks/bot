@@ -731,5 +731,25 @@ async def test_check_stop_loss_take_profit_triggers_close(monkeypatch):
     assert len(tm.positions) == 0
 
 
+def test_compute_stats():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm.returns_by_symbol["BTCUSDT"] = [
+        (0, 1.0),
+        (1, -2.0),
+        (2, 2.0),
+    ]
+
+    async def run():
+        return await tm.compute_stats()
+
+    import asyncio
+
+    stats = asyncio.run(run())
+    assert stats["win_rate"] == pytest.approx(2 / 3)
+    assert stats["avg_pnl"] == pytest.approx(1.0 / 3)
+    assert stats["max_drawdown"] == pytest.approx(2.0)
+
+
 sys.modules.pop('utils', None)
 
