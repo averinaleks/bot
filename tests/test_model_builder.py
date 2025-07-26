@@ -323,3 +323,38 @@ async def test_performance_based_retraining(monkeypatch):
 
     assert call["n"] >= 1
 
+
+def test_freeze_torch_base_layers():
+    torch_mods = model_builder._get_torch_modules()
+    CNNGRU = torch_mods["CNNGRU"]
+    model = CNNGRU(2, 64, 2, 0.2)
+    model_builder._freeze_torch_base_layers(model, "gru")
+    assert not any(p.requires_grad for p in model.conv.parameters())
+    assert any(p.requires_grad for p in model.gru.parameters())
+
+
+def test_train_model_remote_freezes_layers():
+    X = np.random.rand(10, 3, 2).astype(np.float32)
+    y = (np.random.rand(10) > 0.5).astype(np.float32)
+    torch_mods = model_builder._get_torch_modules()
+    CNNGRU = torch_mods["CNNGRU"]
+    torch = torch_mods["torch"]
+    model = CNNGRU(2, 64, 2, 0.2)
+    init_state = {k: v.clone() for k, v in model.state_dict().items()}
+    func = getattr(_train_model_remote, "_function", _train_model_remote)
+    state, _, _ = func(
+        X,
+        y,
+        batch_size=2,
+        model_type="gru",
+        framework="pytorch",
+        initial_state=init_state,
+        epochs=1,
+        n_splits=2,
+        early_stopping_patience=1,
+        freeze_base_layers=True,
+    )
+    new_model = CNNGRU(2, 64, 2, 0.2)
+    new_model.load_state_dict(state)
+    assert torch.allclose(new_model.conv.weight, init_state["conv.weight"])
+

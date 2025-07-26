@@ -248,6 +248,40 @@ def _get_torch_modules():
     return _torch_modules
 
 
+def _freeze_torch_base_layers(model, model_type):
+    """Freeze initial layers of a PyTorch model based on ``model_type``."""
+    layers = []
+    if model_type == "mlp" and hasattr(model, "fc1"):
+        layers.append(model.fc1)
+    elif model_type == "gru" and hasattr(model, "conv"):
+        layers.append(model.conv)
+    else:
+        if hasattr(model, "input_proj"):
+            layers.append(model.input_proj)
+        if hasattr(model, "transformer") and getattr(model.transformer, "layers", None):
+            first = model.transformer.layers[0]
+            layers.append(first)
+    for layer in layers:
+        for param in layer.parameters():
+            param.requires_grad = False
+
+
+def _freeze_keras_base_layers(model, model_type):
+    """Freeze initial layers of a Keras model based on ``model_type``."""
+    from tensorflow import keras
+
+    if model_type == "mlp":
+        for layer in model.layers:
+            if isinstance(layer, keras.layers.Dense):
+                layer.trainable = False
+                break
+    else:
+        for layer in model.layers:
+            if isinstance(layer, keras.layers.Conv1D):
+                layer.trainable = False
+                break
+
+
 def generate_time_series_splits(X, y, n_splits):
     """Yield train/validation indices for time series cross-validation."""
     from sklearn.model_selection import TimeSeriesSplit
@@ -270,6 +304,7 @@ def _train_model_keras(
     epochs=20,
     n_splits=5,
     early_stopping_patience=3,
+    freeze_base_layers=False,
 ):
     import tensorflow as tf
     from tensorflow import keras
@@ -296,6 +331,8 @@ def _train_model_keras(
             x = keras.layers.GlobalAveragePooling1D()(attn)
     outputs = keras.layers.Dense(1, activation="sigmoid")(x)
     model = keras.Model(inputs, outputs)
+    if freeze_base_layers:
+        _freeze_keras_base_layers(model, model_type)
     model.compile(optimizer="adam", loss="binary_crossentropy")
     if initial_state is not None:
         model.set_weights(initial_state)
@@ -303,6 +340,8 @@ def _train_model_keras(
     labels: list[float] = []
     for train_idx, val_idx in generate_time_series_splits(X, y, n_splits):
         fold_model = keras.models.clone_model(model)
+        if freeze_base_layers:
+            _freeze_keras_base_layers(fold_model, model_type)
         fold_model.compile(optimizer="adam", loss="binary_crossentropy")
         if initial_state is not None:
             fold_model.set_weights(initial_state)
@@ -336,6 +375,7 @@ def _train_model_lightning(
     epochs=20,
     n_splits=5,
     early_stopping_patience=3,
+    freeze_base_layers=False,
 ):
     torch_mods = _get_torch_modules()
     torch = torch_mods["torch"]
@@ -370,6 +410,8 @@ def _train_model_lightning(
             net = TFT(X.shape[2])
         else:
             net = TFT(X.shape[2])
+        if freeze_base_layers:
+            _freeze_torch_base_layers(net, model_type)
 
         class LightningWrapper(pl.LightningModule):
             def __init__(self, model):
@@ -443,6 +485,7 @@ def _train_model_remote(
     epochs=20,
     n_splits=5,
     early_stopping_patience=3,
+    freeze_base_layers=False,
 ):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(
@@ -454,6 +497,7 @@ def _train_model_remote(
             epochs,
             n_splits,
             early_stopping_patience,
+            freeze_base_layers,
         )
     if framework == "lightning":
         return _train_model_lightning(
@@ -465,6 +509,7 @@ def _train_model_remote(
             epochs,
             n_splits,
             early_stopping_patience,
+            freeze_base_layers,
         )
 
     torch_mods = _get_torch_modules()
@@ -504,6 +549,8 @@ def _train_model_remote(
             model = TFT(X.shape[2])
         if initial_state is not None:
             model.load_state_dict(initial_state)
+        if freeze_base_layers:
+            _freeze_torch_base_layers(model, model_type)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         criterion = nn.BCELoss()
         model.to(device)
@@ -782,7 +829,7 @@ class ModelBuilder:
 
     async def retrain_symbol(self, symbol):
         if self.config.get("use_transfer_learning") and symbol in self.predictive_models:
-            await self.fine_tune_symbol(symbol)
+            await self.fine_tune_symbol(symbol, self.config.get("freeze_base_layers", False))
             return
         indicators = self.data_handler.indicators.get(symbol)
         if not indicators:
@@ -947,7 +994,7 @@ class ModelBuilder:
             f"🎯 {symbol} обучен. Brier={brier:.4f}"
         )
 
-    async def fine_tune_symbol(self, symbol):
+    async def fine_tune_symbol(self, symbol, freeze_base_layers=False):
         indicators = self.data_handler.indicators.get(symbol)
         if not indicators:
             logger.warning("Нет индикаторов для %s", symbol)
@@ -1011,6 +1058,7 @@ class ModelBuilder:
                 self.config.get("fine_tune_epochs", 5),
                 self.config.get("n_splits", 5),
                 self.config.get("early_stopping_patience", 3),
+                freeze_base_layers,
             )
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
