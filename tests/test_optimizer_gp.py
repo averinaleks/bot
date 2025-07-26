@@ -123,3 +123,7 @@ async def test_holdout_warning_emitted(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     await opt.optimize('BTCUSDT')
     assert any('hold-out' in rec.getMessage() for rec in caplog.records)
+
+sys.modules.pop('optuna', None)
+sys.modules.pop('optuna.samplers', None)
+sys.modules.pop('optuna.exceptions', None)
