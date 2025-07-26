@@ -96,7 +96,7 @@ def get_prediction(symbol: str, price: float, env: dict) -> str | None:
     try:
         resp = requests.post(
             f"{env['model_builder_url']}/predict",
-            json={"symbol": symbol, "price": price},
+            json={"symbol": symbol, "features": [price]},
             timeout=5,
         )
         if resp.status_code != 200:
