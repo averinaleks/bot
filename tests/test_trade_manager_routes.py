@@ -61,9 +61,12 @@ def _setup_module(monkeypatch):
     sys.modules.pop("trade_manager", None)
     tm = importlib.import_module("trade_manager")
     loop = DummyLoop()
-    stub = types.SimpleNamespace(loop=loop,
-                                 open_position=dummy_coroutine,
-                                 run=dummy_coroutine)
+    stub = types.SimpleNamespace(
+        loop=loop,
+        open_position=dummy_coroutine,
+        run=dummy_coroutine,
+        get_stats=lambda: {"win_rate": 1.0},
+    )
     tm.trade_manager = stub
     tm._ready_event.set()
     return tm, loop, stub
@@ -96,3 +99,11 @@ def test_start_route_schedules_run(monkeypatch):
     assert inspect.iscoroutine(args[0])
     assert args[0].cr_code is dummy_coroutine.__code__
     args[0].close()
+
+
+def test_stats_route_returns_data(monkeypatch):
+    tm, _, _ = _setup_module(monkeypatch)
+    client = tm.api_app.test_client()
+    resp = client.get("/stats")
+    assert resp.status_code == 200
+    assert resp.json["stats"]["win_rate"] == 1.0
