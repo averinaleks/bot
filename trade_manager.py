@@ -7,9 +7,52 @@ notifications while interacting with the :class:`ModelBuilder` and exchange.
 import asyncio
 import atexit
 import signal
-import ray
+import os
 import pandas as pd
 import numpy as np
+
+if os.getenv("TEST_MODE") == "1":
+    import types
+    import sys
+
+    ray = types.ModuleType("ray")
+
+    class _RayRemoteFunction:
+        def __init__(self, func):
+            self._function = func
+
+        def remote(self, *args, **kwargs):
+            return self._function(*args, **kwargs)
+
+        def options(self, *args, **kwargs):
+            return self
+
+    def _ray_remote(func=None, **_kwargs):
+        if func is None:
+            def wrapper(f):
+                return _RayRemoteFunction(f)
+            return wrapper
+        return _RayRemoteFunction(func)
+
+    ray.remote = _ray_remote
+    ray.get = lambda x: x
+    ray.init = lambda *a, **k: None
+    ray.is_initialized = lambda: False
+    sys.modules.setdefault("httpx", types.ModuleType("httpx"))
+    pybit_mod = types.ModuleType("pybit")
+    ut_mod = types.ModuleType("unified_trading")
+    ut_mod.HTTP = object
+    pybit_mod.unified_trading = ut_mod
+    sys.modules.setdefault("pybit", pybit_mod)
+    sys.modules.setdefault("pybit.unified_trading", ut_mod)
+    a2wsgi_mod = types.ModuleType("a2wsgi")
+    a2wsgi_mod.WSGIMiddleware = lambda app: app
+    sys.modules.setdefault("a2wsgi", a2wsgi_mod)
+    uvicorn_mod = types.ModuleType("uvicorn")
+    uvicorn_mod.middleware = types.SimpleNamespace(wsgi=types.SimpleNamespace(WSGIMiddleware=lambda app: app))
+    sys.modules.setdefault("uvicorn", uvicorn_mod)
+else:
+    import ray
 from tenacity import retry, wait_exponential, stop_after_attempt
 import inspect
 from utils import (
@@ -20,14 +63,29 @@ from utils import (
     safe_api_call,
 )
 from config import BotConfig, load_config
-import torch
+import contextlib
+import types
+
+if os.getenv("TEST_MODE") == "1":
+    try:  # pragma: no cover - optional dependency
+        import torch  # type: ignore
+    except Exception:
+        torch = types.ModuleType("torch")
+        torch.tensor = lambda *a, **k: a[0]
+        torch.float32 = float
+        torch.no_grad = contextlib.nullcontext
+        torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
+else:
+    import torch
 import joblib
-import os
 import time
 from typing import Dict, Optional, Tuple
 import shutil
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+if os.getenv("TEST_MODE") == "1" and not hasattr(Flask, "asgi_app"):
+    Flask.asgi_app = property(lambda self: self.wsgi_app)
 import threading
 import multiprocessing as mp
 
@@ -40,10 +98,22 @@ device_type = "cuda" if is_cuda_available() else "cpu"
 
 
 def _predict_model(model, tensor) -> np.ndarray:
-    """Run model forward pass in a worker thread."""
+    """Run model forward pass."""
     model.eval()
     with torch.no_grad(), torch.amp.autocast(device_type):
         return model(tensor).squeeze().float().cpu().numpy()
+
+
+@ray.remote(num_cpus=1, num_gpus=1 if is_cuda_available() else 0)
+def _predict_model_proc(model, tensor) -> np.ndarray:
+    """Execute ``_predict_model`` in a separate process."""
+    return _predict_model(model, tensor)
+
+
+async def _predict_async(model, tensor) -> np.ndarray:
+    """Asynchronously run the prediction process and return the result."""
+    obj_ref = _predict_model_proc.remote(model, tensor)
+    return await asyncio.to_thread(ray.get, obj_ref)
 
 
 def _calibrate_output(calibrator, value: float) -> float:
@@ -771,7 +841,7 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            prediction = await asyncio.to_thread(_predict_model, model, X_tensor)
+            prediction = await _predict_async(model, X_tensor)
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = await asyncio.to_thread(
@@ -1046,7 +1116,7 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            prediction = await asyncio.to_thread(_predict_model, model, X_tensor)
+            prediction = await _predict_async(model, X_tensor)
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = await asyncio.to_thread(
