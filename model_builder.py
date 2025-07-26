@@ -631,6 +631,7 @@ class ModelBuilder:
         self.scalers = {}
         self.prediction_history = {}
         self.threshold_offset = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
+        self.base_thresholds = {}
         self.calibrators = {}
         self.calibration_metrics = {}
         self.performance_metrics = {}
@@ -654,6 +655,7 @@ class ModelBuilder:
             return None
         preds, labels = zip(*pairs)
         acc = float(np.mean([(p >= 0.5) == l for p, l in zip(preds, labels)]))
+        self.base_thresholds[symbol] = max(0.5, min(acc, 0.9))
         try:
             brier = float(brier_score_loss(labels, preds))
         except ValueError:
@@ -677,6 +679,7 @@ class ModelBuilder:
                 "scalers": self.scalers,
                 "last_retrain_time": self.last_retrain_time,
                 "threshold_offset": self.threshold_offset,
+                "base_thresholds": self.base_thresholds,
             }
             with open(self.state_file, "wb") as f:
                 joblib.dump(state, f)
@@ -762,6 +765,7 @@ class ModelBuilder:
                     "last_retrain_time", self.last_retrain_time
                 )
                 self.threshold_offset.update(state.get("threshold_offset", {}))
+                self.base_thresholds.update(state.get("base_thresholds", {}))
                 logger.info("Состояние ModelBuilder загружено")
         except Exception as e:
             logger.exception("Ошибка загрузки состояния ModelBuilder: %s", e)
@@ -1184,7 +1188,9 @@ class ModelBuilder:
                 continue
 
     async def adjust_thresholds(self, symbol, prediction: float):
-        base_long = self.config.get("base_probability_threshold", 0.6)
+        base_long = self.base_thresholds.get(
+            symbol, self.config.get("base_probability_threshold", 0.6)
+        )
         adjust_step = self.config.get("threshold_adjustment", 0.05)
         decay = self.config.get("threshold_decay_rate", 0.1)
         loss_streak = await self.trade_manager.get_loss_streak(symbol)

@@ -324,6 +324,66 @@ async def test_performance_based_retraining(monkeypatch):
     assert call["n"] >= 1
 
 
+@pytest.mark.asyncio
+async def test_base_threshold_convergence():
+    cfg = BotConfig(cache_dir="/tmp", prediction_history_size=10)
+    dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
+
+    class TM:
+        last_volatility = {}
+
+        async def get_loss_streak(self, _):
+            return 0
+
+        async def get_win_streak(self, _):
+            return 0
+
+        async def get_sharpe_ratio(self, _):
+            return 0.0
+
+    tm = TM()
+    mb = ModelBuilder(cfg, dh, tm)
+    mb.prediction_history["BTCUSDT"] = deque([], maxlen=10)
+    data = [(0.7, 1), (0.3, 0), (0.8, 1), (0.2, 0), (0.6, 0)]
+    for p, l in data:
+        mb.prediction_history["BTCUSDT"].append((p, l))
+        mb.compute_prediction_metrics("BTCUSDT")
+    assert mb.base_thresholds["BTCUSDT"] == pytest.approx(0.8)
+    long_thr, short_thr = await mb.adjust_thresholds("BTCUSDT", 0.5)
+    assert long_thr == pytest.approx(0.8)
+    assert short_thr == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_base_threshold_clamped_min():
+    cfg = BotConfig(cache_dir="/tmp", prediction_history_size=10)
+    dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
+
+    class TM:
+        last_volatility = {}
+
+        async def get_loss_streak(self, _):
+            return 0
+
+        async def get_win_streak(self, _):
+            return 0
+
+        async def get_sharpe_ratio(self, _):
+            return 0.0
+
+    tm = TM()
+    mb = ModelBuilder(cfg, dh, tm)
+    mb.prediction_history["BTCUSDT"] = deque([], maxlen=10)
+    data = [(0.1, 1), (0.2, 1), (0.3, 1), (0.8, 0), (0.6, 0)]
+    for p, l in data:
+        mb.prediction_history["BTCUSDT"].append((p, l))
+        mb.compute_prediction_metrics("BTCUSDT")
+    assert mb.base_thresholds["BTCUSDT"] == pytest.approx(0.5)
+    long_thr, short_thr = await mb.adjust_thresholds("BTCUSDT", 0.5)
+    assert long_thr == pytest.approx(0.5)
+    assert short_thr == pytest.approx(0.5)
+
+
 def test_freeze_torch_base_layers():
     torch_mods = model_builder._get_torch_modules()
     CNNGRU = torch_mods["CNNGRU"]
