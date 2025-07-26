@@ -107,10 +107,6 @@ class DummyExchange:
             return {'retCode': 1}
         return {'id': '2'}
 
-class DummyIndicators:
-    def __init__(self):
-        self.atr = pd.Series([1.0])
-
 class DummyDataHandler:
     def __init__(self, fresh: bool = True, fail_order: bool = False):
         self.exchange = DummyExchange()
@@ -119,16 +115,17 @@ class DummyDataHandler:
         idx = pd.MultiIndex.from_tuples([
             ('BTCUSDT', pd.Timestamp('2020-01-01'))
         ], names=['symbol', 'timestamp'])
-        self.ohlcv = pd.DataFrame({'close': [100]}, index=idx)
-        self.indicators = {'BTCUSDT': DummyIndicators()}
+        self.ohlcv = pd.DataFrame({'close': [100], 'atr': [1.0]}, index=idx)
+        self.indicators = {'BTCUSDT': types.SimpleNamespace(atr=pd.Series([1.0]), df=pd.DataFrame({'a':[1]}))}
         self.fresh = fresh
         async def _opt(symbol):
             return {}
         self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
 
     async def get_atr(self, symbol: str) -> float:
-        ind = self.indicators.get(symbol)
-        return float(ind.atr.iloc[-1]) if ind else 0.0
+        if "symbol" in self.ohlcv.index.names and symbol in self.ohlcv.index.get_level_values("symbol"):
+            return float(self.ohlcv.loc[(symbol,), "atr"].iloc[-1])
+        return 0.0
 
     async def is_data_fresh(self, symbol: str, timeframe: str = 'primary', max_delay: float = 60) -> bool:
         return self.fresh
@@ -487,7 +484,6 @@ class DummyModel:
 @pytest.mark.asyncio
 async def test_evaluate_signal_uses_cached_features(monkeypatch):
     dh = DummyDataHandler()
-    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
 
     class MB:
         def __init__(self):
@@ -523,7 +519,6 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
 @pytest.mark.asyncio
 async def test_weighted_voting_prefers_transformer(monkeypatch):
     dh = DummyDataHandler()
-    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
 
     class MB:
         def __init__(self):
@@ -592,7 +587,6 @@ async def test_weighted_voting_prefers_transformer(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_exit_signal_uses_cached_features(monkeypatch):
     dh = DummyDataHandler()
-    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
 
     class MB:
         def __init__(self):
@@ -640,7 +634,6 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
 @pytest.mark.asyncio
 async def test_exit_signal_triggers_reverse_trade(monkeypatch):
     dh = DummyDataHandler()
-    dh.indicators["BTCUSDT"].df = pd.DataFrame({"a": [1]})
     class MB:
         def __init__(self):
             self.device = "cpu"

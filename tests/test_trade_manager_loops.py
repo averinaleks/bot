@@ -64,10 +64,6 @@ class DummyExchange:
     def __init__(self):
         self.orders = []
 
-class DummyIndicators:
-    def __init__(self):
-        self.atr = pd.Series([1.0])
-
 class DummyDataHandler:
     def __init__(self):
         self.exchange = DummyExchange()
@@ -75,8 +71,8 @@ class DummyDataHandler:
         idx = pd.MultiIndex.from_tuples([
             ('BTCUSDT', pd.Timestamp('2020-01-01'))
         ], names=['symbol', 'timestamp'])
-        self.ohlcv = pd.DataFrame({'close': [100]}, index=idx)
-        self.indicators = {'BTCUSDT': DummyIndicators()}
+        self.ohlcv = pd.DataFrame({'close': [100], 'atr': [1.0]}, index=idx)
+        self.indicators = {}
         self.parameter_optimizer = types.SimpleNamespace(optimize=lambda s: {})
 
     async def get_atr(self, symbol: str) -> float:

@@ -429,14 +429,11 @@ async def test_feature_callback_invoked(tmp_path):
     df['symbol'] = symbol
     df = df.set_index(['symbol', df.index])
 
-    class DummyInd:
-        def update(self, _):
-            pass
 
-    dh.indicators_cache[f'{symbol}_primary'] = DummyInd()
 
     await dh.synchronize_and_update(symbol, df, 0.0, 0.0, {'imbalance': 0.0, 'timestamp': time.time()})
     await asyncio.sleep(0)
+    assert 'ema30' in dh.ohlcv.columns
     assert called == [symbol]
 
 
