@@ -96,5 +96,6 @@
     "transformer_weight": 0.5,
     "rl_weight": 0.3,
     "ema_weight": 0.2,
+    "early_stopping_patience": 3,
     "reversal_margin": 0.05
 }
