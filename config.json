@@ -72,6 +72,8 @@
     "prediction_history_size": 100,
     "telegram_queue_size": 100,
     "optuna_trials": 20,
+    "optimizer_method": "tpe",
+    "holdout_warning_ratio": 0.3,
     "enable_grid_search": false,
     "loss_streak_threshold": 3,
     "win_streak_threshold": 3,
