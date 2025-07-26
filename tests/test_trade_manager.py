@@ -705,5 +705,31 @@ async def test_exit_signal_triggers_reverse_trade(monkeypatch):
     assert opened["side"] == "sell"
 
 
+@pytest.mark.asyncio
+async def test_check_stop_loss_take_profit_triggers_close(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "buy", 100, {})
+
+    called = {"n": 0}
+
+    async def wrapped(symbol, price, reason=""):
+        called["n"] += 1
+        tm.positions = tm.positions.drop(symbol, level="symbol")
+
+    monkeypatch.setattr(tm, "close_position", wrapped)
+
+    await tm.check_stop_loss_take_profit("BTCUSDT", 90)
+
+    assert called["n"] == 1
+    assert len(tm.positions) == 0
+
+
 sys.modules.pop('utils', None)
 
