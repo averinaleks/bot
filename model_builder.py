@@ -827,12 +827,13 @@ class ModelBuilder:
         features_df["adx"] = _align(indicators.adx)
         features_df["macd"] = _align(indicators.macd)
         features_df["atr"] = _align(indicators.atr)
+        data_np = features_df.to_numpy(dtype=float, copy=True)
         scaler = self.scalers.get(symbol)
         if scaler is None:
             scaler = StandardScaler()
-            scaler.fit(features_df)
+            scaler.fit(data_np)
             self.scalers[symbol] = scaler
-        features = scaler.transform(features_df)
+        features = scaler.transform(data_np)
         return features.astype(np.float32)
 
     async def precompute_features(self, symbol):
