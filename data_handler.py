@@ -1068,7 +1068,9 @@ class DataHandler:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
                         for col in result.df.columns:
-                            df[col] = result.df[col].values
+                            df[col] = result.df.loc[
+                                df.droplevel("symbol").index, col
+                            ].values
                             self.ohlcv.loc[df.index, col] = df[col].values
             else:
                 fetch_needed = False
@@ -1102,7 +1104,9 @@ class DataHandler:
                         self.indicators_cache_2h[cache_key] = result
                         self.indicators_2h[symbol] = result
                         for col in result.df.columns:
-                            df[col] = result.df[col].values
+                            df[col] = result.df.loc[
+                                df.droplevel("symbol").index, col
+                            ].values
                             self.ohlcv_2h.loc[df.index, col] = df[col].values
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
