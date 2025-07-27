@@ -876,6 +876,28 @@ class TradeManager:
                 prediction = await asyncio.to_thread(
                     _calibrate_output, calibrator, float(prediction)
                 )
+            rl_signal = None
+            if self.rl_agent and symbol in self.rl_agent.models:
+                rl_feat = np.append(
+                    features[-1],
+                    [float(prediction), len(self.positions) / max(1, self.max_positions)],
+                ).astype(np.float32)
+                rl_signal = self.rl_agent.predict(symbol, rl_feat)
+                if rl_signal and rl_signal != "hold":
+                    logger.info("RL action for %s: %s", symbol, rl_signal)
+                    if rl_signal == "close":
+                        await self.close_position(symbol, current_price, "RL Signal")
+                        return
+                    if rl_signal == "open_long" and position["side"] == "sell":
+                        await self.close_position(symbol, current_price, "RL Reverse")
+                        params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                        await self.open_position(symbol, "buy", current_price, params)
+                        return
+                    if rl_signal == "open_short" and position["side"] == "buy":
+                        await self.close_position(symbol, current_price, "RL Reverse")
+                        params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                        await self.open_position(symbol, "sell", current_price, params)
+                        return
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
@@ -1183,10 +1205,19 @@ class TradeManager:
 
             rl_signal = None
             if self.rl_agent and symbol in self.rl_agent.models:
-                rl_feat = features[-1]
+                rl_feat = np.append(
+                    features[-1],
+                    [float(prediction), len(self.positions) / max(1, self.max_positions)],
+                ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal:
-                    logger.info("RL signal for %s: %s", symbol, rl_signal)
+                if rl_signal and rl_signal != "hold":
+                    logger.info("RL action for %s: %s", symbol, rl_signal)
+            if rl_signal in ("open_long", "open_short", "close"):
+                final = (
+                    "buy" if rl_signal == "open_long" else
+                    "sell" if rl_signal == "open_short" else "close"
+                )
+                return (final, float(prediction)) if return_prob else final
 
             ema_signal = None
             check = self.evaluate_ema_condition(symbol, "buy")
@@ -1201,16 +1232,11 @@ class TradeManager:
 
             weights = {
                 "transformer": self.config.get("transformer_weight", 0.5),
-                "rl": self.config.get("rl_weight", 0.3),
                 "ema": self.config.get("ema_weight", 0.2),
             }
             scores = {"buy": 0.0, "sell": 0.0}
             scores["buy"] += weights["transformer"] * float(prediction)
             scores["sell"] += weights["transformer"] * (1.0 - float(prediction))
-            if rl_signal == "buy":
-                scores["buy"] += weights["rl"]
-            elif rl_signal == "sell":
-                scores["sell"] += weights["rl"]
             if ema_signal == "buy":
                 scores["buy"] += weights["ema"]
             elif ema_signal == "sell":

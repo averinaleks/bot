@@ -111,4 +111,4 @@ async def test_train_symbol_and_predict(sample_ohlcv):
     action = agent.predict(
         "BTCUSDT", features.iloc[0].to_numpy(dtype=np.float32)
     )
-    assert action in (None, "buy", "sell")
+    assert action in {"hold", "open_long", "open_short", "close"}

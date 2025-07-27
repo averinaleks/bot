@@ -407,15 +407,16 @@ def _train_model_lightning(
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
         val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
+        pt = prediction_target
         if model_type == "mlp":
             input_dim = X.shape[1] * X.shape[2]
-            net = Net(input_dim, regression=prediction_target=="pnl")
+            net = Net(input_dim, regression=pt == "pnl")
         elif model_type == "gru":
-            net = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
+            net = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
         elif model_type in {"tft", "transformer"}:
-            net = TFT(X.shape[2], regression=prediction_target=="pnl")
+            net = TFT(X.shape[2], regression=pt == "pnl")
         else:
-            net = TFT(X.shape[2], regression=prediction_target=="pnl")
+            net = TFT(X.shape[2], regression=pt == "pnl")
         if freeze_base_layers:
             _freeze_torch_base_layers(net, model_type)
 
@@ -547,21 +548,22 @@ def _train_model_remote(
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
+        pt = prediction_target
         if model_type == "mlp":
             input_dim = X.shape[1] * X.shape[2]
-            model = Net(input_dim, regression=prediction_target=="pnl")
+            model = Net(input_dim, regression=pt == "pnl")
         elif model_type == "gru":
-            model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
+            model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
         elif model_type in {"tft", "transformer"}:
-            model = TFT(X.shape[2], regression=prediction_target=="pnl")
+            model = TFT(X.shape[2], regression=pt == "pnl")
         else:
-            model = TFT(X.shape[2], regression=prediction_target=="pnl")
+            model = TFT(X.shape[2], regression=pt == "pnl")
         if initial_state is not None:
             model.load_state_dict(initial_state)
         if freeze_base_layers:
             _freeze_torch_base_layers(model, model_type)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        criterion = nn.MSELoss() if prediction_target == "pnl" else nn.BCELoss()
+        criterion = nn.MSELoss() if pt == "pnl" else nn.BCELoss()
         model.to(device)
         best_loss = float("inf")
         epochs_no_improve = 0
@@ -717,14 +719,18 @@ class ModelBuilder:
                             else self.config["lstm_timesteps"]
                         )
                         mt = self.model_type
+                        pt = self.config.get("prediction_target", "direction")
                         if mt == "mlp":
-                            model = Net(input_size * self.config["lstm_timesteps"], regression=prediction_target=="pnl")
+                            model = Net(
+                                input_size * self.config["lstm_timesteps"],
+                                regression=pt == "pnl",
+                            )
                         elif mt == "gru":
-                            model = CNNGRU(input_size, 64, 2, 0.2, regression=prediction_target=="pnl")
+                            model = CNNGRU(input_size, 64, 2, 0.2, regression=pt == "pnl")
                         elif mt in {"tft", "transformer"}:
-                            model = TFT(input_size, regression=prediction_target=="pnl")
+                            model = TFT(input_size, regression=pt == "pnl")
                         else:
-                            model = TFT(input_size, regression=prediction_target=="pnl")
+                            model = TFT(input_size, regression=pt == "pnl")
                         model.load_state_dict(sd)
                         model.to(self.device)
                         self.predictive_models[symbol] = model
@@ -953,14 +959,15 @@ class ModelBuilder:
             CNNGRU = torch_mods["CNNGRU"]
             TFT = torch_mods["TemporalFusionTransformer"]
             TFT = torch_mods["TemporalFusionTransformer"]
+            pt = self.config.get("prediction_target", "direction")
             if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2], regression=prediction_target=="pnl")
+                model = Net(X.shape[1] * X.shape[2], regression=pt == "pnl")
             elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
+                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
             elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2], regression=prediction_target=="pnl")
+                model = TFT(X.shape[2], regression=pt == "pnl")
             else:
-                model = TFT(X.shape[2], regression=prediction_target=="pnl")
+                model = TFT(X.shape[2], regression=pt == "pnl")
             model.load_state_dict(model_state)
             model.to(self.device)
         if self.config.get("prediction_target", "direction") == "pnl":
@@ -1115,14 +1122,15 @@ class ModelBuilder:
             Net = torch_mods["Net"]
             CNNGRU = torch_mods["CNNGRU"]
             TFT = torch_mods["TemporalFusionTransformer"]
+            pt = self.config.get("prediction_target", "direction")
             if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2], regression=prediction_target=="pnl")
+                model = Net(X.shape[1] * X.shape[2], regression=pt == "pnl")
             elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
+                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
             elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2], regression=prediction_target=="pnl")
+                model = TFT(X.shape[2], regression=pt == "pnl")
             else:
-                model = TFT(X.shape[2], regression=prediction_target=="pnl")
+                model = TFT(X.shape[2], regression=pt == "pnl")
             model.load_state_dict(model_state)
             model.to(self.device)
         if self.config.get("prediction_target", "direction") == "pnl":
@@ -1419,8 +1427,10 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
+        self.position = 0  # 1 for long, -1 for short
         self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
-        self.action_space = spaces.Discrete(3)  # hold, buy, sell
+        # hold, open long, open short, close
+        self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -1430,6 +1440,7 @@ class TradingEnv(gym.Env if gym else object):
 
     def reset(self):
         self.current_step = 0
+        self.position = 0
         return self._get_obs()
 
     def _get_obs(self):
@@ -1438,15 +1449,18 @@ class TradingEnv(gym.Env if gym else object):
     def step(self, action):
         done = False
         reward = 0.0
+        if action == 1:  # open long
+            self.position = 1
+        elif action == 2:  # open short
+            self.position = -1
+        elif action == 3:  # close
+            self.position = 0
         if self.current_step < len(self.df) - 1:
             price_diff = (
                 self.df["close"].iloc[self.current_step + 1]
                 - self.df["close"].iloc[self.current_step]
             )
-            if action == 1:  # buy
-                reward = price_diff
-            elif action == 2:  # sell
-                reward = -price_diff
+            reward = price_diff * self.position
             self.balance += reward
             if self.balance > self.max_balance:
                 self.max_balance = self.balance
@@ -1499,6 +1513,8 @@ class RLAgent:
         features_df["adx"] = _align(indicators.adx)
         features_df["macd"] = _align(indicators.macd)
         features_df["atr"] = _align(indicators.atr)
+        features_df["model_pred"] = 0.0
+        features_df["exposure"] = 0.0
         return features_df.reset_index(drop=True)
 
     async def train_symbol(self, symbol: str):
@@ -1671,11 +1687,14 @@ class RLAgent:
                 )
                 return None
             action, _ = model.predict(obs, deterministic=True)
-        if int(action) == 1:
-            return "buy"
-        if int(action) == 2:
-            return "sell"
-        return None
+        action = int(action)
+        if action == 1:
+            return "open_long"
+        if action == 2:
+            return "open_short"
+        if action == 3:
+            return "close"
+        return "hold"
 
 
 # ----------------------------------------------------------------------
