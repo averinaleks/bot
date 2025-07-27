@@ -661,57 +661,78 @@ class TradeManager:
     async def close_position(
         self, symbol: str, exit_price: float, reason: str = "Manual"
     ):
+        # Fetch current position details under locks
         async with self.position_lock:
             async with self.returns_lock:
-                try:
-                    if "symbol" in self.positions.index.names:
-                        position = self.positions.loc[
-                            self.positions.index.get_level_values("symbol") == symbol
-                        ]
-                    else:
-                        position = pd.DataFrame()
-                    if position.empty:
-                        logger.warning("Position for %s not found", symbol)
-                        return
-                    position = position.iloc[0]
-                    side = "sell" if position["side"] == "buy" else "buy"
-                    order = await self.place_order(
-                        symbol,
-                        side,
-                        position["size"],
-                        exit_price,
-                        use_lock=False,
+                if "symbol" in self.positions.index.names:
+                    position_df = self.positions.loc[
+                        self.positions.index.get_level_values("symbol") == symbol
+                    ]
+                else:
+                    position_df = pd.DataFrame()
+                if position_df.empty:
+                    logger.warning("Position for %s not found", symbol)
+                    return
+                position = position_df.iloc[0]
+                pos_idx = position_df.index[0]
+                side = "sell" if position["side"] == "buy" else "buy"
+                size = position["size"]
+                entry_price = position["entry_price"]
+
+        # Submit the order outside the locks
+        try:
+            order = await self.place_order(
+                symbol,
+                side,
+                size,
+                exit_price,
+                use_lock=False,
+            )
+        except Exception as e:  # pragma: no cover - network issues
+            logger.exception("Failed to close position for %s: %s", symbol, e)
+            await self.telegram_logger.send_telegram_message(
+                f"❌ Failed to close position {symbol}: {e}"
+            )
+            raise
+
+        if not order:
+            return
+
+        profit = (
+            (exit_price - entry_price) * size
+            if position["side"] == "buy"
+            else (entry_price - exit_price) * size
+        )
+        profit *= self.leverage
+
+        # Re-acquire locks to update state, verifying position still exists
+        async with self.position_lock:
+            async with self.returns_lock:
+                if (
+                    "symbol" in self.positions.index.names
+                    and pos_idx in self.positions.index
+                ):
+                    self.positions = self.positions.drop(pos_idx)
+                    self.positions_changed = True
+                    self.returns_by_symbol[symbol].append(
+                        (pd.Timestamp.now(tz="UTC").timestamp(), profit)
                     )
-                    if order:
-                        profit = (
-                            (exit_price - position["entry_price"]) * position["size"]
-                            if position["side"] == "buy"
-                            else (position["entry_price"] - exit_price)
-                            * position["size"]
-                        )
-                        profit *= self.leverage
-                        self.returns_by_symbol[symbol].append(
-                            (pd.Timestamp.now(tz="UTC").timestamp(), profit)
-                        )
-                        self.positions = self.positions.drop(symbol, level="symbol")
-                        self.positions_changed = True
-                        self.save_state()
-                        logger.info(
-                            "Position closed: %s, profit=%.2f, reason=%s",
-                            symbol,
-                            profit,
-                            reason,
-                        )
-                        await self.telegram_logger.send_telegram_message(
-                            f"📉 {symbol} {position['side'].upper()} exit={exit_price:.2f} PnL={profit:.2f} USDT ({reason})",
-                            urgent=True,
-                        )
-                except Exception as e:
-                    logger.exception("Failed to close position for %s: %s", symbol, e)
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Failed to close position {symbol}: {e}"
+                    self.save_state()
+                else:
+                    logger.warning(
+                        "Position for %s modified before close confirmation", symbol
                     )
-                    raise
+
+        logger.info(
+            "Position closed: %s, profit=%.2f, reason=%s",
+            symbol,
+            profit,
+            reason,
+        )
+        await self.telegram_logger.send_telegram_message(
+            f"📉 {symbol} {position['side'].upper()} exit={exit_price:.2f} PnL={profit:.2f} USDT ({reason})",
+            urgent=True,
+        )
 
     async def check_trailing_stop(self, symbol: str, current_price: float):
         async with self.position_lock:
