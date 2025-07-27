@@ -82,6 +82,8 @@ class BotConfig:
     lstm_batch_size: int = _get_default("lstm_batch_size", 32)
     model_type: str = _get_default("model_type", "transformer")
     nn_framework: str = _get_default("nn_framework", "pytorch")
+    prediction_target: str = _get_default("prediction_target", "direction")
+    trading_fee: float = _get_default("trading_fee", 0.0)
     ema30_period: int = _get_default("ema30_period", 30)
     ema100_period: int = _get_default("ema100_period", 100)
     ema200_period: int = _get_default("ema200_period", 200)

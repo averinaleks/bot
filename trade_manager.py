@@ -1161,10 +1161,20 @@ class TradeManager:
                 prediction = await asyncio.to_thread(
                     _calibrate_output, calibrator, float(prediction)
                 )
+
+            if self.config.get("prediction_target", "direction") == "pnl":
+                cost = 2 * self.config.get("trading_fee", 0.0)
+                if prediction > cost:
+                    signal = "buy"
+                elif prediction < -cost:
+                    signal = "sell"
+                else:
+                    signal = None
+                return (signal, float(prediction)) if return_prob else signal
+
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
-            # Determine individual signals
             signal = None
             if prediction > long_threshold:
                 signal = "buy"

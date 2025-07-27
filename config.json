@@ -102,4 +102,6 @@
     "ema_weight": 0.2,
     "early_stopping_patience": 3,
     "reversal_margin": 0.05
+    ,"prediction_target": "direction"
+    ,"trading_fee": 0.0
 }

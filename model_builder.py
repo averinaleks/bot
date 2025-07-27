@@ -106,6 +106,7 @@ def _get_torch_modules():
             conv_channels=32,
             kernel_size=3,
             l2_lambda=1e-5,
+            regression=False,
         ):
             super().__init__()
             self.hidden_size = hidden_size
@@ -126,7 +127,7 @@ def _get_torch_modules():
             )
             self.attn = nn.Linear(hidden_size, 1)
             self.fc = nn.Linear(hidden_size, 1)
-            self.sigmoid = nn.Sigmoid()
+            self.act = nn.Identity() if regression else nn.Sigmoid()
 
         def forward(self, x):
             x = x.permute(0, 2, 1)
@@ -142,7 +143,7 @@ def _get_torch_modules():
             context = (out * attn_weights).sum(dim=1)
             context = self.dropout(context)
             out = self.fc(context)
-            return self.sigmoid(out)
+            return self.act(out)
 
         def l2_regularization(self):
             return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
@@ -151,7 +152,7 @@ def _get_torch_modules():
         """Simple multilayer perceptron."""
 
         def __init__(
-            self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5
+            self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5, regression=False
         ):
             super().__init__()
             self.l2_lambda = l2_lambda
@@ -160,7 +161,7 @@ def _get_torch_modules():
             self.fc3 = nn.Linear(hidden_sizes[1], 1)
             self.relu = nn.ReLU()
             self.dropout = nn.Dropout(dropout)
-            self.sigmoid = nn.Sigmoid()
+            self.act = nn.Identity() if regression else nn.Sigmoid()
 
         def forward(self, x):
             x = self.fc1(x)
@@ -170,7 +171,7 @@ def _get_torch_modules():
             x = self.relu(x)
             x = self.dropout(x)
             x = self.fc3(x)
-            return self.sigmoid(x)
+            return self.act(x)
 
         def l2_regularization(self):
             return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
@@ -207,6 +208,7 @@ def _get_torch_modules():
             num_layers=2,
             dropout=0.1,
             l2_lambda=1e-5,
+            regression=False,
         ):
             super().__init__()
             self.l2_lambda = l2_lambda
@@ -222,7 +224,7 @@ def _get_torch_modules():
             self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
             self.dropout = nn.Dropout(dropout)
             self.fc = nn.Linear(d_model, 1)
-            self.sigmoid = nn.Sigmoid()
+            self.act = nn.Identity() if regression else nn.Sigmoid()
 
         def forward(self, x):
             x = self.input_proj(x)
@@ -231,7 +233,7 @@ def _get_torch_modules():
             x = x.mean(dim=1)
             x = self.dropout(x)
             x = self.fc(x)
-            return self.sigmoid(x)
+            return self.act(x)
 
         def l2_regularization(self):
             return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
@@ -305,6 +307,7 @@ def _train_model_keras(
     n_splits=5,
     early_stopping_patience=3,
     freeze_base_layers=False,
+    prediction_target="direction",
 ):
     import tensorflow as tf
     from tensorflow import keras
@@ -329,11 +332,13 @@ def _train_model_keras(
         else:
             attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
             x = keras.layers.GlobalAveragePooling1D()(attn)
-    outputs = keras.layers.Dense(1, activation="sigmoid")(x)
+    activation = None if prediction_target == "pnl" else "sigmoid"
+    outputs = keras.layers.Dense(1, activation=activation)(x)
     model = keras.Model(inputs, outputs)
     if freeze_base_layers:
         _freeze_keras_base_layers(model, model_type)
-    model.compile(optimizer="adam", loss="binary_crossentropy")
+    loss = "mse" if prediction_target == "pnl" else "binary_crossentropy"
+    model.compile(optimizer="adam", loss=loss)
     if initial_state is not None:
         model.set_weights(initial_state)
     preds: list[float] = []
@@ -342,7 +347,7 @@ def _train_model_keras(
         fold_model = keras.models.clone_model(model)
         if freeze_base_layers:
             _freeze_keras_base_layers(fold_model, model_type)
-        fold_model.compile(optimizer="adam", loss="binary_crossentropy")
+        fold_model.compile(optimizer="adam", loss=loss)
         if initial_state is not None:
             fold_model.set_weights(initial_state)
         early_stop = keras.callbacks.EarlyStopping(
@@ -376,6 +381,7 @@ def _train_model_lightning(
     n_splits=5,
     early_stopping_patience=3,
     freeze_base_layers=False,
+    prediction_target="direction",
 ):
     torch_mods = _get_torch_modules()
     torch = torch_mods["torch"]
@@ -403,13 +409,13 @@ def _train_model_lightning(
 
         if model_type == "mlp":
             input_dim = X.shape[1] * X.shape[2]
-            net = Net(input_dim)
+            net = Net(input_dim, regression=prediction_target=="pnl")
         elif model_type == "gru":
-            net = CNNGRU(X.shape[2], 64, 2, 0.2)
+            net = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
         elif model_type in {"tft", "transformer"}:
-            net = TFT(X.shape[2])
+            net = TFT(X.shape[2], regression=prediction_target=="pnl")
         else:
-            net = TFT(X.shape[2])
+            net = TFT(X.shape[2], regression=prediction_target=="pnl")
         if freeze_base_layers:
             _freeze_torch_base_layers(net, model_type)
 
@@ -417,7 +423,7 @@ def _train_model_lightning(
             def __init__(self, model):
                 super().__init__()
                 self.model = model
-                self.criterion = nn.BCELoss()
+                self.criterion = nn.MSELoss() if prediction_target == "pnl" else nn.BCELoss()
 
             def forward(self, x):
                 return self.model(x)
@@ -486,6 +492,7 @@ def _train_model_remote(
     n_splits=5,
     early_stopping_patience=3,
     freeze_base_layers=False,
+    prediction_target="direction",
 ):
     if framework in {"keras", "tensorflow"}:
         return _train_model_keras(
@@ -498,6 +505,7 @@ def _train_model_remote(
             n_splits,
             early_stopping_patience,
             freeze_base_layers,
+            prediction_target,
         )
     if framework == "lightning":
         return _train_model_lightning(
@@ -510,6 +518,7 @@ def _train_model_remote(
             n_splits,
             early_stopping_patience,
             freeze_base_layers,
+            prediction_target,
         )
 
     torch_mods = _get_torch_modules()
@@ -540,19 +549,19 @@ def _train_model_remote(
 
         if model_type == "mlp":
             input_dim = X.shape[1] * X.shape[2]
-            model = Net(input_dim)
+            model = Net(input_dim, regression=prediction_target=="pnl")
         elif model_type == "gru":
-            model = CNNGRU(X.shape[2], 64, 2, 0.2)
+            model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
         elif model_type in {"tft", "transformer"}:
-            model = TFT(X.shape[2])
+            model = TFT(X.shape[2], regression=prediction_target=="pnl")
         else:
-            model = TFT(X.shape[2])
+            model = TFT(X.shape[2], regression=prediction_target=="pnl")
         if initial_state is not None:
             model.load_state_dict(initial_state)
         if freeze_base_layers:
             _freeze_torch_base_layers(model, model_type)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        criterion = nn.BCELoss()
+        criterion = nn.MSELoss() if prediction_target == "pnl" else nn.BCELoss()
         model.to(device)
         best_loss = float("inf")
         epochs_no_improve = 0
@@ -709,13 +718,13 @@ class ModelBuilder:
                         )
                         mt = self.model_type
                         if mt == "mlp":
-                            model = Net(input_size * self.config["lstm_timesteps"])
+                            model = Net(input_size * self.config["lstm_timesteps"], regression=prediction_target=="pnl")
                         elif mt == "gru":
-                            model = CNNGRU(input_size, 64, 2, 0.2)
+                            model = CNNGRU(input_size, 64, 2, 0.2, regression=prediction_target=="pnl")
                         elif mt in {"tft", "transformer"}:
-                            model = TFT(input_size)
+                            model = TFT(input_size, regression=prediction_target=="pnl")
                         else:
-                            model = TFT(input_size)
+                            model = TFT(input_size, regression=prediction_target=="pnl")
                         model.load_state_dict(sd)
                         model.to(self.device)
                         self.predictive_models[symbol] = model
@@ -832,6 +841,20 @@ class ModelBuilder:
         """Return cached LSTM features for ``symbol`` if available."""
         return self.feature_cache.get(symbol)
 
+    def prepare_dataset(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return training sequences and targets based on ``prediction_target``."""
+        tsteps = self.config.get("lstm_timesteps", 60)
+        X = np.array([features[i : i + tsteps] for i in range(len(features) - tsteps)])
+        price_now = features[: -tsteps, 0]
+        future_price = features[tsteps:, 0]
+        returns = (future_price - price_now) / np.clip(price_now, 1e-6, None)
+        if self.config.get("prediction_target", "direction") == "pnl":
+            y = returns.astype(np.float32)
+        else:
+            thr = self.config.get("target_change_threshold", 0.001)
+            y = (returns > thr).astype(np.float32)
+        return X, y
+
     async def retrain_symbol(self, symbol):
         if self.config.get("use_transfer_learning") and symbol in self.predictive_models:
             await self.fine_tune_symbol(symbol, self.config.get("freeze_base_layers", False))
@@ -867,17 +890,7 @@ class ModelBuilder:
                 symbol,
             )
             return
-        X = np.array(
-            [
-                features[i : i + self.config["lstm_timesteps"]]
-                for i in range(len(features) - self.config["lstm_timesteps"])
-            ]
-        )
-        price_now = features[: -self.config["lstm_timesteps"], 0]
-        future_price = features[self.config["lstm_timesteps"] :, 0]
-        pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
-        thr = self.config.get("target_change_threshold", 0.001)
-        y = (pct_change > thr).astype(np.float32)
+        X, y = self.prepare_dataset(features)
         train_task = _train_model_remote
         if self.nn_framework in {"pytorch", "lightning"}:
             torch_mods = _get_torch_modules()
@@ -897,6 +910,8 @@ class ModelBuilder:
                 20,
                 self.config.get("n_splits", 5),
                 self.config.get("early_stopping_patience", 3),
+                False,
+                self.config.get("prediction_target", "direction"),
             )
         )
         logger.debug("_train_model_remote completed for %s", symbol)
@@ -939,35 +954,40 @@ class ModelBuilder:
             TFT = torch_mods["TemporalFusionTransformer"]
             TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2])
+                model = Net(X.shape[1] * X.shape[2], regression=prediction_target=="pnl")
             elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2)
+                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
             elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2])
+                model = TFT(X.shape[2], regression=prediction_target=="pnl")
             else:
-                model = TFT(X.shape[2])
+                model = TFT(X.shape[2], regression=prediction_target=="pnl")
             model.load_state_dict(model_state)
             model.to(self.device)
-        unique_labels = np.unique(val_labels)
-        brier = brier_score_loss(val_labels, val_preds)
-        if unique_labels.size < 2:
-            logger.warning(
-                "Калибровка пропущена для %s: валидационные метки содержат только класс %s",
-                symbol,
-                unique_labels[0] if unique_labels.size == 1 else "unknown",
-            )
+        if self.config.get("prediction_target", "direction") == "pnl":
+            mse = float(np.mean((np.array(val_labels) - np.array(val_preds)) ** 2))
             self.calibrators[symbol] = None
-            self.calibration_metrics[symbol] = {"brier_score": float(brier)}
+            self.calibration_metrics[symbol] = {"mse": mse}
         else:
-            calibrator = LogisticRegression()
-            calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
-            self.calibrators[symbol] = calibrator
-            prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
-            self.calibration_metrics[symbol] = {
-                "brier_score": float(brier),
-                "prob_true": prob_true.tolist(),
-                "prob_pred": prob_pred.tolist(),
-            }
+            unique_labels = np.unique(val_labels)
+            brier = brier_score_loss(val_labels, val_preds)
+            if unique_labels.size < 2:
+                logger.warning(
+                    "Калибровка пропущена для %s: валидационные метки содержат только класс %s",
+                    symbol,
+                    unique_labels[0] if unique_labels.size == 1 else "unknown",
+                )
+                self.calibrators[symbol] = None
+                self.calibration_metrics[symbol] = {"brier_score": float(brier)}
+            else:
+                calibrator = LogisticRegression()
+                calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
+                self.calibrators[symbol] = calibrator
+                prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
+                self.calibration_metrics[symbol] = {
+                    "brier_score": float(brier),
+                    "prob_true": prob_true.tolist(),
+                    "prob_pred": prob_pred.tolist(),
+                }
         if self.config.get("mlflow_enabled", False) and mlflow is not None:
             mlflow.set_tracking_uri(self.config.get("mlflow_tracking_uri", "mlruns"))
             with mlflow.start_run(run_name=f"{symbol}_retrain"):
@@ -1028,17 +1048,7 @@ class ModelBuilder:
         if len(features) < required_len:
             logger.warning("Недостаточно данных для дообучения %s", symbol)
             return
-        X = np.array(
-            [
-                features[i : i + self.config["lstm_timesteps"]]
-                for i in range(len(features) - self.config["lstm_timesteps"])
-            ]
-        )
-        price_now = features[: -self.config["lstm_timesteps"], 0]
-        future_price = features[self.config["lstm_timesteps"] :, 0]
-        pct_change = (future_price - price_now) / np.clip(price_now, 1e-6, None)
-        thr = self.config.get("target_change_threshold", 0.001)
-        y = (pct_change > thr).astype(np.float32)
+        X, y = self.prepare_dataset(features)
         existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
@@ -1064,6 +1074,7 @@ class ModelBuilder:
                 self.config.get("n_splits", 5),
                 self.config.get("early_stopping_patience", 3),
                 freeze_base_layers,
+                self.config.get("prediction_target", "direction"),
             )
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
@@ -1105,35 +1116,40 @@ class ModelBuilder:
             CNNGRU = torch_mods["CNNGRU"]
             TFT = torch_mods["TemporalFusionTransformer"]
             if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2])
+                model = Net(X.shape[1] * X.shape[2], regression=prediction_target=="pnl")
             elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2)
+                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=prediction_target=="pnl")
             elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2])
+                model = TFT(X.shape[2], regression=prediction_target=="pnl")
             else:
-                model = TFT(X.shape[2])
+                model = TFT(X.shape[2], regression=prediction_target=="pnl")
             model.load_state_dict(model_state)
             model.to(self.device)
-        unique_labels = np.unique(val_labels)
-        brier = brier_score_loss(val_labels, val_preds)
-        if unique_labels.size < 2:
-            logger.warning(
-                "Калибровка пропущена для %s: валидационные метки содержат только класс %s",
-                symbol,
-                unique_labels[0] if unique_labels.size == 1 else "unknown",
-            )
+        if self.config.get("prediction_target", "direction") == "pnl":
+            mse = float(np.mean((np.array(val_labels) - np.array(val_preds)) ** 2))
             self.calibrators[symbol] = None
-            self.calibration_metrics[symbol] = {"brier_score": float(brier)}
+            self.calibration_metrics[symbol] = {"mse": mse}
         else:
-            calibrator = LogisticRegression()
-            calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
-            self.calibrators[symbol] = calibrator
-            prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
-            self.calibration_metrics[symbol] = {
-                "brier_score": float(brier),
-                "prob_true": prob_true.tolist(),
-                "prob_pred": prob_pred.tolist(),
-            }
+            unique_labels = np.unique(val_labels)
+            brier = brier_score_loss(val_labels, val_preds)
+            if unique_labels.size < 2:
+                logger.warning(
+                    "Калибровка пропущена для %s: валидационные метки содержат только класс %s",
+                    symbol,
+                    unique_labels[0] if unique_labels.size == 1 else "unknown",
+                )
+                self.calibrators[symbol] = None
+                self.calibration_metrics[symbol] = {"brier_score": float(brier)}
+            else:
+                calibrator = LogisticRegression()
+                calibrator.fit(np.array(val_preds).reshape(-1, 1), np.array(val_labels))
+                self.calibrators[symbol] = calibrator
+                prob_true, prob_pred = calibration_curve(val_labels, val_preds, n_bins=10)
+                self.calibration_metrics[symbol] = {
+                    "brier_score": float(brier),
+                    "prob_true": prob_true.tolist(),
+                    "prob_pred": prob_pred.tolist(),
+                }
         if self.config.get("mlflow_enabled", False) and mlflow is not None:
             mlflow.set_tracking_uri(self.config.get("mlflow_tracking_uri", "mlruns"))
             with mlflow.start_run(run_name=f"{symbol}_fine_tune"):
