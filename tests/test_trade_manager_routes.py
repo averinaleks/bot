@@ -3,6 +3,7 @@ import os
 import types
 import inspect
 import asyncio
+import concurrent.futures
 import logging
 
 
@@ -107,3 +108,22 @@ def test_stats_route_returns_data(monkeypatch):
     resp = client.get("/stats")
     assert resp.status_code == 200
     assert resp.json["stats"]["win_rate"] == 1.0
+
+
+def test_open_position_route_concurrent(monkeypatch):
+    tm, loop, _ = _setup_module(monkeypatch)
+
+    def _call():
+        client = tm.api_app.test_client()
+        resp = client.post(
+            "/open_position",
+            json={"symbol": "BTCUSDT", "side": "buy", "price": 100.0},
+        )
+        assert resp.status_code == 200
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        futures = [ex.submit(_call) for _ in range(5)]
+        for fut in futures:
+            fut.result()
+
+    assert len(loop.calls) == 5
