@@ -642,6 +642,26 @@ class DataHandler:
             tasks = []
             history_tasks = []
             history_limit = self.config.get("min_data_length", 200)
+
+            mem = psutil.virtual_memory()
+            avail_gb = mem.available / (1024 ** 3)
+            batch_size = self.config.get("history_batch_size", 10)
+            batch_size = max(1, min(batch_size, int(max(1, avail_gb))))
+            logger.info(
+                "Исторические данные загружаются батчами по %s (%.1f GB available)",
+                batch_size,
+                avail_gb,
+            )
+            hist_sem = asyncio.Semaphore(batch_size)
+
+            async def limited_history(sym: str, tf: str, prefix: str = "") -> tuple:
+                async with hist_sem:
+                    return await self.fetch_ohlcv_history(
+                        sym,
+                        tf,
+                        history_limit,
+                        cache_prefix=prefix,
+                    )
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
                 bid_volume = (
@@ -657,26 +677,30 @@ class DataHandler:
                 liquidity = min(bid_volume, ask_volume)
                 self.symbol_priority[symbol] = -liquidity
                 tasks.append(
-                    self.fetch_ohlcv_history(
-                        symbol,
-                        self.config["timeframe"],
-                        history_limit,
-                        cache_prefix="",
+                    asyncio.create_task(
+                        limited_history(
+                            symbol,
+                            self.config["timeframe"],
+                            "",
+                        )
                     )
                 )
                 history_tasks.append((symbol, self.config["timeframe"]))
                 if self.config["secondary_timeframe"] != self.config["timeframe"]:
                     tasks.append(
-                        self.fetch_ohlcv_history(
-                            symbol,
-                            self.config["secondary_timeframe"],
-                            history_limit,
-                            cache_prefix="2h_",
+                        asyncio.create_task(
+                            limited_history(
+                                symbol,
+                                self.config["secondary_timeframe"],
+                                "2h_",
+                            )
                         )
                     )
-                    history_tasks.append((symbol, self.config["secondary_timeframe"]))
-                tasks.append(self.fetch_funding_rate(symbol))
-                tasks.append(self.fetch_open_interest(symbol))
+                    history_tasks.append(
+                        (symbol, self.config["secondary_timeframe"])
+                    )
+                tasks.append(asyncio.create_task(self.fetch_funding_rate(symbol)))
+                tasks.append(asyncio.create_task(self.fetch_open_interest(symbol)))
             results = await asyncio.gather(*tasks, return_exceptions=True)
             hist_idx = 0
             for result in results:

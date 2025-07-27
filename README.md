@@ -97,6 +97,7 @@
   - `max_symbols` задаёт количество наиболее ликвидных торговых пар, которые бот выберет из доступных.
   - `secondary_timeframe` определяет дополнительный интервал (по умолчанию `2h`). Свечи этого таймфрейма бот запрашивает напрямую у биржи и не агрегирует из основного. См. `DataHandler.load_initial` и `_send_subscriptions`.
   - `max_subscriptions_per_connection` определяет, сколько символов подписывается через одно WebSocket‑соединение.
+  - `history_batch_size` задаёт число одновременных запросов истории. При нехватке памяти значение автоматически снижается.
   - `ray_num_cpus` задаёт число потоков, которые Ray выделяет под задачи (по умолчанию 8). Убедитесь, что у хоста достаточно ядер или уменьшите значение.
   - `telegram_queue_size` ограничивает размер очереди сообщений Telegram.
   - `fine_tune_epochs` задаёт число эпох при дообучении модели.
@@ -389,7 +390,8 @@ preventing duplicated updates.
 
 ```json
 {
-    "max_subscriptions_per_connection": 15
+    "max_subscriptions_per_connection": 15,
+    "history_batch_size": 10
 }
 ```
 
