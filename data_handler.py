@@ -690,6 +690,7 @@ class DataHandler:
                     ):
                         df["symbol"] = symbol
                         df = df.set_index(["symbol", df.index])
+                        df.index.set_names(["symbol", "timestamp"], inplace=True)
                         await self.synchronize_and_update(
                             symbol,
                             df,
