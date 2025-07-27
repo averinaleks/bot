@@ -523,98 +523,100 @@ class TradeManager:
                 ):
                     logger.warning("Position for %s already open", symbol)
                     return
-                if not await self.data_handler.is_data_fresh(symbol):
-                    logger.warning("Stale data for %s, skipping trade", symbol)
-                    return
-                atr = await self.data_handler.get_atr(symbol)
-                if atr <= 0:
-                    logger.warning(
-                        "ATR data missing for %s, retrying later",
-                        symbol,
-                    )
-                    return
-                sl_mult = params.get("sl_multiplier", self.config["sl_multiplier"])
-                tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
-                size = await self.calculate_position_size(symbol, price, atr, sl_mult)
-                if size <= 0:
-                    logger.warning("Position size too small for %s", symbol)
-                    return
-                stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
-                    side, price, atr, sl_mult, tp_mult
-                )
 
-                order_params = {
-                    "leverage": self.leverage,
-                    "stopLossPrice": stop_loss_price,
-                    "takeProfitPrice": take_profit_price,
-                    "tpslMode": "full",
-                }
-                max_attempts = self.config.get("order_retry_attempts", 3)
-                retry_delay = self.config.get("order_retry_delay", 1)
-                order = None
-                for attempt in range(max_attempts):
-                    if attempt > 0:
-                        logger.info(
-                            "Retrying order for %s (attempt %s/%s)",
-                            symbol,
-                            attempt + 1,
-                            max_attempts,
-                        )
-                        await asyncio.sleep(retry_delay)
-                    order = await self.place_order(
-                        symbol, side, size, price, order_params, use_lock=False
-                    )
-                    ret_code = None
-                    if isinstance(order, dict):
-                        ret_code = order.get("retCode") or order.get("ret_code")
-                    if order and (ret_code is None or ret_code == 0):
-                        break
-                    logger.warning(
-                        "Order attempt %s for %s failed: %s",
+            if not await self.data_handler.is_data_fresh(symbol):
+                logger.warning("Stale data for %s, skipping trade", symbol)
+                return
+            atr = await self.data_handler.get_atr(symbol)
+            if atr <= 0:
+                logger.warning(
+                    "ATR data missing for %s, retrying later",
+                    symbol,
+                )
+                return
+            sl_mult = params.get("sl_multiplier", self.config["sl_multiplier"])
+            tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
+            size = await self.calculate_position_size(symbol, price, atr, sl_mult)
+            if size <= 0:
+                logger.warning("Position size too small for %s", symbol)
+                return
+            stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
+                side, price, atr, sl_mult, tp_mult
+            )
+
+            order_params = {
+                "leverage": self.leverage,
+                "stopLossPrice": stop_loss_price,
+                "takeProfitPrice": take_profit_price,
+                "tpslMode": "full",
+            }
+            max_attempts = self.config.get("order_retry_attempts", 3)
+            retry_delay = self.config.get("order_retry_delay", 1)
+            order = None
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    logger.info(
+                        "Retrying order for %s (attempt %s/%s)",
+                        symbol,
                         attempt + 1,
-                        symbol,
-                        order,
-                    )
-                else:
-                    logger.error(
-                        "Order failed for %s after %s attempts",
-                        symbol,
                         max_attempts,
                     )
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Order failed {symbol}: retries exhausted"
-                    )
-                    return
-                if isinstance(order, dict) and not (
-                    order.get("id") or order.get("orderId") or order.get("result")
-                ):
-                    logger.error(
-                        "Order confirmation missing id for %s: %s",
-                        symbol,
-                        order,
-                    )
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Order confirmation missing id {symbol}"
-                    )
-                    return
-                new_position = {
-                    "symbol": symbol,
-                    "side": side,
-                    "size": size,
-                    "entry_price": price,
-                    "tp_multiplier": tp_mult,
-                    "sl_multiplier": sl_mult,
-                    "highest_price": price if side == "buy" else float("inf"),
-                    "lowest_price": price if side == "sell" else 0.0,
-                    "breakeven_triggered": False,
-                }
-                new_position_df = pd.DataFrame(
-                    [new_position],
-                    index=pd.MultiIndex.from_tuples(
-                        [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
-                    ),
-                    dtype=object,
+                    await asyncio.sleep(retry_delay)
+                order = await self.place_order(
+                    symbol, side, size, price, order_params, use_lock=False
                 )
+                ret_code = None
+                if isinstance(order, dict):
+                    ret_code = order.get("retCode") or order.get("ret_code")
+                if order and (ret_code is None or ret_code == 0):
+                    break
+                logger.warning(
+                    "Order attempt %s for %s failed: %s",
+                    attempt + 1,
+                    symbol,
+                    order,
+                )
+            else:
+                logger.error(
+                    "Order failed for %s after %s attempts",
+                    symbol,
+                    max_attempts,
+                )
+                await self.telegram_logger.send_telegram_message(
+                    f"❌ Order failed {symbol}: retries exhausted"
+                )
+                return
+            if isinstance(order, dict) and not (
+                order.get("id") or order.get("orderId") or order.get("result")
+            ):
+                logger.error(
+                    "Order confirmation missing id for %s: %s",
+                    symbol,
+                    order,
+                )
+                await self.telegram_logger.send_telegram_message(
+                    f"❌ Order confirmation missing id {symbol}"
+                )
+                return
+            new_position = {
+                "symbol": symbol,
+                "side": side,
+                "size": size,
+                "entry_price": price,
+                "tp_multiplier": tp_mult,
+                "sl_multiplier": sl_mult,
+                "highest_price": price if side == "buy" else float("inf"),
+                "lowest_price": price if side == "sell" else 0.0,
+                "breakeven_triggered": False,
+            }
+            new_position_df = pd.DataFrame(
+                [new_position],
+                index=pd.MultiIndex.from_tuples(
+                    [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
+                ),
+                dtype=object,
+            )
+            async with self.position_lock:
                 if (
                     "symbol" in self.positions.index.names
                     and symbol in self.positions.index.get_level_values("symbol")
@@ -624,6 +626,12 @@ class TradeManager:
                         symbol,
                     )
                     return
+                if len(self.positions) >= self.max_positions:
+                    logger.warning(
+                        "Maximum number of positions reached after order placed: %s",
+                        self.max_positions,
+                    )
+                    return
                 if self.positions.empty:
                     self.positions = new_position_df
                 else:
@@ -631,18 +639,18 @@ class TradeManager:
                         [self.positions, new_position_df], ignore_index=False
                     )
                 self.positions_changed = True
-                self.save_state()
-                logger.info(
-                    "Position opened: %s, %s, size=%s, entry=%s",
-                    symbol,
-                    side,
-                    size,
-                    price,
-                )
-                await self.telegram_logger.send_telegram_message(
-                    f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
-                    urgent=True,
-                )
+            self.save_state()
+            logger.info(
+                "Position opened: %s, %s, size=%s, entry=%s",
+                symbol,
+                side,
+                size,
+                price,
+            )
+            await self.telegram_logger.send_telegram_message(
+                f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
+                urgent=True,
+            )
         except Exception as e:
             logger.exception("Failed to open position for %s: %s", symbol, e)
             await self.telegram_logger.send_telegram_message(
