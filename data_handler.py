@@ -180,6 +180,100 @@ def detect_clusters(
     return clusters
 
 
+def _rsi_update_cpu(
+    prev_gain: float,
+    prev_loss: float,
+    prev_close: float,
+    close: float,
+    window: int,
+) -> tuple[float, float, float]:
+    """Incrementally update RSI using NumPy."""
+    diff = close - prev_close
+    gain = max(diff, 0.0)
+    loss = max(-diff, 0.0)
+    avg_gain = (prev_gain * (window - 1) + gain) / window
+    avg_loss = (prev_loss * (window - 1) + loss) / window
+    if avg_loss == 0:
+        rsi = 100.0
+    else:
+        rs = avg_gain / avg_loss
+        rsi = 100 - 100 / (1 + rs)
+    return rsi, avg_gain, avg_loss
+
+
+def _rsi_update_cupy(
+    prev_gain: float,
+    prev_loss: float,
+    prev_close: float,
+    close: float,
+    window: int,
+) -> tuple[float, float, float]:
+    """Incrementally update RSI using CuPy."""
+    diff = cp.float64(close - prev_close)
+    gain = cp.maximum(diff, 0.0)
+    loss = cp.maximum(-diff, 0.0)
+    avg_gain = (prev_gain * (window - 1) + gain) / window
+    avg_loss = (prev_loss * (window - 1) + loss) / window
+    rsi = cp.where(avg_loss == 0, cp.float64(100.0), 100 - 100 / (1 + avg_gain / avg_loss))
+    return float(rsi), float(avg_gain), float(avg_loss)
+
+
+def _adx_update_cpu(
+    prev_dm_plus: float,
+    prev_dm_minus: float,
+    prev_adx: float | None,
+    prev_high: float,
+    prev_low: float,
+    prev_close: float,
+    high: float,
+    low: float,
+    atr: float,
+    window: int,
+) -> tuple[float, float, float]:
+    """Incrementally update ADX using NumPy."""
+    up_move = high - prev_high
+    down_move = prev_low - low
+    plus_dm = up_move if up_move > down_move and up_move > 0 else 0.0
+    minus_dm = down_move if down_move > up_move and down_move > 0 else 0.0
+    dm_plus = (prev_dm_plus * (window - 1) + plus_dm) / window
+    dm_minus = (prev_dm_minus * (window - 1) + minus_dm) / window
+    tr_sum = atr * window
+    plus_di = 0.0 if tr_sum == 0 else 100 * dm_plus / tr_sum
+    minus_di = 0.0 if tr_sum == 0 else 100 * dm_minus / tr_sum
+    denom = plus_di + minus_di
+    dx = 0.0 if denom == 0 else 100 * abs(plus_di - minus_di) / denom
+    adx = dx if prev_adx is None else (prev_adx * (window - 1) + dx) / window
+    return adx, dm_plus, dm_minus
+
+
+def _adx_update_cupy(
+    prev_dm_plus: float,
+    prev_dm_minus: float,
+    prev_adx: float | None,
+    prev_high: float,
+    prev_low: float,
+    prev_close: float,
+    high: float,
+    low: float,
+    atr: float,
+    window: int,
+) -> tuple[float, float, float]:
+    """Incrementally update ADX using CuPy."""
+    up_move = cp.float64(high - prev_high)
+    down_move = cp.float64(prev_low - low)
+    plus_dm = cp.where((up_move > down_move) & (up_move > 0), up_move, cp.float64(0.0))
+    minus_dm = cp.where((down_move > up_move) & (down_move > 0), down_move, cp.float64(0.0))
+    dm_plus = (prev_dm_plus * (window - 1) + plus_dm) / window
+    dm_minus = (prev_dm_minus * (window - 1) + minus_dm) / window
+    tr_sum = atr * window
+    plus_di = 0.0 if tr_sum == 0 else 100 * dm_plus / tr_sum
+    minus_di = 0.0 if tr_sum == 0 else 100 * dm_minus / tr_sum
+    denom = plus_di + minus_di
+    dx = 0.0 if denom == 0 else 100 * cp.abs(plus_di - minus_di) / denom
+    adx = dx if prev_adx is None else (prev_adx * (window - 1) + dx) / window
+    return float(adx), float(dm_plus), float(dm_minus)
+
+
 class IndicatorsCache:
     """Container for computed technical indicators."""
 
@@ -220,9 +314,27 @@ class IndicatorsCache:
                 self._alpha_ema200 = 2 / (config["ema200_period"] + 1)
                 self._atr_period = config["atr_period_default"]
                 rsi_window = config.get("rsi_window", 14)
+                self._rsi_window = rsi_window
                 self.rsi = ta.momentum.rsi(df["close"], window=rsi_window, fillna=True)
 
+                # Calculate smoothed gain/loss values for incremental RSI updates
+                diff = df["close"].diff().to_numpy()[1:]
+                gains = np.clip(diff, 0.0, None)
+                losses = np.clip(-diff, 0.0, None)
+                if len(gains) >= rsi_window:
+                    avg_gain = gains[:rsi_window].mean()
+                    avg_loss = losses[:rsi_window].mean()
+                    for g, l in zip(gains[rsi_window:], losses[rsi_window:]):
+                        avg_gain = (avg_gain * (rsi_window - 1) + g) / rsi_window
+                        avg_loss = (avg_loss * (rsi_window - 1) + l) / rsi_window
+                    self._rsi_avg_gain = float(avg_gain)
+                    self._rsi_avg_loss = float(avg_loss)
+                else:
+                    self._rsi_avg_gain = None
+                    self._rsi_avg_loss = None
+
                 adx_window = config.get("adx_window", 14)
+                self._adx_window = adx_window
                 if len(df) >= adx_window:
                     self.adx = ta.trend.adx(
                         df["high"],
@@ -233,6 +345,25 @@ class IndicatorsCache:
                     )
                 else:
                     self.adx = pd.Series([np.nan] * len(df), index=df.index)
+
+                # Compute smoothed DM values for incremental ADX updates
+                if len(df) >= 2:
+                    high_np = df["high"].to_numpy()
+                    low_np = df["low"].to_numpy()
+                    up_move = high_np[1:] - high_np[:-1]
+                    down_move = low_np[:-1] - low_np[1:]
+                    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+                    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+                    dm_plus = plus_dm[:adx_window].sum()
+                    dm_minus = minus_dm[:adx_window].sum()
+                    for pdm, mdm in zip(plus_dm[adx_window:], minus_dm[adx_window:]):
+                        dm_plus = (dm_plus * (adx_window - 1) + pdm) / adx_window
+                        dm_minus = (dm_minus * (adx_window - 1) + mdm) / adx_window
+                    self._dm_plus = float(dm_plus)
+                    self._dm_minus = float(dm_minus)
+                else:
+                    self._dm_plus = None
+                    self._dm_minus = None
 
                 self.macd = ta.trend.macd_diff(
                     df["close"],
@@ -284,6 +415,10 @@ class IndicatorsCache:
                 if hasattr(self, "atr") and self.atr is not None
                 else None
             )
+            self.last_high = float(df["high"].iloc[-1]) if "high" in df else None
+            self.last_low = float(df["low"].iloc[-1]) if "low" in df else None
+            self.last_rsi = float(self.rsi.iloc[-1]) if hasattr(self, "rsi") else None
+            self.last_adx = float(self.adx.iloc[-1]) if hasattr(self, "adx") else None
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
@@ -371,7 +506,73 @@ class IndicatorsCache:
                 new_df.loc[ts, "ema200"] = self.last_ema200
             if hasattr(self, "atr"):
                 new_df.loc[ts, "atr"] = self.last_atr
+            if hasattr(self, "_rsi_window") and self._rsi_avg_gain is not None and self._rsi_avg_loss is not None and self.last_close is not None:
+                if GPU_AVAILABLE:
+                    rsi_val, self._rsi_avg_gain, self._rsi_avg_loss = _rsi_update_cupy(
+                        self._rsi_avg_gain,
+                        self._rsi_avg_loss,
+                        self.last_close,
+                        close,
+                        self._rsi_window,
+                    )
+                else:
+                    rsi_val, self._rsi_avg_gain, self._rsi_avg_loss = _rsi_update_cpu(
+                        self._rsi_avg_gain,
+                        self._rsi_avg_loss,
+                        self.last_close,
+                        close,
+                        self._rsi_window,
+                    )
+                self.last_rsi = rsi_val
+            else:
+                rsi_val = np.nan
+            if hasattr(self, "rsi"):
+                self.rsi.loc[ts] = rsi_val
+                new_df.loc[ts, "rsi"] = rsi_val
+
+            if (
+                hasattr(self, "_adx_window")
+                and self._dm_plus is not None
+                and self._dm_minus is not None
+                and self.last_high is not None
+                and self.last_low is not None
+                and self.last_atr is not None
+            ):
+                if GPU_AVAILABLE:
+                    adx_val, self._dm_plus, self._dm_minus = _adx_update_cupy(
+                        self._dm_plus,
+                        self._dm_minus,
+                        self.last_adx,
+                        self.last_high,
+                        self.last_low,
+                        self.last_close,
+                        high,
+                        low,
+                        self.last_atr,
+                        self._adx_window,
+                    )
+                else:
+                    adx_val, self._dm_plus, self._dm_minus = _adx_update_cpu(
+                        self._dm_plus,
+                        self._dm_minus,
+                        self.last_adx,
+                        self.last_high,
+                        self.last_low,
+                        self.last_close,
+                        high,
+                        low,
+                        self.last_atr,
+                        self._adx_window,
+                    )
+                self.last_adx = adx_val
+            else:
+                adx_val = np.nan
+            if hasattr(self, "adx"):
+                self.adx.loc[ts] = adx_val
+                new_df.loc[ts, "adx"] = adx_val
             self.last_close = close
+            self.last_high = high
+            self.last_low = low
         self.df = pd.concat([self.df, new_df])
         self._update_volume_profile()
 
