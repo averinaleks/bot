@@ -598,7 +598,9 @@ def _make_calc_indicators_remote(use_gpu: bool):
             # even when workers are started on demand.
             _init_cuda()
         if pl is not None and isinstance(df, pl.DataFrame):
-            df = df.to_pandas().set_index("timestamp")
+            df = df.to_pandas().copy()
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+            df = df.set_index("timestamp")
         return IndicatorsCache(df, config, volatility, timeframe)
 
     return _calc_indicators
@@ -732,7 +734,7 @@ class DataHandler:
         if self.use_polars:
             if self._ohlcv.height == 0:
                 return pd.DataFrame()
-            df = self._ohlcv.to_pandas()
+            df = self._ohlcv.to_pandas().copy()
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             return df.set_index(["symbol", "timestamp"]).sort_index()
         return self._ohlcv
@@ -753,7 +755,7 @@ class DataHandler:
         if self.use_polars:
             if self._ohlcv_2h.height == 0:
                 return pd.DataFrame()
-            df = self._ohlcv_2h.to_pandas()
+            df = self._ohlcv_2h.to_pandas().copy()
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             return df.set_index(["symbol", "timestamp"]).sort_index()
         return self._ohlcv_2h
