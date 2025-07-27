@@ -573,7 +573,10 @@ class IndicatorsCache:
             self.last_close = close
             self.last_high = high
             self.last_low = low
-        self.df = pd.concat([self.df, new_df])
+        # Append the new rows directly rather than using ``pd.concat``
+        self.df = self.df.reindex(self.df.index.union(new_df.index))
+        self.df.loc[new_df.index] = new_df
+        self.df.sort_index(inplace=True)
         self._update_volume_profile()
 
 
