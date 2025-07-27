@@ -42,6 +42,7 @@ class BotConfig:
         )
     )
     max_concurrent_requests: int = _get_default("max_concurrent_requests", 10)
+    history_batch_size: int = _get_default("history_batch_size", 10)
     max_symbols: int = _get_default("max_symbols", 50)
     max_subscriptions_per_connection: int = _get_default(
         "max_subscriptions_per_connection", 15
