@@ -485,6 +485,13 @@ python trading_bot.py
 0 3 * * * cd /path/to/bot && /usr/bin/python trading_bot.py
 ```
 
+## Signal ranking
+
+During live trading the bot can rank entry signals from all symbols once per
+`check_interval`. Signals are sorted by the predicted probability multiplied by
+the expected ATR. Only the best `top_signals` trades are executed. Set
+`top_signals` in `config.json` (defaults to `max_positions`).
+
 ## MLflow
 
 Если установить пакет `mlflow` и включить флаг `mlflow_enabled` в `config.json`,

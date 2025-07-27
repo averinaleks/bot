@@ -751,5 +751,38 @@ def test_compute_stats():
     assert stats["max_drawdown"] == pytest.approx(2.0)
 
 
+@pytest.mark.asyncio
+async def test_execute_top_signals_ranking(monkeypatch):
+    class DH(DummyDataHandler):
+        def __init__(self):
+            super().__init__()
+            self.usdt_pairs = ["A", "B", "C"]
+            idx = pd.MultiIndex.from_product([
+                self.usdt_pairs,
+                [pd.Timestamp("2020-01-01")],
+            ], names=["symbol", "timestamp"])
+            self.ohlcv = pd.DataFrame({"close": [1, 1, 1], "atr": [1, 1, 1]}, index=idx)
+
+    dh = DH()
+    tm = TradeManager(BotConfig(cache_dir="/tmp", top_signals=2), dh, None, None, None)
+
+    async def fake_eval(symbol, return_prob=False):
+        probs = {"A": 0.9, "B": 0.8, "C": 0.1}
+        return ("buy", probs[symbol]) if return_prob else "buy"
+
+    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+
+    opened = []
+
+    async def fake_open(symbol, side, price, params):
+        opened.append(symbol)
+
+    monkeypatch.setattr(tm, "open_position", fake_open)
+
+    await tm.execute_top_signals_once()
+
+    assert opened == ["A", "B"]
+
+
 sys.modules.pop('utils', None)
 
