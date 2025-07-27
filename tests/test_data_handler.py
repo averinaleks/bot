@@ -428,6 +428,7 @@ async def test_feature_callback_invoked(tmp_path):
     df = pd.DataFrame({'open': [1], 'high': [1], 'low': [1], 'close': [1], 'volume': [1]}, index=[ts])
     df['symbol'] = symbol
     df = df.set_index(['symbol', df.index])
+    df.index.set_names(['symbol', 'timestamp'], inplace=True)
 
 
 
@@ -515,6 +516,7 @@ async def test_sync_updates_metrics(monkeypatch):
     df = pd.DataFrame({'open':[1], 'high':[1], 'low':[1], 'close':[1], 'volume':[1]}, index=[ts])
     df['symbol'] = 'BTCUSDT'
     df = df.set_index(['symbol', df.index])
+    df.index.set_names(['symbol', 'timestamp'], inplace=True)
     ob = {
         'bids': [[100, 10], [99, 5]],
         'asks': [[101, 8], [102, 1]],
