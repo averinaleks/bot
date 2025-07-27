@@ -209,6 +209,7 @@ class TradeManager:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.exchange = data_handler.exchange
         self.max_positions = config.get("max_positions", 5)
+        self.top_signals = config.get("top_signals", self.max_positions)
         self.leverage = config.get("leverage", 10)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
@@ -1113,7 +1114,7 @@ class TradeManager:
             logger.exception("Failed to check EMA conditions for %s: %s", symbol, e)
             raise
 
-    async def evaluate_signal(self, symbol: str):
+    async def evaluate_signal(self, symbol: str, return_prob: bool = False):
         try:
             model = self.model_builder.predictive_models.get(symbol)
             if not model:
@@ -1220,10 +1221,60 @@ class TradeManager:
                     scores["buy"],
                     scores["sell"],
                 )
+            if return_prob:
+                return final, float(prediction)
             return final
         except Exception as e:
             logger.exception("Failed to evaluate signal for %s: %s", symbol, e)
             raise
+
+    async def gather_pending_signals(self):
+        """Collect and rank signals for all symbols."""
+        signals = []
+        for symbol in self.data_handler.usdt_pairs:
+            if "symbol" in self.positions.index.names and symbol in self.positions.index.get_level_values("symbol"):
+                continue
+            result = await self.evaluate_signal(symbol, return_prob=True)
+            if not result:
+                continue
+            signal, prob = result
+            if not signal:
+                continue
+            ohlcv = self.data_handler.ohlcv
+            if (
+                "symbol" in ohlcv.index.names
+                and symbol in ohlcv.index.get_level_values("symbol")
+            ):
+                df = ohlcv.xs(symbol, level="symbol", drop_level=False)
+            else:
+                df = None
+            empty = await _check_df_async(df, f"gather_pending_signals {symbol}")
+            if empty:
+                continue
+            price = df["close"].iloc[-1]
+            atr = await self.data_handler.get_atr(symbol)
+            score = float(prob) * float(atr)
+            signals.append({"symbol": symbol, "signal": signal, "score": score, "price": price})
+        signals.sort(key=lambda s: s["score"], reverse=True)
+        return signals
+
+    async def execute_top_signals_once(self):
+        """Open positions for the best-ranked signals."""
+        signals = await self.gather_pending_signals()
+        for info in signals[: self.top_signals]:
+            params = await self.data_handler.parameter_optimizer.optimize(info["symbol"])
+            await self.open_position(info["symbol"], info["signal"], info["price"], params)
+
+    async def ranked_signal_loop(self):
+        while True:
+            try:
+                await self.execute_top_signals_once()
+                await asyncio.sleep(self.check_interval)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("Error processing ranked signals: %s", e)
+                await asyncio.sleep(1)
 
     async def run(self):
         try:
@@ -1233,12 +1284,8 @@ class TradeManager:
                     self.monitor_performance(), name="monitor_performance"
                 ),
                 asyncio.create_task(self.manage_positions(), name="manage_positions"),
+                asyncio.create_task(self.ranked_signal_loop(), name="ranked_signal_loop"),
             ]
-            for symbol in self.data_handler.usdt_pairs:
-                task_name = f"process_symbol_{symbol}"
-                self.tasks.append(
-                    asyncio.create_task(self.process_symbol(symbol), name=task_name)
-                )
             results = await asyncio.gather(*self.tasks, return_exceptions=True)
             for task, result in zip(self.tasks, results):
                 if isinstance(result, Exception):
