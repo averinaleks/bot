@@ -160,6 +160,9 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
                 logger.error("Failed to fetch price: HTTP %s", resp.status_code)
                 return
             price = resp.json().get("price", 0)
+            if price is None or price <= 0:
+                logger.warning("Invalid price for %s: %s", symbol, price)
+                return
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": [price]},
@@ -194,7 +197,8 @@ def run_once() -> None:
     """Execute a single trading cycle."""
     env = _load_env()
     price = fetch_price(SYMBOL, env)
-    if price is None:
+    if price is None or price <= 0:
+        logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
     signal = get_prediction(SYMBOL, price, env)

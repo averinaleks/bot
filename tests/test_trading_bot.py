@@ -100,3 +100,19 @@ async def test_reactive_trade_latency_alert(monkeypatch):
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
     await trading_bot.reactive_trade("BTCUSDT")
     assert called
+
+
+def test_run_once_invalid_price(monkeypatch):
+    """No trade sent when fetch_price returns a non-positive value."""
+    sent = []
+
+    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 0.0)
+    monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: sent.append(True))
+    monkeypatch.setattr(trading_bot, "_load_env", lambda: {
+        "data_handler_url": "http://dh",
+        "model_builder_url": "http://mb",
+        "trade_manager_url": "http://tm",
+    })
+
+    trading_bot.run_once()
+    assert not sent
