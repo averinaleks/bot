@@ -81,6 +81,12 @@ def ping():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/ready')
+def ready():
+    """Health check endpoint used by docker-compose."""
+    return jsonify({'status': 'ok'})
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8002'))
     host = os.environ.get('HOST', '0.0.0.0')

@@ -148,3 +148,21 @@ def test_trade_manager_service_price_only():
     finally:
         p.terminate()
         p.join()
+
+
+def test_trade_manager_ready_route():
+    p = ctx.Process(target=_run_tm)
+    p.start()
+    try:
+        resp = None
+        for _ in range(50):
+            try:
+                resp = requests.get('http://127.0.0.1:8002/ready', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        assert resp is not None and resp.status_code == 200
+    finally:
+        p.terminate()
+        p.join()
