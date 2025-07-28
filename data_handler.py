@@ -715,6 +715,7 @@ class DataHandler:
         self.indicators_2h = {}
         self.indicators_cache_2h = {}
         self.usdt_pairs = []
+        self.symbol_locks: Dict[str, asyncio.Lock] = {}
         self.ohlcv_lock = asyncio.Lock()
         self.ohlcv_2h_lock = asyncio.Lock()
         self.funding_lock = asyncio.Lock()
@@ -766,6 +767,13 @@ class DataHandler:
             if self.config.get("use_strategy_optimizer", False)
             else None
         )
+
+    def _get_symbol_lock(self, symbol: str) -> asyncio.Lock:
+        lock = self.symbol_locks.get(symbol)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.symbol_locks[symbol] = lock
+        return lock
 
     # ------------------------------------------------------------------
     # Properties to expose OHLCV data as pandas when using Polars
@@ -1230,8 +1238,9 @@ class DataHandler:
                     timeframe,
                 )
                 return
-            if timeframe == "primary":
-                async with self.ohlcv_lock:
+            lock = self._get_symbol_lock(symbol)
+            async with lock:
+                if timeframe == "primary":
                     if self.use_polars:
                         df_pl = (
                             pl.from_pandas(df.reset_index())
@@ -1254,11 +1263,8 @@ class DataHandler:
                             )
                         else:
                             base = self.ohlcv
-                        self.ohlcv = pd.concat(
-                            [base, df], ignore_index=False
-                        ).sort_index()
-            else:
-                async with self.ohlcv_2h_lock:
+                        self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
+                else:
                     if self.use_polars:
                         df_pl = (
                             pl.from_pandas(df.reset_index())
@@ -1281,19 +1287,14 @@ class DataHandler:
                             )
                         else:
                             base = self.ohlcv_2h
-                        self.ohlcv_2h = pd.concat(
-                            [base, df], ignore_index=False
-                        ).sort_index()
-            async with self.funding_lock:
+                        self.ohlcv_2h = pd.concat([base, df], ignore_index=False).sort_index()
                 self.funding_rates[symbol] = funding_rate
-            async with self.oi_lock:
                 prev = self.open_interest.get(symbol)
                 if prev and prev != 0:
                     self.open_interest_change[symbol] = (open_interest - prev) / prev
                 else:
                     self.open_interest_change[symbol] = 0.0
                 self.open_interest[symbol] = open_interest
-            async with self.orderbook_lock:
                 orderbook_df = pd.DataFrame(
                     [orderbook | {"symbol": symbol, "timestamp": time.time()}]
                 )
@@ -2182,11 +2183,7 @@ class DataHandler:
                         if timeframe == "primary"
                         else self.processed_timestamps_2h
                     )
-                    lock = (
-                        self.ohlcv_lock
-                        if timeframe == "primary"
-                        else self.ohlcv_2h_lock
-                    )
+                    lock = self._get_symbol_lock(symbol)
                     confirm = entry.get("confirm", True)
                     async with lock:
                         if symbol not in timestamp_dict:
