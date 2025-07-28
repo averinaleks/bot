@@ -89,11 +89,31 @@ def _stub_modules():
         _ray_state["initialized"] = True
     def _is_initialized():
         return _ray_state["initialized"]
+    def _shutdown():
+        _ray_state["initialized"] = False
     ray_mod.remote = _ray_remote
     ray_mod.get = lambda x: x
     ray_mod.init = _init
     ray_mod.is_initialized = _is_initialized
+    ray_mod.shutdown = _shutdown
     sys.modules.setdefault("ray", ray_mod)
+
+    optuna_mod = types.ModuleType("optuna")
+    optuna_samplers = types.ModuleType("optuna.samplers")
+    optuna_samplers.TPESampler = object
+    optuna_mod.samplers = optuna_samplers
+    optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(optimize=lambda *a, **k: None, best_params={})
+    optuna_integration = types.ModuleType("optuna.integration.mlflow")
+    optuna_integration.MLflowCallback = object
+    optuna_exceptions = types.ModuleType("optuna.exceptions")
+    class _ExpWarn(Warning):
+        pass
+    optuna_exceptions.ExperimentalWarning = _ExpWarn
+    optuna_mod.exceptions = optuna_exceptions
+    sys.modules.setdefault("optuna", optuna_mod)
+    sys.modules.setdefault("optuna.samplers", optuna_samplers)
+    sys.modules.setdefault("optuna.integration.mlflow", optuna_integration)
+    sys.modules.setdefault("optuna.exceptions", optuna_exceptions)
 
     tenacity_mod = types.ModuleType("tenacity")
     tenacity_mod.retry = lambda *a, **k: (lambda f: f)

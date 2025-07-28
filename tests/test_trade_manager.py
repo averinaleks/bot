@@ -900,5 +900,16 @@ async def test_execute_top_signals_ranking(monkeypatch):
     assert opened == ["A", "B"]
 
 
+def test_shutdown_shuts_down_ray(monkeypatch):
+    import ray
+    import trade_manager as tm_mod
+    tm_mod.ray = ray
+    ray.init()
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm.shutdown()
+    assert not ray.is_initialized()
+
+
 sys.modules.pop('utils', None)
 

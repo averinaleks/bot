@@ -2347,6 +2347,8 @@ class DataHandler:
                 pass
 
         await TelegramLogger.shutdown()
+        if ray.is_initialized():
+            ray.shutdown()
 
 
 # ----------------------------------------------------------------------

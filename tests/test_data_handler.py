@@ -275,6 +275,16 @@ async def test_stop_handles_close_errors():
     dh.pro_exchange = BadPro()
 
     await dh.stop()  # should not raise
+
+
+@pytest.mark.asyncio
+async def test_stop_shuts_down_ray():
+    import ray
+    ray.init()
+    cfg = BotConfig(cache_dir='/tmp')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    await dh.stop()
+    assert not ray.is_initialized()
 @pytest.mark.asyncio
 async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
     class DummyExchange2:
