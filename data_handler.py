@@ -372,6 +372,15 @@ class IndicatorsCache:
                     window_sign=config.get("macd_window_sign", 9),
                     fillna=True,
                 )
+                bb_window = config.get("bollinger_window", 20)
+                bb = ta.volatility.BollingerBands(
+                    df["close"], window=bb_window, fillna=True
+                )
+                self.bollinger_wband = bb.bollinger_wband()
+                ui_window = config.get("ulcer_window", 14)
+                self.ulcer_index = ta.volatility.ulcer_index(
+                    df["close"], window=ui_window, fillna=True
+                )
                 df["ema30"] = self.ema30
                 df["ema100"] = self.ema100
                 df["ema200"] = self.ema200
@@ -379,6 +388,8 @@ class IndicatorsCache:
                 df["rsi"] = self.rsi
                 df["adx"] = self.adx
                 df["macd"] = self.macd
+                df["bollinger_wband"] = self.bollinger_wband
+                df["ulcer_index"] = self.ulcer_index
             elif timeframe == "secondary":
                 close_np = df["close"].to_numpy()
                 self.ema30 = pd.Series(
@@ -419,6 +430,16 @@ class IndicatorsCache:
             self.last_low = float(df["low"].iloc[-1]) if "low" in df else None
             self.last_rsi = float(self.rsi.iloc[-1]) if hasattr(self, "rsi") else None
             self.last_adx = float(self.adx.iloc[-1]) if hasattr(self, "adx") else None
+            self.last_bollinger_wband = (
+                float(self.bollinger_wband.iloc[-1])
+                if hasattr(self, "bollinger_wband") and not self.bollinger_wband.empty
+                else None
+            )
+            self.last_ulcer_index = (
+                float(self.ulcer_index.iloc[-1])
+                if hasattr(self, "ulcer_index") and not self.ulcer_index.empty
+                else None
+            )
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
@@ -577,6 +598,20 @@ class IndicatorsCache:
         self.df = self.df.reindex(self.df.index.union(new_df.index))
         self.df.loc[new_df.index] = new_df
         self.df.sort_index(inplace=True)
+        bb_window = self.config.get("bollinger_window", 20)
+        bb = ta.volatility.BollingerBands(
+            self.df["close"], window=bb_window, fillna=True
+        )
+        self.bollinger_wband = bb.bollinger_wband()
+        self.df["bollinger_wband"] = self.bollinger_wband
+        self.last_bollinger_wband = float(self.bollinger_wband.iloc[-1])
+
+        ui_window = self.config.get("ulcer_window", 14)
+        self.ulcer_index = ta.volatility.ulcer_index(
+            self.df["close"], window=ui_window, fillna=True
+        )
+        self.df["ulcer_index"] = self.ulcer_index
+        self.last_ulcer_index = float(self.ulcer_index.iloc[-1])
         self._update_volume_profile()
 
 

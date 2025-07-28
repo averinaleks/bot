@@ -93,6 +93,8 @@ class BotConfig:
     macd_window_fast: int = _get_default("macd_window_fast", 12)
     macd_window_sign: int = _get_default("macd_window_sign", 9)
     adx_window: int = _get_default("adx_window", 14)
+    bollinger_window: int = _get_default("bollinger_window", 20)
+    ulcer_window: int = _get_default("ulcer_window", 14)
     volume_profile_update_interval: int = _get_default(
         "volume_profile_update_interval", 300
     )

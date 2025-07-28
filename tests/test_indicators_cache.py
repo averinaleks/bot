@@ -62,6 +62,14 @@ def test_volume_profile_respects_interval():
     assert ind.volume_profile is None
 
 
+def test_volatility_indicators_present():
+    cfg = BotConfig(bollinger_window=3, ulcer_window=3)
+    df = make_df(10)
+    ind = IndicatorsCache(df, cfg, 0.1)
+    assert "bollinger_wband" in ind.df.columns
+    assert "ulcer_index" in ind.df.columns
+
+
 def test_incremental_update():
     cfg = BotConfig(ema30_period=3, ema100_period=5, ema200_period=7, atr_period_default=3)
     df = make_df(30)
