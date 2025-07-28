@@ -1,12 +1,28 @@
 import os
 import sys
 import types
-import sklearn  # ensure real scikit-learn loaded before tests may stub it
-import sklearn.model_selection  # preload submodules used in tests
-import sklearn.base
+try:
+    import sklearn  # ensure real scikit-learn loaded before tests may stub it
+    import sklearn.model_selection  # preload submodules used in tests
+    import sklearn.base
+    HAVE_SKLEARN = True
+except ImportError:  # pragma: no cover - optional dependency
+    HAVE_SKLEARN = False
 
 import pytest
 import pandas as pd
+
+# Register a marker for tests requiring scikit-learn
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "requires_sklearn: mark test that needs the scikit-learn package",
+    )
+
+
+def pytest_runtest_setup(item):
+    if not HAVE_SKLEARN and item.get_closest_marker("requires_sklearn"):
+        pytest.skip("scikit-learn not installed")
 
 # Ensure the project root is available before tests import project modules
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))

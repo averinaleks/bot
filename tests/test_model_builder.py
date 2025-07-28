@@ -11,6 +11,8 @@ from config import BotConfig
 import asyncio
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import brier_score_loss
+
+pytestmark = pytest.mark.requires_sklearn
 from collections import deque
 
 try:  # require functional torch installation for these tests
