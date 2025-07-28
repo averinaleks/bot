@@ -143,8 +143,12 @@ def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
             )
         if resp.status_code != 200:
             logger.error("Trade manager error: HTTP %s", resp.status_code)
+            send_telegram_alert(
+                f"Trade manager responded with HTTP {resp.status_code} for {symbol}"
+            )
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
+        send_telegram_alert(f"Trade manager request failed for {symbol}: {exc}")
 
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
