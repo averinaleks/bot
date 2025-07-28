@@ -99,6 +99,8 @@ class BotConfig:
     volume_profile_update_interval: int = _get_default(
         "volume_profile_update_interval", 300
     )
+    funding_update_interval: int = _get_default("funding_update_interval", 300)
+    oi_update_interval: int = _get_default("oi_update_interval", 300)
     model_save_path: str = _get_default("model_save_path", "/app/models")
     cache_dir: str = _get_default("cache_dir", "/app/cache")
     log_dir: str = _get_default("log_dir", "/app/logs")

@@ -1616,6 +1616,8 @@ class DataHandler:
                     asyncio.create_task(self.load_from_disk_buffer_loop())
                 )
                 self.tasks.append(asyncio.create_task(self.monitor_load()))
+                self.tasks.append(asyncio.create_task(self.funding_rate_loop()))
+                self.tasks.append(asyncio.create_task(self.open_interest_loop()))
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except Exception as e:
             logger.error("Ошибка подписки на WebSocket: %s", e)
@@ -1631,6 +1633,32 @@ class DataHandler:
                 raise
             except Exception as e:
                 logger.exception("Ошибка мониторинга нагрузки: %s", e)
+                await asyncio.sleep(1)
+                continue
+
+    async def funding_rate_loop(self):
+        while True:
+            try:
+                for symbol in list(self.usdt_pairs):
+                    await self.fetch_funding_rate(symbol)
+                await asyncio.sleep(self.config.get("funding_update_interval", 300))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("Ошибка обновления ставок финансирования: %s", e)
+                await asyncio.sleep(1)
+                continue
+
+    async def open_interest_loop(self):
+        while True:
+            try:
+                for symbol in list(self.usdt_pairs):
+                    await self.fetch_open_interest(symbol)
+                await asyncio.sleep(self.config.get("oi_update_interval", 300))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("Ошибка обновления открытого интереса: %s", e)
                 await asyncio.sleep(1)
                 continue
 

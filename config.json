@@ -57,6 +57,8 @@
     "bollinger_window": 20,
     "ulcer_window": 14,
     "volume_profile_update_interval": 300,
+    "funding_update_interval": 300,
+    "oi_update_interval": 300,
     "model_save_path": "/app/models",
     "cache_dir": "/app/cache",
     "log_dir": "/app/logs",
