@@ -533,3 +533,23 @@ async def test_sync_updates_metrics(monkeypatch):
         assert resp.status_code == 200
         assert 'clusters' in resp.get_json()
 
+
+@pytest.mark.asyncio
+async def test_indicator_cache_update_writable(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    ts = pd.Timestamp.now(tz='UTC')
+    df = pd.DataFrame({'open':[1], 'high':[1], 'low':[1], 'close':[1], 'volume':[1]}, index=[ts])
+    df['symbol'] = 'BTCUSDT'
+    df = df.set_index(['symbol', df.index])
+    df.index.set_names(['symbol', 'timestamp'], inplace=True)
+    await dh.synchronize_and_update('BTCUSDT', df, 0.0, 0.0, {'bids': [], 'asks': []})
+    ind = dh.indicators_cache['BTCUSDT_primary']
+    new_ts = ts + pd.Timedelta(minutes=1)
+    new_df = pd.DataFrame({'close':[2], 'high':[2], 'low':[2], 'volume':[1]}, index=[new_ts])
+    try:
+        ind.update(new_df)
+    except ValueError as exc:
+        pytest.fail(f"update raised {exc}")
+    assert new_ts in ind.df.index
+
