@@ -6,7 +6,23 @@ import requests
 import httpx
 from dotenv import load_dotenv
 from utils import logger
+
+
+def send_telegram_alert(message: str) -> None:
+    """Send a Telegram notification if credentials are configured."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=5)
+    except Exception as exc:  # pragma: no cover - network errors
+        logger.error("Failed to send Telegram alert: %s", exc)
 from tenacity import retry, wait_exponential, stop_after_attempt
+
+# Threshold for slow trade confirmations
+CONFIRMATION_TIMEOUT = float(os.getenv("ORDER_CONFIRMATION_TIMEOUT", "5"))
 
 
 # Default trading symbol. Override with the SYMBOL environment variable.
@@ -114,11 +130,17 @@ def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
     """Send trade request to trade manager."""
     try:
         timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
+        start = time.time()
         resp = requests.post(
             f"{env['trade_manager_url']}/open_position",
             json={"symbol": symbol, "side": side, "price": price},
             timeout=timeout,
         )
+        elapsed = time.time() - start
+        if elapsed > CONFIRMATION_TIMEOUT:
+            send_telegram_alert(
+                f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+            )
         if resp.status_code != 200:
             logger.error("Trade manager error: HTTP %s", resp.status_code)
     except requests.RequestException as exc:

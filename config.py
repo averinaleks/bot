@@ -50,6 +50,7 @@ class BotConfig:
     ws_rate_limit: int = _get_default("ws_rate_limit", 20)
     ws_reconnect_interval: int = _get_default("ws_reconnect_interval", 5)
     max_reconnect_attempts: int = _get_default("max_reconnect_attempts", 10)
+    ws_inactivity_timeout: int = _get_default("ws_inactivity_timeout", 30)
     latency_log_interval: int = _get_default("latency_log_interval", 3600)
     load_threshold: float = _get_default("load_threshold", 0.8)
     leverage: int = _get_default("leverage", 10)

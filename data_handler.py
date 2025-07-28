@@ -746,6 +746,7 @@ class DataHandler:
         self.latency_log_interval = 3600
         self.restart_attempts = 0
         self.max_restart_attempts = 20
+        self.ws_inactivity_timeout = config.get("ws_inactivity_timeout", 30)
         logger.info("DataHandler initialization complete")
         # Maximum number of symbols to work with overall
         self.max_symbols = config.get("max_symbols", 50)
@@ -1880,11 +1881,13 @@ class DataHandler:
         connection_timeout: int,
     ):
         """Read messages from ``ws`` and enqueue them for processing."""
+        last_msg = time.time()
         while True:
             try:
                 start_time = time.time()
                 message = await asyncio.wait_for(ws.recv(), timeout=connection_timeout)
-                latency = time.time() - start_time
+                last_msg = time.time()
+                latency = last_msg - start_time
                 for symbol in symbols:
                     self.ws_latency[symbol] = latency
                 if latency > 5:
@@ -1943,6 +1946,9 @@ class DataHandler:
                     timeframe,
                 )
                 await ws.ping()
+                if time.time() - last_msg > self.ws_inactivity_timeout:
+                    await ws.close()
+                    raise ConnectionError("WebSocket inactivity")
                 continue
             except websockets.exceptions.ConnectionClosed as e:
                 logger.error(
