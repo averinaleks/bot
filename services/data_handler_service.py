@@ -13,6 +13,7 @@ exchange = ccxt.bybit({
     'secret': os.getenv('BYBIT_API_SECRET', ''),
 })
 
+# Correct price endpoint without trailing whitespace
 @app.route('/price/<symbol>')
 def price(symbol: str):
     try:
