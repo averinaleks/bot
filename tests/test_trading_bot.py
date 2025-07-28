@@ -70,6 +70,33 @@ def test_send_trade_latency_alert(monkeypatch):
     assert called
 
 
+def test_send_trade_http_error_alert(monkeypatch):
+    called = []
+
+    def fake_post(url, json=None, timeout=None):
+        class Resp:
+            status_code = 500
+
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
+    assert called
+
+
+def test_send_trade_exception_alert(monkeypatch):
+    called = []
+
+    def fake_post(url, json=None, timeout=None):
+        raise trading_bot.requests.RequestException('boom')
+
+    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
+    assert called
+
+
 @pytest.mark.asyncio
 async def test_reactive_trade_latency_alert(monkeypatch):
     called = []
