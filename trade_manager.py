@@ -1393,6 +1393,8 @@ class TradeManager:
             except RuntimeError:
                 # event loop already closed
                 pass
+        if ray.is_initialized():
+            ray.shutdown()
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.predictive_models:
