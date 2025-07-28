@@ -200,7 +200,7 @@ place market orders on Bybit when you POST to `/open_position` or
 ```
 python services/trade_manager_service.py
 ```
-It also exposes `/positions` and `/ping` routes for status checks.
+It also exposes `/positions`, `/ping` and `/ready` routes for status checks.
 The `/open_position` endpoint accepts either `amount` or `price`. When only
 `price` is sent the service calculates the position size using the
 `TRADE_RISK_USD` environment variable.
