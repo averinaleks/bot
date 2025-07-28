@@ -850,7 +850,8 @@ class DataHandler:
             history_limit = self.config.get("min_data_length", 200)
 
             mem = psutil.virtual_memory()
-            avail_gb = mem.available / (1024 ** 3)
+            avail_bytes = getattr(mem, "available", 0)
+            avail_gb = avail_bytes / (1024 ** 3)
             batch_size = self.config.get("history_batch_size", 10)
             batch_size = max(1, min(batch_size, int(max(1, avail_gb))))
             logger.info(
