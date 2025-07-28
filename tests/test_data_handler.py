@@ -206,6 +206,70 @@ async def test_monitor_load_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_funding_rate_loop_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', funding_update_interval=0)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    dh.usdt_pairs = ['BTCUSDT']
+
+    call = {'n': 0}
+
+    async def fake_fetch(sym):
+        call['n'] += 1
+        if call['n'] == 1:
+            raise RuntimeError('boom')
+
+    monkeypatch.setattr(dh, 'fetch_funding_rate', fake_fetch)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(dh.funding_rate_loop())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call['n'] >= 2
+
+
+@pytest.mark.asyncio
+async def test_open_interest_loop_recovery(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', oi_update_interval=0)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+    dh.usdt_pairs = ['BTCUSDT']
+
+    call = {'n': 0}
+
+    async def fake_fetch(sym):
+        call['n'] += 1
+        if call['n'] == 1:
+            raise RuntimeError('boom')
+
+    monkeypatch.setattr(dh, 'fetch_open_interest', fake_fetch)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(dh.open_interest_loop())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call['n'] >= 2
+
+
+@pytest.mark.asyncio
 async def test_process_ws_queue_recovery(monkeypatch):
     cfg = BotConfig(cache_dir='/tmp')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
