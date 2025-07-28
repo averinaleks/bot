@@ -8,6 +8,7 @@ import json
 import time
 import pandas as pd
 import pytest
+import trading_bot
 from config import BotConfig
 
 # Replace utils with a stub that overrides TelegramLogger
@@ -436,6 +437,67 @@ async def test_feature_callback_invoked(tmp_path):
     await asyncio.sleep(0)
     assert 'ema30' in dh.ohlcv.columns
     assert called == [symbol]
+
+
+@pytest.mark.asyncio
+async def test_trade_callback_invoked(monkeypatch, tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path))
+
+    records = []
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def get(self, url, timeout=None):
+            records.append(("get", url))
+            return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
+        async def post(self, url, json=None, timeout=None):
+            records.append(("post", url, json))
+            if url.endswith("/predict"):
+                return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
+            return types.SimpleNamespace(status_code=200, json=lambda: {})
+
+    monkeypatch.setattr(
+        trading_bot.httpx,
+        "AsyncClient",
+        lambda *a, **k: DummyClient(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        trading_bot,
+        "_load_env",
+        lambda: {
+            "data_handler_url": "http://dh",
+            "model_builder_url": "http://mb",
+            "trade_manager_url": "http://tm",
+        },
+    )
+
+    dh = DataHandler(
+        cfg,
+        None,
+        None,
+        exchange=DummyExchange({"BTCUSDT": 1.0}),
+        trade_callback=trading_bot.reactive_trade,
+    )
+    symbol = "BTCUSDT"
+    ts = pd.Timestamp.now(tz="UTC")
+    df = pd.DataFrame(
+        {"open": [1], "high": [1], "low": [1], "close": [1], "volume": [1]}, index=[ts]
+    )
+    df["symbol"] = symbol
+    df = df.set_index(["symbol", df.index])
+    df.index.set_names(["symbol", "timestamp"], inplace=True)
+
+    await dh.synchronize_and_update(
+        symbol, df, 0.0, 0.0, {"imbalance": 0.0, "timestamp": time.time()}
+    )
+    await asyncio.sleep(0)
+
+    assert any(r[0] == "post" and r[1].endswith("/predict") for r in records)
+    assert any(r[0] == "post" and r[1].endswith("/open_position") for r in records)
 
 
 @pytest.mark.asyncio

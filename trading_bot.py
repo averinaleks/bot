@@ -3,6 +3,7 @@
 import os
 import time
 import requests
+import httpx
 from dotenv import load_dotenv
 from utils import logger
 from tenacity import retry, wait_exponential, stop_after_attempt
@@ -122,6 +123,43 @@ def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
             logger.error("Trade manager error: HTTP %s", resp.status_code)
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
+
+
+async def reactive_trade(symbol: str, env: dict | None = None) -> None:
+    """Asynchronously fetch prediction and open position if signaled."""
+    env = env or _load_env()
+    timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"{env['data_handler_url']}/price/{symbol}", timeout=5.0
+            )
+            if resp.status_code != 200:
+                logger.error("Failed to fetch price: HTTP %s", resp.status_code)
+                return
+            price = resp.json().get("price", 0)
+            pred = await client.post(
+                f"{env['model_builder_url']}/predict",
+                json={"symbol": symbol, "features": [price]},
+                timeout=5.0,
+            )
+            if pred.status_code != 200:
+                logger.error("Model prediction failed: HTTP %s", pred.status_code)
+                return
+            signal = pred.json().get("signal")
+            if not signal:
+                return
+            trade_resp = await client.post(
+                f"{env['trade_manager_url']}/open_position",
+                json={"symbol": symbol, "side": signal, "price": price},
+                timeout=timeout,
+            )
+            if trade_resp.status_code != 200:
+                logger.error(
+                    "Trade manager error: HTTP %s", trade_resp.status_code
+                )
+        except httpx.HTTPError as exc:
+            logger.error("Reactive trade request error: %s", exc)
 
 
 def run_once() -> None:
