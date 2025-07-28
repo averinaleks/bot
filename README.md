@@ -631,6 +631,18 @@ Linting configuration is stored in `.flake8`. Run the checker manually:
 python -m flake8
 ```
 
+## Historical simulator
+
+Replay past market data using the built in trading logic:
+
+```bash
+python scripts/run_simulation.py --start 2020-01-01 --end 2020-01-02 --speed 60
+```
+
+The simulator loads candles from the DataHandler cache and steps through them
+rapidly while reusing ``TradeManager`` methods. Trailing stops and other
+position logic behave exactly like in live trading.
+
 ## Continuous integration
 
 All pushes and pull requests trigger a GitHub Actions workflow that installs
