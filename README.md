@@ -189,37 +189,32 @@ tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
 
-Earlier revisions started lightweight stubs for the supporting services.  This
-repository now includes simple reference implementations in the `services`
-directory. `data_handler_service.py` fetches live prices from Bybit using
-`ccxt`, `model_builder_service.py` trains a small logistic regression
-model when you POST data to `/train`, and `trade_manager_service.py` can
-place market orders on Bybit when you POST to `/open_position` or
-`/close_position`.  Start it with:
+## Lightweight service scripts
 
-```
+The `services` directory provides minimal versions of the microservices. They
+avoid heavy dependencies so they start quickly and are useful for basic
+testing.
+
+Run each script directly from the project root:
+
+```bash
+python services/data_handler_service.py
+python services/model_builder_service.py
 python services/trade_manager_service.py
 ```
-It also exposes `/positions`, `/ping` and `/ready` routes for status checks.
-The `/open_position` endpoint accepts either `amount` or `price`. When only
-`price` is sent the service calculates the position size using the
-`TRADE_RISK_USD` environment variable.
 
-The data handler exposes two endpoints:
+`data_handler_service.py` fetches prices from Bybit using `ccxt` and exposes
+`/price/<symbol>` and `/ohlcv/<symbol>`.
+`model_builder_service.py` trains a small logistic regression when you POST
+features to `/train`.
+`trade_manager_service.py` opens and closes positions on Bybit via
+`/open_position` and `/close_position` and also provides `/positions`, `/ping`
+and `/ready` routes. The `/open_position` endpoint accepts either `amount` or
+`price`, calculating the size from `TRADE_RISK_USD` when only a price is given.
 
-``/price/<symbol>``
-    Return the latest ticker price.
-
-``/ohlcv/<symbol>``
-    Return cached OHLCV bars for ``symbol``. The service periodically refreshes
-    data for symbols listed in ``STREAM_SYMBOLS``.  Cache lifetime is controlled
-    by ``CACHE_TTL``.
-
-
-The reference scripts exist purely for demonstration and integration testing.
-They expose the same HTTP routes as the real services but avoid heavy
-dependencies.  Use them when you just want to verify the bot's basic workflow
-without setting up full ML libraries.
+These reference scripts expose the same HTTP routes as the full services but
+avoid heavy frameworks like TensorFlow and PyTorch, making them ideal for quick
+tests.
 
 The model builder maintains separate models per trading pair.  POST JSON data
 of the form::
