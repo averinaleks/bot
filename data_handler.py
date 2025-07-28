@@ -1296,6 +1296,23 @@ class DataHandler:
                         timeframe,
                         cache_key,
                     )
+                    # Deep copy the DataFrame and Series to avoid read-only
+                    # buffers returned from Ray
+                    result.df = result.df.copy(deep=True)
+                    for attr in [
+                        "ema30",
+                        "ema100",
+                        "ema200",
+                        "atr",
+                        "rsi",
+                        "adx",
+                        "macd",
+                        "volume_profile",
+                    ]:
+                        if hasattr(result, attr) and getattr(result, attr) is not None:
+                            series = getattr(result, attr)
+                            if isinstance(series, (pd.Series, pd.DataFrame)):
+                                setattr(result, attr, series.copy(deep=True))
                     async with self.ohlcv_lock:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
@@ -1333,6 +1350,23 @@ class DataHandler:
                         cache_key,
                     )
                     async with self.ohlcv_2h_lock:
+                        # Deep copy before caching to allow in-place updates
+                        result.df = result.df.copy(deep=True)
+                        for attr in [
+                            "ema30",
+                            "ema100",
+                            "ema200",
+                            "atr",
+                            "rsi",
+                            "adx",
+                            "macd",
+                            "volume_profile",
+                        ]:
+                            if hasattr(result, attr) and getattr(result, attr) is not None:
+                                series = getattr(result, attr)
+                                if isinstance(series, (pd.Series, pd.DataFrame)):
+                                    setattr(result, attr, series.copy(deep=True))
+
                         self.indicators_cache_2h[cache_key] = result
                         self.indicators_2h[symbol] = result
                         for col in result.df.columns:
