@@ -656,6 +656,8 @@ class DataHandler:
         Preconfigured Bybit client.
     pro_exchange : "ccxtpro.bybit", optional
         ccxtpro client for WebSocket data.
+    trade_callback : Callable[[str], Awaitable[None]], optional
+        Function called after a candle has been processed.
     """
 
     def __init__(
@@ -666,6 +668,7 @@ class DataHandler:
         exchange: BybitSDKAsync | None = None,
         pro_exchange: "ccxtpro.bybit" | None = None,
         feature_callback: Callable[[str], Awaitable[Any]] | None = None,
+        trade_callback: Callable[[str], Awaitable[None]] | None = None,
     ):
         _init_cuda()
         logger.info(
@@ -689,6 +692,7 @@ class DataHandler:
             max_queue_size=config.get("telegram_queue_size"),
         )
         self.feature_callback = feature_callback
+        self.trade_callback = trade_callback
         self.cache = HistoricalDataCache(config["cache_dir"])
         self.calc_indicators = _make_calc_indicators_remote(GPU_AVAILABLE)
         self.use_polars = config.get("use_polars", False)
@@ -1411,6 +1415,8 @@ class DataHandler:
                             self.ohlcv_2h.loc[df.index, col] = df[col].values
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
+            if self.trade_callback:
+                asyncio.create_task(self.trade_callback(symbol))
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError) as e:
             logger.error(
@@ -1428,6 +1434,10 @@ class DataHandler:
                                 threshold = current_time - pd.Timedelta(
                                     seconds=self.config["forget_window"]
                                 )
+                                if self._ohlcv.dtypes[1] == pl.Object:
+                                    self._ohlcv = pl.from_pandas(
+                                        self._ohlcv.to_pandas()
+                                    )
                                 self._ohlcv = self._ohlcv.filter(
                                     pl.col("timestamp") >= threshold
                                 )
@@ -1445,6 +1455,10 @@ class DataHandler:
                                 threshold = current_time - pd.Timedelta(
                                     seconds=self.config["forget_window"]
                                 )
+                                if self._ohlcv_2h.dtypes[1] == pl.Object:
+                                    self._ohlcv_2h = pl.from_pandas(
+                                        self._ohlcv_2h.to_pandas()
+                                    )
                                 self._ohlcv_2h = self._ohlcv_2h.filter(
                                     pl.col("timestamp") >= threshold
                                 )
