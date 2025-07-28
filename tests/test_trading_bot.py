@@ -1,5 +1,7 @@
 import trading_bot
 import time
+import types
+import pytest
 
 
 def test_send_trade_timeout_env(monkeypatch):
@@ -65,4 +67,36 @@ def test_send_trade_latency_alert(monkeypatch):
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
     trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    assert called
+
+
+@pytest.mark.asyncio
+async def test_reactive_trade_latency_alert(monkeypatch):
+    called = []
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def get(self, url, timeout=None):
+            return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
+
+        async def post(self, url, json=None, timeout=None):
+            if url.endswith("/predict"):
+                return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
+            time.sleep(0.01)
+            return types.SimpleNamespace(status_code=200, json=lambda: {})
+
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(trading_bot, "_load_env", lambda: {
+        "data_handler_url": "http://dh",
+        "model_builder_url": "http://mb",
+        "trade_manager_url": "http://tm",
+    })
+    monkeypatch.setattr(trading_bot, "send_telegram_alert", lambda msg: called.append(msg))
+    trading_bot.CONFIRMATION_TIMEOUT = 0.0
+    await trading_bot.reactive_trade("BTCUSDT")
     assert called

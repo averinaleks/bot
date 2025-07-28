@@ -171,11 +171,17 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             signal = pred.json().get("signal")
             if not signal:
                 return
+            start = time.time()
             trade_resp = await client.post(
                 f"{env['trade_manager_url']}/open_position",
                 json={"symbol": symbol, "side": signal, "price": price},
                 timeout=timeout,
             )
+            elapsed = time.time() - start
+            if elapsed > CONFIRMATION_TIMEOUT:
+                send_telegram_alert(
+                    f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+                )
             if trade_resp.status_code != 200:
                 logger.error(
                     "Trade manager error: HTTP %s", trade_resp.status_code
