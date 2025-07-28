@@ -23,3 +23,11 @@ def test_ws_min_process_rate_default(tmp_path):
     cfg_file.write_text('{"timeframe": "2h"}')
     cfg = load_config(str(cfg_file))
     assert cfg.ws_min_process_rate == 1
+
+
+def test_ws_inactivity_timeout_env(monkeypatch, tmp_path):
+    cfg_file = tmp_path / "c.json"
+    cfg_file.write_text("{}")
+    monkeypatch.setenv("WS_INACTIVITY_TIMEOUT", "99")
+    cfg = load_config(str(cfg_file))
+    assert cfg.ws_inactivity_timeout == 99

@@ -1,4 +1,5 @@
 import trading_bot
+import time
 
 
 def test_send_trade_timeout_env(monkeypatch):
@@ -49,3 +50,19 @@ def test_load_env_uses_host_when_missing(monkeypatch):
     assert env['data_handler_url'] == 'http://127.0.0.1:8000'
     assert env['model_builder_url'] == 'http://127.0.0.1:8001'
     assert env['trade_manager_url'] == 'http://127.0.0.1:8002'
+
+
+def test_send_trade_latency_alert(monkeypatch):
+    called = []
+
+    def fake_post(url, json=None, timeout=None):
+        time.sleep(0.01)
+        class Resp:
+            status_code = 200
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    trading_bot.CONFIRMATION_TIMEOUT = 0.0
+    trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    assert called

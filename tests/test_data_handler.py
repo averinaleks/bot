@@ -615,3 +615,32 @@ async def test_indicator_cache_update_writable(tmp_path):
         pytest.fail(f"update raised {exc}")
     assert new_ts in ind.df.index
 
+
+@pytest.mark.asyncio
+async def test_ws_inactivity_triggers_reconnect(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', ws_inactivity_timeout=1)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    class DummyWS:
+        def __init__(self):
+            self.closed = False
+            self.pings = 0
+            self.open = True
+
+        async def recv(self):
+            await asyncio.sleep(0)
+            raise asyncio.TimeoutError
+
+        async def ping(self):
+            self.pings += 1
+
+        async def close(self):
+            self.closed = True
+            self.open = False
+
+    ws = DummyWS()
+    monkeypatch.setattr(dh, 'telegram_logger', types.SimpleNamespace(send_telegram_message=lambda *a, **k: asyncio.sleep(0)))
+    with pytest.raises(ConnectionError):
+        await dh._read_messages(ws, ['BTCUSDT'], 'primary', '1m', 0.1)
+    assert ws.closed
+
