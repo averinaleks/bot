@@ -53,6 +53,8 @@
     "macd_window_fast": 12,
     "macd_window_sign": 9,
     "adx_window": 14,
+    "bollinger_window": 20,
+    "ulcer_window": 14,
     "volume_profile_update_interval": 300,
     "model_save_path": "/app/models",
     "cache_dir": "/app/cache",
