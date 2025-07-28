@@ -644,3 +644,52 @@ async def test_ws_inactivity_triggers_reconnect(monkeypatch):
         await dh._read_messages(ws, ['BTCUSDT'], 'primary', '1m', 0.1)
     assert ws.closed
 
+
+@pytest.mark.asyncio
+async def test_subscribe_chunk_uses_backup(monkeypatch):
+    cfg = BotConfig(cache_dir='/tmp', backup_ws_urls=['ws://backup'])
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    calls = []
+
+    class DummyWS:
+        def __init__(self):
+            self.open = True
+
+        async def close(self):
+            self.open = False
+
+    async def fake_connect(url, timeout):
+        calls.append(url)
+        if url not in dh.ws_pool:
+            dh.ws_pool[url] = []
+        if len(calls) == 1:
+            raise OSError('boom')
+        return DummyWS()
+
+    async def fake_send_subs(ws, symbols, timeframe):
+        return []
+
+    async def fake_read(ws, *a, **k):
+        raise KeyboardInterrupt
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(dh, '_connect_ws', fake_connect)
+    monkeypatch.setattr(dh, '_send_subscriptions', fake_send_subs)
+    monkeypatch.setattr(dh, '_read_messages', fake_read)
+    async def fake_fetch(*a, **k):
+        return 'BTCUSDT', pd.DataFrame()
+
+    monkeypatch.setattr(dh, 'fetch_ohlcv_single', fake_fetch)
+    monkeypatch.setattr(data_handler, 'check_dataframe_empty', lambda df, context='': True)
+    monkeypatch.setattr(data_handler.asyncio, 'sleep', fast_sleep)
+
+    with pytest.raises(KeyboardInterrupt):
+        await dh._subscribe_chunk(['BTCUSDT'], 'ws://primary', 0, 'primary')
+
+    assert calls == ['ws://primary', 'ws://backup']
+
