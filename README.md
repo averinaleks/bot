@@ -545,6 +545,9 @@ Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
+If `scikit-learn` is not installed, tests marked with `requires_sklearn`
+are skipped automatically. Install the package to run the full suite.
+
 As noted above, make sure to run `./scripts/setup-tests.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 `requests` will fail.
