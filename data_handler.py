@@ -27,6 +27,7 @@ from utils import (
 )
 from tenacity import retry, wait_exponential
 from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
+import functools
 from config import BotConfig
 import ta
 import os
@@ -37,6 +38,33 @@ from flask import Flask, jsonify
 from optimizer import ParameterOptimizer
 from strategy_optimizer import StrategyOptimizer
 from dotenv import load_dotenv
+
+PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
+
+
+def _profile_async(func: Callable) -> Callable:
+    if not PROFILE_DATA_HANDLER:
+        return func
+
+    async def wrapper(*args, **kwargs):
+        start = asyncio.get_running_loop().time()
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            elapsed = asyncio.get_running_loop().time() - start
+            logger.info("profile %s took %.4fs", func.__qualname__, elapsed)
+
+    return functools.wraps(func)(wrapper)
+
+
+def _instrument_methods(cls: type) -> type:
+    if not PROFILE_DATA_HANDLER:
+        return cls
+
+    for name, attr in list(cls.__dict__.items()):
+        if asyncio.iscoroutinefunction(attr):
+            setattr(cls, name, _profile_async(attr))
+    return cls
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
@@ -2377,6 +2405,9 @@ class DataHandler:
         await TelegramLogger.shutdown()
         if ray.is_initialized():
             ray.shutdown()
+
+
+DataHandler = _instrument_methods(DataHandler)
 
 
 # ----------------------------------------------------------------------
