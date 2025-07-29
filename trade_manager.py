@@ -886,11 +886,18 @@ class TradeManager:
                 return
             features = self.model_builder.get_cached_features(symbol)
             if features is None or len(features) < self.config["lstm_timesteps"]:
-                features = await self.model_builder.prepare_lstm_features(
-                    symbol, indicators
-                )
+                try:
+                    features = await self.model_builder.prepare_lstm_features(
+                        symbol, indicators
+                    )
+                except Exception:
+                    logger.debug("Failed to prepare features for %s", symbol, exc_info=True)
+                    return
                 self.model_builder.feature_cache[symbol] = features
             if len(features) < self.config["lstm_timesteps"]:
+                logger.debug(
+                    "Not enough features for %s: %s", symbol, len(features)
+                )
                 return
             X = np.array([features[-self.config["lstm_timesteps"] :]])
             X_tensor = torch.tensor(
@@ -1193,11 +1200,20 @@ class TradeManager:
                 volatility = self.config.get("volatility_threshold", 0.02)
             features = self.model_builder.get_cached_features(symbol)
             if features is None or len(features) < self.config["lstm_timesteps"]:
-                features = await self.model_builder.prepare_lstm_features(
-                    symbol, indicators
-                )
+                try:
+                    features = await self.model_builder.prepare_lstm_features(
+                        symbol, indicators
+                    )
+                except Exception:
+                    logger.debug(
+                        "Failed to prepare features for %s", symbol, exc_info=True
+                    )
+                    return None
                 self.model_builder.feature_cache[symbol] = features
             if len(features) < self.config["lstm_timesteps"]:
+                logger.debug(
+                    "Not enough features for %s: %s", symbol, len(features)
+                )
                 return None
             X = np.array([features[-self.config["lstm_timesteps"] :]])
             X_tensor = torch.tensor(
