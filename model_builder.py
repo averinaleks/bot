@@ -827,6 +827,10 @@ class ModelBuilder:
         features_df["adx"] = _align(indicators.adx)
         features_df["macd"] = _align(indicators.macd)
         features_df["atr"] = _align(indicators.atr)
+        features_df = features_df.dropna()
+        if features_df.empty:
+            logger.warning("Нет валидных данных для %s", symbol)
+            return np.array([])
         data_np = features_df.to_numpy(dtype=float, copy=True)
         scaler = self.scalers.get(symbol)
         if scaler is None:
