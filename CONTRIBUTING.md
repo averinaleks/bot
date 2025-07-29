@@ -4,13 +4,16 @@ Thank you for your interest in contributing to this project!
 
 ## Development workflow
 
-1. Install dependencies (and `flake8`) in a virtual environment using the helper script:
+1. Create a virtual environment and install dependencies using the helper
+   script:
 
-   ```bash
-   ./scripts/install-test-deps.sh
-   ```
-2. Run `python -m flake8` and `pytest` before submitting a pull request. These tests are
-   also executed automatically by `pre-commit`.
+    ```bash
+    ./scripts/install-test-deps.sh
+    ```
+   (Use `--full` to include GPU packages.) This step is **required** before
+   running the test suite—`pytest` expects these packages to be installed.
+2. Run `python -m flake8` and `pytest` before submitting a pull request. These
+   tests are also executed automatically by `pre-commit`.
 
 ## CI troubleshooting
 
