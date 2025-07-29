@@ -140,26 +140,30 @@ def _stub_modules():
     sys.modules.setdefault("dotenv", dotenv_mod)
     sys.modules.setdefault("dotenv.main", dotenv_mod)
 
-    flask_mod = types.ModuleType("flask")
-    class _Flask:
-        def __init__(self, name):
-            self.name = name
+    try:  # use real Flask if available
+        import flask  # noqa: F401
+    except Exception:  # pragma: no cover - optional dependency missing
+        flask_mod = types.ModuleType("flask")
 
-        def route(self, *a, **k):
-            def decorator(f):
-                return f
-            return decorator
+        class _Flask:
+            def __init__(self, name):
+                self.name = name
 
-        def run(self, *a, **k):
-            pass
+            def route(self, *a, **k):
+                def decorator(f):
+                    return f
+                return decorator
 
-        def before_request(self, func):
-            return func
+            def run(self, *a, **k):
+                pass
 
-    flask_mod.Flask = _Flask
-    flask_mod.jsonify = lambda *a, **k: dict(*a, **k)
-    flask_mod.request = types.SimpleNamespace(get_json=lambda *a, **k: {})
-    sys.modules.setdefault("flask", flask_mod)
+            def before_request(self, func):
+                return func
+
+        flask_mod.Flask = _Flask
+        flask_mod.jsonify = lambda *a, **k: dict(*a, **k)
+        flask_mod.request = types.SimpleNamespace(get_json=lambda *a, **k: {})
+        sys.modules.setdefault("flask", flask_mod)
 
     ta_mod = types.ModuleType("ta")
     trend_mod = types.ModuleType("ta.trend")
