@@ -1490,7 +1490,7 @@ async def create_trade_manager() -> TradeManager:
                 from telegram import Bot
                 telegram_bot = Bot(token)
                 try:
-                    telegram_bot.delete_webhook(drop_pending_updates=True)
+                    await telegram_bot.delete_webhook(drop_pending_updates=True)
                     logger.info("Deleted existing Telegram webhook")
                 except Exception as exc:  # pragma: no cover - delete_webhook errors
                     logger.exception("Failed to delete Telegram webhook: %s", exc)
