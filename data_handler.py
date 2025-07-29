@@ -1014,6 +1014,7 @@ class DataHandler:
                                 else "secondary"
                             ),
                         )
+            await self.release_memory()
         except (KeyError, ValueError, TypeError) as e:
             logger.error("Ошибка загрузки начальных данных: %s", e)
             await self.telegram_logger.send_telegram_message(
@@ -1529,6 +1530,38 @@ class DataHandler:
                 logger.exception("Ошибка очистки данных: %s", e)
                 await asyncio.sleep(1)
                 continue
+
+    async def release_memory(self) -> None:
+        """Trim stored history to the configured number of recent bars."""
+        retention = int(self.config.get("history_retention", 0))
+        if retention <= 0:
+            return
+        try:
+            async with self.ohlcv_lock:
+                if self.use_polars:
+                    df = self._ohlcv.to_pandas() if self._ohlcv.height > 0 else pd.DataFrame()
+                else:
+                    df = self._ohlcv
+                if not df.empty:
+                    df = df.groupby(level="symbol").tail(retention)
+                if self.use_polars:
+                    self._ohlcv = pl.from_pandas(df.reset_index()) if not df.empty else pl.DataFrame()
+                else:
+                    self._ohlcv = df
+            async with self.ohlcv_2h_lock:
+                if self.use_polars:
+                    df2 = self._ohlcv_2h.to_pandas() if self._ohlcv_2h.height > 0 else pd.DataFrame()
+                else:
+                    df2 = self._ohlcv_2h
+                if not df2.empty:
+                    df2 = df2.groupby(level="symbol").tail(retention)
+                if self.use_polars:
+                    self._ohlcv_2h = pl.from_pandas(df2.reset_index()) if not df2.empty else pl.DataFrame()
+                else:
+                    self._ohlcv_2h = df2
+            logger.info("История обрезана до последних %s баров", retention)
+        except Exception as e:  # pragma: no cover - best effort cleanup
+            logger.exception("Не удалось освободить память: %s", e)
 
     async def save_to_disk_buffer(self, priority, item):
         try:

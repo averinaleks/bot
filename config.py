@@ -83,6 +83,7 @@ class BotConfig:
     min_sharpe_ratio: float = _get_default("min_sharpe_ratio", 0.5)
     performance_window: int = _get_default("performance_window", 86400)
     min_data_length: int = _get_default("min_data_length", 1000)
+    history_retention: int = _get_default("history_retention", 200)
     lstm_timesteps: int = _get_default("lstm_timesteps", 60)
     lstm_batch_size: int = _get_default("lstm_batch_size", 32)
     model_type: str = _get_default("model_type", "transformer")
