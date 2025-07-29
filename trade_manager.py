@@ -66,18 +66,15 @@ from config import BotConfig, load_config
 import contextlib
 import types
 
-if os.getenv("TEST_MODE") == "1":
-    try:  # pragma: no cover - optional dependency
-        import torch  # type: ignore
-    except Exception:
-        torch = types.ModuleType("torch")
-        torch.tensor = lambda *a, **k: a[0]
-        torch.float32 = float
-        torch.no_grad = contextlib.nullcontext
-        torch.cuda = types.SimpleNamespace(is_available=lambda: False)
-        torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
-else:
-    import torch
+try:  # pragma: no cover - optional dependency
+    import torch  # type: ignore
+except Exception:  # noqa: W0703 - optional dependency may not be installed
+    torch = types.ModuleType("torch")
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = float
+    torch.no_grad = contextlib.nullcontext
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
 import joblib
 import time
 from typing import Dict, Optional, Tuple
