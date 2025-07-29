@@ -47,6 +47,10 @@ class BotConfig:
     max_subscriptions_per_connection: int = _get_default(
         "max_subscriptions_per_connection", 15
     )
+    ws_subscription_batch_size: int = _get_default(
+        "ws_subscription_batch_size",
+        DEFAULTS.get("max_subscriptions_per_connection", 15),
+    )
     ws_rate_limit: int = _get_default("ws_rate_limit", 20)
     ws_reconnect_interval: int = _get_default("ws_reconnect_interval", 5)
     max_reconnect_attempts: int = _get_default("max_reconnect_attempts", 10)

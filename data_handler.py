@@ -782,8 +782,12 @@ class DataHandler:
         # Start with the configured limit for dynamic adjustments
         self.max_subscriptions = self.max_symbols
         # Number of symbols to subscribe per WebSocket connection
+        # Number of symbols to subscribe per WebSocket connection. Prefer
+        # ``ws_subscription_batch_size`` if present for backward compatibility
+        # with the older ``max_subscriptions_per_connection`` option.
         self.ws_subscription_batch_size = config.get(
-            "max_subscriptions_per_connection", 30
+            "ws_subscription_batch_size",
+            config.get("max_subscriptions_per_connection", 30),
         )
         self.active_subscriptions = 0
         self.load_threshold = config.get("load_threshold", 0.8)
