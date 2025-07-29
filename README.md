@@ -544,6 +544,14 @@ Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
+Set `DATA_HANDLER_PROFILE=1` to log how long `DataHandler` methods take.
+Profiling information is printed to the standard log output.
+For example:
+
+```bash
+DATA_HANDLER_PROFILE=1 python trading_bot.py
+```
+
 If `scikit-learn` is not installed, tests marked with `requires_sklearn`
 are skipped automatically. Install the package to run the full suite.
 
