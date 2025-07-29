@@ -6,6 +6,8 @@ import asyncio
 import pandas as pd
 from typing import Dict
 
+from utils import logger
+
 
 class HistoricalSimulator:
     """Replay historical candles and execute TradeManager methods."""
@@ -30,7 +32,13 @@ class HistoricalSimulator:
                     df = cache.load_cached_data(symbol, timeframe)
             if df is None:
                 continue
-            idx = df.index.get_level_values("timestamp") if isinstance(df.index, pd.MultiIndex) else df.index
+            if isinstance(df.index, pd.MultiIndex):
+                ts_level = "timestamp" if "timestamp" in df.index.names else df.index.names[0]
+                if ts_level != "timestamp":
+                    logger.warning("Timestamp level not found in DataFrame index. Using '%s' instead", ts_level)
+                idx = df.index.get_level_values(ts_level)
+            else:
+                idx = df.index
             df = df[(idx >= start_ts) & (idx <= end_ts)]
             self.history[symbol] = df
 
