@@ -658,6 +658,13 @@ Replay past market data using the built in trading logic:
 python scripts/run_simulation.py --start 2020-01-01 --end 2020-01-02 --speed 60
 ```
 
+If you do not have the full `requirements.txt` installed, set `TEST_MODE=1` so
+the simulator stubs heavy dependencies. Example:
+
+```bash
+TEST_MODE=1 python scripts/run_simulation.py --start ... --end ...
+```
+
 The simulator loads candles from the DataHandler cache and steps through them
 rapidly while reusing ``TradeManager`` methods. Trailing stops and other
 position logic behave exactly like in live trading.
