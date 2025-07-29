@@ -14,7 +14,11 @@
    python -m pip install -r requirements.txt
    # Или CPU‑сборки без CUDA
    python -m pip install -r requirements-cpu.txt
+   # Зависимости для тестов
+   ./scripts/install-test-deps.sh
    ```
+   Эта утилита устанавливает пакеты, необходимые для запуска тестов. Выполните
+   её перед `pytest`, чтобы все проверки прошли успешно.
    Для работы с GPU установите подходящий пакет CuPy, например
    `pip install cupy-cuda12x`, где `12x` соответствует версии вашей CUDA.
    Если CuPy отсутствует, бот автоматически переключается на CPU‑режим.
