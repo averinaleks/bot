@@ -100,7 +100,10 @@ def _stub_modules():
 
     optuna_mod = types.ModuleType("optuna")
     optuna_samplers = types.ModuleType("optuna.samplers")
-    optuna_samplers.TPESampler = object
+    class _TPESampler:
+        def __init__(self, *a, **k):
+            pass
+    optuna_samplers.TPESampler = _TPESampler
     optuna_mod.samplers = optuna_samplers
     optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(optimize=lambda *a, **k: None, best_params={})
     optuna_integration = types.ModuleType("optuna.integration.mlflow")
@@ -126,6 +129,188 @@ def _stub_modules():
     requests_mod.get = lambda *a, **k: None
     requests_mod.post = lambda *a, **k: None
     sys.modules.setdefault("requests", requests_mod)
+
+    joblib_mod = types.ModuleType("joblib")
+    joblib_mod.dump = lambda *a, **k: None
+    joblib_mod.load = lambda *a, **k: {}
+    sys.modules.setdefault("joblib", joblib_mod)
+
+    dotenv_mod = types.ModuleType("dotenv")
+    dotenv_mod.load_dotenv = lambda *a, **k: None
+    sys.modules.setdefault("dotenv", dotenv_mod)
+    sys.modules.setdefault("dotenv.main", dotenv_mod)
+
+    flask_mod = types.ModuleType("flask")
+    class _Flask:
+        def __init__(self, name):
+            self.name = name
+
+        def route(self, *a, **k):
+            def decorator(f):
+                return f
+            return decorator
+
+        def run(self, *a, **k):
+            pass
+
+        def before_request(self, func):
+            return func
+
+    flask_mod.Flask = _Flask
+    flask_mod.jsonify = lambda *a, **k: dict(*a, **k)
+    flask_mod.request = types.SimpleNamespace(get_json=lambda *a, **k: {})
+    sys.modules.setdefault("flask", flask_mod)
+
+    ta_mod = types.ModuleType("ta")
+    trend_mod = types.ModuleType("ta.trend")
+    momentum_mod = types.ModuleType("ta.momentum")
+    volatility_mod = types.ModuleType("ta.volatility")
+
+    def _ema_indicator(series, window=14, fillna=True):
+        s = pd.Series(series)
+        result = s.ewm(span=window, adjust=False).mean()
+        return result.fillna(result.iloc[0]) if fillna else result
+
+    def _average_true_range(high, low, close, window=14, fillna=True):
+        h = pd.Series(high)
+        l = pd.Series(low)
+        c = pd.Series(close)
+        prev_close = c.shift(1)
+        tr = pd.concat([(h - l).abs(), (h - prev_close).abs(), (l - prev_close).abs()], axis=1).max(axis=1)
+        atr = tr.rolling(window, min_periods=1).mean()
+        return atr.fillna(0) if fillna else atr
+
+    def _rsi(series, window=14, fillna=True):
+        s = pd.Series(series)
+        diff = s.diff().fillna(0)
+        gain = diff.clip(lower=0)
+        loss = -diff.clip(upper=0)
+        avg_gain = gain.rolling(window, min_periods=1).mean()
+        avg_loss = loss.rolling(window, min_periods=1).mean()
+        rs = avg_gain / avg_loss.replace(0, pd.NA)
+        rsi = 100 - (100 / (1 + rs))
+        return rsi.fillna(0) if fillna else rsi
+
+    def _macd_diff(close, window_slow=26, window_fast=12, window_sign=9, fillna=True):
+        c = pd.Series(close)
+        fast = c.ewm(span=window_fast, adjust=False).mean()
+        slow = c.ewm(span=window_slow, adjust=False).mean()
+        macd = fast - slow
+        signal = macd.ewm(span=window_sign, adjust=False).mean()
+        diff = macd - signal
+        return diff.fillna(0) if fillna else diff
+
+    class _BollingerBands:
+        def __init__(self, series, window=20, fillna=True):
+            self.series = pd.Series(series)
+
+        def bollinger_wband(self):
+            return pd.Series([0.0] * len(self.series))
+
+    def _ulcer_index(series, window=14, fillna=True):
+        return pd.Series([0.0] * len(pd.Series(series)))
+
+    trend_mod.ema_indicator = _ema_indicator
+    trend_mod.macd_diff = _macd_diff
+    trend_mod.adx = lambda *a, **k: pd.Series([0.0] * len(pd.Series(a[0])))
+    momentum_mod.rsi = _rsi
+    volatility_mod.average_true_range = _average_true_range
+    volatility_mod.BollingerBands = _BollingerBands
+    volatility_mod.ulcer_index = _ulcer_index
+    ta_mod.trend = trend_mod
+    ta_mod.momentum = momentum_mod
+    ta_mod.volatility = volatility_mod
+    sys.modules.setdefault("ta", ta_mod)
+    sys.modules.setdefault("ta.trend", trend_mod)
+    sys.modules.setdefault("ta.momentum", momentum_mod)
+    sys.modules.setdefault("ta.volatility", volatility_mod)
+
+    class _PlExpr:
+        def __init__(self, func):
+            self.func = func
+
+        def __call__(self, df):
+            return self.func(df)
+
+    class _PlColumn:
+        def __init__(self, name):
+            self.name = name
+
+        def __ne__(self, other):
+            return _PlExpr(lambda df: df[self.name] != other)
+
+    def col(name):
+        return _PlColumn(name)
+
+    class DataFrame:
+        def __init__(self, data=None):
+            if isinstance(data, pd.DataFrame):
+                self._df = data.copy()
+            else:
+                self._df = pd.DataFrame(data)
+
+        @classmethod
+        def from_pandas(cls, df):
+            return cls(df)
+
+        def to_pandas(self):
+            return self._df.copy()
+
+        def clone(self):
+            return DataFrame(self._df.copy())
+
+        @property
+        def height(self):
+            return len(self._df)
+
+        def filter(self, expr):
+            mask = expr(self._df)
+            return DataFrame(self._df[mask])
+
+        def sort(self, columns):
+            return DataFrame(self._df.sort_values(columns))
+
+    def concat(dfs):
+        pdfs = [df._df if isinstance(df, DataFrame) else df for df in dfs]
+        return DataFrame(pd.concat(pdfs, ignore_index=True))
+
+    polars_mod = types.ModuleType("polars")
+    polars_mod.DataFrame = DataFrame
+    polars_mod.from_pandas = DataFrame.from_pandas
+    polars_mod.concat = concat
+    polars_mod.col = col
+    sys.modules.setdefault("polars", polars_mod)
+
+    if not HAVE_SKLEARN:
+        sk_mod = types.ModuleType("sklearn")
+        preproc_mod = types.ModuleType("sklearn.preprocessing")
+        class _Scaler:
+            def fit(self, *a, **k):
+                return self
+            def transform(self, X):
+                return X
+        preproc_mod.StandardScaler = _Scaler
+        metrics_mod = types.ModuleType("sklearn.metrics")
+        metrics_mod.brier_score_loss = lambda *a, **k: 0.0
+        linear_mod = types.ModuleType("sklearn.linear_model")
+        class _LogReg:
+            def fit(self, *a, **k):
+                return self
+            def predict_proba(self, X):
+                import numpy as _np
+                return _np.zeros((len(X), 2))
+        linear_mod.LogisticRegression = _LogReg
+        calib_mod = types.ModuleType("sklearn.calibration")
+        calib_mod.calibration_curve = lambda *a, **k: ([], [])
+        sk_mod.preprocessing = preproc_mod
+        sk_mod.metrics = metrics_mod
+        sk_mod.linear_model = linear_mod
+        sk_mod.calibration = calib_mod
+        sys.modules.setdefault("sklearn", sk_mod)
+        sys.modules.setdefault("sklearn.preprocessing", preproc_mod)
+        sys.modules.setdefault("sklearn.metrics", metrics_mod)
+        sys.modules.setdefault("sklearn.linear_model", linear_mod)
+        sys.modules.setdefault("sklearn.calibration", calib_mod)
 
     scipy_mod = types.ModuleType("scipy")
     stats_mod = types.ModuleType("scipy.stats")
