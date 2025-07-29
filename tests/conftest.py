@@ -121,6 +121,25 @@ def _stub_modules():
     tenacity_mod.stop_after_attempt = lambda *a, **k: (lambda f: f)
     sys.modules.setdefault("tenacity", tenacity_mod)
 
+    requests_mod = types.ModuleType("requests")
+    requests_mod.RequestException = Exception
+    requests_mod.get = lambda *a, **k: None
+    requests_mod.post = lambda *a, **k: None
+    sys.modules.setdefault("requests", requests_mod)
+
+    scipy_mod = types.ModuleType("scipy")
+    stats_mod = types.ModuleType("scipy.stats")
+    def _zscore(a, axis=0):
+        import numpy as _np  # local import to avoid global dependency
+        a = _np.asarray(a, dtype=float)
+        mean = a.mean(axis=axis, keepdims=True)
+        std = a.std(axis=axis, ddof=0, keepdims=True)
+        return (a - mean) / std
+    stats_mod.zscore = _zscore
+    scipy_mod.stats = stats_mod
+    sys.modules.setdefault("scipy", scipy_mod)
+    sys.modules.setdefault("scipy.stats", stats_mod)
+
 _stub_modules()
 
 
