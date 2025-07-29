@@ -661,6 +661,8 @@ python scripts/run_simulation.py --start 2020-01-01 --end 2020-01-02 --speed 60
 The simulator loads candles from the DataHandler cache and steps through them
 rapidly while reusing ``TradeManager`` methods. Trailing stops and other
 position logic behave exactly like in live trading.
+If no cached candles exist for the chosen period, the simulator logs a warning
+and exits.
 
 ## Continuous integration
 

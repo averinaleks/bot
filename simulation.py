@@ -63,6 +63,11 @@ class HistoricalSimulator:
     async def run(self, start_ts: pd.Timestamp, end_ts: pd.Timestamp, speed: float = 1.0) -> None:
         await self.load(start_ts, end_ts)
         if not self.history:
+            logger.warning(
+                "No cached OHLCV data found between %s and %s; simulation aborted",
+                start_ts,
+                end_ts,
+            )
             return
         timestamps = sorted({
             ts
