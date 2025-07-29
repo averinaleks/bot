@@ -270,6 +270,7 @@ def _freeze_torch_base_layers(model, model_type):
 
 def _freeze_keras_base_layers(model, model_type):
     """Freeze initial layers of a Keras model based on ``model_type``."""
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     from tensorflow import keras
 
     if model_type == "mlp":
@@ -294,7 +295,7 @@ def generate_time_series_splits(X, y, n_splits):
 
 
 # Reduce verbose TensorFlow logs before any TF import
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def _train_model_keras(
@@ -309,6 +310,7 @@ def _train_model_keras(
     freeze_base_layers=False,
     prediction_target="direction",
 ):
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     import tensorflow as tf
     from tensorflow import keras
 
@@ -735,47 +737,54 @@ class ModelBuilder:
                         model.to(self.device)
                         self.predictive_models[symbol] = model
                 else:
-                    from tensorflow import keras
+                    if self.nn_framework in {"keras", "tensorflow"}:
+                        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+                        from tensorflow import keras
 
-                    for symbol, weights in state.get("lstm_models", {}).items():
-                        scaler = self.scalers.get(symbol)
-                        input_size = (
-                            len(scaler.mean_)
-                            if scaler
-                            else self.config["lstm_timesteps"]
-                        )
-                        if self.model_type == "mlp":
-                            inputs = keras.Input(
-                                shape=(input_size * self.config["lstm_timesteps"],)
+                        for symbol, weights in state.get("lstm_models", {}).items():
+                            scaler = self.scalers.get(symbol)
+                            input_size = (
+                                len(scaler.mean_)
+                                if scaler
+                                else self.config["lstm_timesteps"]
                             )
-                            x = keras.layers.Dense(128, activation="relu")(inputs)
-                            x = keras.layers.Dropout(0.2)(x)
-                            x = keras.layers.Dense(64, activation="relu")(x)
-                        else:
-                            inputs = keras.Input(
-                                shape=(self.config["lstm_timesteps"], input_size)
-                            )
-                            x = keras.layers.Conv1D(
-                                32, 3, padding="same", activation="relu"
-                            )(inputs)
-                            x = keras.layers.Dropout(0.2)(x)
-                            if self.model_type == "gru":
-                                x = keras.layers.GRU(64, return_sequences=True)(x)
-                                attn = keras.layers.Dense(1, activation="softmax")(x)
-                                x = keras.layers.Multiply()([x, attn])
-                                x = keras.layers.Lambda(
-                                    lambda t: keras.backend.sum(t, axis=1)
-                                )(x)
-                            elif self.model_type in {"tft", "transformer"}:
-                                attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                                x = keras.layers.GlobalAveragePooling1D()(attn)
+                            if self.model_type == "mlp":
+                                inputs = keras.Input(
+                                    shape=(input_size * self.config["lstm_timesteps"],)
+                                )
+                                x = keras.layers.Dense(128, activation="relu")(inputs)
+                                x = keras.layers.Dropout(0.2)(x)
+                                x = keras.layers.Dense(64, activation="relu")(x)
                             else:
-                                attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                                x = keras.layers.GlobalAveragePooling1D()(attn)
-                        outputs = keras.layers.Dense(1, activation="sigmoid")(x)
-                        model = keras.Model(inputs, outputs)
-                        model.set_weights(weights)
-                        self.predictive_models[symbol] = model
+                                inputs = keras.Input(
+                                    shape=(self.config["lstm_timesteps"], input_size)
+                                )
+                                x = keras.layers.Conv1D(
+                                    32, 3, padding="same", activation="relu"
+                                )(inputs)
+                                x = keras.layers.Dropout(0.2)(x)
+                                if self.model_type == "gru":
+                                    x = keras.layers.GRU(64, return_sequences=True)(x)
+                                    attn = keras.layers.Dense(1, activation="softmax")(x)
+                                    x = keras.layers.Multiply()([x, attn])
+                                    x = keras.layers.Lambda(
+                                        lambda t: keras.backend.sum(t, axis=1)
+                                    )(x)
+                                elif self.model_type in {"tft", "transformer"}:
+                                    attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                                    x = keras.layers.GlobalAveragePooling1D()(attn)
+                                else:
+                                    attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+                                    x = keras.layers.GlobalAveragePooling1D()(attn)
+                            outputs = keras.layers.Dense(1, activation="sigmoid")(x)
+                            model = keras.Model(inputs, outputs)
+                            model.set_weights(weights)
+                            self.predictive_models[symbol] = model
+                    else:
+                        logger.warning(
+                            "Skipping TensorFlow model load because framework is %s",
+                            self.nn_framework,
+                        )
                 self.last_retrain_time = state.get(
                     "last_retrain_time", self.last_retrain_time
                 )
@@ -927,6 +936,7 @@ class ModelBuilder:
         )
         logger.debug("_train_model_remote completed for %s", symbol)
         if self.nn_framework in {"keras", "tensorflow"}:
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             import tensorflow as tf
             from tensorflow import keras
 
@@ -1091,6 +1101,7 @@ class ModelBuilder:
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
         if self.nn_framework in {"keras", "tensorflow"}:
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             import tensorflow as tf
             from tensorflow import keras
 
