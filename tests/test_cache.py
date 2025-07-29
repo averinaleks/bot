@@ -36,3 +36,23 @@ def test_load_converts_old_format(tmp_path, monkeypatch):
     assert not old_file.exists()
     loaded_again = cache.load_cached_data("BTCUSDT", "1m")
     assert loaded_again.equals(df)
+
+
+def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    # fail if _calculate_cache_size is used after init
+    def fail(*a, **k):
+        raise AssertionError("walk not called")
+    monkeypatch.setattr(cache, "_calculate_cache_size", fail)
+    cache.max_cache_size_mb = 10
+    cache.max_buffer_size_mb = 10
+    df = pd.DataFrame({"close": list(range(100))})
+    cache.save_cached_data("BTC/USDT", "1m", df)
+    file_path = tmp_path / "BTC_USDT_1m.pkl.gz"
+    size_mb = file_path.stat().st_size / (1024 * 1024)
+    assert abs(cache.current_cache_size_mb - size_mb) < 0.01
+    cache.max_cache_size_mb = 0
+    cache._aggressive_clean()
+    assert cache.current_cache_size_mb == 0
+    assert not file_path.exists()

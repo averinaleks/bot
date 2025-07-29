@@ -708,6 +708,20 @@ class HistoricalDataCache:
             self.current_cache_size_mb + additional_size_mb
         ) < available_mb * self.memory_threshold
 
+    def _delete_cache_file(self, path):
+        """Remove a cache file and adjust the cached size value."""
+        if not os.path.exists(path):
+            return
+        try:
+            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+        except OSError:
+            file_size_mb = 0
+        try:
+            os.remove(path)
+            self.current_cache_size_mb -= file_size_mb
+        except OSError as e:  # pragma: no cover - unexpected deletion failure
+            logger.error("Ошибка удаления файла кэша %s: %s", path, e)
+
     def _aggressive_clean(self):
         try:
             files = [
@@ -722,19 +736,16 @@ class HistoricalDataCache:
             while self.current_cache_size_mb > target_size and files:
                 file_name, _ = files.pop(0)
                 file_path = os.path.join(self.cache_dir, file_name)
-                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-                os.remove(file_path)
-                self.current_cache_size_mb -= file_size_mb
+                self._delete_cache_file(file_path)
                 logger.info(
-                    "Удален файл кэша (агрессивная очистка): %s, освобождено %.2f МБ",
+                    "Удален файл кэша (агрессивная очистка): %s",
                     file_name,
-                    file_size_mb,
                 )
         except OSError as e:
             logger.error("Ошибка агрессивной очистки кэша: %s", e)
 
     def _check_buffer_size(self):
-        buffer_size_mb = self._calculate_cache_size()
+        buffer_size_mb = self.current_cache_size_mb
         if buffer_size_mb > self.max_buffer_size_mb:
             logger.warning(
                 "Дисковый буфер превысил лимит %s МБ, очистка",
@@ -776,10 +787,16 @@ class HistoricalDataCache:
                     )
                     return
             self._check_buffer_size()
+            old_size_mb = 0
+            if os.path.exists(filename):
+                try:
+                    old_size_mb = os.path.getsize(filename) / (1024 * 1024)
+                except OSError:
+                    old_size_mb = 0
             with gzip.open(filename, "wb") as f:
                 pickle.dump(data, f)
             compressed_size_mb = os.path.getsize(filename) / (1024 * 1024)
-            self.current_cache_size_mb += compressed_size_mb
+            self.current_cache_size_mb += compressed_size_mb - old_size_mb
             elapsed_time = time.time() - start_time
             if elapsed_time > 0.5:
                 logger.warning(
@@ -805,7 +822,7 @@ class HistoricalDataCache:
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
                     logger.info("Кэш для %s_%s устарел, удаление", symbol, timeframe)
-                    os.remove(filename)
+                    self._delete_cache_file(filename)
                     return None
                 start_time = time.time()
                 with gzip.open(filename, "rb") as f:
@@ -817,7 +834,7 @@ class HistoricalDataCache:
                         timeframe,
                         type(data),
                     )
-                    os.remove(filename)
+                    self._delete_cache_file(filename)
                     return None
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
@@ -844,18 +861,14 @@ class HistoricalDataCache:
                         timeframe,
                         type(data),
                     )
-                    os.remove(old_filename)
+                    self._delete_cache_file(old_filename)
                     return None
                 self.save_cached_data(symbol, timeframe, data)
-                os.remove(old_filename)
+                self._delete_cache_file(old_filename)
                 return data
             return None
         except Exception as e:
             logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
             for f in (filename, old_filename):
-                try:
-                    if os.path.exists(f):
-                        os.remove(f)
-                except OSError:
-                    pass
+                self._delete_cache_file(f)
             return None
