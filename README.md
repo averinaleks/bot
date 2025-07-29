@@ -182,7 +182,9 @@ The services may build large data sets in memory. Compose allocates
 and other libraries do not run into the default `/dev/shm` limit.
 
 The `model_builder` service sets `TF_CPP_MIN_LOG_LEVEL=3` to hide verbose TensorFlow
-GPU warnings. Adjust or remove this variable if you need more detailed logs.
+GPU warnings. Set the environment variable to `2` or `3` **before importing
+TensorFlow** if you want to suppress extra CUDA messages entirely. Adjust or
+remove this variable if you need more detailed logs.
 
 When both TensorFlow and PyTorch start in the same container you might see
 messages like `Unable to register cuDNN factory` or `computation placer already
