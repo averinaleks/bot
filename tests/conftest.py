@@ -3,6 +3,7 @@ import sys
 import types
 import importlib.abc
 import importlib.util
+import threading
 try:
     import sklearn  # ensure real scikit-learn loaded before tests may stub it
     import sklearn.model_selection  # preload submodules used in tests
@@ -188,21 +189,95 @@ def _stub_modules():
         class _Flask:
             def __init__(self, name):
                 self.name = name
+                self._routes: dict[str, list[tuple[str, callable]]] = {}
+                self._before: list[callable] = []
 
-            def route(self, *a, **k):
-                def decorator(f):
-                    return f
+            def route(self, rule: str, methods: list[str] | None = None):
+                methods = methods or ["GET"]
+
+                def decorator(func):
+                    for m in methods:
+                        self._routes.setdefault(m.upper(), []).append((rule, func))
+                    return func
+
                 return decorator
+
+            def before_request(self, func):
+                self._before.append(func)
+                return func
 
             def run(self, *a, **k):
                 pass
 
-            def before_request(self, func):
-                return func
+            def _match(self, method: str, path: str):
+                for rule, func in self._routes.get(method.upper(), []):
+                    parts = rule.strip("/").split("/")
+                    vals = path.strip("/").split("/")
+                    if len(parts) != len(vals):
+                        continue
+                    kwargs = {}
+                    for p, v in zip(parts, vals):
+                        if p.startswith("<") and p.endswith(">"):
+                            kwargs[p[1:-1]] = v
+                        elif p != v:
+                            break
+                    else:
+                        return func, kwargs
+                return None, {}
+
+            class _TestResponse:
+                def __init__(self, data: dict | None, status: int = 200):
+                    self.status_code = status
+                    self.json = data
+
+                def get_json(self):
+                    return self.json
+
+            class _TestClient:
+                def __init__(self, app: "_Flask"):
+                    self.app = app
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def _request(self, method: str, path: str, json: dict | None = None):
+                    for func in self.app._before:
+                        func()
+                    request_ctx.json_data = json or {}
+                    func, kwargs = self.app._match(method, path)
+                    if func is None:
+                        return _Flask._TestResponse(None, 404)
+                    result = func(**kwargs)
+                    status = 200
+                    data = result
+                    if isinstance(result, tuple):
+                        data, status = result[0], result[1]
+                    return _Flask._TestResponse(data, status)
+
+                def get(self, path: str):
+                    return self._request("GET", path)
+
+                def post(self, path: str, json: dict | None = None):
+                    return self._request("POST", path, json=json)
+
+            def test_client(self):
+                return _Flask._TestClient(self)
+
+        class _RequestContext(threading.local):
+            def __init__(self):
+                self.json_data = {}
+
+            def get_json(self, *a, **k):
+                return self.json_data
+
+        request_ctx = _RequestContext()
 
         flask_mod.Flask = _Flask
         flask_mod.jsonify = lambda *a, **k: dict(*a, **k)
-        flask_mod.request = types.SimpleNamespace(get_json=lambda *a, **k: {})
+        flask_mod.request = request_ctx
         sys.modules.setdefault("flask", flask_mod)
 
     ta_mod = types.ModuleType("ta")
