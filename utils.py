@@ -692,7 +692,11 @@ class HistoricalDataCache:
         for dirpath, _, filenames in os.walk(self.cache_dir):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
-                total_size += os.path.getsize(fp)
+                try:
+                    total_size += os.path.getsize(fp)
+                except FileNotFoundError:
+                    # File was removed after os.walk listed it
+                    continue
         return total_size / (1024 * 1024)
 
     def _check_disk_space(self):
