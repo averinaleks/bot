@@ -171,12 +171,10 @@ def _stub_modules():
     requests_mod.post = lambda *a, **k: None
     sys.modules.setdefault("requests", requests_mod)
 
-    import importlib.util as _importlib_util
-    if _importlib_util.find_spec("joblib") is None:
-        joblib_mod = types.ModuleType("joblib")
-        joblib_mod.dump = lambda *a, **k: None
-        joblib_mod.load = lambda *a, **k: {}
-        sys.modules.setdefault("joblib", joblib_mod)
+    joblib_mod = types.ModuleType("joblib")
+    joblib_mod.dump = lambda *a, **k: None
+    joblib_mod.load = lambda *a, **k: {}
+    sys.modules.setdefault("joblib", joblib_mod)
 
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *a, **k: None
