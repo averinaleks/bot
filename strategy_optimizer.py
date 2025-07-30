@@ -9,8 +9,8 @@ import pandas as pd
 import optuna
 import ray
 
-from utils import logger
-from config import BotConfig
+from bot.utils import logger
+from bot.config import BotConfig
 from portfolio_backtest import portfolio_backtest
 
 

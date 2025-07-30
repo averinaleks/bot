@@ -4,7 +4,7 @@ import asyncio
 import json
 from contextlib import suppress
 import pandas as pd
-from config import BotConfig
+from bot.config import BotConfig
 from data_handler import DataHandler
 
 class DummyExchange:

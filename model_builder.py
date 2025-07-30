@@ -10,10 +10,10 @@ import os
 import time
 import asyncio
 import sys
-from config import BotConfig
+from bot.config import BotConfig
 from collections import deque
 import ray
-from utils import logger, check_dataframe_empty, HistoricalDataCache, is_cuda_available
+from bot.utils import logger, check_dataframe_empty, HistoricalDataCache, is_cuda_available
 from dotenv import load_dotenv
 
 try:  # prefer gymnasium if available
