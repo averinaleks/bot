@@ -559,9 +559,18 @@ class TradeManager:
                         max_attempts,
                     )
                     await asyncio.sleep(retry_delay)
-                order = await self.place_order(
-                    symbol, side, size, price, order_params, use_lock=False
-                )
+                try:
+                    order = await self.place_order(
+                        symbol, side, size, price, order_params, use_lock=False
+                    )
+                except Exception as exc:  # pragma: no cover - network issues
+                    logger.error(
+                        "Order attempt %s for %s failed: %s",
+                        attempt + 1,
+                        symbol,
+                        exc,
+                    )
+                    order = None
                 ret_code = None
                 if isinstance(order, dict):
                     ret_code = order.get("retCode") or order.get("ret_code")
@@ -653,7 +662,7 @@ class TradeManager:
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to open position {symbol}: {e}"
             )
-            raise
+            return
 
     async def close_position(
         self, symbol: str, exit_price: float, reason: str = "Manual"
@@ -1406,8 +1415,13 @@ class TradeManager:
             except RuntimeError:
                 # event loop already closed
                 pass
-        if ray.is_initialized():
-            ray.shutdown()
+        try:
+            if not hasattr(ray, "shutdown"):
+                return
+            if ray.is_initialized():
+                ray.shutdown()
+        except Exception:  # pragma: no cover - cleanup errors
+            pass
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.predictive_models:

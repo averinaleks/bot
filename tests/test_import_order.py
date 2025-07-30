@@ -22,7 +22,9 @@ def test_telegramlogger_injection_order():
         return await getattr(exchange, method)(*args, **kwargs)
     utils_stub.safe_api_call = _safe_api_call
     sys.modules['utils'] = utils_stub
+    sys.modules['bot.utils'] = utils_stub
 
     tm = importlib.import_module('trade_manager')
     assert tm.TelegramLogger is StubTL
     sys.modules.pop('utils', None)
+    sys.modules.pop('bot.utils', None)

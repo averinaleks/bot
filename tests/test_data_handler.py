@@ -769,3 +769,5 @@ async def test_subscribe_chunk_uses_backup(monkeypatch):
 
     assert calls == ['ws://primary', 'ws://backup']
 
+sys.modules['bot.utils'] = real_utils
+
