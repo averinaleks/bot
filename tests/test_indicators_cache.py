@@ -2,6 +2,7 @@ import sys
 import types
 import pandas as pd
 import numpy as np
+import ta
 from bot.config import BotConfig
 
 optimizer_stubbed = False
@@ -180,3 +181,17 @@ def test_dataframe_equal_to_adx_window():
     df = make_df(cfg.adx_window)
     ind = IndicatorsCache(df, cfg, 0.1)
     assert ind.adx.isna().all()
+
+
+def test_rsi_fallback(monkeypatch):
+    cfg = BotConfig()
+    df = make_df(10)
+
+    def fail_rsi(*a, **k):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(ta.momentum, "rsi", fail_rsi)
+    ind = IndicatorsCache(df, cfg, 0.1)
+    assert (ind.rsi == 0).all()
+    assert ind._rsi_avg_gain is None
+    assert ind._rsi_avg_loss is None
