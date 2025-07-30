@@ -2,8 +2,8 @@ import asyncio
 import types
 import numpy as np
 import pytest
-from config import BotConfig
-import model_builder
+from bot.config import BotConfig
+from bot import model_builder
 
 class DummyTL:
     async def send_telegram_message(self, *args, **kwargs):

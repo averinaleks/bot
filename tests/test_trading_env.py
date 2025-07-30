@@ -1,6 +1,6 @@
 import pytest
-from config import BotConfig
-from model_builder import TradingEnv
+from bot.config import BotConfig
+from bot.model_builder import TradingEnv
 
 def test_drawdown_penalty(sample_ohlcv):
     cfg = BotConfig(drawdown_penalty=0.5)

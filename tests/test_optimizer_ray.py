@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import optuna  # noqa: F401
-from config import BotConfig
+from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the optimizer
 if 'torch' not in sys.modules:
@@ -53,8 +53,8 @@ from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
 builtins.ExperimentalWarning = _OptunaExperimentalWarning
 
 sys.modules.pop('optimizer', None)
-from optimizer import ParameterOptimizer  # noqa: E402
-import optimizer
+from bot.optimizer import ParameterOptimizer  # noqa: E402
+from bot import optimizer
 
 
 # ensure real optuna

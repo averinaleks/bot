@@ -1,7 +1,7 @@
 import pickle
 import pandas as pd
 
-from utils import HistoricalDataCache, psutil
+from bot.utils import HistoricalDataCache, psutil
 
 
 def _mock_virtual_memory():

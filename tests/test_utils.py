@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-import utils
+from bot import utils
 
 
 class DummyExchange:

@@ -8,12 +8,12 @@ import json
 import time
 import pandas as pd
 import pytest
-import trading_bot
-from config import BotConfig
+from bot import trading_bot
+from bot.config import BotConfig
 
 # Replace utils with a stub that overrides TelegramLogger
-real_utils = importlib.import_module('utils')
-utils_stub = types.ModuleType('utils')
+real_utils = importlib.import_module('bot.utils')
+utils_stub = types.ModuleType('bot.utils')
 utils_stub.__dict__.update(real_utils.__dict__)
 class DummyTL:
     def __init__(self, *a, **k):
@@ -25,7 +25,7 @@ class DummyTL:
         pass
 utils_stub.TelegramLogger = DummyTL
 utils_stub.logger = logging.getLogger('test')
-sys.modules['utils'] = utils_stub
+sys.modules['bot.utils'] = utils_stub
 optimizer_stubbed = False
 if 'optimizer' not in sys.modules:
     optimizer_stubbed = True
@@ -37,8 +37,8 @@ if 'optimizer' not in sys.modules:
     sys.modules['optimizer'] = optimizer_stub
 os.environ['TEST_MODE'] = '1'
 
-from data_handler import DataHandler
-import data_handler
+from bot.data_handler import DataHandler
+from bot import data_handler
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
@@ -110,7 +110,7 @@ async def test_ws_rate_limit_zero_no_exception():
 
 
 def test_price_endpoint_returns_default():
-    from data_handler import api_app, DEFAULT_PRICE
+    from bot.data_handler import api_app, DEFAULT_PRICE
     with api_app.test_client() as client:
         resp = client.get('/price/UNKNOWN')
         assert resp.status_code == 200

@@ -4,7 +4,7 @@ import sys
 import types
 import pandas as pd
 import pytest
-from config import BotConfig
+from bot.config import BotConfig
 
 # Stub heavy dependencies
 if 'torch' not in sys.modules:
@@ -50,8 +50,8 @@ os.environ['TEST_MODE'] = '1'
 
 sys.modules.pop('trade_manager', None)
 sys.modules.pop('simulation', None)
-from trade_manager import TradeManager
-from simulation import HistoricalSimulator
+from bot.trade_manager import TradeManager
+from bot.simulation import HistoricalSimulator
 
 class DummyExchange:
     def __init__(self):

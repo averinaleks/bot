@@ -7,7 +7,7 @@ import logging
 import os
 import math
 import contextlib
-from config import BotConfig
+from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
 if 'torch' not in sys.modules:
@@ -53,8 +53,8 @@ joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
 
-import trade_manager
-from trade_manager import TradeManager  # noqa: E402
+from bot import trade_manager
+from bot.trade_manager import TradeManager  # noqa: E402
 
 import asyncio
 
