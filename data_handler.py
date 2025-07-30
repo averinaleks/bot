@@ -343,21 +343,29 @@ class IndicatorsCache:
                 self._atr_period = config["atr_period_default"]
                 rsi_window = config.get("rsi_window", 14)
                 self._rsi_window = rsi_window
-                self.rsi = ta.momentum.rsi(df["close"], window=rsi_window, fillna=True)
+                try:
+                    self.rsi = ta.momentum.rsi(
+                        df["close"], window=rsi_window, fillna=True
+                    )
 
-                # Calculate smoothed gain/loss values for incremental RSI updates
-                diff = df["close"].diff().to_numpy()[1:]
-                gains = np.clip(diff, 0.0, None)
-                losses = np.clip(-diff, 0.0, None)
-                if len(gains) >= rsi_window:
-                    avg_gain = gains[:rsi_window].mean()
-                    avg_loss = losses[:rsi_window].mean()
-                    for g, l in zip(gains[rsi_window:], losses[rsi_window:]):
-                        avg_gain = (avg_gain * (rsi_window - 1) + g) / rsi_window
-                        avg_loss = (avg_loss * (rsi_window - 1) + l) / rsi_window
-                    self._rsi_avg_gain = float(avg_gain)
-                    self._rsi_avg_loss = float(avg_loss)
-                else:
+                    # Calculate smoothed gain/loss values for incremental RSI updates
+                    diff = df["close"].diff().to_numpy()[1:]
+                    gains = np.clip(diff, 0.0, None)
+                    losses = np.clip(-diff, 0.0, None)
+                    if len(gains) >= rsi_window:
+                        avg_gain = gains[:rsi_window].mean()
+                        avg_loss = losses[:rsi_window].mean()
+                        for g, l in zip(gains[rsi_window:], losses[rsi_window:]):
+                            avg_gain = (avg_gain * (rsi_window - 1) + g) / rsi_window
+                            avg_loss = (avg_loss * (rsi_window - 1) + l) / rsi_window
+                        self._rsi_avg_gain = float(avg_gain)
+                        self._rsi_avg_loss = float(avg_loss)
+                    else:
+                        self._rsi_avg_gain = None
+                        self._rsi_avg_loss = None
+                except Exception as e:  # pragma: no cover - log and fallback
+                    logger.error("RSI calculation failed: %s", e)
+                    self.rsi = pd.Series(np.zeros(len(df)), index=df.index)
                     self._rsi_avg_gain = None
                     self._rsi_avg_loss = None
 
