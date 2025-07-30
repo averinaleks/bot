@@ -484,6 +484,8 @@ async def test_subscribe_to_klines_single_timeframe(monkeypatch):
     monkeypatch.setattr(dh, 'load_from_disk_buffer_loop', fake_task)
     monkeypatch.setattr(dh, 'monitor_load', fake_task)
     monkeypatch.setattr(dh, 'cleanup_old_data', fake_task)
+    monkeypatch.setattr(dh, 'funding_rate_loop', fake_task)
+    monkeypatch.setattr(dh, 'open_interest_loop', fake_task)
 
     await dh.subscribe_to_klines(['BTCUSDT'])
     assert call['n'] == 1
