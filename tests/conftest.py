@@ -1,6 +1,8 @@
 import os
 import sys
 import types
+import importlib.abc
+import importlib.util
 try:
     import sklearn  # ensure real scikit-learn loaded before tests may stub it
     import sklearn.model_selection  # preload submodules used in tests
@@ -107,7 +109,43 @@ def _stub_modules():
             pass
     optuna_samplers.TPESampler = _TPESampler
     optuna_mod.samplers = optuna_samplers
-    optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(optimize=lambda *a, **k: None, best_params={})
+
+    def _create_study_stub(*a, **k):
+        class _Trial:
+            def __init__(self, number: int):
+                self.number = number
+                self.params: dict = {}
+
+            def suggest_int(self, name, low, high):
+                self.params[name] = low
+                return low
+
+            def suggest_float(self, name, low, high):
+                self.params[name] = low
+                return low
+
+        class _Study:
+            def __init__(self):
+                self.trials = []
+                self.best_params = {}
+                self.best_value = 0.0
+
+            def ask(self):
+                trial = _Trial(len(self.trials))
+                self.trials.append(trial)
+                return trial
+
+            def tell(self, trial, value):
+                if value is not None and value > self.best_value:
+                    self.best_value = value
+                    self.best_params = getattr(trial, "params", {})
+
+            def optimize(self, *a, **k):
+                pass
+
+        return _Study()
+
+    optuna_mod.create_study = _create_study_stub
     optuna_integration = types.ModuleType("optuna.integration.mlflow")
     optuna_integration.MLflowCallback = object
     optuna_exceptions = types.ModuleType("optuna.exceptions")
@@ -115,10 +153,10 @@ def _stub_modules():
         pass
     optuna_exceptions.ExperimentalWarning = _ExpWarn
     optuna_mod.exceptions = optuna_exceptions
-    sys.modules.setdefault("optuna", optuna_mod)
-    sys.modules.setdefault("optuna.samplers", optuna_samplers)
-    sys.modules.setdefault("optuna.integration.mlflow", optuna_integration)
-    sys.modules.setdefault("optuna.exceptions", optuna_exceptions)
+    sys.modules["optuna"] = optuna_mod
+    sys.modules["optuna.samplers"] = optuna_samplers
+    sys.modules["optuna.integration.mlflow"] = optuna_integration
+    sys.modules["optuna.exceptions"] = optuna_exceptions
 
     tenacity_mod = types.ModuleType("tenacity")
     tenacity_mod.retry = lambda *a, **k: (lambda f: f)
@@ -330,6 +368,25 @@ def _stub_modules():
     scipy_mod.stats = stats_mod
     sys.modules.setdefault("scipy", scipy_mod)
     sys.modules.setdefault("scipy.stats", stats_mod)
+
+class _OptunaLoader(importlib.abc.Loader):
+    def create_module(self, spec):
+        return sys.modules.get(spec.name)
+
+    def exec_module(self, module):
+        pass
+
+
+class _OptunaFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "optuna" or fullname.startswith("optuna."):
+            if fullname not in sys.modules:
+                _stub_modules()
+            if fullname in sys.modules:
+                return importlib.util.spec_from_loader(fullname, _OptunaLoader())
+        return None
+
+sys.meta_path.insert(0, _OptunaFinder())
 
 _stub_modules()
 
