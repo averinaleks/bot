@@ -5,7 +5,7 @@ import time
 import requests
 import httpx
 from dotenv import load_dotenv
-from utils import logger
+from bot.utils import logger
 
 
 def send_telegram_alert(message: str) -> None:

@@ -15,12 +15,12 @@ except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 import inspect
 import ray
-from utils import (
+from bot.utils import (
     logger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
 )
-from config import BotConfig
+from bot.config import BotConfig
 from optuna.samplers import TPESampler
 try:
     from optuna.integration.mlflow import MLflowCallback

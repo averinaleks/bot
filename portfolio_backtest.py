@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from utils import logger
+from bot.utils import logger
 
 
 def portfolio_backtest(

@@ -13,7 +13,7 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - allow missing polars
     pl = None
 import websockets
-from utils import (
+from bot.utils import (
     BybitSDKAsync,
     logger,
     check_dataframe_empty,
@@ -28,7 +28,7 @@ from utils import (
 from tenacity import retry, wait_exponential
 from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
 import functools
-from config import BotConfig
+from bot.config import BotConfig
 import ta
 import os
 import joblib

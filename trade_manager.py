@@ -55,14 +55,14 @@ else:
     import ray
 from tenacity import retry, wait_exponential, stop_after_attempt
 import inspect
-from utils import (
+from bot.utils import (
     logger,
     TelegramLogger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
     safe_api_call,
 )
-from config import BotConfig, load_config
+from bot.config import BotConfig, load_config
 import contextlib
 import types
 
@@ -1537,7 +1537,7 @@ async def create_trade_manager() -> TradeManager:
         trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
         logger.info("TradeManager instance created")
         if telegram_bot:
-            from utils import TelegramUpdateListener
+            from bot.utils import TelegramUpdateListener
 
             listener = TelegramUpdateListener(telegram_bot)
 

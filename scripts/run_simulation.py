@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import pandas as pd
-from config import load_config
+from bot.config import load_config
 from data_handler import DataHandler
 from model_builder import ModelBuilder
 from trade_manager import TradeManager
