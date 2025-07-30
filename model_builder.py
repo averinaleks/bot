@@ -38,6 +38,9 @@ except ImportError as e:  # pragma: no cover - optional dependency
 shap = None
 from flask import Flask, request, jsonify
 
+# Framework identifiers used for TensorFlow/Keras
+KERAS_FRAMEWORKS = {"tensorflow", "keras"}
+
 if os.getenv("TEST_MODE") == "1":
     import types
 
@@ -294,8 +297,6 @@ def generate_time_series_splits(X, y, n_splits):
         yield train_idx, val_idx
 
 
-# Reduce verbose TensorFlow logs before any TF import
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def _train_model_keras(
@@ -497,7 +498,7 @@ def _train_model_remote(
     freeze_base_layers=False,
     prediction_target="direction",
 ):
-    if framework in {"keras", "tensorflow"}:
+    if framework in KERAS_FRAMEWORKS:
         return _train_model_keras(
             X,
             y,
@@ -737,7 +738,7 @@ class ModelBuilder:
                         model.to(self.device)
                         self.predictive_models[symbol] = model
                 else:
-                    if self.nn_framework in {"keras", "tensorflow"}:
+                    if self.nn_framework in KERAS_FRAMEWORKS:
                         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
                         from tensorflow import keras
 
@@ -935,7 +936,7 @@ class ModelBuilder:
             )
         )
         logger.debug("_train_model_remote completed for %s", symbol)
-        if self.nn_framework in {"keras", "tensorflow"}:
+        if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             import tensorflow as tf
             from tensorflow import keras
@@ -1023,7 +1024,7 @@ class ModelBuilder:
                     }
                 )
                 mlflow.log_metric("brier_score", float(brier))
-                if self.nn_framework in {"keras", "tensorflow"}:
+                if self.nn_framework in KERAS_FRAMEWORKS:
                     mlflow.tensorflow.log_model(model, "model")
                 else:
                     mlflow.pytorch.log_model(model, "model")
@@ -1074,7 +1075,7 @@ class ModelBuilder:
         existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
-            if self.nn_framework in {"keras", "tensorflow"}:
+            if self.nn_framework in KERAS_FRAMEWORKS:
                 init_state = existing.get_weights()
             else:
                 init_state = existing.state_dict()
@@ -1100,7 +1101,7 @@ class ModelBuilder:
             )
         )
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
-        if self.nn_framework in {"keras", "tensorflow"}:
+        if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             import tensorflow as tf
             from tensorflow import keras
@@ -1187,7 +1188,7 @@ class ModelBuilder:
                     }
                 )
                 mlflow.log_metric("brier_score", float(brier))
-                if self.nn_framework in {"keras", "tensorflow"}:
+                if self.nn_framework in KERAS_FRAMEWORKS:
                     mlflow.tensorflow.log_model(model, "model")
                 else:
                     mlflow.pytorch.log_model(model, "model")
@@ -1358,7 +1359,7 @@ class ModelBuilder:
                     for i in range(len(features) - self.config["lstm_timesteps"])
                 ]
             )
-            if self.nn_framework in {"keras", "tensorflow"}:
+            if self.nn_framework in KERAS_FRAMEWORKS:
                 preds = model.predict(X).reshape(-1)
             else:
                 torch_mods = _get_torch_modules()
