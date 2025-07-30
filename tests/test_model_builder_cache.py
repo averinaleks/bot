@@ -4,7 +4,7 @@ import types
 import numpy as np
 import pandas as pd
 import pytest
-from config import BotConfig
+from bot.config import BotConfig
 
 os.environ["TEST_MODE"] = "1"
 gym_mod = types.ModuleType("gymnasium")
@@ -27,7 +27,7 @@ spaces_mod.Box = DummyBox
 
 sys.modules.setdefault("gymnasium", gym_mod)
 sys.modules.setdefault("gymnasium.spaces", spaces_mod)
-from model_builder import ModelBuilder
+from bot.model_builder import ModelBuilder
 
 class DummyIndicators:
     def __init__(self, length):

@@ -24,10 +24,12 @@ def pytest_runtest_setup(item):
     if not HAVE_SKLEARN and item.get_closest_marker("requires_sklearn"):
         pytest.skip("scikit-learn not installed")
 
-# Ensure the project root is available before tests import project modules
+# Ensure the project root and its parent are available before tests import project modules
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+PARENT = os.path.dirname(ROOT)
+for path in (PARENT, ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def _stub_modules():

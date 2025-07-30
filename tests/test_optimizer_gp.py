@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import logging
-from config import BotConfig
+from bot.config import BotConfig
 
 # Stub heavy dependencies before importing optimizer
 if 'torch' not in sys.modules:
@@ -70,8 +70,8 @@ sys.modules['skopt.space'] = skopt_space
 
 # Import optimizer fresh
 sys.modules.pop('optimizer', None)
-from optimizer import ParameterOptimizer  # noqa: E402
-import optimizer
+from bot.optimizer import ParameterOptimizer  # noqa: E402
+from bot import optimizer
 
 # Stub utils
 utils = types.ModuleType('utils')

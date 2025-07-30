@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import ta
 import types
-import utils
+from bot import utils
 
 import importlib.util
 
@@ -28,7 +28,7 @@ if 'optimizer' not in sys.modules:
     optimizer_stub.ParameterOptimizer = _PO
     sys.modules['optimizer'] = optimizer_stub
 
-from data_handler import ema_fast, atr_fast  # noqa: E402
+from bot.data_handler import ema_fast, atr_fast  # noqa: E402
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)

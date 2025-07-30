@@ -1,7 +1,7 @@
 import os
 import importlib
 import sys
-import utils
+from bot import utils
 
 
 def test_force_cpu(monkeypatch):

@@ -7,7 +7,7 @@ import types
 import pytest
 import importlib.util
 import contextlib
-from config import BotConfig
+from bot.config import BotConfig
 import asyncio
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import brier_score_loss
@@ -35,8 +35,8 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common"] = common
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
-import model_builder
-from model_builder import ModelBuilder, _train_model_remote
+from bot import model_builder
+from bot.model_builder import ModelBuilder, _train_model_remote
 
 class DummyIndicators:
     def __init__(self, length):

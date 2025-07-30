@@ -2,7 +2,7 @@ import sys
 import types
 import pandas as pd
 import numpy as np
-from config import BotConfig
+from bot.config import BotConfig
 
 optimizer_stubbed = False
 if 'optimizer' not in sys.modules:
@@ -24,7 +24,7 @@ if 'strategy_optimizer' not in sys.modules:
     strategy_stub.StrategyOptimizer = _SO
     sys.modules['strategy_optimizer'] = strategy_stub
 
-from data_handler import IndicatorsCache
+from bot.data_handler import IndicatorsCache
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)

@@ -4,7 +4,7 @@ import sys
 import pytest
 import types
 import logging
-from config import BotConfig
+from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the optimizer
 if 'torch' not in sys.modules:
@@ -44,7 +44,7 @@ sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
 
 sys.modules.pop("optimizer", None)
-from optimizer import ParameterOptimizer  # noqa: E402
+from bot.optimizer import ParameterOptimizer  # noqa: E402
 
 
 utils = types.ModuleType('utils')

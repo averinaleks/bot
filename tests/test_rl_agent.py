@@ -59,10 +59,10 @@ if "gymnasium" not in sys.modules:
     sys.modules["gymnasium"] = gym_stub
 
 import importlib
-import model_builder
+from bot import model_builder
 importlib.reload(model_builder)
-from config import BotConfig
-from model_builder import RLAgent
+from bot.config import BotConfig
+from bot.model_builder import RLAgent
 
 
 class DummyModelBuilder:

@@ -1,4 +1,4 @@
-import trading_bot
+from bot import trading_bot
 import time
 import types
 import pytest

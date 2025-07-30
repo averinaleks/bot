@@ -19,7 +19,7 @@ def _run_dh():
     sys.modules['ccxt'] = ccxt
     os.environ['STREAM_SYMBOLS'] = ''
     os.environ['HOST'] = '127.0.0.1'
-    from services import data_handler_service
+    from bot.services import data_handler_service
     data_handler_service.app.run(host='127.0.0.1', port=8000)
 
 
@@ -45,7 +45,7 @@ def test_data_handler_service_price():
 def _run_mb(model_dir: str):
     os.environ['MODEL_DIR'] = model_dir
     os.environ['HOST'] = '127.0.0.1'
-    from services import model_builder_service
+    from bot.services import model_builder_service
     model_builder_service.app.run(host='127.0.0.1', port=8001)
 
 
@@ -88,7 +88,7 @@ def _run_tm():
     sys.modules['ccxt'] = ccxt
     os.environ['HOST'] = '127.0.0.1'
     os.environ.setdefault('TRADE_RISK_USD', '10')
-    from services import trade_manager_service
+    from bot.services import trade_manager_service
     trade_manager_service.app.run(host='127.0.0.1', port=8002)
 
 

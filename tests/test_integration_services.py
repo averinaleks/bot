@@ -77,7 +77,7 @@ def _run_tm():
 
 
 def test_services_communicate():
-    import trading_bot  # noqa: E402
+    from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
@@ -105,7 +105,7 @@ def test_services_communicate():
 
 
 def test_service_availability_check():
-    import trading_bot  # noqa: E402
+    from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
@@ -130,7 +130,7 @@ def test_service_availability_check():
 
 
 def test_check_services_success():
-    import trading_bot  # noqa: E402
+    from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
@@ -157,7 +157,7 @@ def test_check_services_success():
 
 
 def test_check_services_failure():
-    import trading_bot  # noqa: E402
+    from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
     processes = [
         ctx.Process(target=_run_dh),
@@ -184,7 +184,7 @@ def test_check_services_failure():
 
 
 def test_check_services_host_only():
-    import trading_bot  # noqa: E402
+    from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
     for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
         os.environ.pop(var, None)

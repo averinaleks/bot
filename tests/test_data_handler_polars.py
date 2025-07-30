@@ -7,11 +7,11 @@ import pandas as pd
 import polars as pl
 import contextlib
 import pytest
-from config import BotConfig
+from bot.config import BotConfig
 
 # Replace utils with a stub like in test_data_handler
-real_utils = importlib.import_module('utils')
-utils_stub = types.ModuleType('utils')
+real_utils = importlib.import_module('bot.utils')
+utils_stub = types.ModuleType('bot.utils')
 utils_stub.__dict__.update(real_utils.__dict__)
 class DummyTL:
     def __init__(self, *a, **k):
@@ -23,7 +23,7 @@ class DummyTL:
         pass
 utils_stub.TelegramLogger = DummyTL
 utils_stub.logger = logging.getLogger('test')
-sys.modules['utils'] = utils_stub
+sys.modules['bot.utils'] = utils_stub
 
 # Ensure optimizer stub
 optimizer_stubbed = False
@@ -38,8 +38,8 @@ if 'optimizer' not in sys.modules:
 
 os.environ['TEST_MODE'] = '1'
 
-from data_handler import DataHandler
-import data_handler
+from bot.data_handler import DataHandler
+from bot import data_handler
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)

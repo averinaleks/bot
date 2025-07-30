@@ -5,7 +5,7 @@ import types
 import os
 import sys
 import pytest
-from config import BotConfig
+from bot.config import BotConfig
 
 os.environ["TEST_MODE"] = "1"
 
