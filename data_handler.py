@@ -363,7 +363,8 @@ class IndicatorsCache:
 
                 adx_window = config.get("adx_window", 14)
                 self._adx_window = adx_window
-                if len(df) >= adx_window:
+                # Require at least ``adx_window + 1`` values for ADX calculation
+                if len(df) > adx_window:
                     self.adx = ta.trend.adx(
                         df["high"],
                         df["low"],
