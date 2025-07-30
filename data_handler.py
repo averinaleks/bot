@@ -140,7 +140,7 @@ def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarra
 def atr_fast(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, window: int
 ) -> np.ndarray:
-    """Compute ATR using Wilder's smoothing with optional GPU acceleration."""
+    """Compute ATR using a rolling mean with ``min_periods=1``."""
 
     high = np.asarray(high, dtype=np.float64)
     low = np.asarray(low, dtype=np.float64)
@@ -149,21 +149,24 @@ def atr_fast(
     tr1 = high - low
     tr2 = np.abs(high - prev_close)
     tr3 = np.abs(low - prev_close)
-    tr = np.maximum(np.maximum(tr1, tr2), tr3)
+    tr = np.maximum.reduce([tr1, tr2, tr3])
 
     if GPU_AVAILABLE and len(tr) >= 1024:
         tr_gpu = cp.asarray(tr)
-        atr_gpu = cp.zeros_like(tr_gpu)
-        atr_gpu[window - 1] = cp.mean(tr_gpu[:window])
-        for i in range(window, len(tr)):
-            atr_gpu[i] = (atr_gpu[i - 1] * (window - 1) + tr_gpu[i]) / float(window)
+        cumsum = cp.cumsum(tr_gpu)
+        atr_gpu = cp.empty_like(tr_gpu)
+        for i in range(len(tr_gpu)):
+            start = max(0, i - window + 1)
+            count = i - start + 1
+            atr_gpu[i] = (cumsum[i] - (cumsum[start - 1] if start > 0 else 0)) / count
         return cp.asnumpy(atr_gpu)
 
-    atr = np.zeros_like(tr)
-    if len(tr) >= window:
-        atr[window - 1] = tr[:window].mean()
-        for i in range(window, len(tr)):
-            atr[i] = (atr[i - 1] * (window - 1) + tr[i]) / float(window)
+    cumsum = np.cumsum(tr)
+    atr = np.empty_like(tr)
+    for i in range(len(tr)):
+        start = max(0, i - window + 1)
+        count = i - start + 1
+        atr[i] = (cumsum[i] - (cumsum[start - 1] if start > 0 else 0)) / count
     return atr
 
 

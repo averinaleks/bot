@@ -165,11 +165,14 @@ def _stub_modules():
     tenacity_mod.stop_after_attempt = lambda *a, **k: (lambda f: f)
     sys.modules.setdefault("tenacity", tenacity_mod)
 
-    requests_mod = types.ModuleType("requests")
-    requests_mod.RequestException = Exception
-    requests_mod.get = lambda *a, **k: None
-    requests_mod.post = lambda *a, **k: None
-    sys.modules.setdefault("requests", requests_mod)
+    try:
+        import requests  # noqa: F401
+    except Exception:
+        requests_mod = types.ModuleType("requests")
+        requests_mod.RequestException = Exception
+        requests_mod.get = lambda *a, **k: None
+        requests_mod.post = lambda *a, **k: None
+        sys.modules.setdefault("requests", requests_mod)
 
     joblib_mod = types.ModuleType("joblib")
     joblib_mod.dump = lambda *a, **k: None

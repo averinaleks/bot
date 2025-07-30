@@ -827,6 +827,8 @@ class ModelBuilder:
             """Return values aligned to ``df.index`` and forward filled."""
             if not isinstance(series, pd.Series):
                 return np.full(len(df), 0.0, dtype=float)
+            if not series.index.equals(df.index):
+                series = pd.Series(series.values, index=df.index[: len(series)])
             aligned = series.reindex(df.index).bfill().ffill()
             return aligned.to_numpy(dtype=float)
 
@@ -1521,6 +1523,8 @@ class RLAgent:
         def _align(series: pd.Series) -> np.ndarray:
             if not isinstance(series, pd.Series):
                 return np.full(len(df), 0.0, dtype=float)
+            if not series.index.equals(df.index):
+                series = pd.Series(series.values, index=df.index[: len(series)])
             return series.reindex(df.index).bfill().ffill().to_numpy(dtype=float)
 
         features_df["ema30"] = _align(indicators.ema30)
