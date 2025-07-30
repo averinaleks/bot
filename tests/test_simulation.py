@@ -106,6 +106,20 @@ async def test_simulator_trailing_stop():
         first['n'] += 1
         return 'buy' if first['n'] == 1 else None
     tm.evaluate_signal = fake_eval
+    async def fake_close(symbol, price, reason='Manual'):
+        if (
+            'symbol' in tm.positions.index.names
+            and symbol in tm.positions.index.get_level_values('symbol')
+        ):
+            idx = tm.positions.loc[
+                tm.positions.index.get_level_values('symbol') == symbol
+            ].index[0]
+            tm.positions = tm.positions.drop(idx)
+        dh.exchange.orders.append({'method': 'close', 'price': price})
+    tm.close_position = fake_close
+    async def _noop(*_a, **_k):
+        pass
+    tm.check_exit_signal = _noop
 
     sim = HistoricalSimulator(dh, tm)
     start = dh.history.index.get_level_values('timestamp').min()
