@@ -173,3 +173,10 @@ def test_short_dataframe_no_value_error():
     df = make_df(5)
     ind = IndicatorsCache(df, cfg, 0.1)
     assert ind.adx.isna().all()
+
+
+def test_dataframe_equal_to_adx_window():
+    cfg = BotConfig()
+    df = make_df(cfg.adx_window)
+    ind = IndicatorsCache(df, cfg, 0.1)
+    assert ind.adx.isna().all()
