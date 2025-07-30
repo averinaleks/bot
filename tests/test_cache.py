@@ -1,4 +1,5 @@
 import pickle
+import os
 import pandas as pd
 
 from bot.utils import HistoricalDataCache, psutil
@@ -56,3 +57,20 @@ def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
     cache._aggressive_clean()
     assert cache.current_cache_size_mb == 0
     assert not file_path.exists()
+
+
+def test_calculate_cache_size_skips_deleted_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    file_path = tmp_path / "del.pkl.gz"
+    file_path.write_bytes(b"data")
+    orig_getsize = os.path.getsize
+
+    def fake_getsize(path):
+        if path == str(file_path):
+            file_path.unlink()
+            raise FileNotFoundError
+        return orig_getsize(path)
+
+    monkeypatch.setattr(os.path, "getsize", fake_getsize)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    assert cache.current_cache_size_mb == 0
