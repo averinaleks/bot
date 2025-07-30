@@ -395,13 +395,17 @@ class TelegramLogger(logging.Handler):
                 return
             if TelegramLogger._stop_event.is_set():
                 return
+            queue = TelegramLogger._queue
             try:
-                item = await asyncio.wait_for(TelegramLogger._queue.get(), 1.0)
+                item = await asyncio.wait_for(queue.get(), 1.0)
             except asyncio.TimeoutError:
                 continue
             chat_id, text, urgent = item
+            if chat_id is None:
+                queue.task_done()
+                return
             await self._send(text, chat_id, urgent)
-            TelegramLogger._queue.task_done()
+            queue.task_done()
             await asyncio.sleep(1)
 
     async def _send(self, message: str, chat_id: int | str, urgent: bool):
@@ -506,6 +510,11 @@ class TelegramLogger(logging.Handler):
     async def shutdown(cls):
         if cls._stop_event is None:
             return
+        if cls._queue is not None:
+            try:
+                cls._queue.put_nowait((None, "", False))
+            except asyncio.QueueFull:
+                pass
         cls._stop_event.set()
         if cls._worker_task is not None:
             cls._worker_task.cancel()
