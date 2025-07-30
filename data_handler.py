@@ -469,7 +469,7 @@ class IndicatorsCache:
                 if hasattr(self, "ulcer_index") and not self.ulcer_index.empty
                 else None
             )
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error("Ошибка расчета индикаторов (%s): %s", timeframe, e)
             self.ema30 = self.ema100 = self.ema200 = self.atr = self.rsi = self.adx = (
                 self.macd
@@ -483,7 +483,7 @@ class IndicatorsCache:
             vp = utils_volume_profile(prices, volumes, bins=50)
             price_bins = np.linspace(prices.min(), prices.max(), num=len(vp))
             return pd.Series(vp, index=price_bins)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error("Ошибка расчета Volume Profile: %s", e)
             return None
 
@@ -1016,7 +1016,7 @@ class DataHandler:
                             ),
                         )
             await self.release_memory()
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error("Ошибка загрузки начальных данных: %s", e)
             await self.telegram_logger.send_telegram_message(
                 f"Ошибка загрузки данных: {e}"
@@ -1128,7 +1128,7 @@ class DataHandler:
             else:
                 self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error("Ошибка получения OHLCV для %s (%s): %s", symbol, timeframe, e)
             return symbol, pd.DataFrame()
 
@@ -1178,7 +1178,7 @@ class DataHandler:
             else:
                 self.cache.save_cached_data(f"{cache_prefix}{symbol}", timeframe, df)
             return symbol, pd.DataFrame(df)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error(
                 "Ошибка получения расширенной истории OHLCV для %s (%s): %s",
                 symbol,
@@ -1454,7 +1454,7 @@ class DataHandler:
             if self.trade_callback:
                 asyncio.create_task(self.trade_callback(symbol))
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error(
                 "Ошибка синхронизации данных для %s (%s): %s", symbol, timeframe, e
             )
