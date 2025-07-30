@@ -1466,16 +1466,17 @@ class DataHandler:
                     async with self.ohlcv_lock:
                         if self.use_polars:
                             if self._ohlcv.height > 0:
-                                threshold = current_time - pd.Timedelta(
-                                    seconds=self.config["forget_window"]
-                                )
-                                if self._ohlcv.dtypes[1] == pl.Object:
+                                threshold = (
+                                    current_time
+                                    - pd.Timedelta(seconds=self.config["forget_window"])
+                                ).to_pydatetime()
+                                if not hasattr(self._ohlcv, "dtypes") or self._ohlcv.dtypes[1] == pl.Object:
                                     self._ohlcv = pl.from_pandas(
                                         self._ohlcv.to_pandas()
                                     )
-                                self._ohlcv = self._ohlcv.filter(
-                                    pl.col("timestamp") >= threshold
-                                )
+                                df_pd = self._ohlcv.to_pandas()
+                                df_pd = df_pd[df_pd["timestamp"] >= threshold]
+                                self._ohlcv = pl.from_pandas(df_pd)
                         elif not self.ohlcv.empty:
                             threshold = current_time - pd.Timedelta(
                                 seconds=self.config["forget_window"]
@@ -1487,16 +1488,17 @@ class DataHandler:
                     async with self.ohlcv_2h_lock:
                         if self.use_polars:
                             if self._ohlcv_2h.height > 0:
-                                threshold = current_time - pd.Timedelta(
-                                    seconds=self.config["forget_window"]
-                                )
-                                if self._ohlcv_2h.dtypes[1] == pl.Object:
+                                threshold = (
+                                    current_time
+                                    - pd.Timedelta(seconds=self.config["forget_window"])
+                                ).to_pydatetime()
+                                if not hasattr(self._ohlcv_2h, "dtypes") or self._ohlcv_2h.dtypes[1] == pl.Object:
                                     self._ohlcv_2h = pl.from_pandas(
                                         self._ohlcv_2h.to_pandas()
                                     )
-                                self._ohlcv_2h = self._ohlcv_2h.filter(
-                                    pl.col("timestamp") >= threshold
-                                )
+                                df2_pd = self._ohlcv_2h.to_pandas()
+                                df2_pd = df2_pd[df2_pd["timestamp"] >= threshold]
+                                self._ohlcv_2h = pl.from_pandas(df2_pd)
                         elif not self.ohlcv_2h.empty:
                             threshold = current_time - pd.Timedelta(
                                 seconds=self.config["forget_window"]
