@@ -46,6 +46,7 @@ async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils_stub.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils_stub
+sys.modules['bot.utils'] = utils_stub
 os.environ["TEST_MODE"] = "1"
 sys.modules.pop('trade_manager', None)
 joblib_mod = types.ModuleType('joblib')
@@ -85,6 +86,7 @@ async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils
+sys.modules['bot.utils'] = utils
 
 
 class DummyExchange:
@@ -912,4 +914,5 @@ def test_shutdown_shuts_down_ray(monkeypatch):
 
 
 sys.modules.pop('utils', None)
+sys.modules.pop('bot.utils', None)
 

@@ -140,8 +140,8 @@ class ParameterOptimizer:
     def __init__(self, config: BotConfig, data_handler):
         self.config = config
         self.data_handler = data_handler
-        self.base_optimization_interval = (
-            config.get("optimization_interval", 14400) // 2
+        self.base_optimization_interval = max(
+            float(config.get("optimization_interval", 14400)) / 2, 1.0
         )  # Уменьшен базовый интервал
         self.last_optimization = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.best_params_by_symbol = {symbol: {} for symbol in data_handler.usdt_pairs}
@@ -169,10 +169,10 @@ class ParameterOptimizer:
         """Return optimization interval for a symbol based on its volatility."""
         try:
             threshold = max(self.volatility_threshold, 1e-6)
-            interval = self.base_optimization_interval / (
-                1 + volatility / threshold
-            )
-            interval = max(1800, min(self.base_optimization_interval * 2, interval))
+            interval = self.base_optimization_interval / (1 + volatility / threshold)
+            lower = 1.0 if self.base_optimization_interval < 1800 else 1800
+            upper = self.base_optimization_interval * 2
+            interval = max(lower, min(upper, interval))
             return interval
         except Exception as e:
             logger.exception(

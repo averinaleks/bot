@@ -98,3 +98,5 @@ async def test_cleanup_old_data_polars(monkeypatch):
 
     assert dh._ohlcv.height == 1
     assert dh._ohlcv_2h.height == 1
+
+sys.modules['bot.utils'] = real_utils
