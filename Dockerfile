@@ -60,12 +60,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
 
-# Копируем исходный код
-COPY . .
+# Копируем исходный код в /app/bot
+COPY . /app/bot
 
 # Устанавливаем переменные окружения для виртуального окружения
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Добавляем PYTHONPATH, чтобы модуль bot был доступен
+ENV PYTHONPATH=/app
 
 # Проверяем версии библиотек и доступность CUDA с отладкой
 RUN echo "Checking library versions and CUDA availability..." && \
@@ -81,4 +83,4 @@ RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3.12 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
 
 # Указываем команду для запуска
-CMD ["/app/venv/bin/python3.12", "trading_bot.py"]
+CMD ["/app/venv/bin/python3.12", "-m", "bot.trading_bot"]
