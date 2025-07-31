@@ -67,10 +67,10 @@ def _cleanup_telegram_logger():
     asyncio.run(trade_manager.TelegramLogger.shutdown())
 
 def test_utils_injected_before_trade_manager_import():
-    import importlib
-    importlib.reload(trade_manager)
-    trade_manager.TelegramLogger = _TL
-    assert trade_manager.TelegramLogger is _TL
+    import importlib, sys
+    tm = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    tm.TelegramLogger = _TL
+    assert tm.TelegramLogger is _TL
 
 class DummyTelegramLogger:
     def __init__(self, *a, **kw):
