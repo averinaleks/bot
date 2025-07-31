@@ -81,10 +81,19 @@ class HistoricalSimulator:
         for i, ts in enumerate(timestamps):
             for symbol, df in self.history.items():
                 if ts in df.index:
-                    row = df.loc[[ts]]
-                    row = row.assign(symbol=symbol)
-                    row.index.name = "timestamp"
-                    row = row.set_index("symbol", append=True).swaplevel(0,1)
+                    if isinstance(df.index, pd.MultiIndex):
+                        row = df.loc[df.index.get_level_values("timestamp") == ts]
+                        if list(row.index.names) != ["symbol", "timestamp"]:
+                            if "symbol" in row.index.names and "timestamp" in row.index.names:
+                                row = row.swaplevel("timestamp", "symbol")
+                            else:
+                                row.index.names = ["timestamp", "symbol"]
+                                row = row.swaplevel(0, 1)
+                    else:
+                        row = df.loc[[ts]]
+                        row = row.assign(symbol=symbol)
+                        row.index.name = "timestamp"
+                        row = row.set_index("symbol", append=True).swaplevel(0, 1)
                     await self.data_handler.synchronize_and_update(
                         symbol,
                         row,
