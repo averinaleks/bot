@@ -7,8 +7,6 @@ import sys
 import pytest
 from bot.config import BotConfig
 
-os.environ["TEST_MODE"] = "1"
-
 class DummyTL:
     def __init__(self):
         self.sent = []
@@ -28,6 +26,7 @@ class DummyTM:
 
 @pytest.mark.asyncio
 async def test_backtest_loop_warns(monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
     cfg = BotConfig(cache_dir="/tmp", backtest_interval=0, min_sharpe_ratio=0.5)
     dh = DummyDH()
     gym_mod = types.ModuleType("gymnasium")

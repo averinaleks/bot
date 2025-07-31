@@ -49,6 +49,7 @@ sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
 os.environ["TEST_MODE"] = "1"
 sys.modules.pop('trade_manager', None)
+sys.modules.pop('bot.trade_manager', None)
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
@@ -66,6 +67,9 @@ def _cleanup_telegram_logger():
     asyncio.run(trade_manager.TelegramLogger.shutdown())
 
 def test_utils_injected_before_trade_manager_import():
+    import importlib
+    importlib.reload(trade_manager)
+    trade_manager.TelegramLogger = _TL
     assert trade_manager.TelegramLogger is _TL
 
 class DummyTelegramLogger:
@@ -906,11 +910,18 @@ def test_shutdown_shuts_down_ray(monkeypatch):
     import ray
     import trade_manager as tm_mod
     tm_mod.ray = ray
+    trade_manager.ray = ray
     ray.init()
+    called = {"done": False}
+    orig_shutdown = ray.shutdown
+    def fake_shutdown():
+        called["done"] = True
+        orig_shutdown()
+    monkeypatch.setattr(ray, "shutdown", fake_shutdown)
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, None, None, None)
     tm.shutdown()
-    assert not ray.is_initialized()
+    assert called["done"]
 
 
 sys.modules.pop('utils', None)

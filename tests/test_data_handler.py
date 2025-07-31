@@ -36,10 +36,15 @@ if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:
     optimizer_stub.ParameterOptimizer = _PO
     sys.modules['optimizer'] = optimizer_stub
     sys.modules['bot.optimizer'] = optimizer_stub
-os.environ['TEST_MODE'] = '1'
 
 from bot.data_handler import DataHandler
 from bot import data_handler
+
+
+@pytest.fixture(autouse=True)
+def _set_test_mode(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    yield
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
@@ -380,6 +385,7 @@ async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_fetch_ohlcv_single_empty_not_cached(tmp_path, monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
     class Ex:
         async def fetch_ohlcv(self, symbol, timeframe, limit=200, since=None):
             return []
@@ -399,6 +405,7 @@ async def test_fetch_ohlcv_single_empty_not_cached(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_ohlcv_history_empty_not_cached(tmp_path, monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
     class Ex:
         async def fetch_ohlcv(self, symbol, timeframe, limit=200, since=None):
             return []
