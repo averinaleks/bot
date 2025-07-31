@@ -6,13 +6,14 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # Run the full data handler implementation
-    command: gunicorn -w 1 -b 0.0.0.0:8000 --timeout ${GUNICORN_TIMEOUT:-120} data_handler:api_app
+    command: gunicorn -w 1 -b 0.0.0.0:8000 bot.data_handler:api_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8000:8000"
     env_file: .env
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
+      - PYTHONPATH=/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 5s
@@ -27,13 +28,14 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # Run the full model builder implementation
-    command: gunicorn -w 1 -b 0.0.0.0:8001 --timeout ${GUNICORN_TIMEOUT:-120} model_builder:api_app
+    command: gunicorn -w 1 -b 0.0.0.0:8001 bot.model_builder:api_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8001:8001"
     environment:
       - TF_CPP_MIN_LOG_LEVEL=3
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
+      - PYTHONPATH=/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
       interval: 5s
@@ -49,13 +51,14 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # Use the ASGI wrapper exported by trade_manager so UvicornWorker can
     # serve the Flask app correctly.
-    command: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002 --timeout ${GUNICORN_TIMEOUT:-120} trade_manager:asgi_app
+    command: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002 bot.trade_manager:asgi_app
     runtime: ${RUNTIME:-nvidia}
     ports:
       - "8002:8002"
     env_file: .env
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
+      - PYTHONPATH=/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/ready"]
       interval: 5s
@@ -75,7 +78,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # container_name: trading_bot
-    command: python trading_bot.py
+    command: python -m bot.trading_bot
     runtime: ${RUNTIME:-nvidia}
     depends_on:
       data_handler:
@@ -91,6 +94,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - BYBIT_API_KEY=${BYBIT_API_KEY}
       - BYBIT_API_SECRET=${BYBIT_API_SECRET}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
