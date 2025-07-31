@@ -912,6 +912,7 @@ def test_shutdown_shuts_down_ray(monkeypatch):
     tm_mod.ray = ray
     trade_manager.ray = ray
     ray.init()
+    monkeypatch.setattr(ray, "is_initialized", lambda: True)
     called = {"done": False}
     orig_shutdown = ray.shutdown
     def fake_shutdown():
