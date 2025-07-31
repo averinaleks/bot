@@ -1524,8 +1524,8 @@ async def create_trade_manager() -> TradeManager:
             except Exception as exc:  # pragma: no cover - import/runtime errors
                 logger.exception("Failed to create Telegram Bot: %s", exc)
                 raise
-        from data_handler import DataHandler
-        from model_builder import ModelBuilder
+        from bot.data_handler import DataHandler
+        from bot.model_builder import ModelBuilder
 
         logger.info("Creating DataHandler")
         try:

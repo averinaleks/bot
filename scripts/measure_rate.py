@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-import os, sys; sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import asyncio
 import json
+import os
+import sys
 from contextlib import suppress
 import pandas as pd
+
+if __package__ is None or __package__ == "":
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 from bot.config import BotConfig
-from data_handler import DataHandler
+from bot.data_handler import DataHandler
 
 class DummyExchange:
     pass

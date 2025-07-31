@@ -6,11 +6,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import pandas as pd
+
+if __package__ is None or __package__ == "":
+    import os
+    import sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 from bot.config import load_config
-from data_handler import DataHandler
-from model_builder import ModelBuilder
-from trade_manager import TradeManager
-from simulation import HistoricalSimulator
+from bot.data_handler import DataHandler
+from bot.model_builder import ModelBuilder
+from bot.trade_manager import TradeManager
+from bot.simulation import HistoricalSimulator
 
 
 async def main() -> None:

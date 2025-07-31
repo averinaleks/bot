@@ -27,7 +27,7 @@ utils_stub.TelegramLogger = DummyTL
 utils_stub.logger = logging.getLogger('test')
 sys.modules['bot.utils'] = utils_stub
 optimizer_stubbed = False
-if 'optimizer' not in sys.modules:
+if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:
     optimizer_stubbed = True
     optimizer_stub = types.ModuleType('optimizer')
     class _PO:
@@ -35,6 +35,7 @@ if 'optimizer' not in sys.modules:
             pass
     optimizer_stub.ParameterOptimizer = _PO
     sys.modules['optimizer'] = optimizer_stub
+    sys.modules['bot.optimizer'] = optimizer_stub
 os.environ['TEST_MODE'] = '1'
 
 from bot.data_handler import DataHandler
@@ -42,6 +43,7 @@ from bot import data_handler
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
+    sys.modules.pop('bot.optimizer', None)
 
 class DummyExchange:
     def __init__(self, volumes):

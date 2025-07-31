@@ -70,6 +70,7 @@ sys.modules['skopt.space'] = skopt_space
 
 # Import optimizer fresh
 sys.modules.pop('optimizer', None)
+sys.modules.pop('bot.optimizer', None)
 from bot.optimizer import ParameterOptimizer  # noqa: E402
 from bot import optimizer
 

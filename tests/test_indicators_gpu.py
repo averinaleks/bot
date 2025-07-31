@@ -19,7 +19,7 @@ sys.modules.setdefault('ccxt.async_support', ccxt_mod.async_support)
 sys.modules.setdefault('ccxt.pro', ccxt_mod.pro)
 
 optimizer_stubbed = False
-if 'optimizer' not in sys.modules:
+if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:
     optimizer_stubbed = True
     optimizer_stub = types.ModuleType('optimizer')
     class _PO:
@@ -27,11 +27,13 @@ if 'optimizer' not in sys.modules:
             pass
     optimizer_stub.ParameterOptimizer = _PO
     sys.modules['optimizer'] = optimizer_stub
+    sys.modules['bot.optimizer'] = optimizer_stub
 
 from bot.data_handler import ema_fast, atr_fast  # noqa: E402
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
+    sys.modules.pop('bot.optimizer', None)
 
 
 def test_ema_fast_matches_ta():

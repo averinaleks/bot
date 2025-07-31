@@ -49,7 +49,7 @@ def _objective_remote(
 ):
     """Heavy part of objective executed remotely."""
     try:
-        from data_handler import IndicatorsCache
+        from bot.data_handler import IndicatorsCache
 
         train_size = int(0.6 * len(df))
         test_size = int(0.2 * len(df))
