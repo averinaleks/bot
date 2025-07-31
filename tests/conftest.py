@@ -70,6 +70,15 @@ def _stub_modules():
             pass
     optimizer_mod.ParameterOptimizer = _PO
     sys.modules.setdefault("optimizer", optimizer_mod)
+    sys.modules.setdefault("bot.optimizer", optimizer_mod)
+
+    strategy_mod = types.ModuleType("strategy_optimizer")
+    class _SO:
+        def __init__(self, *a, **k):
+            pass
+    strategy_mod.StrategyOptimizer = _SO
+    sys.modules.setdefault("strategy_optimizer", strategy_mod)
+    sys.modules.setdefault("bot.strategy_optimizer", strategy_mod)
 
     class _RayRemoteFunction:
         def __init__(self, func):

@@ -11,7 +11,7 @@ import ray
 
 from bot.utils import logger
 from bot.config import BotConfig
-from portfolio_backtest import portfolio_backtest
+from bot.portfolio_backtest import portfolio_backtest
 
 
 @ray.remote

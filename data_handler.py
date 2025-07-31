@@ -35,8 +35,8 @@ import joblib
 import psutil
 import ray
 from flask import Flask, jsonify
-from optimizer import ParameterOptimizer
-from strategy_optimizer import StrategyOptimizer
+from bot.optimizer import ParameterOptimizer
+from bot.strategy_optimizer import StrategyOptimizer
 from dotenv import load_dotenv
 
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"

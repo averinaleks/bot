@@ -5,6 +5,7 @@ import pytest
 from bot.config import BotConfig
 
 sys.modules.pop('strategy_optimizer', None)
+sys.modules.pop('bot.strategy_optimizer', None)
 from bot.strategy_optimizer import StrategyOptimizer, _portfolio_backtest_remote
 from bot.portfolio_backtest import portfolio_backtest
 

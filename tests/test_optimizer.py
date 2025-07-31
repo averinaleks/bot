@@ -44,6 +44,7 @@ sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
 
 sys.modules.pop("optimizer", None)
+sys.modules.pop("bot.optimizer", None)
 from bot.optimizer import ParameterOptimizer  # noqa: E402
 
 

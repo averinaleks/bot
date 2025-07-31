@@ -6,7 +6,7 @@ import ta
 from bot.config import BotConfig
 
 optimizer_stubbed = False
-if 'optimizer' not in sys.modules:
+if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:
     optimizer_stubbed = True
     optimizer_stub = types.ModuleType('optimizer')
     class _PO:
@@ -14,9 +14,10 @@ if 'optimizer' not in sys.modules:
             pass
     optimizer_stub.ParameterOptimizer = _PO
     sys.modules['optimizer'] = optimizer_stub
+    sys.modules['bot.optimizer'] = optimizer_stub
 
 strategy_stubbed = False
-if 'strategy_optimizer' not in sys.modules:
+if 'strategy_optimizer' not in sys.modules and 'bot.strategy_optimizer' not in sys.modules:
     strategy_stubbed = True
     strategy_stub = types.ModuleType('strategy_optimizer')
     class _SO:
@@ -24,13 +25,16 @@ if 'strategy_optimizer' not in sys.modules:
             pass
     strategy_stub.StrategyOptimizer = _SO
     sys.modules['strategy_optimizer'] = strategy_stub
+    sys.modules['bot.strategy_optimizer'] = strategy_stub
 
 from bot.data_handler import IndicatorsCache
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
+    sys.modules.pop('bot.optimizer', None)
 if strategy_stubbed:
     sys.modules.pop('strategy_optimizer', None)
+    sys.modules.pop('bot.strategy_optimizer', None)
 
 
 def make_df(length=30):
