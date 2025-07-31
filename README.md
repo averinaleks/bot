@@ -553,6 +553,12 @@ Unit tests automatically set the environment variable `TEST_MODE=1`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
+When `TEST_MODE=1` is exported manually, heavy dependencies like Ray,
+stable-baselines3 and the Bybit SDK are replaced with lightweight stubs.
+`DataHandler` also generates synthetic OHLCV data instead of calling
+external APIs. This mode is useful for running examples on systems
+without the full requirements installed.
+
 Set `DATA_HANDLER_PROFILE=1` to log how long `DataHandler` methods take.
 Profiling information is printed to the standard log output.
 For example:

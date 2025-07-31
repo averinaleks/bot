@@ -31,6 +31,16 @@ except Exception:  # pragma: no cover - allow missing numba package
         return range(*args)
 
 import httpx
+if os.getenv("TEST_MODE") == "1":
+    import types
+    import sys
+
+    pybit_mod = types.ModuleType("pybit")
+    ut_mod = types.ModuleType("unified_trading")
+    ut_mod.HTTP = object
+    pybit_mod.unified_trading = ut_mod
+    sys.modules.setdefault("pybit", pybit_mod)
+    sys.modules.setdefault("pybit.unified_trading", ut_mod)
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
 except Exception:  # pragma: no cover - allow missing telegram package
