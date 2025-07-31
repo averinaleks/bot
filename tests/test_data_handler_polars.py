@@ -37,10 +37,15 @@ if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:
     sys.modules['optimizer'] = optimizer_stub
     sys.modules['bot.optimizer'] = optimizer_stub
 
-os.environ['TEST_MODE'] = '1'
 
 from bot.data_handler import DataHandler
 from bot import data_handler
+
+
+@pytest.fixture(autouse=True)
+def _set_test_mode(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    yield
 
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)

@@ -741,6 +741,7 @@ class TradeManager:
         )
 
     async def check_trailing_stop(self, symbol: str, current_price: float):
+        should_close = False
         async with self.position_lock:
             try:
                 if "symbol" in self.positions.index.names:
@@ -813,9 +814,7 @@ class TradeManager:
                     )
                     trailing_stop_price = new_highest - trailing_stop_distance
                     if current_price <= trailing_stop_price:
-                        await self.close_position(
-                            symbol, current_price, "Trailing Stop"
-                        )
+                        should_close = True
                 else:
                     new_lowest = min(position["lowest_price"], current_price)
                     self.positions.loc[(symbol, slice(None)), "lowest_price"] = (
@@ -823,14 +822,15 @@ class TradeManager:
                     )
                     trailing_stop_price = new_lowest + trailing_stop_distance
                     if current_price >= trailing_stop_price:
-                        await self.close_position(
-                            symbol, current_price, "Trailing Stop"
-                        )
+                        should_close = True
             except Exception as e:
                 logger.exception("Failed trailing stop check for %s: %s", symbol, e)
                 raise
+        if should_close:
+            await self.close_position(symbol, current_price, "Trailing Stop")
 
     async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
+        close_reason = None
         async with self.position_lock:
             try:
                 if "symbol" in self.positions.index.names:
@@ -861,19 +861,23 @@ class TradeManager:
                     * (1 - position["tp_multiplier"] * atr / position["entry_price"])
                 )
                 if position["side"] == "buy" and current_price <= stop_loss:
-                    await self.close_position(symbol, current_price, "Stop Loss")
+                    close_reason = "Stop Loss"
                 elif position["side"] == "sell" and current_price >= stop_loss:
-                    await self.close_position(symbol, current_price, "Stop Loss")
+                    close_reason = "Stop Loss"
                 elif position["side"] == "buy" and current_price >= take_profit:
-                    await self.close_position(symbol, current_price, "Take Profit")
+                    close_reason = "Take Profit"
                 elif position["side"] == "sell" and current_price <= take_profit:
-                    await self.close_position(symbol, current_price, "Take Profit")
+                    close_reason = "Take Profit"
             except Exception as e:
                 logger.exception("Failed SL/TP check for %s: %s", symbol, e)
                 raise
+        if close_reason:
+            await self.close_position(symbol, current_price, close_reason)
 
     async def check_exit_signal(self, symbol: str, current_price: float):
         try:
+            if self.model_builder is None:
+                return
             model = self.model_builder.predictive_models.get(symbol)
             if not model:
                 logger.debug("Model for %s not found", symbol)
@@ -1416,9 +1420,9 @@ class TradeManager:
                 # event loop already closed
                 pass
         try:
-            if not hasattr(ray, "shutdown"):
-                return
-            if ray.is_initialized():
+            if hasattr(ray, "shutdown"):
+                if not ray.is_initialized():
+                    return
                 ray.shutdown()
         except Exception:  # pragma: no cover - cleanup errors
             pass

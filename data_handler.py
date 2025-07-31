@@ -34,10 +34,10 @@ import joblib
 import psutil
 import os
 
-if os.getenv("TEST_MODE") == "1":
+try:
+    import ray
+except Exception:  # pragma: no cover - optional dependency missing
     import types
-    import sys
-
     ray = types.ModuleType("ray")
 
     class _RayRemoteFunction:
@@ -61,8 +61,6 @@ if os.getenv("TEST_MODE") == "1":
     ray.get = lambda x: x
     ray.init = lambda *a, **k: None
     ray.is_initialized = lambda: False
-else:
-    import ray
 from flask import Flask, jsonify
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
