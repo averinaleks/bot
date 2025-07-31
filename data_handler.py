@@ -30,10 +30,39 @@ from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
 import functools
 from bot.config import BotConfig
 import ta
-import os
 import joblib
 import psutil
-import ray
+import os
+
+if os.getenv("TEST_MODE") == "1":
+    import types
+    import sys
+
+    ray = types.ModuleType("ray")
+
+    class _RayRemoteFunction:
+        def __init__(self, func):
+            self._function = func
+
+        def remote(self, *args, **kwargs):
+            return self._function(*args, **kwargs)
+
+        def options(self, *args, **kwargs):
+            return self
+
+    def _ray_remote(func=None, **_kwargs):
+        if func is None:
+            def wrapper(f):
+                return _RayRemoteFunction(f)
+            return wrapper
+        return _RayRemoteFunction(func)
+
+    ray.remote = _ray_remote
+    ray.get = lambda x: x
+    ray.init = lambda *a, **k: None
+    ray.is_initialized = lambda: False
+else:
+    import ray
 from flask import Flask, jsonify
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
@@ -107,6 +136,28 @@ def create_exchange() -> BybitSDKAsync:
     RuntimeError
         If required API credentials are missing.
     """
+    if os.getenv("TEST_MODE") == "1":
+        class _DummyEx:
+            async def load_markets(self) -> dict:
+                return {}
+
+            async def fetch_ticker(self, symbol: str) -> dict:
+                return {"last": 100.0, "quoteVolume": 1.0}
+
+            async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200, since: int | None = None):
+                return generate_synthetic_ohlcv(timeframe, limit)
+
+            async def fetch_order_book(self, symbol: str, limit: int = 10) -> dict:
+                return {"bids": [[100.0, 1.0]], "asks": [[101.0, 1.0]]}
+
+            async def fetch_funding_rate(self, symbol: str) -> dict:
+                return {"fundingRate": 0.0}
+
+            async def fetch_open_interest(self, symbol: str) -> dict:
+                return {"openInterest": 0.0}
+
+        return _DummyEx()  # type: ignore[return-value]
+
     api_key = os.environ.get("BYBIT_API_KEY", "")
     api_secret = os.environ.get("BYBIT_API_SECRET", "")
     if not api_key or not api_secret:
@@ -114,6 +165,23 @@ def create_exchange() -> BybitSDKAsync:
             "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
         )
     return BybitSDKAsync(api_key=api_key, api_secret=api_secret)
+
+
+def generate_synthetic_ohlcv(timeframe: str, limit: int) -> list[list[float]]:
+    """Return random OHLCV data for testing."""
+    interval_ms = int(pd.Timedelta(timeframe).total_seconds() * 1000)
+    start = int(time.time() * 1000) - limit * interval_ms
+    prices = 100 + np.cumsum(np.random.randn(limit))
+    result = []
+    for i in range(limit):
+        ts = start + i * interval_ms
+        open_p = prices[i]
+        high_p = open_p + abs(np.random.randn())
+        low_p = open_p - abs(np.random.randn())
+        close_p = open_p + np.random.randn() * 0.5
+        volume = abs(np.random.randn()) * 10
+        result.append([ts, float(open_p), float(high_p), float(low_p), float(close_p), float(volume)])
+    return result
 
 
 def ema_fast(values: np.ndarray, window: int, wilder: bool = False) -> np.ndarray:
@@ -1084,13 +1152,16 @@ class DataHandler:
         self, symbol: str, timeframe: str, limit: int = 200, cache_prefix: str = ""
     ) -> tuple:
         try:
-            ohlcv = await safe_api_call(
-                self.exchange,
-                "fetch_ohlcv",
-                symbol,
-                timeframe,
-                limit=limit,
-            )
+            if os.getenv("TEST_MODE") == "1":
+                ohlcv = generate_synthetic_ohlcv(timeframe, limit)
+            else:
+                ohlcv = await safe_api_call(
+                    self.exchange,
+                    "fetch_ohlcv",
+                    symbol,
+                    timeframe,
+                    limit=limit,
+                )
             if not ohlcv or len(ohlcv) < limit * 0.8:
                 logger.warning(
                     "Неполные данные OHLCV для %s (%s), получено %s из %s",
@@ -1148,38 +1219,45 @@ class DataHandler:
     ) -> tuple:
         """Fetch extended OHLCV history by performing multiple requests."""
         try:
-            all_data = []
-            timeframe_ms = int(pd.Timedelta(timeframe).total_seconds() * 1000)
-            since = None
-            remaining = total_limit
-            # bybit allows up to 1000 candles per request, default to 200 on errors
-            per_request = min(1000, total_limit)
-            while remaining > 0:
-                limit = min(per_request, remaining)
-                ohlcv = await safe_api_call(
-                    self.exchange,
-                    "fetch_ohlcv",
-                    symbol,
-                    timeframe,
-                    limit=limit,
-                    since=since,
-                )
-                if not ohlcv:
-                    break
+            if os.getenv("TEST_MODE") == "1":
                 df = pd.DataFrame(
-                    ohlcv,
+                    generate_synthetic_ohlcv(timeframe, total_limit),
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
                 df = df.set_index("timestamp")
-                all_data.append(df)
-                remaining -= len(df)
-                if len(df) < limit:
-                    break
-                since = int(df.index[0].timestamp() * 1000) - timeframe_ms * limit
-            if not all_data:
-                return symbol, pd.DataFrame()
-            df = pd.concat(all_data).sort_index().drop_duplicates()
+            else:
+                all_data = []
+                timeframe_ms = int(pd.Timedelta(timeframe).total_seconds() * 1000)
+                since = None
+                remaining = total_limit
+                per_request = min(1000, total_limit)
+                while remaining > 0:
+                    limit = min(per_request, remaining)
+                    ohlcv = await safe_api_call(
+                        self.exchange,
+                        "fetch_ohlcv",
+                        symbol,
+                        timeframe,
+                        limit=limit,
+                        since=since,
+                    )
+                    if not ohlcv:
+                        break
+                    df_part = pd.DataFrame(
+                        ohlcv,
+                        columns=["timestamp", "open", "high", "low", "close", "volume"],
+                    )
+                    df_part["timestamp"] = pd.to_datetime(df_part["timestamp"], unit="ms", utc=True)
+                    df_part = df_part.set_index("timestamp")
+                    all_data.append(df_part)
+                    remaining -= len(df_part)
+                    if len(df_part) < limit:
+                        break
+                    since = int(df_part.index[0].timestamp() * 1000) - timeframe_ms * limit
+                if not all_data:
+                    return symbol, pd.DataFrame()
+                df = pd.concat(all_data).sort_index().drop_duplicates()
             if df.empty:
                 logger.warning(
                     "Skipping cache for %s (%s) — no data",

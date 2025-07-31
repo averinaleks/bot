@@ -12,7 +12,37 @@ import asyncio
 import sys
 from bot.config import BotConfig
 from collections import deque
-import ray
+import os
+
+if os.getenv("TEST_MODE") == "1":
+    import types
+    import sys
+
+    ray = types.ModuleType("ray")
+
+    class _RayRemoteFunction:
+        def __init__(self, func):
+            self._function = func
+
+        def remote(self, *args, **kwargs):
+            return self._function(*args, **kwargs)
+
+        def options(self, *args, **kwargs):
+            return self
+
+    def _ray_remote(func=None, **_kwargs):
+        if func is None:
+            def wrapper(f):
+                return _RayRemoteFunction(f)
+            return wrapper
+        return _RayRemoteFunction(func)
+
+    ray.remote = _ray_remote
+    ray.get = lambda x: x
+    ray.init = lambda *a, **k: None
+    ray.is_initialized = lambda: False
+else:
+    import ray
 from bot.utils import logger, check_dataframe_empty, HistoricalDataCache, is_cuda_available
 from dotenv import load_dotenv
 
@@ -71,6 +101,46 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules["stable_baselines3"] = sb3
     sys.modules["stable_baselines3.common"] = common
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
+
+    rllib_base = types.ModuleType("ray.rllib")
+    alg_mod = types.ModuleType("ray.rllib.algorithms")
+    dqn_mod = types.ModuleType("ray.rllib.algorithms.dqn")
+    ppo_mod = types.ModuleType("ray.rllib.algorithms.ppo")
+
+    class _Cfg:
+        def environment(self, *_a, **_k):
+            return self
+
+        def rollouts(self, *_a, **_k):
+            return self
+
+        def build(self):
+            return self
+
+        def train(self):
+            return {}
+
+    dqn_mod.DQNConfig = _Cfg
+    ppo_mod.PPOConfig = _Cfg
+    alg_mod.dqn = dqn_mod
+    alg_mod.ppo = ppo_mod
+    rllib_base.algorithms = alg_mod
+    sys.modules.setdefault("ray.rllib", rllib_base)
+    sys.modules.setdefault("ray.rllib.algorithms", alg_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
+
+    catalyst_mod = types.ModuleType("catalyst")
+    dl_mod = types.ModuleType("catalyst.dl")
+
+    class _Runner:
+        def train(self, *a, **k):
+            pass
+
+    dl_mod.Runner = _Runner
+    catalyst_mod.dl = dl_mod
+    sys.modules.setdefault("catalyst", catalyst_mod)
+    sys.modules.setdefault("catalyst.dl", dl_mod)
 try:
     from stable_baselines3 import PPO, DQN
     from stable_baselines3.common.vec_env import DummyVecEnv
