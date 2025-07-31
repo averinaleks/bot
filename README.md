@@ -144,7 +144,7 @@
 DATA_HANDLER_URL=http://localhost:8000 \
 MODEL_BUILDER_URL=http://localhost:8001 \
 TRADE_MANAGER_URL=http://localhost:8002 \
-python trading_bot.py
+python -m bot.trading_bot
 ```
 Эти переменные задают URL-адреса сервисов `data_handler`, `model_builder` и `trade_manager`. В Compose они не требуются, так как сервисы обнаруживаются по имени.
 Перед запуском убедитесь, что сервисы отвечают на `/ping`. В Docker Compose это происходит автоматически через встроенные health check'и, так что дополнительных настроек не требуется. При запуске вне Compose бот использует функцию `check_services`, которая повторяет запросы к `/ping`. Количество попыток и пауза между ними настраиваются переменными `SERVICE_CHECK_RETRIES` и `SERVICE_CHECK_DELAY`. По умолчанию бот делает 30 попыток с задержкой 2 секунды.
@@ -436,7 +436,7 @@ PnL превышает торговые издержки.
 Пример запуска обучения вместе с ботом:
 
 ```bash
-python trading_bot.py
+python -m bot.trading_bot
 ```
 
 ### Transformer architecture
@@ -493,7 +493,7 @@ python trading_bot.py
 регулярного обновления моделей:
 
 ```bash
-0 3 * * * cd /path/to/bot && /usr/bin/python trading_bot.py
+0 3 * * * cd /path/to/bot && /usr/bin/python -m bot.trading_bot
 ```
 
 ## Signal ranking
@@ -514,7 +514,7 @@ the expected ATR. Only the best `top_signals` trades are executed. Set
 Пример запуска с отслеживанием экспериментов:
 
 ```bash
-MLFLOW_TRACKING_URI=mlruns python trading_bot.py
+MLFLOW_TRACKING_URI=mlruns python -m bot.trading_bot
 ```
 
 ## Running tests
@@ -564,7 +564,7 @@ Profiling information is printed to the standard log output.
 For example:
 
 ```bash
-DATA_HANDLER_PROFILE=1 python trading_bot.py
+DATA_HANDLER_PROFILE=1 python -m bot.trading_bot
 ```
 
 If `scikit-learn` is not installed, tests marked with `requires_sklearn`
