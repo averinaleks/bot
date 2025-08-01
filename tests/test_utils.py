@@ -32,3 +32,14 @@ async def test_safe_api_call_retries(monkeypatch):
 
     assert exch.calls == 5
     assert sleep_calls['n'] == 4
+
+
+@pytest.mark.asyncio
+async def test_safe_api_call_test_mode(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    exch = DummyExchange()
+
+    result = await utils.safe_api_call(exch, 'fail')
+
+    assert result == {'retCode': 1}
+    assert exch.calls == 1

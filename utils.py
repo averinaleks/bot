@@ -129,6 +129,10 @@ async def handle_rate_limits(exchange) -> None:
 
 async def safe_api_call(exchange, method: str, *args, **kwargs):
     """Call a ccxt method with retry, status and retCode verification."""
+    if os.getenv("TEST_MODE"):
+        # During unit tests we do not want to spend time in the retry loop.
+        return await getattr(exchange, method)(*args, **kwargs)
+
     delay = 1.0
     for attempt in range(5):
         try:
