@@ -26,9 +26,9 @@ def _load_model() -> None:
     if os.path.exists(MODEL_FILE):
         try:
             _model = joblib.load(MODEL_FILE)
-        except Exception:  # pragma: no cover - model may be corrupted
+        except Exception as exc:  # pragma: no cover - model may be corrupted
+            app.logger.exception("Failed to load model: %s", exc)
             _model = None
-            raise
 
 
 @app.route('/train', methods=['POST'])

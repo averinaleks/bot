@@ -1812,7 +1812,6 @@ def _load_model() -> None:
         except Exception as e:  # pragma: no cover - model may be corrupted
             logger.exception("Failed to load model: %s", e)
             _model = None
-            raise
 
 
 @api_app.route("/train", methods=["POST"])
