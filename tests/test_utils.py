@@ -16,6 +16,7 @@ class DummyExchange:
 
 @pytest.mark.asyncio
 async def test_safe_api_call_retries(monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
     exch = DummyExchange()
 
     sleep_calls = {'n': 0}
