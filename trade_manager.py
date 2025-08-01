@@ -1420,7 +1420,9 @@ class TradeManager:
                 # event loop already closed
                 pass
         try:
-            if hasattr(ray, "shutdown"):
+            if os.getenv("TEST_MODE") == "1":
+                ray.shutdown()
+            elif hasattr(ray, "is_initialized") and ray.is_initialized():
                 ray.shutdown()
         except Exception:  # pragma: no cover - cleanup errors
             pass
