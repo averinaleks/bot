@@ -1,4 +1,9 @@
-"""Reference model builder service using logistic regression."""
+"""Reference model builder service using logistic regression.
+
+The service expects binary labels. The ``/train`` route will return a
+``400`` error if the provided label array does not contain exactly two
+unique classes.
+"""
 
 from flask import Flask, request, jsonify
 import numpy as np
@@ -35,6 +40,9 @@ def train() -> tuple:
         features = features.reshape(-1, 1)
     if len(features) == 0 or len(features) != len(labels):
         return jsonify({'error': 'invalid training data'}), 400
+    # Ensure training labels represent a binary classification problem
+    if len(np.unique(labels)) != 2:
+        return jsonify({'error': 'labels must contain two classes'}), 400
     model = LogisticRegression()
     model.fit(features, labels)
     joblib.dump(model, MODEL_FILE)
