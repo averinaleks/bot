@@ -127,3 +127,5 @@ def test_open_position_route_concurrent(monkeypatch):
             fut.result()
 
     assert len(loop.calls) == 5
+    for _, call_args in loop.calls:
+        call_args[0].close()
