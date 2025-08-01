@@ -6,7 +6,11 @@ import pandas as pd
 import pytest
 from bot.config import BotConfig
 
-os.environ["TEST_MODE"] = "1"
+@pytest.fixture(autouse=True)
+def _test_mode_env(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    yield
+    monkeypatch.delenv("TEST_MODE", raising=False)
 gym_mod = types.ModuleType("gymnasium")
 gym_mod.Env = object
 spaces_mod = types.ModuleType("gymnasium.spaces")
@@ -27,7 +31,6 @@ spaces_mod.Box = DummyBox
 
 sys.modules.setdefault("gymnasium", gym_mod)
 sys.modules.setdefault("gymnasium.spaces", spaces_mod)
-from bot.model_builder import ModelBuilder
 
 class DummyIndicators:
     def __init__(self, length):
@@ -65,6 +68,7 @@ def make_df(n=5):
 
 @pytest.mark.asyncio
 async def test_precompute_features_caches(monkeypatch):
+    from bot.model_builder import ModelBuilder
     df = make_df()
     dh = DummyDH(df)
     cfg = BotConfig(cache_dir="/tmp", lstm_timesteps=2, min_data_length=len(df), nn_framework="tensorflow")
