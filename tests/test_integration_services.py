@@ -19,6 +19,20 @@ def _get_free_port() -> int:
     return port
 
 
+def _wait_for_service(url: str, timeout: float = 5.0) -> None:
+    """Poll the given URL until it responds or until ``timeout`` seconds have passed."""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            resp = requests.get(url, timeout=0.2)
+            if resp.status_code == 200:
+                return
+        except Exception:
+            pass
+        time.sleep(0.1)
+    raise AssertionError(f"Service at {url} did not become ready within {timeout} seconds")
+
+
 # Minimal stubs for services to avoid heavy dependencies
 dh_app = Flask('data_handler')
 
@@ -102,13 +116,7 @@ def test_services_communicate():
         f'http://localhost:{mb_port}/ping',
         f'http://localhost:{tm_port}/ready',
     ):
-        for _ in range(50):
-            try:
-                resp = requests.get(url, timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        _wait_for_service(url)
     os.environ.update({
         'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
         'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -144,13 +152,7 @@ def test_service_availability_check():
         f'http://localhost:{mb_port}/ping',
         f'http://localhost:{tm_port}/ready',
     ):
-        for _ in range(50):
-            try:
-                resp = requests.get(url, timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        _wait_for_service(url)
     try:
         resp = requests.get(f'http://localhost:{dh_port}/ping', timeout=5)
         assert resp.status_code == 200
@@ -183,13 +185,7 @@ def test_check_services_success():
         f'http://localhost:{mb_port}/ping',
         f'http://localhost:{tm_port}/ready',
     ):
-        for _ in range(50):
-            try:
-                resp = requests.get(url, timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        _wait_for_service(url)
     os.environ.update({
         'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
         'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -222,13 +218,7 @@ def test_check_services_failure():
         f'http://localhost:{dh_port}/ping',
         f'http://localhost:{mb_port}/ping',
     ):
-        for _ in range(50):
-            try:
-                resp = requests.get(url, timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        _wait_for_service(url)
     os.environ.update({
         'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
         'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -270,13 +260,7 @@ def test_check_services_host_only():
         f'http://localhost:{mb_port}/ping',
         f'http://localhost:{tm_port}/ready',
     ):
-        for _ in range(50):
-            try:
-                resp = requests.get(url, timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        _wait_for_service(url)
     os.environ.update({
         'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
         'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
