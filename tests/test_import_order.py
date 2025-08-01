@@ -3,8 +3,14 @@ import sys
 import types
 import logging
 import os
+import pytest
 
-os.environ["TEST_MODE"] = "1"
+
+@pytest.fixture(autouse=True)
+def _test_mode_env(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    yield
+    monkeypatch.delenv("TEST_MODE", raising=False)
 
 def test_telegramlogger_injection_order():
     sys.modules.pop('trade_manager', None)
