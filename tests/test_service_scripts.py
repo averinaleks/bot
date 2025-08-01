@@ -89,6 +89,29 @@ def test_model_builder_service_train_predict(tmp_path):
         p.join()
 
 
+def test_model_builder_service_requires_binary_labels(tmp_path):
+    port = _get_free_port()
+    p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
+    p.start()
+    try:
+        for _ in range(50):
+            try:
+                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/train',
+            json={'features': [[0], [1]], 'labels': [0, 0]},
+            timeout=5,
+        )
+        assert resp.status_code == 400
+    finally:
+        p.terminate()
+        p.join()
+
+
 def _run_tm(port: int):
     class DummyExchange:
         def create_order(self, symbol, typ, side, amount, params=None):
