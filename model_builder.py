@@ -898,7 +898,10 @@ class ModelBuilder:
             if not isinstance(series, pd.Series):
                 return np.full(len(df), 0.0, dtype=float)
             if not series.index.equals(df.index):
-                series = pd.Series(series.values, index=df.index[: len(series)])
+                if len(series) > len(df.index):
+                    series = pd.Series(series.values[: len(df.index)], index=df.index)
+                else:
+                    series = pd.Series(series.values, index=df.index[: len(series)])
             aligned = series.reindex(df.index).bfill().ffill()
             return aligned.to_numpy(dtype=float)
 
@@ -1594,7 +1597,10 @@ class RLAgent:
             if not isinstance(series, pd.Series):
                 return np.full(len(df), 0.0, dtype=float)
             if not series.index.equals(df.index):
-                series = pd.Series(series.values, index=df.index[: len(series)])
+                if len(series) > len(df.index):
+                    series = pd.Series(series.values[: len(df.index)], index=df.index)
+                else:
+                    series = pd.Series(series.values, index=df.index[: len(series)])
             return series.reindex(df.index).bfill().ffill().to_numpy(dtype=float)
 
         features_df["ema30"] = _align(indicators.ema30)
