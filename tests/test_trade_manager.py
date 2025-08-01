@@ -921,49 +921,94 @@ async def test_execute_top_signals_ranking(monkeypatch):
 
 
 def test_shutdown_shuts_down_ray(monkeypatch):
-    import ray
-    import trade_manager as tm_mod
-    monkeypatch.setattr(tm_mod, "ray", ray, raising=False)
-    monkeypatch.setattr(trade_manager, "ray", ray, raising=False)
-    ray.init()
-    monkeypatch.setattr(ray, "is_initialized", lambda: True)
+    import importlib, sys, types
+
+    ray_stub = types.ModuleType("ray")
     called = {"done": False}
-    orig_shutdown = ray.shutdown
-    def fake_shutdown():
+    ray_stub.init = lambda: None
+    ray_stub.is_initialized = lambda: True
+
+    def _shutdown():
         called["done"] = True
-        orig_shutdown()
-    monkeypatch.setattr(ray, "shutdown", fake_shutdown)
+
+    ray_stub.shutdown = _shutdown
+
+    monkeypatch.setitem(sys.modules, "ray", ray_stub)
+
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
+
     dh = DummyDataHandler()
-    tm = TradeManager(make_config(), dh, None, None, None)
+    tm = tm_mod.TradeManager(make_config(), dh, None, None, None)
     tm.shutdown()
+
     assert called["done"]
 
 
 def test_shutdown_calls_ray_shutdown_in_test_mode(monkeypatch):
+    import importlib, sys, types
+
+    ray_stub = types.ModuleType("ray")
     called = {"done": False}
-    monkeypatch.setattr(trade_manager.ray, "shutdown", lambda: called.update(done=True), raising=False)
-    monkeypatch.setattr(trade_manager.ray, "is_initialized", lambda: False, raising=False)
+    ray_stub.is_initialized = lambda: False
+    ray_stub.shutdown = lambda: called.update(done=True)
+
+    monkeypatch.setitem(sys.modules, "ray", ray_stub)
+
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
+
     dh = DummyDataHandler()
-    tm = TradeManager(make_config(), dh, None, None, None)
+    tm = tm_mod.TradeManager(make_config(), dh, None, None, None)
     tm.shutdown()
+
     assert called["done"]
 
 
 def test_shutdown_handles_missing_is_initialized(monkeypatch):
+    import importlib, sys, types
+
     monkeypatch.setenv("TEST_MODE", "0")
 
-    class DummyRay:
-        def __init__(self):
-            self.called = False
-        def shutdown(self):
-            self.called = True
+    ray_stub = types.ModuleType("ray")
 
-    ray_stub = DummyRay()
-    monkeypatch.setattr(trade_manager, "ray", ray_stub)
+    class _RayRemoteFunction:
+        def __init__(self, func):
+            self._function = func
+
+        def remote(self, *args, **kwargs):
+            return self._function(*args, **kwargs)
+
+        def options(self, *args, **kwargs):
+            return self
+
+    def _ray_remote(func=None, **_kwargs):
+        if func is None:
+            def wrapper(f):
+                return _RayRemoteFunction(f)
+            return wrapper
+        return _RayRemoteFunction(func)
+
+    ray_stub.remote = _ray_remote
+    ray_stub.get = lambda x: x
+    ray_stub.init = lambda *a, **k: None
+    called = {"done": False}
+
+    def _shutdown():
+        called["done"] = True
+
+    ray_stub.shutdown = _shutdown
+
+    monkeypatch.setitem(sys.modules, "ray", ray_stub)
+
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
+
     dh = DummyDataHandler()
-    tm = TradeManager(make_config(), dh, None, None, None)
+    tm = tm_mod.TradeManager(make_config(), dh, None, None, None)
     tm.shutdown()
-    assert not ray_stub.called
+
+    assert not called["done"]
 
 
 sys.modules.pop('utils', None)
