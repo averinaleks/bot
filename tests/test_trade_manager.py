@@ -47,7 +47,6 @@ async def _safe_api_call(exchange, method: str, *args, **kwargs):
 utils_stub.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
-os.environ["TEST_MODE"] = "1"
 sys.modules.pop('trade_manager', None)
 sys.modules.pop('bot.trade_manager', None)
 joblib_mod = types.ModuleType('joblib')
@@ -55,14 +54,29 @@ joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
 
-from bot import trade_manager
-from bot.trade_manager import TradeManager  # noqa: E402
-
 import asyncio
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _cleanup_telegram_logger():
+def _set_test_mode():
+    mp = pytest.MonkeyPatch()
+    mp.setenv("TEST_MODE", "1")
+    yield
+    mp.undo()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _import_trade_manager(_set_test_mode):
+    global trade_manager, TradeManager
+    from bot import trade_manager as tm
+    from bot.trade_manager import TradeManager as TM
+    trade_manager = tm
+    TradeManager = TM
+    yield
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_telegram_logger(_import_trade_manager):
     yield
     asyncio.run(trade_manager.TelegramLogger.shutdown())
 
@@ -954,4 +968,5 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
 
 sys.modules.pop('utils', None)
 sys.modules.pop('bot.utils', None)
+os.environ.pop("TEST_MODE", None)
 
