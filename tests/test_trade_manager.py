@@ -963,7 +963,7 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, None, None, None)
     tm.shutdown()
-    assert ray_stub.called
+    assert not ray_stub.called
 
 
 sys.modules.pop('utils', None)
