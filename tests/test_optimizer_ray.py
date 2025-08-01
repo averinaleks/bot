@@ -50,7 +50,18 @@ sys.modules.setdefault('scipy.stats', stats_mod)
 
 import builtins
 from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
+
+_prev_experimental_warning = getattr(builtins, "ExperimentalWarning", None)
 builtins.ExperimentalWarning = _OptunaExperimentalWarning
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_experimental_warning():
+    yield
+    if _prev_experimental_warning is None:
+        delattr(builtins, "ExperimentalWarning")
+    else:
+        builtins.ExperimentalWarning = _prev_experimental_warning
 
 sys.modules.pop('optimizer', None)
 sys.modules.pop('bot.optimizer', None)
