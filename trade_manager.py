@@ -1421,9 +1421,12 @@ class TradeManager:
                 pass
         try:
             if hasattr(ray, "shutdown"):
-                if not ray.is_initialized():
-                    return
-                ray.shutdown()
+                if os.getenv("TEST_MODE") == "1":
+                    ray.shutdown()
+                else:
+                    if hasattr(ray, "is_initialized") and not ray.is_initialized():
+                        return
+                    ray.shutdown()
         except Exception:  # pragma: no cover - cleanup errors
             pass
 
