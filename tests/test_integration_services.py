@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import multiprocessing
+import socket
 from flask import Flask, request, jsonify
 import pytest
 
@@ -9,6 +10,13 @@ import pytest
 multiprocessing.set_start_method("spawn", force=True)
 ctx = multiprocessing.get_context("spawn")
 
+
+def _get_free_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
 
 
 # Minimal stubs for services to avoid heavy dependencies
@@ -61,40 +69,54 @@ def tm_ready():
     return jsonify({'status': 'ok'})
 
 
-def _run_dh():
+def _run_dh(port: int):
     host = os.environ.get("HOST", "0.0.0.0")
-    dh_app.run(host=host, port=8000)
+    dh_app.run(host=host, port=port)
 
 
-def _run_mb():
+def _run_mb(port: int):
     host = os.environ.get("HOST", "0.0.0.0")
-    mb_app.run(host=host, port=8001)
+    mb_app.run(host=host, port=port)
 
 
-def _run_tm():
+def _run_tm(port: int):
     host = os.environ.get("HOST", "0.0.0.0")
-    tm_app.run(host=host, port=8002)
+    tm_app.run(host=host, port=port)
 
 
 def test_services_communicate():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
+    dh_port = _get_free_port()
+    mb_port = _get_free_port()
+    tm_port = _get_free_port()
     processes = [
-        ctx.Process(target=_run_dh),
-        ctx.Process(target=_run_mb),
-        ctx.Process(target=_run_tm),
+        ctx.Process(target=_run_dh, args=(dh_port,)),
+        ctx.Process(target=_run_mb, args=(mb_port,)),
+        ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
     for p in processes:
         p.start()
-    time.sleep(1)
+    for url in (
+        f'http://localhost:{dh_port}/ping',
+        f'http://localhost:{mb_port}/ping',
+        f'http://localhost:{tm_port}/ready',
+    ):
+        for _ in range(50):
+            try:
+                resp = requests.get(url, timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
     os.environ.update({
-        'DATA_HANDLER_URL': 'http://localhost:8000',
-        'MODEL_BUILDER_URL': 'http://localhost:8001',
-        'TRADE_MANAGER_URL': 'http://localhost:8002',
+        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
     })
     try:
         trading_bot.run_once()
-        resp = requests.get('http://localhost:8002/positions', timeout=5)
+        resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
         data = resp.json()
         assert data['positions'], 'position was not created'
     finally:
@@ -107,20 +129,34 @@ def test_services_communicate():
 def test_service_availability_check():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
+    dh_port = _get_free_port()
+    mb_port = _get_free_port()
+    tm_port = _get_free_port()
     processes = [
-        ctx.Process(target=_run_dh),
-        ctx.Process(target=_run_mb),
-        ctx.Process(target=_run_tm),
+        ctx.Process(target=_run_dh, args=(dh_port,)),
+        ctx.Process(target=_run_mb, args=(mb_port,)),
+        ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
     for p in processes:
         p.start()
-    time.sleep(1)
+    for url in (
+        f'http://localhost:{dh_port}/ping',
+        f'http://localhost:{mb_port}/ping',
+        f'http://localhost:{tm_port}/ready',
+    ):
+        for _ in range(50):
+            try:
+                resp = requests.get(url, timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
     try:
-        resp = requests.get('http://localhost:8000/ping', timeout=5)
+        resp = requests.get(f'http://localhost:{dh_port}/ping', timeout=5)
         assert resp.status_code == 200
-        resp = requests.get('http://localhost:8001/ping', timeout=5)
+        resp = requests.get(f'http://localhost:{mb_port}/ping', timeout=5)
         assert resp.status_code == 200
-        resp = requests.get('http://localhost:8002/ready', timeout=5)
+        resp = requests.get(f'http://localhost:{tm_port}/ready', timeout=5)
         assert resp.status_code == 200
     finally:
         for p in processes:
@@ -132,18 +168,32 @@ def test_service_availability_check():
 def test_check_services_success():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
+    dh_port = _get_free_port()
+    mb_port = _get_free_port()
+    tm_port = _get_free_port()
     processes = [
-        ctx.Process(target=_run_dh),
-        ctx.Process(target=_run_mb),
-        ctx.Process(target=_run_tm),
+        ctx.Process(target=_run_dh, args=(dh_port,)),
+        ctx.Process(target=_run_mb, args=(mb_port,)),
+        ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
     for p in processes:
         p.start()
-    time.sleep(1)
+    for url in (
+        f'http://localhost:{dh_port}/ping',
+        f'http://localhost:{mb_port}/ping',
+        f'http://localhost:{tm_port}/ready',
+    ):
+        for _ in range(50):
+            try:
+                resp = requests.get(url, timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
     os.environ.update({
-        'DATA_HANDLER_URL': 'http://localhost:8000',
-        'MODEL_BUILDER_URL': 'http://localhost:8001',
-        'TRADE_MANAGER_URL': 'http://localhost:8002',
+        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
         'SERVICE_CHECK_RETRIES': '2',
         'SERVICE_CHECK_DELAY': '0.1',
     })
@@ -159,17 +209,30 @@ def test_check_services_success():
 def test_check_services_failure():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
+    dh_port = _get_free_port()
+    mb_port = _get_free_port()
+    tm_port = _get_free_port()
     processes = [
-        ctx.Process(target=_run_dh),
-        ctx.Process(target=_run_mb),
+        ctx.Process(target=_run_dh, args=(dh_port,)),
+        ctx.Process(target=_run_mb, args=(mb_port,)),
     ]
     for p in processes:
         p.start()
-    time.sleep(1)
+    for url in (
+        f'http://localhost:{dh_port}/ping',
+        f'http://localhost:{mb_port}/ping',
+    ):
+        for _ in range(50):
+            try:
+                resp = requests.get(url, timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
     os.environ.update({
-        'DATA_HANDLER_URL': 'http://localhost:8000',
-        'MODEL_BUILDER_URL': 'http://localhost:8001',
-        'TRADE_MANAGER_URL': 'http://localhost:8002',
+        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
         'SERVICE_CHECK_RETRIES': '2',
         'SERVICE_CHECK_DELAY': '0.1',
     })
@@ -192,14 +255,33 @@ def test_check_services_host_only():
         'SERVICE_CHECK_RETRIES': '2',
         'SERVICE_CHECK_DELAY': '0.1',
     })
+    dh_port = _get_free_port()
+    mb_port = _get_free_port()
+    tm_port = _get_free_port()
     processes = [
-        ctx.Process(target=_run_dh),
-        ctx.Process(target=_run_mb),
-        ctx.Process(target=_run_tm),
+        ctx.Process(target=_run_dh, args=(dh_port,)),
+        ctx.Process(target=_run_mb, args=(mb_port,)),
+        ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
     for p in processes:
         p.start()
-    time.sleep(1)
+    for url in (
+        f'http://localhost:{dh_port}/ping',
+        f'http://localhost:{mb_port}/ping',
+        f'http://localhost:{tm_port}/ready',
+    ):
+        for _ in range(50):
+            try:
+                resp = requests.get(url, timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+    os.environ.update({
+        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
+    })
     try:
         trading_bot.check_services()
     finally:
