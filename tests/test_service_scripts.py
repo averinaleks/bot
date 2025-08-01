@@ -112,6 +112,35 @@ def test_model_builder_service_requires_binary_labels(tmp_path):
         p.join()
 
 
+def _run_mb_fail(model_file: str, port: int):
+    os.environ['MODEL_FILE'] = model_file
+    os.environ['HOST'] = '127.0.0.1'
+    from bot.services import model_builder_service
+    model_builder_service._load_model()
+    model_builder_service.app.run(host='127.0.0.1', port=port)
+
+
+def test_model_builder_service_load_failure(tmp_path):
+    port = _get_free_port()
+    bad_file = tmp_path / 'model.pkl'
+    bad_file.write_text('broken')
+    p = ctx.Process(target=_run_mb_fail, args=(str(bad_file), port))
+    p.start()
+    try:
+        resp = None
+        for _ in range(50):
+            try:
+                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        assert resp is not None and resp.status_code == 200
+    finally:
+        p.terminate()
+        p.join()
+
+
 def _run_tm(port: int):
     class DummyExchange:
         def create_order(self, symbol, typ, side, amount, params=None):
