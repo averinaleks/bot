@@ -24,11 +24,27 @@ except Exception:
 # Provide dummy stable_baselines3 if missing
 if "stable_baselines3" not in sys.modules:
     sb3 = types.ModuleType("stable_baselines3")
-    sb3.PPO = object
-    sb3.DQN = object
+
+    class DummyModel:
+        def __init__(self, *a, **kw):
+            pass
+
+        def learn(self, *a, **kw):
+            return self
+
+        def predict(self, obs, deterministic=True):
+            return np.array([1]), None
+
+    sb3.PPO = DummyModel
+    sb3.DQN = DummyModel
     common = types.ModuleType("stable_baselines3.common")
     vec_env = types.ModuleType("stable_baselines3.common.vec_env")
-    vec_env.DummyVecEnv = object
+
+    class DummyVecEnv:
+        def __init__(self, env_fns):
+            self.envs = [fn() for fn in env_fns]
+
+    vec_env.DummyVecEnv = DummyVecEnv
     common.vec_env = vec_env
     sb3.common = common
     sys.modules["stable_baselines3"] = sb3
