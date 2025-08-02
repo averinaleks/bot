@@ -320,7 +320,8 @@ def _stub_modules():
         avg_loss = loss.rolling(window, min_periods=1).mean()
         rs = avg_gain / avg_loss.replace(0, pd.NA)
         rsi = 100 - (100 / (1 + rs))
-        return rsi.fillna(0) if fillna else rsi
+        rsi = rsi.astype("Float64")
+        return rsi.fillna(0).astype("float64") if fillna else rsi
 
     def _macd_diff(close, window_slow=26, window_fast=12, window_sign=9, fillna=True):
         c = pd.Series(close)
