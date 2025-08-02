@@ -12,7 +12,8 @@ import asyncio
 import sys
 from bot.config import BotConfig
 from collections import deque
-import os
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 if os.getenv("TEST_MODE") == "1":
     import types
