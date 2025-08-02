@@ -377,7 +377,7 @@ def _train_model_keras(
     model_type,
     initial_state=None,
     epochs=20,
-    n_splits=5,
+    n_splits=3,
     early_stopping_patience=3,
     freeze_base_layers=False,
     prediction_target="direction",
@@ -452,7 +452,7 @@ def _train_model_lightning(
     model_type,
     initial_state=None,
     epochs=20,
-    n_splits=5,
+    n_splits=3,
     early_stopping_patience=3,
     freeze_base_layers=False,
     prediction_target="direction",
@@ -564,7 +564,7 @@ def _train_model_remote(
     framework="pytorch",
     initial_state=None,
     epochs=20,
-    n_splits=5,
+    n_splits=3,
     early_stopping_patience=3,
     freeze_base_layers=False,
     prediction_target="direction",
@@ -941,6 +941,10 @@ class ModelBuilder:
         """Return cached LSTM features for ``symbol`` if available."""
         return self.feature_cache.get(symbol)
 
+    def clear_feature_cache(self, symbol: str) -> None:
+        """Remove cached LSTM features for ``symbol`` to free memory."""
+        self.feature_cache.pop(symbol, None)
+
     def prepare_dataset(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Return training sequences and targets based on ``prediction_target``."""
         tsteps = self.config.get("lstm_timesteps", 60)
@@ -1008,7 +1012,7 @@ class ModelBuilder:
                 self.nn_framework,
                 None,
                 20,
-                self.config.get("n_splits", 5),
+                self.config.get("n_splits", 3),
                 self.config.get("early_stopping_patience", 3),
                 False,
                 self.config.get("prediction_target", "direction"),
@@ -1120,6 +1124,7 @@ class ModelBuilder:
         await self.data_handler.telegram_logger.send_telegram_message(
             f"🎯 {symbol} обучен. Brier={brier:.4f}"
         )
+        self.clear_feature_cache(symbol)
 
     async def fine_tune_symbol(self, symbol, freeze_base_layers=False):
         indicators = self.data_handler.indicators.get(symbol)
@@ -1173,7 +1178,7 @@ class ModelBuilder:
                 self.nn_framework,
                 init_state,
                 self.config.get("fine_tune_epochs", 5),
-                self.config.get("n_splits", 5),
+                self.config.get("n_splits", 3),
                 self.config.get("early_stopping_patience", 3),
                 freeze_base_layers,
                 self.config.get("prediction_target", "direction"),
@@ -1284,6 +1289,7 @@ class ModelBuilder:
         await self.data_handler.telegram_logger.send_telegram_message(
             f"🔄 {symbol} дообучен. Brier={brier:.4f}"
         )
+        self.clear_feature_cache(symbol)
 
     async def train(self):
         self.load_state()
