@@ -69,7 +69,7 @@ class StrategyOptimizer:
         self.config = config
         self.data_handler = data_handler
         self.max_trials = config.get("optuna_trials", 20)
-        self.n_splits = config.get("n_splits", 5)
+        self.n_splits = config.get("n_splits", 3)
         self.metric = config.get("portfolio_metric", "sharpe")
 
     async def optimize(self) -> dict:

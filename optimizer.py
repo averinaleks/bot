@@ -74,7 +74,7 @@ def _objective_remote(
     ema200_period,
     atr_period_default,
     timeframe,
-    n_splits=5,
+    n_splits=3,
 ):
     """Heavy part of objective executed remotely."""
     try:
@@ -183,7 +183,7 @@ class ParameterOptimizer:
         self.max_trials = config.get("optuna_trials", 20)
         self.optimizer_method = config.get("optimizer_method", "tpe")
         self.holdout_warning_ratio = config.get("holdout_warning_ratio", 0.3)
-        self.n_splits = config.get("n_splits", 5)
+        self.n_splits = config.get("n_splits", 3)
         self.mlflow_enabled = config.get("mlflow_enabled", False)
         self.mlflow_tracking_uri = config.get("mlflow_tracking_uri", "mlruns")
         if self.mlflow_enabled and MLflowCallback is None:
