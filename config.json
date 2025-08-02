@@ -33,7 +33,7 @@
     "base_probability_threshold": 0.6,
     "trailing_stop_percentage": 1.0,
     "trailing_stop_coeff": 1.0,
-    "retrain_threshold": 0.1,
+    "retrain_threshold": 0.0,
     "retrain_volatility_threshold": 0.02,
     "forget_window": 259200,
     "trailing_stop_multiplier": 1.0,
