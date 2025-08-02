@@ -1187,7 +1187,13 @@ class TradeManager:
             model = self.model_builder.predictive_models.get(symbol)
             if not model:
                 logger.debug("Model for %s not yet trained", symbol)
-                return None
+                try:
+                    await self.model_builder.retrain_symbol(symbol)
+                except Exception:
+                    logger.debug("Retraining failed for %s", symbol, exc_info=True)
+                model = self.model_builder.predictive_models.get(symbol)
+                if not model:
+                    return None
             indicators = self.data_handler.indicators.get(symbol)
             empty = (
                 await _check_df_async(indicators.df, f"evaluate_signal {symbol}")

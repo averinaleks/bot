@@ -537,6 +537,34 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {}
+            self.calibrators = {}
+            self.retrained = False
+
+        async def retrain_symbol(self, symbol):
+            self.retrained = True
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert signal is None
+    assert mb.retrained
+
+
+@pytest.mark.asyncio
 async def test_evaluate_signal_regression(monkeypatch):
     dh = DummyDataHandler()
 
