@@ -1131,6 +1131,10 @@ class DataHandler:
                     volume = 0.0
                 return sym, volume
 
+        min_age = self.config.get("min_data_length", 0) * pd.Timedelta(
+            self.config["timeframe"]
+        ).total_seconds()
+        now = pd.Timestamp.utcnow()
         tasks = []
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols
@@ -1139,6 +1143,26 @@ class DataHandler:
                 and symbol.endswith("USDT")
                 and ((":" in symbol) or ("/" not in symbol))
             ):
+                launch_time = None
+                info = market.get("info") or {}
+                for key in (
+                    "launchTime",
+                    "launch_time",
+                    "listingTime",
+                    "listing_date",
+                    "created",
+                ):
+                    raw = info.get(key) or market.get(key)
+                    if raw:
+                        try:
+                            launch_time = pd.to_datetime(raw, unit="ms", utc=True)
+                        except Exception:  # noqa: BLE001
+                            launch_time = pd.to_datetime(raw, utc=True, errors="coerce")
+                        break
+                if launch_time is not None:
+                    age = (now - launch_time).total_seconds()
+                    if age < min_age:
+                        continue
                 tasks.append(asyncio.create_task(fetch_volume(symbol)))
 
         if tasks:

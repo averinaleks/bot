@@ -108,7 +108,7 @@ def test_prepare_lstm_features_shape():
     indicators = DummyIndicators(len(df))
     features = asyncio.run(mb.prepare_lstm_features("BTCUSDT", indicators))
     assert isinstance(features, np.ndarray)
-    assert features.shape == (len(df), 15)
+    assert features.shape == (len(df), 8)
 
 
 def test_prepare_lstm_features_with_short_indicators():
@@ -117,7 +117,7 @@ def test_prepare_lstm_features_with_short_indicators():
     indicators = DummyIndicators(len(df) - 2)
     features = asyncio.run(mb.prepare_lstm_features("BTCUSDT", indicators))
     assert isinstance(features, np.ndarray)
-    assert features.shape == (len(df), 15)
+    assert features.shape == (len(df), 8)
 
 
 def test_prepare_lstm_features_with_long_indicators():

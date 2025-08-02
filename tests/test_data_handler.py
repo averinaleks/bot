@@ -95,6 +95,23 @@ async def test_select_liquid_pairs_filters_by_min_liquidity():
     assert pairs == []
 
 
+@pytest.mark.asyncio
+async def test_select_liquid_pairs_filters_new_listings():
+    now = pd.Timestamp.utcnow()
+    recent = int((now - pd.Timedelta(minutes=5)).timestamp() * 1000)
+    old = int((now - pd.Timedelta(hours=2)).timestamp() * 1000)
+    volumes = {'NEWUSDT': 1.0, 'OLDUSDT': 1.0}
+    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0, min_data_length=10, timeframe='1m')
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
+    markets = {
+        'NEWUSDT': {'active': True, 'info': {'launchTime': recent}},
+        'OLDUSDT': {'active': True, 'info': {'launchTime': old}},
+    }
+    pairs = await dh.select_liquid_pairs(markets)
+    assert 'NEWUSDT' not in pairs
+    assert 'OLDUSDT' in pairs
+
+
 def test_dynamic_ws_min_process_rate_short_tf():
     cfg = BotConfig(cache_dir='/tmp', timeframe='1m')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
