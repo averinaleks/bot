@@ -97,19 +97,25 @@ if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
 
 # GPU availability is determined lazily to avoid initializing CUDA in every
-# Ray worker at import time.
+# Ray worker at import time. Track whether initialization has already
+# occurred so we only attempt it once per process.
 GPU_AVAILABLE = False
+GPU_INITIALIZED = False
 cp = np  # type: ignore
 
 
 def _init_cuda() -> None:
     """Initialize GPU support if available."""
 
-    global GPU_AVAILABLE, cp
+    global GPU_AVAILABLE, cp, GPU_INITIALIZED
+
+    if GPU_INITIALIZED:
+        return
 
     if os.environ.get("FORCE_CPU") == "1":
         GPU_AVAILABLE = False
         cp = np  # type: ignore
+        GPU_INITIALIZED = True
         return
 
     GPU_AVAILABLE = is_cuda_available()
@@ -124,6 +130,8 @@ def _init_cuda() -> None:
             cp = np  # type: ignore
     else:
         cp = np  # type: ignore
+
+    GPU_INITIALIZED = True
 
 
 def create_exchange() -> BybitSDKAsync:
@@ -722,7 +730,7 @@ class IndicatorsCache:
 
 
 
-def _make_calc_indicators_remote(use_gpu: bool):
+def _make_calc_indicators_remote(use_gpu: bool, gpu_initialized: bool = False):
     """Return a Ray remote function for indicator calculation."""
 
     @ray.remote(num_cpus=1, num_gpus=1 if use_gpu else 0)
@@ -732,12 +740,14 @@ def _make_calc_indicators_remote(use_gpu: bool):
         volatility: float,
         timeframe: str,
     ):
-        if use_gpu:
+        nonlocal gpu_initialized
+        if use_gpu and not gpu_initialized:
             # Lazily initialize CUDA on each Ray worker so the global
             # ``cp`` variable points to CuPy when GPU acceleration is
             # requested. This ensures GPU-based functions work correctly
             # even when workers are started on demand.
             _init_cuda()
+            gpu_initialized = True
         if pl is not None and isinstance(df, pl.DataFrame):
             df = df.to_pandas().copy()
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
@@ -800,7 +810,7 @@ class DataHandler:
         self.feature_callback = feature_callback
         self.trade_callback = trade_callback
         self.cache = HistoricalDataCache(config["cache_dir"])
-        self.calc_indicators = _make_calc_indicators_remote(GPU_AVAILABLE)
+        self.calc_indicators = _make_calc_indicators_remote(GPU_AVAILABLE, False)
         self.use_polars = config.get("use_polars", False)
         if self.use_polars:
             if pl is None:
