@@ -783,6 +783,8 @@ class HistoricalDataCache:
     def save_cached_data(self, symbol, timeframe, data):
         try:
             safe_symbol = sanitize_symbol(symbol)
+            if isinstance(data, pd.DataFrame) and data.empty:
+                return
             if not self._check_disk_space():
                 logger.error(
                     "Невозможно кэшировать %s_%s: нехватка места на диске",

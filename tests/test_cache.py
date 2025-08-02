@@ -39,6 +39,14 @@ def test_load_converts_old_format(tmp_path, monkeypatch):
     assert loaded_again.equals(df)
 
 
+def test_save_skips_empty_dataframe(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    empty_df = pd.DataFrame()
+    cache.save_cached_data("BTC/USDT", "1m", empty_df)
+    assert not (tmp_path / "BTC_USDT_1m.pkl.gz").exists()
+
+
 def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
     cache = HistoricalDataCache(cache_dir=str(tmp_path))

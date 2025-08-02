@@ -913,6 +913,9 @@ class ModelBuilder:
         features_df["adx"] = _align(indicators.adx)
         features_df["macd"] = _align(indicators.macd)
         features_df["atr"] = _align(indicators.atr)
+        min_len = self.config.get("min_data_length", 0)
+        if len(features_df) < min_len:
+            return np.array([])
         features_df = features_df.dropna()
         if features_df.empty:
             logger.warning("Нет валидных данных для %s", symbol)

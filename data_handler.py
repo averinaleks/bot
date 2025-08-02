@@ -1152,8 +1152,10 @@ class DataHandler:
                 highest[canon] = (sym, vol)
 
         sorted_pairs = sorted(highest.values(), key=lambda x: x[1], reverse=True)
+        min_liq = self.config.get("min_liquidity", 0)
+        filtered = [p for p in sorted_pairs if p[1] >= min_liq]
         top_limit = self.config.get("max_symbols", 50)
-        return [s for s, _ in sorted_pairs[:top_limit]]
+        return [s for s, _ in filtered[:top_limit]]
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_ohlcv_single(
