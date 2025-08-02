@@ -609,7 +609,7 @@ def _train_model_remote(
     device = torch.device("cuda" if cuda_available else "cpu")
     if cuda_available:
         torch.backends.cudnn.benchmark = True
-    scaler = torch.cuda.amp.GradScaler(enabled=cuda_available)
+    scaler = torch.amp.GradScaler("cuda", enabled=cuda_available)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     preds: list[float] = []
@@ -651,7 +651,7 @@ def _train_model_remote(
                     batch_X = batch_X.view(batch_X.size(0), -1)
                 batch_y = batch_y.to(device)
                 optimizer.zero_grad()
-                with torch.cuda.amp.autocast(enabled=cuda_available):
+                with torch.amp.autocast("cuda", enabled=cuda_available):
                     outputs = model(batch_X).view(-1)
                     loss = criterion(outputs, batch_y) + model.l2_regularization()
                 scaler.scale(loss).backward()
@@ -665,7 +665,7 @@ def _train_model_remote(
                     if model_type == "mlp":
                         val_X = val_X.view(val_X.size(0), -1)
                     val_y = val_y.to(device)
-                    with torch.cuda.amp.autocast(enabled=cuda_available):
+                    with torch.amp.autocast("cuda", enabled=cuda_available):
                         outputs = model(val_X).view(-1)
                     preds.extend(outputs.cpu().numpy().reshape(-1))
                     labels.extend(val_y.cpu().numpy().reshape(-1))
