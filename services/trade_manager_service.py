@@ -39,6 +39,10 @@ def open_position() -> tuple:
     side = str(data.get('side', 'buy')).lower()
     price = float(data.get('price', 0) or 0)
     amount = float(data.get('amount', 0))
+    tp = data.get('tp')
+    sl = data.get('sl')
+    tp = float(tp) if tp is not None else None
+    sl = float(sl) if sl is not None else None
     if amount <= 0:
         risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
         if risk_usd > 0 and price > 0:
@@ -46,7 +50,14 @@ def open_position() -> tuple:
     if not symbol or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     try:
-        order = exchange.create_order(symbol, 'market', side, amount)
+        if (tp is not None or sl is not None) and hasattr(
+            exchange, 'create_order_with_take_profit_and_stop_loss'
+        ):
+            order = exchange.create_order_with_take_profit_and_stop_loss(
+                symbol, 'market', side, amount, None, tp, sl, None
+            )
+        else:
+            order = exchange.create_order(symbol, 'market', side, amount)
         _record(order, symbol, side, amount, 'open')
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
@@ -65,7 +76,14 @@ def close_position() -> tuple:
     params = {'reduce_only': True}
     try:
         order = exchange.create_order(symbol, 'market', side, amount, params=params)
-        _record(order, symbol, side, amount, 'close')
+        for i, rec in enumerate(POSITIONS):
+            if (
+                rec.get('symbol') == symbol
+                and rec.get('side') == data.get('side')
+                and rec.get('action') == 'open'
+            ):
+                POSITIONS.pop(i)
+                break
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
         return jsonify({'error': str(exc)}), 500
