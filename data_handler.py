@@ -1445,9 +1445,10 @@ class DataHandler:
                     else:
                         cache_obj = self.indicators_cache[cache_key]
                         cache_obj.update(df.droplevel("symbol"))
-                        for col in cache_obj.df.columns:
-                            df[col] = cache_obj.df.loc[df.droplevel("symbol").index, col].values
-                            self.ohlcv.loc[df.index, col] = df[col].values
+                        idx = df.droplevel("symbol").index
+                        self.ohlcv.loc[
+                            df.index, cache_obj.df.columns
+                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].values
                         self.indicators[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1478,11 +1479,10 @@ class DataHandler:
                     async with self.ohlcv_lock:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
-                        for col in result.df.columns:
-                            df[col] = result.df.loc[
-                                df.droplevel("symbol").index, col
-                            ].values
-                            self.ohlcv.loc[df.index, col] = df[col].values
+                        idx = df.droplevel("symbol").index
+                        self.ohlcv.loc[
+                            df.index, result.df.columns
+                        ] = result.df.loc[idx, result.df.columns].values
             else:
                 fetch_needed = False
                 obj_ref = None
@@ -1498,9 +1498,10 @@ class DataHandler:
                     else:
                         cache_obj = self.indicators_cache_2h[cache_key]
                         cache_obj.update(df.droplevel("symbol"))
-                        for col in cache_obj.df.columns:
-                            df[col] = cache_obj.df.loc[df.droplevel("symbol").index, col].values
-                            self.ohlcv_2h.loc[df.index, col] = df[col].values
+                        idx = df.droplevel("symbol").index
+                        self.ohlcv_2h.loc[
+                            df.index, cache_obj.df.columns
+                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].values
                         self.indicators_2h[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1531,11 +1532,10 @@ class DataHandler:
 
                         self.indicators_cache_2h[cache_key] = result
                         self.indicators_2h[symbol] = result
-                        for col in result.df.columns:
-                            df[col] = result.df.loc[
-                                df.droplevel("symbol").index, col
-                            ].values
-                            self.ohlcv_2h.loc[df.index, col] = df[col].values
+                        idx = df.droplevel("symbol").index
+                        self.ohlcv_2h.loc[
+                            df.index, result.df.columns
+                        ] = result.df.loc[idx, result.df.columns].values
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
             if self.trade_callback:
