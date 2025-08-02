@@ -1788,6 +1788,7 @@ class RLAgent:
                 )
                 return None
             action, _ = model.predict(obs, deterministic=True)
+        action = action.item()
         action = int(action)
         if action == 1:
             return "open_long"
