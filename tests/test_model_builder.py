@@ -128,6 +128,16 @@ def test_prepare_lstm_features_with_long_indicators():
     assert isinstance(features, np.ndarray)
     assert features.shape == (len(df), 15)
 
+
+def test_prepare_lstm_features_short_history_returns_empty():
+    df = make_df(3)
+    mb = create_model_builder(df)
+    mb.config.min_data_length = 10
+    indicators = DummyIndicators(len(df))
+    features = asyncio.run(mb.prepare_lstm_features("BTCUSDT", indicators))
+    assert isinstance(features, np.ndarray)
+    assert features.size == 0
+
 @pytest.mark.parametrize("model_type", ["mlp", "tft"])
 def test_train_model_remote_returns_state_and_predictions(model_type):
     X = np.random.rand(20, 3, 2).astype(np.float32)

@@ -63,7 +63,7 @@ def _expected_rate(tf: str) -> int:
 
 @pytest.mark.asyncio
 async def test_select_liquid_pairs_plain_symbol_included():
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5)
+    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     markets = {
         'BTCUSDT': {'active': True},
@@ -75,7 +75,7 @@ async def test_select_liquid_pairs_plain_symbol_included():
 
 @pytest.mark.asyncio
 async def test_select_liquid_pairs_prefers_highest_volume():
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5)
+    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0)
     volumes = {'BTCUSDT': 1.0, 'BTC/USDT:USDT': 2.0}
     dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
     markets = {
@@ -84,6 +84,15 @@ async def test_select_liquid_pairs_prefers_highest_volume():
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert pairs == ['BTC/USDT:USDT']
+
+
+@pytest.mark.asyncio
+async def test_select_liquid_pairs_filters_by_min_liquidity():
+    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=100)
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 50}))
+    markets = {'BTCUSDT': {'active': True}}
+    pairs = await dh.select_liquid_pairs(markets)
+    assert pairs == []
 
 
 def test_dynamic_ws_min_process_rate_short_tf():
@@ -363,7 +372,7 @@ async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
             return {'BTCUSDT': {'active': True}}
         async def fetch_ticker(self, symbol):
             return {'quoteVolume': 1.0}
-    cfg = BotConfig(cache_dir=str(tmp_path), max_symbols=1, min_data_length=1, timeframe='1m', secondary_timeframe='1m')
+    cfg = BotConfig(cache_dir=str(tmp_path), max_symbols=1, min_data_length=1, timeframe='1m', secondary_timeframe='1m', min_liquidity=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange2())
     async def fake_orderbook(symbol):
         return {'bids': [[1,1]], 'asks': [[1,1]]}
