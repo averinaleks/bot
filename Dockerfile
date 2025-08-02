@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libblas-dev \
     liblapack-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && python3.12 --version
 
 WORKDIR /app
 
@@ -55,7 +56,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     curl \
     python3.12 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && python3.12 --version
 
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
