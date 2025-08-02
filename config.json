@@ -42,7 +42,7 @@
     "kelly_win_prob": 0.6,
     "min_sharpe_ratio": 0.5,
     "performance_window": 86400,
-    "min_data_length": 1000,
+    "min_data_length": 200,
     "lstm_timesteps": 60,
     "lstm_batch_size": 32,
     "model_type": "transformer",

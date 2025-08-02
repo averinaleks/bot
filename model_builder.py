@@ -906,13 +906,34 @@ class ModelBuilder:
             aligned = series.reindex(df.index).bfill().ffill()
             return aligned.to_numpy(dtype=float)
 
-        features_df["ema30"] = _align(indicators.ema30)
-        features_df["ema100"] = _align(indicators.ema100)
-        features_df["ema200"] = _align(indicators.ema200)
-        features_df["rsi"] = _align(indicators.rsi)
-        features_df["adx"] = _align(indicators.adx)
-        features_df["macd"] = _align(indicators.macd)
-        features_df["atr"] = _align(indicators.atr)
+        def _maybe_add(name: str, series: pd.Series, window_key: str | None = None):
+            """Add indicator ``name`` if sufficient history is available."""
+            if not isinstance(series, pd.Series):
+                return
+            if window_key is not None:
+                window = self.config.get(window_key, 0)
+                if len(df) < window:
+                    logger.debug(
+                        "Skipping %s for %s: need %s rows, have %s",
+                        name,
+                        symbol,
+                        window,
+                        len(df),
+                    )
+                    return
+            aligned = _align(series)
+            if np.isnan(aligned).any():
+                logger.debug("Skipping %s for %s due to NaNs", name, symbol)
+                return
+            features_df[name] = aligned
+
+        _maybe_add("ema30", indicators.ema30, "ema30_period")
+        _maybe_add("ema100", indicators.ema100, "ema100_period")
+        _maybe_add("ema200", indicators.ema200, "ema200_period")
+        _maybe_add("rsi", indicators.rsi, "rsi_window")
+        _maybe_add("adx", indicators.adx, "adx_window")
+        _maybe_add("macd", indicators.macd, "macd_window_slow")
+        _maybe_add("atr", indicators.atr, "atr_period_default")
         min_len = self.config.get("min_data_length", 0)
         if len(features_df) < min_len:
             return np.array([])
