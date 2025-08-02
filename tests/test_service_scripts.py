@@ -145,6 +145,10 @@ def _run_tm(port: int):
     class DummyExchange:
         def create_order(self, symbol, typ, side, amount, params=None):
             return {'id': '1'}
+        def create_order_with_take_profit_and_stop_loss(
+            self, symbol, typ, side, amount, price, tp, sl, params=None
+        ):
+            return {'id': '2', 'tp': tp, 'sl': sl}
     ccxt = types.ModuleType('ccxt')
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
@@ -169,10 +173,14 @@ def test_trade_manager_service_endpoints():
                 time.sleep(0.1)
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
-            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
             timeout=5,
         )
         assert resp.status_code == 200
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        assert resp.status_code == 200
+        data = resp.json()['positions']
+        assert len(data) == 1
         resp = requests.post(
             f'http://127.0.0.1:{port}/close_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
@@ -182,7 +190,7 @@ def test_trade_manager_service_endpoints():
         resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
         assert resp.status_code == 200
         data = resp.json()['positions']
-        assert len(data) == 2
+        assert len(data) == 0
     finally:
         p.terminate()
         p.join()
