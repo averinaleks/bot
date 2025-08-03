@@ -1,8 +1,8 @@
---extra-index-url https://download.pytorch.org/whl/cu121
+-f https://download.pytorch.org/whl/cu121
 numpy>=1.26.4
 pandas>=2.2.2
-torch==2.7.1
-torchvision==0.22.1
+torch==2.7.1+cu121
+torchvision==0.22.1+cu121
 ccxt>=4.3.85
 ccxtpro>=0.9.0
 python-telegram-bot>=20.7
