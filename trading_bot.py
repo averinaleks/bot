@@ -2,9 +2,12 @@
 
 import os
 import time
-import requests
+
 import httpx
+import requests
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from bot.utils import logger
 
 
@@ -19,7 +22,6 @@ def send_telegram_alert(message: str) -> None:
         requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=5)
     except Exception as exc:  # pragma: no cover - network errors
         logger.error("Failed to send Telegram alert: %s", exc)
-from tenacity import retry, wait_exponential, stop_after_attempt
 
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = float(os.getenv("ORDER_CONFIRMATION_TIMEOUT", "5"))
