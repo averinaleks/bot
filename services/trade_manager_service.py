@@ -9,6 +9,9 @@ from flask import Flask, request, jsonify
 import ccxt
 import os
 from dotenv import load_dotenv
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
@@ -86,7 +89,8 @@ def close_position() -> tuple:
                 break
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
-        return jsonify({'error': str(exc)}), 500
+        logging.exception("Error closing position")
+        return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
 @app.route('/positions')
