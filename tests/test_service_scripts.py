@@ -81,6 +81,9 @@ def test_data_handler_service_price_error():
 
 def _run_mb(model_dir: str, port: int):
     class DummyLR:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def fit(self, X, y):
             return self
 
@@ -136,7 +139,32 @@ def test_model_builder_service_train_predict(tmp_path):
 
 
 @pytest.mark.integration
-def test_model_builder_service_requires_binary_labels(tmp_path):
+def test_model_builder_service_train_predict_multi_class(tmp_path):
+    port = _get_free_port()
+    p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
+    p.start()
+    try:
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/train',
+            json={'symbol': 'SYM', 'features': [[0], [1], [2]], 'labels': [0, 1, 2]},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/predict',
+            json={'symbol': 'SYM', 'features': [1]},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        assert resp.json()['signal'] in {'buy', 'sell'}
+    finally:
+        p.terminate()
+        p.join()
+
+
+@pytest.mark.integration
+def test_model_builder_service_rejects_single_class_labels(tmp_path):
     port = _get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     p.start()
@@ -155,6 +183,9 @@ def test_model_builder_service_requires_binary_labels(tmp_path):
 
 def _run_mb_fail(model_file: str, port: int):
     class DummyLR:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def fit(self, X, y):
             return self
 
