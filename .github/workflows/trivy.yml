@@ -33,9 +33,6 @@ jobs:
         run: |
           docker build -f Dockerfile.ci -t ghcr.io/your-user/your-bot:${{ github.sha }} .
 
-      - name: Free disk space
-        run: docker system prune -af
-
       - name: Run Trivy vulnerability scanner
         env:
           TRIVY_CACHE_DIR: /tmp/trivy-cache
@@ -51,3 +48,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0 # v3
         with:
           sarif_file: 'trivy-results.sarif'
+
+      - name: Free disk space
+        run: docker system prune -af
+
