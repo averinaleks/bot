@@ -4,8 +4,6 @@
 #
 #    pip-compile --output-file=requirements.out requirements.txt
 #
--f https://download.pytorch.org/whl/cu124
-
 a2wsgi==1.10.10
     # via -r requirements.txt
 absl-py==2.3.1
@@ -53,7 +51,7 @@ ccxt==4.4.98
     # via -r requirements.txt
 ccxtpro==1.0.1
     # via -r requirements.txt
-certifi==2025.7.14
+certifi==2025.8.3
     # via
     #   ccxt
     #   httpcore
@@ -65,7 +63,7 @@ cffi==1.17.1
     #   pycares
 charset-normalizer==3.4.2
     # via requests
-click==8.2.2
+click==8.2.1
     # via
     #   flask
     #   mlflow-skinny
@@ -531,7 +529,7 @@ threadpoolctl==3.6.0
     # via
     #   imbalanced-learn
     #   scikit-learn
-torch==2.7.1+cu124
+torch==2.7.1
     # via
     #   -r requirements.txt
     #   catalyst
@@ -541,7 +539,7 @@ torch==2.7.1+cu124
     #   torchvision
 torchmetrics==1.8.0
     # via pytorch-lightning
-torchvision==0.22.1+cu124
+torchvision==0.22.1
     # via -r requirements.txt
 tqdm==4.67.1
     # via
