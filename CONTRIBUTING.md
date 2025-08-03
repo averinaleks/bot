@@ -12,10 +12,16 @@ Thank you for your interest in contributing to this project!
     ```
    (Use `--full` to include GPU packages.) This step is **required** before
    running the test suite—`pytest` expects these packages to be installed.
-2. Run `python -m flake8` and `pytest` before submitting a pull request. The CI
-   workflow runs `flake8` as a dedicated step and will fail if any style errors
-   are reported, so it's best to fix them locally first. These tests are also
-   executed automatically by `pre-commit`.
+2. Run `python -m flake8` and the test suites before submitting a pull request.
+   The CI workflow runs `flake8` as a dedicated step and will fail if any style
+   errors are reported, so it's best to fix them locally first.
+
+   ```bash
+   pytest -m "not integration"  # unit tests
+   pytest -m integration         # integration tests
+   ```
+
+   These tests are also executed automatically by `pre-commit`.
 
 ## CI troubleshooting
 
