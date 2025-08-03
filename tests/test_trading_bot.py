@@ -143,3 +143,31 @@ def test_run_once_invalid_price(monkeypatch):
 
     trading_bot.run_once()
     assert not sent
+
+
+def test_fetch_price_error(monkeypatch):
+    def fake_get(url, timeout=None):
+        class Resp:
+            status_code = 503
+            def json(self):
+                return {"error": "down"}
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, "get", fake_get)
+    price = trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"})
+    assert price is None
+
+
+def test_run_once_price_error(monkeypatch):
+    called = {"pred": False}
+
+    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: None)
+    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: called.__setitem__("pred", True))
+    monkeypatch.setattr(trading_bot, "_load_env", lambda: {
+        "data_handler_url": "http://dh",
+        "model_builder_url": "http://mb",
+        "trade_manager_url": "http://tm",
+    })
+
+    trading_bot.run_once()
+    assert not called["pred"]

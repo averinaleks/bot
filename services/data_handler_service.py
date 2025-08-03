@@ -19,9 +19,10 @@ def price(symbol: str):
     try:
         ticker = exchange.fetch_ticker(symbol)
         last = float(ticker.get('last') or 0.0)
+        return jsonify({'price': last})
     except Exception as exc:  # pragma: no cover - network errors
-        last = 0.0
-    return jsonify({'price': last})
+        # Surface exchange errors to clients so callers can react accordingly.
+        return jsonify({'error': str(exc)}), 503
 
 @app.route('/ping')
 def ping():
