@@ -96,7 +96,7 @@ def open_position() -> tuple:
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
         app.logger.error('exception creating order: %s', exc)
-        return jsonify({'error': str(exc)}), 500
+        return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
 @app.route('/close_position', methods=['POST'])
