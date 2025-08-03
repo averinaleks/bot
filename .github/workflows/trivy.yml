@@ -29,9 +29,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - name: Build an image from Dockerfile
+      - name: Build an image from Dockerfile.ci
         run: |
-          docker build -t ghcr.io/your-user/your-bot:${{ github.sha }} .
+          docker build -f Dockerfile.ci -t ghcr.io/your-user/your-bot:${{ github.sha }} .
 
       - name: Free disk space
         run: docker system prune -af

@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install only linting tools
+RUN pip install --no-cache-dir flake8
+
+# Copy files required for static analysis
+COPY .pre-commit-config.yaml .flake8 .pylintrc requirements.txt requirements-cpu.txt ./
+COPY *.py ./
+COPY scripts scripts
+COPY services services
+COPY tests tests
