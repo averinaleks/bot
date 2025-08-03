@@ -2,6 +2,7 @@ import os
 import requests
 import multiprocessing
 import socket
+import signal
 from flask import Flask, request, jsonify
 import pytest
 
@@ -72,17 +73,24 @@ def tm_ready():
     return jsonify({'status': 'ok'})
 
 
+def _shutdown(*_):
+    raise SystemExit(0)
+
+
 def _run_dh(port: int):
+    signal.signal(signal.SIGTERM, _shutdown)
     host = os.environ.get("HOST", "0.0.0.0")
     dh_app.run(host=host, port=port)
 
 
 def _run_mb(port: int):
+    signal.signal(signal.SIGTERM, _shutdown)
     host = os.environ.get("HOST", "0.0.0.0")
     mb_app.run(host=host, port=port)
 
 
 def _run_tm(port: int):
+    signal.signal(signal.SIGTERM, _shutdown)
     host = os.environ.get("HOST", "0.0.0.0")
     tm_app.run(host=host, port=port)
 
@@ -99,20 +107,20 @@ def test_services_communicate():
         ctx.Process(target=_run_mb, args=(mb_port,)),
         ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
-    for p in processes:
-        p.start()
-    for url in (
-        f'http://localhost:{dh_port}/ping',
-        f'http://localhost:{mb_port}/ping',
-        f'http://localhost:{tm_port}/ready',
-    ):
-        wait_for_service(url)
-    os.environ.update({
-        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-    })
     try:
+        for p in processes:
+            p.start()
+        for url in (
+            f'http://localhost:{dh_port}/ping',
+            f'http://localhost:{mb_port}/ping',
+            f'http://localhost:{tm_port}/ready',
+        ):
+            wait_for_service(url)
+        os.environ.update({
+            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
+        })
         trading_bot.run_once()
         resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
         data = resp.json()
@@ -120,8 +128,8 @@ def test_services_communicate():
     finally:
         for p in processes:
             p.terminate()
-        for p in processes:
             p.join()
+            assert p.exitcode == 0
 
 
 @pytest.mark.integration
@@ -136,15 +144,15 @@ def test_service_availability_check():
         ctx.Process(target=_run_mb, args=(mb_port,)),
         ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
-    for p in processes:
-        p.start()
-    for url in (
-        f'http://localhost:{dh_port}/ping',
-        f'http://localhost:{mb_port}/ping',
-        f'http://localhost:{tm_port}/ready',
-    ):
-        wait_for_service(url)
     try:
+        for p in processes:
+            p.start()
+        for url in (
+            f'http://localhost:{dh_port}/ping',
+            f'http://localhost:{mb_port}/ping',
+            f'http://localhost:{tm_port}/ready',
+        ):
+            wait_for_service(url)
         resp = requests.get(f'http://localhost:{dh_port}/ping', timeout=5)
         assert resp.status_code == 200
         resp = requests.get(f'http://localhost:{mb_port}/ping', timeout=5)
@@ -154,8 +162,8 @@ def test_service_availability_check():
     finally:
         for p in processes:
             p.terminate()
-        for p in processes:
             p.join()
+            assert p.exitcode == 0
 
 
 @pytest.mark.integration
@@ -170,28 +178,28 @@ def test_check_services_success():
         ctx.Process(target=_run_mb, args=(mb_port,)),
         ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
-    for p in processes:
-        p.start()
-    for url in (
-        f'http://localhost:{dh_port}/ping',
-        f'http://localhost:{mb_port}/ping',
-        f'http://localhost:{tm_port}/ready',
-    ):
-        wait_for_service(url)
-    os.environ.update({
-        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-        'SERVICE_CHECK_RETRIES': '2',
-        'SERVICE_CHECK_DELAY': '0.1',
-    })
     try:
+        for p in processes:
+            p.start()
+        for url in (
+            f'http://localhost:{dh_port}/ping',
+            f'http://localhost:{mb_port}/ping',
+            f'http://localhost:{tm_port}/ready',
+        ):
+            wait_for_service(url)
+        os.environ.update({
+            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
+            'SERVICE_CHECK_RETRIES': '2',
+            'SERVICE_CHECK_DELAY': '0.1',
+        })
         trading_bot.check_services()
     finally:
         for p in processes:
             p.terminate()
-        for p in processes:
             p.join()
+            assert p.exitcode == 0
 
 
 @pytest.mark.integration
@@ -205,28 +213,28 @@ def test_check_services_failure():
         ctx.Process(target=_run_dh, args=(dh_port,)),
         ctx.Process(target=_run_mb, args=(mb_port,)),
     ]
-    for p in processes:
-        p.start()
-    for url in (
-        f'http://localhost:{dh_port}/ping',
-        f'http://localhost:{mb_port}/ping',
-    ):
-        wait_for_service(url)
-    os.environ.update({
-        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-        'SERVICE_CHECK_RETRIES': '2',
-        'SERVICE_CHECK_DELAY': '0.1',
-    })
     try:
+        for p in processes:
+            p.start()
+        for url in (
+            f'http://localhost:{dh_port}/ping',
+            f'http://localhost:{mb_port}/ping',
+        ):
+            wait_for_service(url)
+        os.environ.update({
+            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
+            'SERVICE_CHECK_RETRIES': '2',
+            'SERVICE_CHECK_DELAY': '0.1',
+        })
         with pytest.raises(SystemExit):
             trading_bot.check_services()
     finally:
         for p in processes:
             p.terminate()
-        for p in processes:
             p.join()
+            assert p.exitcode == 0
 
 
 @pytest.mark.integration
@@ -247,23 +255,23 @@ def test_check_services_host_only():
         ctx.Process(target=_run_mb, args=(mb_port,)),
         ctx.Process(target=_run_tm, args=(tm_port,)),
     ]
-    for p in processes:
-        p.start()
-    for url in (
-        f'http://localhost:{dh_port}/ping',
-        f'http://localhost:{mb_port}/ping',
-        f'http://localhost:{tm_port}/ready',
-    ):
-        wait_for_service(url)
-    os.environ.update({
-        'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-        'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-        'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-    })
     try:
+        for p in processes:
+            p.start()
+        for url in (
+            f'http://localhost:{dh_port}/ping',
+            f'http://localhost:{mb_port}/ping',
+            f'http://localhost:{tm_port}/ready',
+        ):
+            wait_for_service(url)
+        os.environ.update({
+            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
+            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
+            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
+        })
         trading_bot.check_services()
     finally:
         for p in processes:
             p.terminate()
-        for p in processes:
             p.join()
+            assert p.exitcode == 0
