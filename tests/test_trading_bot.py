@@ -54,7 +54,7 @@ def test_load_env_uses_host_when_missing(monkeypatch):
     assert env['trade_manager_url'] == 'http://127.0.0.1:8002'
 
 
-def test_send_trade_latency_alert(monkeypatch):
+def test_send_trade_latency_alert(monkeypatch, fast_sleep):
     called = []
 
     def fake_post(url, json=None, timeout=None):
@@ -98,7 +98,7 @@ def test_send_trade_exception_alert(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_reactive_trade_latency_alert(monkeypatch):
+async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
     called = []
 
     class DummyClient:
