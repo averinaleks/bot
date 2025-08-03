@@ -259,3 +259,24 @@ def test_run_once_env_fallback(monkeypatch):
 
     trading_bot.run_once()
     assert sent == {"tp": 10.0, "sl": 5.0, "trailing_stop": 2.0}
+
+
+def test_run_once_logs_prediction(monkeypatch, caplog):
+    """A prediction from the model service is logged."""
+    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
+    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: None)
+    monkeypatch.setattr(
+        trading_bot,
+        "_load_env",
+        lambda: {
+            "data_handler_url": "http://dh",
+            "model_builder_url": "http://mb",
+            "trade_manager_url": "http://tm",
+        },
+    )
+
+    with caplog.at_level("INFO"):
+        trading_bot.run_once()
+
+    assert "Prediction: buy" in caplog.messages
