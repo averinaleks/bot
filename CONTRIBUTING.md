@@ -16,12 +16,16 @@ Thank you for your interest in contributing to this project!
    The CI workflow runs `flake8` as a dedicated step and will fail if any style
    errors are reported, so it's best to fix them locally first.
 
-   ```bash
-   pytest -m "not integration"  # unit tests
-   pytest -m integration         # integration tests
-   ```
+### Running tests
 
-   These tests are also executed automatically by `pre-commit`.
+Use the following commands to execute the test suites locally:
+
+```bash
+pytest -m "not integration"  # unit tests
+pytest -m integration         # integration tests
+```
+
+These tests are also executed automatically by `pre-commit`.
 
 ## CI troubleshooting
 
