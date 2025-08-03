@@ -197,7 +197,10 @@ class TradeManager:
                 "lowest_price",
                 "breakeven_triggered",
             ],
-            index=pd.MultiIndex.from_arrays([[], []], names=["symbol", "timestamp"]),
+            index=pd.MultiIndex.from_arrays(
+                [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
+                names=["symbol", "timestamp"],
+            ),
         )
         self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
@@ -342,6 +345,11 @@ class TradeManager:
         try:
             if os.path.exists(self.state_file):
                 self.positions = pd.read_pickle(self.state_file)
+                if (
+                    "timestamp" in self.positions.index.names
+                    and self.positions.index.get_level_values("timestamp").tz is None
+                ):
+                    self.positions = self.positions.tz_localize("UTC", level="timestamp")
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "rb") as f:
                     self.returns_by_symbol = joblib.load(f)
@@ -615,10 +623,11 @@ class TradeManager:
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
             }
+            timestamp = pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC")
             new_position_df = pd.DataFrame(
                 [new_position],
                 index=pd.MultiIndex.from_tuples(
-                    [(symbol, pd.Timestamp.now())], names=["symbol", "timestamp"]
+                    [(symbol, timestamp)], names=["symbol", "timestamp"]
                 ),
                 dtype=object,
             )
