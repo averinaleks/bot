@@ -1,5 +1,5 @@
 # Этап сборки
-FROM nvidia/cuda:12.4.0-cudnn-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS builder
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
     find /app/venv -type f -name '*.pyc' -delete
 
 # Этап выполнения
-FROM nvidia/cuda:12.4.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
