@@ -53,6 +53,41 @@ def test_data_handler_service_price():
         p.join()
 
 
+def _run_dh_fail(port: int):
+    class DummyExchange:
+        def fetch_ticker(self, symbol):
+            raise RuntimeError("exchange down")
+
+    ccxt = types.ModuleType('ccxt')
+    ccxt.bybit = lambda *a, **kw: DummyExchange()
+    import sys
+    sys.modules['ccxt'] = ccxt
+    os.environ['STREAM_SYMBOLS'] = ''
+    os.environ['HOST'] = '127.0.0.1'
+    from bot.services import data_handler_service
+    data_handler_service.app.run(host='127.0.0.1', port=port)
+
+
+def test_data_handler_service_price_error():
+    port = _get_free_port()
+    p = ctx.Process(target=_run_dh_fail, args=(port,))
+    p.start()
+    try:
+        for _ in range(50):
+            try:
+                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
+        assert resp.status_code == 503
+        assert 'error' in resp.json()
+    finally:
+        p.terminate()
+        p.join()
+
+
 def _run_mb(model_dir: str, port: int):
     os.environ['MODEL_DIR'] = model_dir
     os.environ['HOST'] = '127.0.0.1'

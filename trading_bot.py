@@ -98,10 +98,16 @@ def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or None if request failed."""
     try:
         resp = requests.get(f"{env['data_handler_url']}/price/{symbol}", timeout=5)
-        if resp.status_code != 200:
-            logger.error("Failed to fetch price: HTTP %s", resp.status_code)
+        data = resp.json()
+        if resp.status_code != 200 or "error" in data:
+            err = data.get("error", f"HTTP {resp.status_code}")
+            logger.error("Failed to fetch price: %s", err)
             return None
-        return resp.json().get("price", 0)
+        price = data.get("price")
+        if price is None or price <= 0:
+            logger.error("Invalid price for %s: %s", symbol, price)
+            return None
+        return price
     except requests.RequestException as exc:
         logger.error("Price request error: %s", exc)
         return None
