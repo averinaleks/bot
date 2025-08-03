@@ -60,6 +60,8 @@ def portfolio_backtest(
                 ema_slow=ema_slow,
                 atr=atr,
             )
+            if "probability" not in df_reset.columns:
+                df_reset["probability"] = 1.0
             events.append(
                 df_reset[
                     [
@@ -68,6 +70,7 @@ def portfolio_backtest(
                         "close",
                         "high",
                         "low",
+                        "probability",
                         "ema_fast",
                         "ema_slow",
                         "atr",
@@ -90,6 +93,7 @@ def portfolio_backtest(
             high = row["high"]
             low = row["low"]
             atr = row["atr"]
+            probability = row.get("probability", 1.0)
 
             pos = positions.get(symbol)
             if pos is not None:
@@ -110,9 +114,9 @@ def portfolio_backtest(
 
             if symbol not in positions and len(positions) < max_positions and pd.notna(atr):
                 signal = None
-                if row["ema_fast"] > row["ema_slow"] and 1.0 >= base_thr:
+                if row["ema_fast"] > row["ema_slow"] and probability >= base_thr:
                     signal = "buy"
-                elif row["ema_fast"] < row["ema_slow"] and 0.0 <= 1 - base_thr:
+                elif row["ema_fast"] < row["ema_slow"] and (1 - probability) >= base_thr:
                     signal = "sell"
                 if signal:
                     if signal == "buy":
