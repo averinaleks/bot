@@ -225,7 +225,9 @@ python services/trade_manager_service.py
 `data_handler_service.py` fetches prices from Bybit using `ccxt` and exposes
 `/price/<symbol>` and `/ohlcv/<symbol>`.
 `model_builder_service.py` trains a small logistic regression when you POST
-features to `/train`.
+features to `/train`.  The service supports multi-class problems via
+`LogisticRegression(multi_class="auto")` and returns an error if the labels
+contain only a single class.
 `trade_manager_service.py` opens and closes positions on Bybit via
 `/open_position` and `/close_position` and also provides `/positions`, `/ping`
 and `/ready` routes. The `/open_position` endpoint accepts either `amount` or
