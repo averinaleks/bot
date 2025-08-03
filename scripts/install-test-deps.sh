@@ -14,4 +14,3 @@ elif [ -n "$1" ]; then
 fi
 
 python -m pip install -r "$REPO_ROOT/$REQ_FILE"
-python -m pip install flake8
