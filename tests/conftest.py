@@ -22,6 +22,10 @@ def pytest_configure(config):
         "markers",
         "requires_sklearn: mark test that needs the scikit-learn package",
     )
+    config.addinivalue_line(
+        "markers",
+        "integration: mark integration tests",
+    )
 
 
 def pytest_runtest_setup(item):
