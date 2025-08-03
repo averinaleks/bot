@@ -31,14 +31,14 @@ jobs:
 
       - name: Build an image from Dockerfile.ci
         run: |
-          docker build -f Dockerfile.ci -t ghcr.io/your-user/your-bot:${{ github.sha }} .
+          docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
 
       - name: Run Trivy vulnerability scanner
         env:
           TRIVY_CACHE_DIR: /tmp/trivy-cache
         uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
         with:
-          image-ref: ghcr.io/your-user/your-bot:${{ github.sha }}
+          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
           format: template
           template: '@/contrib/sarif.tpl'
           output: trivy-results.sarif
