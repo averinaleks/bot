@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=requirements.out requirements.txt
 #
---extra-index-url https://download.pytorch.org/whl/cu121
+-f https://download.pytorch.org/whl/cu121
 
 a2wsgi==1.10.10
     # via -r requirements.txt
@@ -531,7 +531,7 @@ threadpoolctl==3.6.0
     # via
     #   imbalanced-learn
     #   scikit-learn
-torch==2.7.1
+torch==2.7.1+cu121
     # via
     #   -r requirements.txt
     #   catalyst
@@ -541,7 +541,7 @@ torch==2.7.1
     #   torchvision
 torchmetrics==1.8.0
     # via pytorch-lightning
-torchvision==0.22.1
+torchvision==0.22.1+cu121
     # via -r requirements.txt
 tqdm==4.67.1
     # via
