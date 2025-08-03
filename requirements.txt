@@ -1,6 +1,6 @@
 numpy>=1.26.4
 pandas>=2.2.2
-torch==2.7.1
+torch==2.7.1+cpu
 torchvision==0.22.1
 ccxt>=4.3.85
 ccxtpro>=0.9.0
