@@ -56,14 +56,46 @@ def open_position() -> tuple:
         if (tp is not None or sl is not None) and hasattr(
             exchange, 'create_order_with_take_profit_and_stop_loss'
         ):
+            app.logger.info('using create_order_with_take_profit_and_stop_loss')
             order = exchange.create_order_with_take_profit_and_stop_loss(
                 symbol, 'market', side, amount, None, tp, sl, None
             )
+            orders = [order]
         else:
+            app.logger.info('using fallback order placement')
+            orders = []
             order = exchange.create_order(symbol, 'market', side, amount)
+            orders.append(order)
+            opp_side = 'sell' if side == 'buy' else 'buy'
+            if sl is not None:
+                stop_order = None
+                try:
+                    stop_order = exchange.create_order(
+                        symbol, 'stop', opp_side, amount, sl
+                    )
+                except Exception:
+                    try:
+                        stop_order = exchange.create_order(
+                            symbol, 'stop_market', opp_side, amount, sl
+                        )
+                    except Exception:
+                        stop_order = None
+                orders.append(stop_order)
+            if tp is not None:
+                try:
+                    tp_order = exchange.create_order(
+                        symbol, 'limit', opp_side, amount, tp
+                    )
+                except Exception:
+                    tp_order = None
+                orders.append(tp_order)
+        if any(not o or o.get('id') is None for o in orders):
+            app.logger.error('failed to create one or more orders')
+            return jsonify({'error': 'order creation failed'}), 500
         _record(order, symbol, side, amount, 'open')
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
+        app.logger.error('exception creating order: %s', exc)
         return jsonify({'error': str(exc)}), 500
 
 

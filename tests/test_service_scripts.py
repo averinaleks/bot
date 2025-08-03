@@ -4,6 +4,7 @@ import time
 import types
 import socket
 import requests
+import multiprocessing
 
 ctx = multiprocessing.get_context("spawn")
 
@@ -141,14 +142,26 @@ def test_model_builder_service_load_failure(tmp_path):
         p.join()
 
 
-def _run_tm(port: int):
+def _run_tm(port: int, with_tp_sl: bool = True, fail_after_market: bool = False):
     class DummyExchange:
-        def create_order(self, symbol, typ, side, amount, params=None):
-            return {'id': '1'}
-        def create_order_with_take_profit_and_stop_loss(
-            self, symbol, typ, side, amount, price, tp, sl, params=None
-        ):
-            return {'id': '2', 'tp': tp, 'sl': sl}
+        def __init__(self):
+            self.calls = 0
+
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            self.calls += 1
+            if fail_after_market and self.calls > 1:
+                return None
+            return {'id': str(self.calls), 'type': typ, 'side': side, 'price': price}
+
+        if with_tp_sl:
+            def create_order_with_take_profit_and_stop_loss(
+                self, symbol, typ, side, amount, price, tp, sl, params=None
+            ):
+                self.calls += 1
+                if fail_after_market:
+                    return None
+                return {'id': 'tp-sl', 'tp': tp, 'sl': sl}
+
     ccxt = types.ModuleType('ccxt')
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
@@ -218,6 +231,56 @@ def test_trade_manager_service_price_only():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
+    finally:
+        p.terminate()
+        p.join()
+
+
+def test_trade_manager_service_fallback_orders():
+    port = _get_free_port()
+    p = ctx.Process(target=_run_tm, args=(port, False))
+    p.start()
+    try:
+        for _ in range(50):
+            try:
+                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/open_position',
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        assert resp.status_code == 200
+        data = resp.json()['positions']
+        assert len(data) == 1
+    finally:
+        p.terminate()
+        p.join()
+
+
+def test_trade_manager_service_fallback_failure():
+    port = _get_free_port()
+    p = ctx.Process(target=_run_tm, args=(port, False, True))
+    p.start()
+    try:
+        for _ in range(50):
+            try:
+                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/open_position',
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
+            timeout=5,
+        )
+        assert resp.status_code == 500
     finally:
         p.terminate()
         p.join()
