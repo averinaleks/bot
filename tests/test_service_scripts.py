@@ -231,7 +231,12 @@ def test_model_builder_service_load_failure(tmp_path):
         p.join()
 
 
-def _run_tm(port: int, with_tp_sl: bool = True, fail_after_market: bool = False):
+def _run_tm(
+    port: int,
+    with_tp_sl: bool = True,
+    fail_after_market: bool = False,
+    with_trailing: bool = True,
+):
     class DummyExchange:
         def __init__(self):
             self.calls = 0
@@ -240,7 +245,12 @@ def _run_tm(port: int, with_tp_sl: bool = True, fail_after_market: bool = False)
             self.calls += 1
             if fail_after_market and self.calls > 1:
                 return None
-            return {'id': str(self.calls), 'type': typ, 'side': side, 'price': price}
+            return {
+                'id': str(self.calls),
+                'type': typ,
+                'side': side,
+                'price': price,
+            }
 
         if with_tp_sl:
             def create_order_with_take_profit_and_stop_loss(
@@ -250,6 +260,15 @@ def _run_tm(port: int, with_tp_sl: bool = True, fail_after_market: bool = False)
                 if fail_after_market:
                     return None
                 return {'id': 'tp-sl', 'tp': tp, 'sl': sl}
+
+        if with_trailing:
+            def create_order_with_trailing_stop(
+                self, symbol, typ, side, amount, price, trailing, params=None
+            ):
+                self.calls += 1
+                if fail_after_market:
+                    return None
+                return {'id': 'trailing', 'trailing': trailing}
 
     ccxt = types.ModuleType('ccxt')
     ccxt.bybit = lambda *a, **kw: DummyExchange()
@@ -270,7 +289,7 @@ def test_trade_manager_service_endpoints():
         wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
-            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'trailing_stop': 1},
             timeout=5,
         )
         assert resp.status_code == 200
@@ -278,6 +297,7 @@ def test_trade_manager_service_endpoints():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
+        assert data[0]['trailing_stop'] == 1
         resp = requests.post(
             f'http://127.0.0.1:{port}/close_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
@@ -318,13 +338,13 @@ def test_trade_manager_service_price_only():
 @pytest.mark.integration
 def test_trade_manager_service_fallback_orders():
     port = _get_free_port()
-    p = ctx.Process(target=_run_tm, args=(port, False))
+    p = ctx.Process(target=_run_tm, args=(port, False, False, False))
     p.start()
     try:
         wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
-            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'price': 100, 'trailing_stop': 1},
             timeout=5,
         )
         assert resp.status_code == 200
@@ -332,6 +352,7 @@ def test_trade_manager_service_fallback_orders():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
+        assert data[0]['trailing_stop'] == 1
     finally:
         p.terminate()
         p.join()
