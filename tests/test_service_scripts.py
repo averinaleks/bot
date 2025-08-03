@@ -293,6 +293,7 @@ def test_trade_manager_service_endpoints():
             timeout=5,
         )
         assert resp.status_code == 200
+        order_id = resp.json()['order_id']
         resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
         assert resp.status_code == 200
         data = resp.json()['positions']
@@ -300,7 +301,7 @@ def test_trade_manager_service_endpoints():
         assert data[0]['trailing_stop'] == 1
         resp = requests.post(
             f'http://127.0.0.1:{port}/close_position',
-            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
+            json={'order_id': order_id, 'side': 'sell'},
             timeout=5,
         )
         assert resp.status_code == 200

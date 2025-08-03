@@ -137,23 +137,44 @@ def open_position() -> tuple:
 @app.route('/close_position', methods=['POST'])
 def close_position() -> tuple:
     data = request.get_json(force=True)
-    symbol = data.get('symbol')
-    side = str(data.get('side', 'buy')).lower()
-    side = 'sell' if side == 'buy' else 'buy'
-    amount = float(data.get('amount', 0))
-    if not symbol or amount <= 0:
+    order_id = data.get('order_id')
+    side = str(data.get('side', '')).lower()
+    close_amount = data.get('close_amount')
+    if close_amount is None:
+        close_amount = data.get('amount')
+    if close_amount is not None:
+        close_amount = float(close_amount)
+    if not order_id or not side:
         return jsonify({'error': 'invalid order'}), 400
+
+    rec_index = next(
+        (
+            i
+            for i, rec in enumerate(POSITIONS)
+            if rec.get('id') == order_id and rec.get('action') == 'open'
+        ),
+        None,
+    )
+    if rec_index is None:
+        return jsonify({'error': 'order not found'}), 404
+
+    rec = POSITIONS[rec_index]
+    symbol = rec.get('symbol')
+    amount = close_amount if close_amount is not None else rec.get('amount', 0)
+    if amount <= 0:
+        return jsonify({'error': 'invalid order'}), 400
+
     params = {'reduce_only': True}
     try:
         order = exchange.create_order(symbol, 'market', side, amount, params=params)
-        for i, rec in enumerate(POSITIONS):
-            if (
-                rec.get('symbol') == symbol
-                and rec.get('side') == data.get('side')
-                and rec.get('action') == 'open'
-            ):
-                POSITIONS.pop(i)
-                break
+        if not order or order.get('id') is None:
+            app.logger.error('failed to create close order')
+            return jsonify({'error': 'order creation failed'}), 500
+        remaining = rec.get('amount', 0) - amount
+        if remaining <= 0:
+            POSITIONS.pop(rec_index)
+        else:
+            rec['amount'] = remaining
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
         logging.exception("Error closing position")
