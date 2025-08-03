@@ -1,5 +1,6 @@
 import sys
 import types
+import importlib
 import pandas as pd
 import numpy as np
 import pytest
@@ -58,7 +59,6 @@ if "gymnasium" not in sys.modules:
     gym_stub.spaces = types.SimpleNamespace(Discrete=DummyDiscrete, Box=DummyBox)
     sys.modules["gymnasium"] = gym_stub
 
-import importlib
 from bot import model_builder
 importlib.reload(model_builder)
 from bot.config import BotConfig

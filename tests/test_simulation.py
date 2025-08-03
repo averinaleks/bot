@@ -45,13 +45,17 @@ joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
-import os
-os.environ['TEST_MODE'] = '1'
 
-sys.modules.pop('trade_manager', None)
-sys.modules.pop('simulation', None)
-from bot.trade_manager import TradeManager
-from bot.simulation import HistoricalSimulator
+
+@pytest.fixture
+def trade_manager_classes(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    sys.modules.pop('trade_manager', None)
+    sys.modules.pop('simulation', None)
+    from bot.trade_manager import TradeManager
+    from bot.simulation import HistoricalSimulator
+    yield TradeManager, HistoricalSimulator
+    monkeypatch.delenv("TEST_MODE", raising=False)
 
 class DummyExchange:
     def __init__(self):
@@ -96,7 +100,8 @@ class DummyDataHandler:
         self.ohlcv = pd.concat([self.ohlcv, df], ignore_index=False).sort_index()
 
 @pytest.mark.asyncio
-async def test_simulator_trailing_stop():
+async def test_simulator_trailing_stop(trade_manager_classes):
+    TradeManager, HistoricalSimulator = trade_manager_classes
     dh = DummyDataHandler()
     cfg = BotConfig(cache_dir='/tmp', trailing_stop_percentage=1.0, trailing_stop_coeff=0.0, trailing_stop_multiplier=1.0)
     tm = TradeManager(cfg, dh, None, None, None)

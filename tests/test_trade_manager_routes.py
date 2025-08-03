@@ -20,7 +20,7 @@ async def dummy_coroutine(*_args, **_kwargs):
 
 
 def _setup_module(monkeypatch):
-    os.environ["TEST_MODE"] = "1"
+    monkeypatch.setenv("TEST_MODE", "1")
     import sys
     # stub heavy deps before import
     torch = types.ModuleType("torch")
@@ -70,6 +70,7 @@ def _setup_module(monkeypatch):
     )
     tm.trade_manager = stub
     tm._ready_event.set()
+    monkeypatch.delenv("TEST_MODE", raising=False)
     return tm, loop, stub
 
 
