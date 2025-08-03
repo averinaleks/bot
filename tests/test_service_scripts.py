@@ -1,10 +1,11 @@
 import multiprocessing
 import os
-import time
 import types
 import socket
 import requests
 import pytest
+
+from tests.helpers import wait_for_service
 
 ctx = multiprocessing.get_context("spawn")
 
@@ -39,13 +40,7 @@ def test_data_handler_service_price():
     p = ctx.Process(target=_run_dh, args=(port,))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
         assert resp.status_code == 200
         assert resp.json()['price'] == 42.0
@@ -75,13 +70,7 @@ def test_data_handler_service_price_error():
     p = ctx.Process(target=_run_dh_fail, args=(port,))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
         assert resp.status_code == 503
         assert 'error' in resp.json()
@@ -91,6 +80,30 @@ def test_data_handler_service_price_error():
 
 
 def _run_mb(model_dir: str, port: int):
+    class DummyLR:
+        def fit(self, X, y):
+            return self
+
+        def predict_proba(self, X):
+            import numpy as np
+
+            prob = np.zeros((X.shape[0], 2), dtype=float)
+            prob[:, 1] = (X[:, 0] > 0).astype(float)
+            prob[:, 0] = 1 - prob[:, 1]
+            return prob
+
+    DummyLR.__module__ = 'sklearn.linear_model'
+    DummyLR.__name__ = 'LogisticRegression'
+    DummyLR.__qualname__ = 'LogisticRegression'
+    sklearn = types.ModuleType('sklearn')
+    linear_model = types.ModuleType('sklearn.linear_model')
+    linear_model.LogisticRegression = DummyLR
+    sklearn.linear_model = linear_model
+    import sys
+
+    sys.modules['sklearn'] = sklearn
+    sys.modules['sklearn.linear_model'] = linear_model
+
     os.environ['MODEL_DIR'] = model_dir
     os.environ['HOST'] = '127.0.0.1'
     from bot.services import model_builder_service
@@ -103,13 +116,7 @@ def test_model_builder_service_train_predict(tmp_path):
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1]], 'labels': [0, 1]},
@@ -134,13 +141,7 @@ def test_model_builder_service_requires_binary_labels(tmp_path):
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/train',
             json={'features': [[0], [1]], 'labels': [0, 0]},
@@ -153,6 +154,30 @@ def test_model_builder_service_requires_binary_labels(tmp_path):
 
 
 def _run_mb_fail(model_file: str, port: int):
+    class DummyLR:
+        def fit(self, X, y):
+            return self
+
+        def predict_proba(self, X):
+            import numpy as np
+
+            prob = np.zeros((X.shape[0], 2), dtype=float)
+            prob[:, 1] = (X[:, 0] > 0).astype(float)
+            prob[:, 0] = 1 - prob[:, 1]
+            return prob
+
+    DummyLR.__module__ = 'sklearn.linear_model'
+    DummyLR.__name__ = 'LogisticRegression'
+    DummyLR.__qualname__ = 'LogisticRegression'
+    sklearn = types.ModuleType('sklearn')
+    linear_model = types.ModuleType('sklearn.linear_model')
+    linear_model.LogisticRegression = DummyLR
+    sklearn.linear_model = linear_model
+    import sys
+
+    sys.modules['sklearn'] = sklearn
+    sys.modules['sklearn.linear_model'] = linear_model
+
     os.environ['MODEL_FILE'] = model_file
     os.environ['HOST'] = '127.0.0.1'
     from bot.services import model_builder_service
@@ -168,15 +193,8 @@ def test_model_builder_service_load_failure(tmp_path):
     p = ctx.Process(target=_run_mb_fail, args=(str(bad_file), port))
     p.start()
     try:
-        resp = None
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
-        assert resp is not None and resp.status_code == 200
+        resp = wait_for_service(f'http://127.0.0.1:{port}/ping')
+        assert resp.status_code == 200
     finally:
         p.terminate()
         p.join()
@@ -218,13 +236,7 @@ def test_trade_manager_service_endpoints():
     p = ctx.Process(target=_run_tm, args=(port,))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
@@ -256,13 +268,7 @@ def test_trade_manager_service_price_only():
     p = ctx.Process(target=_run_tm, args=(port,))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
@@ -284,13 +290,7 @@ def test_trade_manager_service_fallback_orders():
     p = ctx.Process(target=_run_tm, args=(port, False))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
@@ -312,13 +312,7 @@ def test_trade_manager_service_fallback_failure():
     p = ctx.Process(target=_run_tm, args=(port, False, True))
     p.start()
     try:
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ping', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
@@ -336,15 +330,8 @@ def test_trade_manager_ready_route():
     p = ctx.Process(target=_run_tm, args=(port,))
     p.start()
     try:
-        resp = None
-        for _ in range(50):
-            try:
-                resp = requests.get(f'http://127.0.0.1:{port}/ready', timeout=1)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                time.sleep(0.1)
-        assert resp is not None and resp.status_code == 200
+        resp = wait_for_service(f'http://127.0.0.1:{port}/ready')
+        assert resp.status_code == 200
     finally:
         p.terminate()
         p.join()
