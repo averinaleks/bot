@@ -17,15 +17,16 @@
    # Зависимости для тестов
    ./scripts/install-test-deps.sh
    ```
-   Если у вас есть доступ к CUDA 12.4, перед (или вместо) установки
-   `requirements.txt` поставьте совместимые версии PyTorch и torchvision:
+   В CI применяются только стандартные колёса PyTorch без поддержки CUDA.
+   Если вам нужна GPU‑сборка с CUDA 12.4, установите PyTorch и torchvision
+   отдельно, указав дополнительный индекс:
 
    ```bash
-   pip install torch==2.7.1+cu124 torchvision==0.22.1+cu124 -f https://download.pytorch.org/whl/cu124
+   pip install torch==2.7.1 torchvision==0.22.1 --extra-index-url https://download.pytorch.org/whl/cu124
    ```
-   Эта команда устанавливает пакеты с поддержкой CUDA 12.4 и должна
-   выполняться до `python -m pip install -r requirements.txt` (либо вместо
-   него, если остальные зависимости уже установлены).
+   Эта команда ставит версии с поддержкой CUDA 12.4. Выполните её до
+   `python -m pip install -r requirements.txt` (или вместо него, если
+   остальные зависимости уже установлены).
    Эта утилита устанавливает пакеты, необходимые для запуска тестов. Выполните
    её перед `pytest`, чтобы все проверки прошли успешно.
    Для работы с GPU установите подходящий пакет CuPy, например
