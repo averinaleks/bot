@@ -1,11 +1,15 @@
 """Simple reference data handler service fetching real prices from Bybit."""
 from flask import Flask, jsonify
+import logging
 import ccxt
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 exchange = ccxt.bybit({
@@ -21,8 +25,9 @@ def price(symbol: str):
         last = float(ticker.get('last') or 0.0)
         return jsonify({'price': last})
     except Exception as exc:  # pragma: no cover - network errors
-        # Surface exchange errors to clients so callers can react accordingly.
-        return jsonify({'error': str(exc)}), 503
+        # Log the exception with traceback for debugging, but do not expose details to clients.
+        logging.exception("Error fetching price for symbol '%s': %s", symbol, exc)
+        return jsonify({'error': 'Failed to fetch price.'}), 503
 
 @app.route('/ping')
 def ping():
