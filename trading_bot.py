@@ -116,8 +116,8 @@ def fetch_price(symbol: str, env: dict) -> float | None:
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def get_prediction(symbol: str, price: float, env: dict) -> str | None:
-    """Return model signal if available."""
+def get_prediction(symbol: str, price: float, env: dict) -> dict | None:
+    """Return raw model prediction output if available."""
     try:
         resp = requests.post(
             f"{env['model_builder_url']}/predict",
@@ -127,21 +127,36 @@ def get_prediction(symbol: str, price: float, env: dict) -> str | None:
         if resp.status_code != 200:
             logger.error("Model prediction failed: HTTP %s", resp.status_code)
             return None
-        return resp.json().get("signal")
+        return resp.json()
     except requests.RequestException as exc:
         logger.error("Model request error: %s", exc)
         return None
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def send_trade(symbol: str, side: str, price: float, env: dict) -> None:
+def send_trade(
+    symbol: str,
+    side: str,
+    price: float,
+    env: dict,
+    tp: float | None = None,
+    sl: float | None = None,
+    trailing_stop: float | None = None,
+) -> None:
     """Send trade request to trade manager."""
     try:
         timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
         start = time.time()
+        payload = {"symbol": symbol, "side": side, "price": price}
+        if tp is not None:
+            payload["tp"] = tp
+        if sl is not None:
+            payload["sl"] = sl
+        if trailing_stop is not None:
+            payload["trailing_stop"] = trailing_stop
         resp = requests.post(
             f"{env['trade_manager_url']}/open_position",
-            json={"symbol": symbol, "side": side, "price": price},
+            json=payload,
             timeout=timeout,
         )
         elapsed = time.time() - start
@@ -183,13 +198,33 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if pred.status_code != 200:
                 logger.error("Model prediction failed: HTTP %s", pred.status_code)
                 return
-            signal = pred.json().get("signal")
+            pdata = pred.json()
+            signal = pdata.get("signal")
             if not signal:
                 return
+            tp = pdata.get("tp")
+            sl = pdata.get("sl")
+            trailing_stop = pdata.get("trailing_stop")
+            if tp is None:
+                t = os.getenv("TP")
+                tp = float(t) if t else None
+            if sl is None:
+                s = os.getenv("SL")
+                sl = float(s) if s else None
+            if trailing_stop is None:
+                ts = os.getenv("TRAILING_STOP")
+                trailing_stop = float(ts) if ts else None
+            payload = {"symbol": symbol, "side": signal, "price": price}
+            if tp is not None:
+                payload["tp"] = tp
+            if sl is not None:
+                payload["sl"] = sl
+            if trailing_stop is not None:
+                payload["trailing_stop"] = trailing_stop
             start = time.time()
             trade_resp = await client.post(
                 f"{env['trade_manager_url']}/open_position",
-                json={"symbol": symbol, "side": signal, "price": price},
+                json=payload,
                 timeout=timeout,
             )
             elapsed = time.time() - start
@@ -213,11 +248,32 @@ def run_once() -> None:
         logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
-    signal = get_prediction(SYMBOL, price, env)
+    pdata = get_prediction(SYMBOL, price, env)
+    signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:
+        tp = pdata.get("tp") if pdata else None
+        sl = pdata.get("sl") if pdata else None
+        trailing_stop = pdata.get("trailing_stop") if pdata else None
+        if tp is None:
+            t = os.getenv("TP")
+            tp = float(t) if t else None
+        if sl is None:
+            s = os.getenv("SL")
+            sl = float(s) if s else None
+        if trailing_stop is None:
+            ts = os.getenv("TRAILING_STOP")
+            trailing_stop = float(ts) if ts else None
         logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
-        send_trade(SYMBOL, signal, price, env)
+        send_trade(
+            SYMBOL,
+            signal,
+            price,
+            env,
+            tp=tp,
+            sl=sl,
+            trailing_stop=trailing_stop,
+        )
 
 
 def main():
