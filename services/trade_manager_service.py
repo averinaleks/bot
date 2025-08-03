@@ -25,14 +25,24 @@ exchange = ccxt.bybit({
 POSITIONS: list[dict] = []
 
 
-def _record(order: dict, symbol: str, side: str, amount: float, action: str) -> None:
-    POSITIONS.append({
-        'id': order.get('id'),
-        'symbol': symbol,
-        'side': side,
-        'amount': amount,
-        'action': action,
-    })
+def _record(
+    order: dict,
+    symbol: str,
+    side: str,
+    amount: float,
+    action: str,
+    trailing_stop: float | None = None,
+) -> None:
+    POSITIONS.append(
+        {
+            'id': order.get('id'),
+            'symbol': symbol,
+            'side': side,
+            'amount': amount,
+            'action': action,
+            'trailing_stop': trailing_stop,
+        }
+    )
 
 
 @app.route('/open_position', methods=['POST'])
@@ -44,8 +54,10 @@ def open_position() -> tuple:
     amount = float(data.get('amount', 0))
     tp = data.get('tp')
     sl = data.get('sl')
+    trailing_stop = data.get('trailing_stop')
     tp = float(tp) if tp is not None else None
     sl = float(sl) if sl is not None else None
+    trailing_stop = float(trailing_stop) if trailing_stop is not None else None
     if amount <= 0:
         risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
         if risk_usd > 0 and price > 0:
@@ -53,7 +65,15 @@ def open_position() -> tuple:
     if not symbol or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     try:
-        if (tp is not None or sl is not None) and hasattr(
+        if trailing_stop is not None and hasattr(
+            exchange, 'create_order_with_trailing_stop'
+        ):
+            app.logger.info('using create_order_with_trailing_stop')
+            order = exchange.create_order_with_trailing_stop(
+                symbol, 'market', side, amount, None, trailing_stop, None
+            )
+            orders = [order]
+        elif (tp is not None or sl is not None) and hasattr(
             exchange, 'create_order_with_take_profit_and_stop_loss'
         ):
             app.logger.info('using create_order_with_take_profit_and_stop_loss')
@@ -89,10 +109,25 @@ def open_position() -> tuple:
                 except Exception:
                     tp_order = None
                 orders.append(tp_order)
+            if trailing_stop is not None and price > 0:
+                tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
+                stop_order = None
+                try:
+                    stop_order = exchange.create_order(
+                        symbol, 'stop', opp_side, amount, tprice
+                    )
+                except Exception:
+                    try:
+                        stop_order = exchange.create_order(
+                            symbol, 'stop_market', opp_side, amount, tprice
+                        )
+                    except Exception:
+                        stop_order = None
+                orders.append(stop_order)
         if any(not o or o.get('id') is None for o in orders):
             app.logger.error('failed to create one or more orders')
             return jsonify({'error': 'order creation failed'}), 500
-        _record(order, symbol, side, amount, 'open')
+        _record(order, symbol, side, amount, 'open', trailing_stop)
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except Exception as exc:  # pragma: no cover - network errors
         app.logger.error('exception creating order: %s', exc)
