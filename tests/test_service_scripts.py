@@ -4,7 +4,7 @@ import time
 import types
 import socket
 import requests
-import multiprocessing
+import pytest
 
 ctx = multiprocessing.get_context("spawn")
 
@@ -33,6 +33,7 @@ def _run_dh(port: int):
     data_handler_service.app.run(host='127.0.0.1', port=port)
 
 
+@pytest.mark.integration
 def test_data_handler_service_price():
     port = _get_free_port()
     p = ctx.Process(target=_run_dh, args=(port,))
@@ -68,6 +69,7 @@ def _run_dh_fail(port: int):
     data_handler_service.app.run(host='127.0.0.1', port=port)
 
 
+@pytest.mark.integration
 def test_data_handler_service_price_error():
     port = _get_free_port()
     p = ctx.Process(target=_run_dh_fail, args=(port,))
@@ -95,6 +97,7 @@ def _run_mb(model_dir: str, port: int):
     model_builder_service.app.run(host='127.0.0.1', port=port)
 
 
+@pytest.mark.integration
 def test_model_builder_service_train_predict(tmp_path):
     port = _get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
@@ -125,6 +128,7 @@ def test_model_builder_service_train_predict(tmp_path):
         p.join()
 
 
+@pytest.mark.integration
 def test_model_builder_service_requires_binary_labels(tmp_path):
     port = _get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
@@ -156,6 +160,7 @@ def _run_mb_fail(model_file: str, port: int):
     model_builder_service.app.run(host='127.0.0.1', port=port)
 
 
+@pytest.mark.integration
 def test_model_builder_service_load_failure(tmp_path):
     port = _get_free_port()
     bad_file = tmp_path / 'model.pkl'
@@ -207,6 +212,7 @@ def _run_tm(port: int, with_tp_sl: bool = True, fail_after_market: bool = False)
     trade_manager_service.app.run(host='127.0.0.1', port=port)
 
 
+@pytest.mark.integration
 def test_trade_manager_service_endpoints():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
@@ -244,6 +250,7 @@ def test_trade_manager_service_endpoints():
         p.join()
 
 
+@pytest.mark.integration
 def test_trade_manager_service_price_only():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
@@ -271,6 +278,7 @@ def test_trade_manager_service_price_only():
         p.join()
 
 
+@pytest.mark.integration
 def test_trade_manager_service_fallback_orders():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False))
@@ -298,6 +306,7 @@ def test_trade_manager_service_fallback_orders():
         p.join()
 
 
+@pytest.mark.integration
 def test_trade_manager_service_fallback_failure():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, True))
@@ -321,6 +330,7 @@ def test_trade_manager_service_fallback_failure():
         p.join()
 
 
+@pytest.mark.integration
 def test_trade_manager_ready_route():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))

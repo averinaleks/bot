@@ -98,6 +98,7 @@ def _run_tm(port: int):
     tm_app.run(host=host, port=port)
 
 
+@pytest.mark.integration
 def test_services_communicate():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
@@ -134,6 +135,7 @@ def test_services_communicate():
             p.join()
 
 
+@pytest.mark.integration
 def test_service_availability_check():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
@@ -167,6 +169,7 @@ def test_service_availability_check():
             p.join()
 
 
+@pytest.mark.integration
 def test_check_services_success():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
@@ -202,6 +205,7 @@ def test_check_services_success():
             p.join()
 
 
+@pytest.mark.integration
 def test_check_services_failure():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
@@ -236,6 +240,7 @@ def test_check_services_failure():
             p.join()
 
 
+@pytest.mark.integration
 def test_check_services_host_only():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
