@@ -33,14 +33,19 @@ jobs:
         run: |
           docker build -t ghcr.io/your-user/your-bot:${{ github.sha }} .
 
+      - name: Free disk space
+        run: docker system prune -af
+
       - name: Run Trivy vulnerability scanner
+        env:
+          TRIVY_CACHE_DIR: /tmp/trivy-cache
         uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
         with:
-          image-ref: 'ghcr.io/your-user/your-bot:${{ github.sha }}'
-          format: 'template'
+          image-ref: ghcr.io/your-user/your-bot:${{ github.sha }}
+          format: template
           template: '@/contrib/sarif.tpl'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0 # v3
