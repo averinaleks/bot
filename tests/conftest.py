@@ -4,6 +4,7 @@ import types
 import importlib.abc
 import importlib.util
 import threading
+import time
 try:
     import sklearn  # ensure real scikit-learn loaded before tests may stub it
     import sklearn.model_selection  # preload submodules used in tests
@@ -498,3 +499,18 @@ def sample_ohlcv():
             "volume": [0.0, 0.0, 0.0],
         }
     )
+
+
+@pytest.fixture
+def fast_sleep(monkeypatch):
+    """Replace time.sleep with a stub that records calls without delaying."""
+    calls = {"count": 0, "total": 0.0}
+    real_sleep = time.sleep
+
+    def _sleep(seconds: float):
+        calls["count"] += 1
+        calls["total"] += seconds
+        real_sleep(0)
+
+    monkeypatch.setattr(time, "sleep", _sleep)
+    return calls
