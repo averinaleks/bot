@@ -34,3 +34,4 @@ def test_telegramlogger_injection_order():
     assert tm.TelegramLogger is StubTL
     sys.modules.pop('utils', None)
     sys.modules.pop('bot.utils', None)
+    sys.modules.pop("trade_manager", None)
