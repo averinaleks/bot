@@ -19,8 +19,8 @@ class DummyBot:
         return types.SimpleNamespace(message_id=1)
 
 
-def test_emit_without_running_loop_no_exception():
-    os.environ["TEST_MODE"] = "1"
+def test_emit_without_running_loop_no_exception(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
 
     async def stub_send(self, message, urgent: bool = False):
         pass
@@ -38,7 +38,6 @@ def test_emit_without_running_loop_no_exception():
 
 
 def test_worker_thread_stops_after_shutdown():
-    os.environ.pop("TEST_MODE", None)
 
     spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -66,8 +65,8 @@ def test_worker_thread_stops_after_shutdown():
 
 
 @pytest.mark.asyncio
-async def test_long_message_split_into_parts():
-    os.environ["TEST_MODE"] = "1"
+async def test_long_message_split_into_parts(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
 
     class CaptureBot:
         def __init__(self):
@@ -95,8 +94,8 @@ async def test_long_message_split_into_parts():
 
 
 @pytest.mark.asyncio
-async def test_send_after_shutdown_warning(caplog):
-    os.environ["TEST_MODE"] = "1"
+async def test_send_after_shutdown_warning(monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
 
     bot = DummyBot()
     tl = TelegramLogger(bot, chat_id=1)
