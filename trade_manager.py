@@ -778,15 +778,17 @@ class TradeManager:
                 self._sort_positions()
                 if "symbol" in self.positions.index.names:
                     try:
-                        position = self.positions.xs(symbol, level="symbol")
+                        position_df = self.positions.xs(
+                            symbol, level="symbol", drop_level=False
+                        )
                     except KeyError:
-                        position = pd.DataFrame()
+                        position_df = pd.DataFrame()
                 else:
-                    position = pd.DataFrame()
-                if position.empty:
+                    position_df = pd.DataFrame()
+                if position_df.empty:
                     logger.warning("Position for %s not found", symbol)
                     return
-                position = position.iloc[0]
+                position = position_df.iloc[0]
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
                     logger.warning(
