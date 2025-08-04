@@ -1549,7 +1549,7 @@ async def create_trade_manager() -> TradeManager:
     if trade_manager is None:
         logger.info("Loading configuration from config.json")
         try:
-            cfg = load_config("config.json")
+            cfg = load_config()
             logger.info("Configuration loaded successfully")
         except Exception as exc:
             logger.exception("Failed to load configuration: %s", exc)

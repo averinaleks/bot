@@ -41,7 +41,7 @@ async def test_backtest_loop_warns(monkeypatch, caplog):
     monkeypatch.setitem(sys.modules, "gymnasium", gym_mod)
     monkeypatch.setitem(sys.modules, "gymnasium.spaces", spaces_mod)
     import importlib
-    model_builder = importlib.import_module("model_builder")
+    model_builder = importlib.import_module("bot.model_builder")
     ModelBuilder = model_builder.ModelBuilder
     monkeypatch.setattr(
         model_builder,

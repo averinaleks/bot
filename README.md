@@ -1,6 +1,6 @@
 # Trading Bot
 
-Этот репозиторий содержит пример торгового бота на Python. Для запуска необходимы файлы `config.json` и `.env` с ключами API.
+Этот репозиторий содержит пример торгового бота на Python. Для запуска необходимы файлы `bot/config.json` и `.env` с ключами API.
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
@@ -93,7 +93,7 @@
       trade_manager:
         env_file: .env
     ```
-3. Отредактируйте `config.json` под свои нужды. Помимо основных настроек можно
+3. Отредактируйте `bot/config.json` под свои нужды. Помимо основных настроек можно
    задать параметры адаптации порогов:
    - `loss_streak_threshold` и `win_streak_threshold` контролируют количество
      подряд убыточных или прибыльных сделок, после которого базовый порог
@@ -372,7 +372,7 @@ from telegram import Bot
 import json
 import os
 
-with open("config.json") as f:
+with open("bot/config.json") as f:
     cfg = json.load(f)
 
 bot = Bot(os.environ["TELEGRAM_BOT_TOKEN"])

@@ -5,8 +5,8 @@ import pytest
 
 
 def test_model_builder_requires_gymnasium(monkeypatch):
-    sys.modules.pop('model_builder', None)
-    sys.modules.pop('utils', None)
+    sys.modules.pop('bot.model_builder', None)
+    sys.modules.pop('bot.utils', None)
     if 'torch' not in sys.modules:
         torch_stub = types.ModuleType('torch')
         nn_stub = types.ModuleType('torch.nn')
@@ -25,12 +25,12 @@ def test_model_builder_requires_gymnasium(monkeypatch):
         sys.modules['torch.utils.data'] = data_stub
     monkeypatch.setitem(sys.modules, 'gymnasium', None)
     with pytest.raises(ImportError, match='gymnasium package is required'):
-        importlib.import_module('model_builder')
+        importlib.import_module('bot.model_builder')
 
 
 def test_model_builder_imports_without_mlflow(monkeypatch):
-    sys.modules.pop('model_builder', None)
-    sys.modules.pop('utils', None)
+    sys.modules.pop('bot.model_builder', None)
+    sys.modules.pop('bot.utils', None)
     if 'torch' not in sys.modules:
         torch_stub = types.ModuleType('torch')
         nn_stub = types.ModuleType('torch.nn')
@@ -69,4 +69,4 @@ def test_model_builder_imports_without_mlflow(monkeypatch):
     monkeypatch.setitem(sys.modules, 'sklearn.linear_model', linear_mod)
     monkeypatch.setitem(sys.modules, 'sklearn.metrics', metrics_mod)
     monkeypatch.setitem(sys.modules, 'sklearn.calibration', calib_mod)
-    importlib.import_module('model_builder')
+    importlib.import_module('bot.model_builder')

@@ -41,6 +41,7 @@ async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils
+sys.modules['bot.utils'] = utils
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
@@ -52,6 +53,8 @@ def trade_manager_classes(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     sys.modules.pop('trade_manager', None)
     sys.modules.pop('simulation', None)
+    sys.modules.pop('bot.trade_manager', None)
+    sys.modules.pop('bot.simulation', None)
     from bot.trade_manager import TradeManager
     from bot.simulation import HistoricalSimulator
     yield TradeManager, HistoricalSimulator

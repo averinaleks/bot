@@ -45,7 +45,9 @@ async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils_stub.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils_stub
+sys.modules['bot.utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
+sys.modules.pop('bot.trade_manager', None)
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}

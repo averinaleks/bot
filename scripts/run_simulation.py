@@ -29,7 +29,7 @@ async def main() -> None:
     start_ts = pd.to_datetime(args.start, utc=True)
     end_ts = pd.to_datetime(args.end, utc=True)
 
-    cfg = load_config("config.json")
+    cfg = load_config()
     dh = DataHandler(cfg, None, None)
     await dh.load_initial()
     mb = ModelBuilder(cfg, dh, None)

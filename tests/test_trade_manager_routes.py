@@ -52,6 +52,7 @@ def _setup_module(monkeypatch):
         return await getattr(exchange, method)(*args, **kwargs)
     utils_stub.safe_api_call = _safe_api_call
     sys.modules["utils"] = utils_stub
+    sys.modules["bot.utils"] = utils_stub
 
     joblib_mod = types.ModuleType("joblib")
     joblib_mod.dump = lambda *a, **k: None
@@ -60,7 +61,8 @@ def _setup_module(monkeypatch):
 
     monkeypatch.syspath_prepend(os.getcwd())
     sys.modules.pop("trade_manager", None)
-    tm = importlib.import_module("trade_manager")
+    sys.modules.pop("bot.trade_manager", None)
+    tm = importlib.import_module("bot.trade_manager")
     loop = DummyLoop()
     stub = types.SimpleNamespace(
         loop=loop,

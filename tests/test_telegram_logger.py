@@ -9,7 +9,7 @@ import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
-spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
+spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "bot", "utils.py"))
 utils_real = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(utils_real)
 TelegramLogger = utils_real.TelegramLogger
@@ -39,7 +39,7 @@ def test_emit_without_running_loop_no_exception(monkeypatch):
 
 def test_worker_thread_stops_after_shutdown():
 
-    spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
+    spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "bot", "utils.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     TL = mod.TelegramLogger

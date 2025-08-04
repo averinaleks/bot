@@ -8,7 +8,7 @@ import importlib.util
 import os
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
-spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
+spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "bot", "utils.py"))
 utils_real = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(utils_real)
 sys.modules['utils'] = utils_real

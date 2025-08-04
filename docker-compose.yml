@@ -69,7 +69,7 @@ services:
       - ./logs:/app/logs
       - ./models:/app/models
       - ./cache:/app/cache
-      - ./config.json:/app/config.json
+      - ./bot/config.json:/app/config.json
     shm_size: '8gb'
     networks:
       - trading_bot_default
@@ -109,7 +109,7 @@ services:
       - ./logs:/app/logs
       - ./models:/app/models
       - ./cache:/app/cache
-      - ./config.json:/app/config.json
+      - ./bot/config.json:/app/config.json
     networks:
       - trading_bot_default
     restart: unless-stopped

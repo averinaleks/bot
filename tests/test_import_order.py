@@ -13,7 +13,7 @@ def _test_mode_env(monkeypatch):
     monkeypatch.delenv("TEST_MODE", raising=False)
 
 def test_telegramlogger_injection_order():
-    sys.modules.pop('trade_manager', None)
+    sys.modules.pop('bot.trade_manager', None)
     utils_stub = types.ModuleType('utils')
     class StubTL:
         pass
@@ -30,8 +30,8 @@ def test_telegramlogger_injection_order():
     sys.modules['utils'] = utils_stub
     sys.modules['bot.utils'] = utils_stub
 
-    tm = importlib.import_module('trade_manager')
+    tm = importlib.import_module('bot.trade_manager')
     assert tm.TelegramLogger is StubTL
     sys.modules.pop('utils', None)
     sys.modules.pop('bot.utils', None)
-    sys.modules.pop("trade_manager", None)
+    sys.modules.pop('bot.trade_manager', None)
