@@ -156,7 +156,7 @@ class DummyDataHandler:
 
     async def get_atr(self, symbol: str) -> float:
         if "symbol" in self.ohlcv.index.names and symbol in self.ohlcv.index.get_level_values("symbol"):
-            return float(self.ohlcv.loc[(symbol,), "atr"].iloc[-1])
+            return float(self.ohlcv.loc[pd.IndexSlice[symbol], "atr"].iloc[-1])
         return 0.0
 
     async def is_data_fresh(self, symbol: str, timeframe: str = 'primary', max_delay: float = 60) -> bool:
@@ -281,7 +281,9 @@ def test_trailing_stop_to_breakeven():
         await tm.open_position('BTCUSDT', 'buy', 100, {})
         # Deliberately unsort positions
         tm.positions = tm.positions.iloc[::-1]
+        assert not tm.positions.index.is_monotonic_increasing
         await tm.check_trailing_stop('BTCUSDT', 101)
+        assert tm.positions.index.is_monotonic_increasing
 
     import asyncio
     asyncio.run(run())
