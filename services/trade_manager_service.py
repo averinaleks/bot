@@ -140,8 +140,6 @@ def close_position() -> tuple:
     order_id = data.get('order_id')
     side = str(data.get('side', '')).lower()
     close_amount = data.get('close_amount')
-    if close_amount is None:
-        close_amount = data.get('amount')
     if close_amount is not None:
         close_amount = float(close_amount)
     if not order_id or not side:
