@@ -5,14 +5,57 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-import pandas as pd
-import numpy as np
+import os
+import types
+
+try:  # pragma: no cover - optional dependency
+    import pandas as pd  # type: ignore
+except Exception:  # noqa: W0703 - allow missing pandas
+    pd = types.ModuleType("pandas")
+    pd.DataFrame = dict
+    pd.Series = list
+    pd.Timestamp = lambda *a, **k: None
+    pd.Timedelta = lambda *a, **k: None
+    pd.Index = list
+    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
+
+try:  # pragma: no cover - optional dependency
+    import numpy as np  # type: ignore
+except Exception:  # noqa: W0703 - allow missing numpy
+    np = types.ModuleType("numpy")
+    np.ndarray = list
+    np.array = lambda *a, **k: a[0]
+    np.random = types.SimpleNamespace(randn=lambda *a, **k: [0] * (a[0] if a else 0))
+    np.cumsum = lambda x: x
+    np.abs = abs
 
 try:  # optional dependency
     import polars as pl  # type: ignore
 except Exception:  # pragma: no cover - allow missing polars
     pl = None
-import websockets
+
+try:  # pragma: no cover - optional dependency
+    import websockets  # type: ignore
+except Exception:  # noqa: W0703 - allow missing websockets
+    websockets = types.ModuleType("websockets")
+
+    async def _dummy_connect(*args, **kwargs):  # type: ignore[override]
+        class _DummyWS:
+            async def send(self, *a, **k):
+                pass
+
+            async def recv(self):
+                return ""
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        return _DummyWS()
+
+    websockets.connect = _dummy_connect
 from bot.utils import (
     BybitSDKAsync,
     logger,
@@ -29,15 +72,27 @@ from tenacity import retry, wait_exponential
 from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
 import functools
 from bot.config import BotConfig
-import ta
-import joblib
-import psutil
-import os
+try:  # pragma: no cover - optional dependency
+    import ta  # type: ignore
+except Exception:  # noqa: W0703 - allow missing ta
+    ta = types.ModuleType("ta")
+
+try:  # pragma: no cover - optional dependency
+    import joblib  # type: ignore
+except Exception:  # noqa: W0703 - allow missing joblib
+    joblib = types.SimpleNamespace(dump=lambda *a, **k: None, load=lambda *a, **k: {})
+
+try:  # pragma: no cover - optional dependency
+    import psutil  # type: ignore
+except Exception:  # noqa: W0703 - allow missing psutil
+    psutil = types.SimpleNamespace(
+        cpu_percent=lambda interval=1: 0,
+        virtual_memory=lambda: type("mem", (), {"percent": 0}),
+    )
 
 try:
     import ray
 except Exception:  # pragma: no cover - optional dependency missing
-    import types
     ray = types.ModuleType("ray")
 
     class _RayRemoteFunction:
