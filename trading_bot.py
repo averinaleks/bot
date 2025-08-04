@@ -174,6 +174,23 @@ def send_trade(
         send_telegram_alert(f"Trade manager request failed for {symbol}: {exc}")
 
 
+def _resolve_trade_params(pdata: dict | None) -> tuple[float | None, float | None, float | None]:
+    """Return TP/SL/trailing stop values from prediction or env vars."""
+    tp = pdata.get("tp") if pdata else None
+    sl = pdata.get("sl") if pdata else None
+    trailing_stop = pdata.get("trailing_stop") if pdata else None
+    if tp is None:
+        t = os.getenv("TP")
+        tp = float(t) if t else None
+    if sl is None:
+        s = os.getenv("SL")
+        sl = float(s) if s else None
+    if trailing_stop is None:
+        ts = os.getenv("TRAILING_STOP")
+        trailing_stop = float(ts) if ts else None
+    return tp, sl, trailing_stop
+
+
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     """Asynchronously fetch prediction and open position if signaled."""
     env = env or _load_env()
@@ -202,18 +219,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             signal = pdata.get("signal")
             if not signal:
                 return
-            tp = pdata.get("tp")
-            sl = pdata.get("sl")
-            trailing_stop = pdata.get("trailing_stop")
-            if tp is None:
-                t = os.getenv("TP")
-                tp = float(t) if t else None
-            if sl is None:
-                s = os.getenv("SL")
-                sl = float(s) if s else None
-            if trailing_stop is None:
-                ts = os.getenv("TRAILING_STOP")
-                trailing_stop = float(ts) if ts else None
+            tp, sl, trailing_stop = _resolve_trade_params(pdata)
             payload = {"symbol": symbol, "side": signal, "price": price}
             if tp is not None:
                 payload["tp"] = tp
@@ -252,18 +258,7 @@ def run_once() -> None:
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:
-        tp = pdata.get("tp") if pdata else None
-        sl = pdata.get("sl") if pdata else None
-        trailing_stop = pdata.get("trailing_stop") if pdata else None
-        if tp is None:
-            t = os.getenv("TP")
-            tp = float(t) if t else None
-        if sl is None:
-            s = os.getenv("SL")
-            sl = float(s) if s else None
-        if trailing_stop is None:
-            ts = os.getenv("TRAILING_STOP")
-            trailing_stop = float(ts) if ts else None
+        tp, sl, trailing_stop = _resolve_trade_params(pdata)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
         send_trade(
             SYMBOL,
