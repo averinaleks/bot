@@ -129,7 +129,8 @@ def _init_cuda() -> None:
             logger.warning(
                 "GPU detected but CuPy is not installed. Install it with"
                 " 'pip install cupy-cuda12x' for CUDA 12.x or the appropriate"
-                " package for your CUDA version to enable GPU support."
+                " package for your CUDA version to enable GPU support. See"
+                " README.md for installation details."
             )
             GPU_AVAILABLE = False
             cp = np  # type: ignore
