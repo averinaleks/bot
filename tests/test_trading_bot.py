@@ -11,12 +11,15 @@ def test_send_trade_timeout_env(monkeypatch):
         called['timeout'] = timeout
         class Resp:
             status_code = 200
+            def json(self):
+                return {"status": "ok"}
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
-    trading_bot.send_trade('BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'})
+    result = trading_bot.send_trade('BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'})
     assert called['timeout'] == 9.0
+    assert result is True
 
 
 def test_load_env_uses_host(monkeypatch):
@@ -61,6 +64,8 @@ def test_send_trade_latency_alert(monkeypatch, fast_sleep):
         time.sleep(0.01)
         class Resp:
             status_code = 200
+            def json(self):
+                return {"status": "ok"}
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
@@ -76,7 +81,8 @@ def test_send_trade_http_error_alert(monkeypatch):
     def fake_post(url, json=None, timeout=None):
         class Resp:
             status_code = 500
-
+            def json(self):
+                return {}
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
@@ -104,6 +110,8 @@ def test_send_trade_forwards_params(monkeypatch):
         captured.update(json)
         class Resp:
             status_code = 200
+            def json(self):
+                return {"status": "ok"}
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
@@ -119,6 +127,24 @@ def test_send_trade_forwards_params(monkeypatch):
     assert captured['tp'] == 10
     assert captured['sl'] == 5
     assert captured['trailing_stop'] == 2
+
+
+def test_send_trade_reports_error_field(monkeypatch):
+    """An error field triggers alert even with HTTP 200."""
+    called = []
+
+    def fake_post(url, json=None, timeout=None):
+        class Resp:
+            status_code = 200
+            def json(self):
+                return {"error": "boom"}
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    ok = trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    assert not ok
+    assert called
 
 
 @pytest.mark.asyncio

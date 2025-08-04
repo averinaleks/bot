@@ -176,8 +176,11 @@ def send_trade(
     tp: float | None = None,
     sl: float | None = None,
     trailing_stop: float | None = None,
-) -> None:
-    """Send trade request to trade manager."""
+) -> bool:
+    """Send trade request to trade manager.
+
+    Returns ``True`` when the trade manager reports success, otherwise ``False``.
+    """
     try:
         timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
         start = time.time()
@@ -198,14 +201,31 @@ def send_trade(
             send_telegram_alert(
                 f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
             )
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+            logger.error("Trade manager returned invalid JSON")
+            send_telegram_alert(f"Trade manager invalid response for {symbol}")
+            return False
+        error: str | None = None
         if resp.status_code != 200:
-            logger.error("Trade manager error: HTTP %s", resp.status_code)
+            error = f"HTTP {resp.status_code}"
+        elif data.get("error"):
+            error = str(data.get("error"))
+        elif data.get("status") not in (None, "ok", "success"):
+            error = str(data.get("status"))
+        if error:
+            logger.error("Trade manager error: %s", error)
             send_telegram_alert(
-                f"Trade manager responded with HTTP {resp.status_code} for {symbol}"
+                f"Trade manager responded with {error} for {symbol}"
             )
+            return False
+        return True
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
         send_telegram_alert(f"Trade manager request failed for {symbol}: {exc}")
+        return False
 
 
 def _parse_trade_params(
