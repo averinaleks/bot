@@ -44,3 +44,35 @@ async def test_safe_api_call_test_mode(monkeypatch):
 
     assert result == {'retCode': 1}
     assert exch.calls == 1
+
+
+def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
+    import sys
+    import importlib
+    import logging
+
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+
+    # Reset logger to simulate first import
+    logger = logging.getLogger("TradingBot")
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
+    monkeypatch.delitem(sys.modules, "bot.utils", raising=False)
+    capsys.readouterr()  # clear captured output
+
+    utils_mod = importlib.import_module("bot.utils")
+    captured = capsys.readouterr()
+    assert captured.err.count("Logging initialized") == 1
+
+    utils_mod.logger.info("first")
+    captured = capsys.readouterr()
+    assert captured.err.count("first") == 1
+
+    utils_mod = importlib.reload(utils_mod)
+    captured = capsys.readouterr()
+    assert "Logging initialized" not in captured.err
+
+    utils_mod.logger.info("second")
+    captured = capsys.readouterr()
+    assert captured.err.count("second") == 1
