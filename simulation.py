@@ -111,7 +111,10 @@ class HistoricalSimulator:
                             mask = price_df.index.get_level_values("timestamp") <= ts
                         else:
                             mask = price_df.index <= ts
-                        price = price_df.loc[mask]["close"].iloc[-1]
+                        price_subset = price_df.loc[mask]
+                        if price_subset.empty:
+                            continue
+                        price = price_subset["close"].iloc[-1]
                     else:
                         continue
                     params = await self.data_handler.parameter_optimizer.optimize(symbol)
