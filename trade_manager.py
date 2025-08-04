@@ -377,11 +377,16 @@ class TradeManager:
             try:
                 order_params = {"category": "linear", **params}
                 order_type = order_params.get("type", "market")
-                tp_price = order_params.pop("takeProfitPrice", None)
-                sl_price = order_params.pop("stopLossPrice", None)
+                tp_price = order_params.get("takeProfitPrice")
+                sl_price = order_params.get("stopLossPrice")
                 if (tp_price is not None or sl_price is not None) and hasattr(
                     self.exchange, "create_order_with_take_profit_and_stop_loss"
                 ):
+                    order_params = {
+                        k: v
+                        for k, v in order_params.items()
+                        if k not in {"takeProfitPrice", "stopLossPrice"}
+                    }
                     order = await safe_api_call(
                         self.exchange,
                         "create_order_with_take_profit_and_stop_loss",

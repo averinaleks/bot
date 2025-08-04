@@ -166,6 +166,39 @@ def make_config():
         reversal_margin=0.05,
     )
 
+
+def test_place_order_includes_tp_sl_when_no_special_method():
+    class ExchangeNoTPSL:
+        def __init__(self):
+            self.calls = []
+
+        async def create_order(self, symbol, type, side, amount, price, params):
+            self.calls.append((symbol, type, side, amount, price, params))
+            return {"id": "1"}
+
+    dh = DummyDataHandler()
+    dh.exchange = ExchangeNoTPSL()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def run():
+        await tm.place_order(
+            "BTCUSDT",
+            "buy",
+            1,
+            100,
+            {"takeProfitPrice": 102.0, "stopLossPrice": 99.0},
+            use_lock=False,
+        )
+
+    import asyncio
+
+    asyncio.run(run())
+
+    assert dh.exchange.calls, "create_order not called"
+    _symbol, _type, _side, _amount, _price, params = dh.exchange.calls[0]
+    assert params.get("takeProfitPrice") == pytest.approx(102.0)
+    assert params.get("stopLossPrice") == pytest.approx(99.0)
+
 def test_position_calculations():
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, None, None, None)
