@@ -350,7 +350,6 @@ class BybitSDKAsync:
 logger = logging.getLogger("TradingBot")
 level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, level_name, logging.INFO))
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 log_dir = os.getenv("LOG_DIR", "/app/logs")
 fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -362,19 +361,24 @@ except (OSError, PermissionError):
     log_dir = fallback_dir
     os.makedirs(log_dir, exist_ok=True)
 
-file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+if not logger.handlers:
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+    file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
-logger.info(
-    "Logging initialized at %s; writing logs to %s",
-    logging.getLevelName(logger.level),
-    log_dir,
-)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    logger.info(
+        "Logging initialized at %s; writing logs to %s",
+        logging.getLevelName(logger.level),
+        log_dir,
+    )
 
 
 class TelegramLogger(logging.Handler):
