@@ -34,6 +34,10 @@ def _load_model() -> None:
 @app.route('/train', methods=['POST'])
 def train() -> tuple:
     data = request.get_json(force=True)
+    # ``features`` may contain multiple attributes such as price, volume and
+    # technical indicators.  Ensure the array is always two-dimensional so the
+    # logistic regression treats each row as one observation with ``n``
+    # features.
     features = np.array(data.get('features', []), dtype=np.float32)
     labels = np.array(data.get('labels', []), dtype=np.float32)
     if features.ndim == 1:
@@ -56,6 +60,7 @@ def predict() -> tuple:
     data = request.get_json(force=True)
     features = data.get('features')
     if features is None:
+        # Backwards compatibility – allow a single ``price`` value.
         price_val = float(data.get('price', 0.0))
         features = [price_val]
     features = np.array(features, dtype=np.float32)
