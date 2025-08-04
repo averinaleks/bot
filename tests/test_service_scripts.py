@@ -1,21 +1,12 @@
 import multiprocessing
 import os
 import types
-import socket
 import requests
 import pytest
 
-from tests.helpers import wait_for_service
+from tests.helpers import get_free_port, service_process
 
 ctx = multiprocessing.get_context("spawn")
-
-
-def _get_free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
 
 
 def _run_dh(port: int):
@@ -36,17 +27,12 @@ def _run_dh(port: int):
 
 @pytest.mark.integration
 def test_data_handler_service_price():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_dh, args=(port,))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
         assert resp.status_code == 200
         assert resp.json()['price'] == 42.0
-    finally:
-        p.terminate()
-        p.join()
 
 
 def _run_dh_fail(port: int):
@@ -66,17 +52,12 @@ def _run_dh_fail(port: int):
 
 @pytest.mark.integration
 def test_data_handler_service_price_error():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_dh_fail, args=(port,))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
         assert resp.status_code == 503
         assert 'error' in resp.json()
-    finally:
-        p.terminate()
-        p.join()
 
 
 def _run_mb(model_dir: str, port: int):
@@ -115,11 +96,9 @@ def _run_mb(model_dir: str, port: int):
 
 @pytest.mark.integration
 def test_model_builder_service_train_predict(tmp_path):
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1]], 'labels': [0, 1]},
@@ -133,18 +112,13 @@ def test_model_builder_service_train_predict(tmp_path):
         )
         assert resp.status_code == 200
         assert resp.json()['signal'] in {'buy', 'sell'}
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_model_builder_service_train_predict_multi_class(tmp_path):
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1], [2]], 'labels': [0, 1, 2]},
@@ -158,27 +132,19 @@ def test_model_builder_service_train_predict_multi_class(tmp_path):
         )
         assert resp.status_code == 200
         assert resp.json()['signal'] in {'buy', 'sell'}
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_model_builder_service_rejects_single_class_labels(tmp_path):
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/train',
             json={'features': [[0], [1]], 'labels': [0, 0]},
             timeout=5,
         )
         assert resp.status_code == 400
-    finally:
-        p.terminate()
-        p.join()
 
 
 def _run_mb_fail(model_file: str, port: int):
@@ -218,17 +184,12 @@ def _run_mb_fail(model_file: str, port: int):
 
 @pytest.mark.integration
 def test_model_builder_service_load_failure(tmp_path):
-    port = _get_free_port()
+    port = get_free_port()
     bad_file = tmp_path / 'model.pkl'
     bad_file.write_text('broken')
     p = ctx.Process(target=_run_mb_fail, args=(str(bad_file), port))
-    p.start()
-    try:
-        resp = wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping') as resp:
         assert resp.status_code == 200
-    finally:
-        p.terminate()
-        p.join()
 
 
 def _run_tm(
@@ -282,11 +243,9 @@ def _run_tm(
 
 @pytest.mark.integration
 def test_trade_manager_service_endpoints():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'trailing_stop': 1},
@@ -309,18 +268,13 @@ def test_trade_manager_service_endpoints():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_trade_manager_service_partial_close():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
@@ -351,18 +305,13 @@ def test_trade_manager_service_partial_close():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_trade_manager_service_price_only():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
@@ -373,18 +322,13 @@ def test_trade_manager_service_price_only():
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_trade_manager_service_fallback_orders():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, False, False))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'price': 100, 'trailing_stop': 1},
@@ -396,37 +340,24 @@ def test_trade_manager_service_fallback_orders():
         data = resp.json()['positions']
         assert len(data) == 1
         assert data[0]['trailing_stop'] == 1
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_trade_manager_service_fallback_failure():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, True))
-    p.start()
-    try:
-        wait_for_service(f'http://127.0.0.1:{port}/ping')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = requests.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
             timeout=5,
         )
         assert resp.status_code == 500
-    finally:
-        p.terminate()
-        p.join()
 
 
 @pytest.mark.integration
 def test_trade_manager_ready_route():
-    port = _get_free_port()
+    port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
-    p.start()
-    try:
-        resp = wait_for_service(f'http://127.0.0.1:{port}/ready')
+    with service_process(p, url=f'http://127.0.0.1:{port}/ready') as resp:
         assert resp.status_code == 200
-    finally:
-        p.terminate()
-        p.join()
