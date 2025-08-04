@@ -15,6 +15,7 @@ from scipy.stats import zscore
 import gzip
 import psutil
 import shutil
+import tempfile
 
 # Hide verbose TensorFlow logs and Numba performance warnings
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -786,26 +787,26 @@ class HistoricalDataCache:
             self._aggressive_clean()
 
     def save_cached_data(self, symbol, timeframe, data):
-        try:
-            safe_symbol = sanitize_symbol(symbol)
-            if isinstance(data, pd.DataFrame) and data.empty:
-                return
-            if not self._check_disk_space():
-                logger.error(
-                    "Невозможно кэшировать %s_%s: нехватка места на диске",
-                    symbol,
-                    timeframe,
-                )
-                return
-            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
-            temp_filename = os.path.join(
-                self.cache_dir, f"temp_{safe_symbol}_{timeframe}.pkl"
+        safe_symbol = sanitize_symbol(symbol)
+        if isinstance(data, pd.DataFrame) and data.empty:
+            return
+        if not self._check_disk_space():
+            logger.error(
+                "Невозможно кэшировать %s_%s: нехватка места на диске",
+                symbol,
+                timeframe,
             )
-            start_time = time.time()
-            with open(temp_filename, "wb") as f:
-                pickle.dump(data, f)
-            file_size_mb = os.path.getsize(temp_filename) / (1024 * 1024)
-            os.remove(temp_filename)
+            return
+        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
+        temp_path = None
+        start_time = time.time()
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", delete=False, dir=self.cache_dir
+            ) as tmp:
+                pickle.dump(data, tmp)
+                temp_path = tmp.name
+            file_size_mb = os.path.getsize(temp_path) / (1024 * 1024)
             if not self._check_memory(file_size_mb):
                 logger.warning(
                     "Недостаточно памяти для кэширования %s_%s, очистка кэша",
@@ -845,8 +846,14 @@ class HistoricalDataCache:
                 compressed_size_mb,
             )
             self._aggressive_clean()
-        except Exception as e:
+        except (OSError, pickle.PickleError) as e:
             logger.error("Ошибка сохранения кэша для %s_%s: %s", symbol, timeframe, e)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError as e:
+                    logger.error("Ошибка удаления временного файла %s: %s", temp_path, e)
 
     def load_cached_data(self, symbol, timeframe):
         try:
