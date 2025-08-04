@@ -26,7 +26,7 @@ def send_telegram_alert(message: str) -> None:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=5)
-    except Exception as exc:  # pragma: no cover - network errors
+    except requests.RequestException as exc:  # pragma: no cover - network errors
         logger.error("Failed to send Telegram alert: %s", exc)
 
 # Threshold for slow trade confirmations

@@ -148,9 +148,6 @@ def open_position() -> tuple:
     except CCXT_BASE_ERROR as exc:
         app.logger.exception('exchange error creating order: %s', exc)
         return jsonify({'error': 'exchange error creating order'}), 502
-    except Exception as exc:  # pragma: no cover - unexpected
-        app.logger.exception('unexpected error creating order: %s', exc)
-        return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
 @app.route('/close_position', methods=['POST'])
@@ -202,9 +199,6 @@ def close_position() -> tuple:
     except CCXT_BASE_ERROR as exc:
         app.logger.exception('exchange error closing position: %s', exc)
         return jsonify({'error': 'exchange error closing position'}), 502
-    except Exception as exc:  # pragma: no cover - unexpected
-        app.logger.exception('unexpected error closing position: %s', exc)
-        return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
 @app.route('/positions')
@@ -221,6 +215,13 @@ def ping():
 def ready():
     """Health check endpoint used by docker-compose."""
     return jsonify({'status': 'ok'})
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc: Exception) -> tuple:
+    """Log unexpected errors and return a 500 response."""
+    app.logger.exception('unhandled error: %s', exc)
+    return jsonify({'error': 'internal server error'}), 500
 
 
 if __name__ == '__main__':
