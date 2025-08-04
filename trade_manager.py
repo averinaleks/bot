@@ -8,13 +8,25 @@ import asyncio
 import atexit
 import signal
 import os
-import pandas as pd
-import numpy as np
+import sys
+import types
+
+try:  # pragma: no cover - optional dependency
+    import pandas as pd  # type: ignore
+except Exception:  # noqa: W0703 - allow missing pandas
+    pd = types.ModuleType("pandas")
+    pd.DataFrame = dict
+    pd.Series = list
+    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
+
+try:  # pragma: no cover - optional dependency
+    import numpy as np  # type: ignore
+except Exception:  # noqa: W0703 - allow missing numpy
+    np = types.ModuleType("numpy")
+    np.ndarray = list
+    np.array = lambda *a, **k: a[0]
 
 if os.getenv("TEST_MODE") == "1":
-    import types
-    import sys
-
     ray = types.ModuleType("ray")
 
     class _RayRemoteFunction:
@@ -64,7 +76,6 @@ from bot.utils import (
 )
 from bot.config import BotConfig, load_config
 import contextlib
-import types
 
 try:  # pragma: no cover - optional dependency
     import torch  # type: ignore
@@ -75,7 +86,10 @@ except Exception:  # noqa: W0703 - optional dependency may not be installed
     torch.no_grad = contextlib.nullcontext
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
-import joblib
+try:  # pragma: no cover - optional dependency
+    import joblib  # type: ignore
+except Exception:  # noqa: W0703 - allow missing joblib
+    joblib = types.SimpleNamespace(dump=lambda *a, **k: None, load=lambda *a, **k: {})
 import time
 from typing import Dict, Optional, Tuple
 import shutil
