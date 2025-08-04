@@ -42,7 +42,9 @@ def train() -> tuple:
     labels = np.array(data.get('labels', []), dtype=np.float32)
     if features.ndim == 1:
         features = features.reshape(-1, 1)
-    if len(features) == 0 or len(features) != len(labels):
+    else:
+        features = features.reshape(len(features), -1)
+    if features.size == 0 or len(features) != len(labels):
         return jsonify({'error': 'invalid training data'}), 400
     # Ensure training labels contain at least two classes
     if len(np.unique(labels)) < 2:
@@ -67,6 +69,8 @@ def predict() -> tuple:
     if features.ndim == 0:
         features = np.array([[features]], dtype=np.float32)
     elif features.ndim == 1:
+        features = features.reshape(1, -1)
+    else:
         features = features.reshape(1, -1)
     if _model is None:
         price = float(features[0, 0]) if features.size else 0.0

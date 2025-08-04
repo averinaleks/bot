@@ -1853,9 +1853,13 @@ def train_route():
     labels = np.array(data.get("labels", []), dtype=np.float32)
     if features.ndim == 1:
         features = features.reshape(-1, 1)
-    if len(features) == 0 or len(features) != len(labels):
+    else:
+        features = features.reshape(len(features), -1)
+    if features.size == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
-    model = LogisticRegression()
+    if len(np.unique(labels)) < 2:
+        return jsonify({"error": "labels must contain at least two classes"}), 400
+    model = LogisticRegression(multi_class="auto")
     model.fit(features, labels)
     joblib.dump(model, MODEL_FILE)
     global _model
@@ -1875,6 +1879,8 @@ def predict_route():
     if features.ndim == 0:
         features = np.array([[features]], dtype=np.float32)
     elif features.ndim == 1:
+        features = features.reshape(1, -1)
+    else:
         features = features.reshape(1, -1)
     price = float(features[0, 0]) if features.size else 0.0
     if _model is None:
