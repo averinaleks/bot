@@ -2,6 +2,7 @@
 
 import os
 import time
+from collections import deque
 
 import httpx
 import requests
@@ -29,6 +30,12 @@ def send_telegram_alert(message: str) -> None:
 
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = float(os.getenv("ORDER_CONFIRMATION_TIMEOUT", "5"))
+
+# Keep a short history of prices to derive simple features such as
+# price change (used as a lightweight volume proxy) and a moving
+# average.  This avoids additional service calls while still allowing
+# us to build a small feature vector for the prediction service.
+_PRICE_HISTORY: deque[float] = deque(maxlen=50)
 
 
 # Default trading symbol. Override with the SYMBOL environment variable.
@@ -101,7 +108,7 @@ def check_services() -> None:
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def fetch_price(symbol: str, env: dict) -> float | None:
-    """Return current price or None if request failed."""
+    """Return current price or ``None`` if the request fails."""
     try:
         resp = requests.get(f"{env['data_handler_url']}/price/{symbol}", timeout=5)
         data = resp.json()
@@ -119,13 +126,35 @@ def fetch_price(symbol: str, env: dict) -> float | None:
         return None
 
 
+def build_feature_vector(price: float) -> list[float]:
+    """Derive a simple feature vector from the latest price.
+
+    The feature vector consists of:
+
+    1. ``price`` – the latest price value.
+    2. ``volume`` – approximated by the price change since the previous
+       observation.  This acts as a very lightweight proxy when real
+       volume data is unavailable.
+    3. ``sma`` – a simple moving average of recent prices acting as a
+       basic technical indicator.
+    """
+
+    _PRICE_HISTORY.append(price)
+    if len(_PRICE_HISTORY) > 1:
+        volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
+    else:
+        volume = 0.0
+    sma = sum(_PRICE_HISTORY) / len(_PRICE_HISTORY)
+    return [price, volume, sma]
+
+
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def get_prediction(symbol: str, price: float, env: dict) -> dict | None:
-    """Return raw model prediction output if available."""
+def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
+    """Return raw model prediction output for the given ``features``."""
     try:
         resp = requests.post(
             f"{env['model_builder_url']}/predict",
-            json={"symbol": symbol, "features": [price]},
+            json={"symbol": symbol, "features": features},
             timeout=5,
         )
         if resp.status_code != 200:
@@ -234,9 +263,10 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if price is None or price <= 0:
                 logger.warning("Invalid price for %s: %s", symbol, price)
                 return
+            features = build_feature_vector(price)
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
-                json={"symbol": symbol, "features": [price]},
+                json={"symbol": symbol, "features": features},
                 timeout=5.0,
             )
             if pred.status_code != 200:
@@ -281,7 +311,8 @@ def run_once() -> None:
         logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
-    pdata = get_prediction(SYMBOL, price, env)
+    features = build_feature_vector(price)
+    pdata = get_prediction(SYMBOL, features, env)
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:

@@ -1849,12 +1849,14 @@ def _load_model() -> None:
 @api_app.route("/train", methods=["POST"])
 def train_route():
     data = request.get_json(force=True)
-    prices = np.array(data.get("prices", []), dtype=np.float32).reshape(-1, 1)
+    features = np.array(data.get("features", []), dtype=np.float32)
     labels = np.array(data.get("labels", []), dtype=np.float32)
-    if len(prices) == 0 or len(prices) != len(labels):
+    if features.ndim == 1:
+        features = features.reshape(-1, 1)
+    if len(features) == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
     model = LogisticRegression()
-    model.fit(prices, labels)
+    model.fit(features, labels)
     joblib.dump(model, MODEL_FILE)
     global _model
     _model = model
@@ -1866,6 +1868,7 @@ def predict_route():
     data = request.get_json(force=True)
     features = data.get("features")
     if features is None:
+        # Backwards compatibility for a single price input
         price_val = float(data.get("price", 0.0))
         features = [price_val]
     features = np.array(features, dtype=np.float32)
