@@ -261,6 +261,41 @@ def test_run_once_env_fallback(monkeypatch):
     assert sent == {"tp": 10.0, "sl": 5.0, "trailing_stop": 2.0}
 
 
+def test_run_once_config_fallback(monkeypatch):
+    """Defaults are computed from config when env and prediction lack values."""
+    sent = {}
+    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
+    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    monkeypatch.setattr(
+        trading_bot,
+        "send_trade",
+        lambda *a, tp=None, sl=None, trailing_stop=None, **k: sent.update(
+            tp=tp, sl=sl, trailing_stop=trailing_stop
+        ),
+    )
+    monkeypatch.setattr(
+        trading_bot,
+        "_load_env",
+        lambda: {
+            "data_handler_url": "http://dh",
+            "model_builder_url": "http://mb",
+            "trade_manager_url": "http://tm",
+        },
+    )
+    for var in ("TP", "SL", "TRAILING_STOP"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "tp_multiplier", 1.1, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 0.9, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "trailing_stop_multiplier", 0.05, raising=False)
+
+    trading_bot.run_once()
+    assert sent == {
+        "tp": pytest.approx(110.0),
+        "sl": pytest.approx(90.0),
+        "trailing_stop": pytest.approx(5.0),
+    }
+
+
 def test_run_once_logs_prediction(monkeypatch, caplog):
     """A prediction from the model service is logged."""
     monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
