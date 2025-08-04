@@ -54,7 +54,11 @@ def train() -> tuple:
 @app.route('/predict', methods=['POST'])
 def predict() -> tuple:
     data = request.get_json(force=True)
-    features = np.array(data.get('features', []), dtype=np.float32)
+    features = data.get('features')
+    if features is None:
+        price_val = float(data.get('price', 0.0))
+        features = [price_val]
+    features = np.array(features, dtype=np.float32)
     if features.ndim == 0:
         features = np.array([[features]], dtype=np.float32)
     elif features.ndim == 1:

@@ -40,6 +40,7 @@ mb_app = Flask('model_builder')
 @mb_app.route('/predict', methods=['POST'])
 def predict():
     data = request.get_json(force=True)
+    assert 'features' in data
     features = data.get('features') or []
     price = float(features[0]) if isinstance(features, list) and features else 0.0
     signal = 'buy' if price > 0 else None
