@@ -400,6 +400,10 @@ class TradeManager:
                         order_params,
                     )
                 else:
+                    if tp_price is not None:
+                        order_params["takeProfitPrice"] = tp_price
+                    if sl_price is not None:
+                        order_params["stopLossPrice"] = sl_price
                     order = await safe_api_call(
                         self.exchange,
                         "create_order",

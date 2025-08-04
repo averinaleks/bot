@@ -167,13 +167,23 @@ def make_config():
     )
 
 
-def test_place_order_includes_tp_sl_when_no_special_method():
+def test_place_order_passes_tp_sl_without_special_method():
     class ExchangeNoTPSL:
         def __init__(self):
             self.calls = []
 
         async def create_order(self, symbol, type, side, amount, price, params):
-            self.calls.append((symbol, type, side, amount, price, params))
+            self.calls.append(
+                {
+                    "method": "create_order",
+                    "symbol": symbol,
+                    "type": type,
+                    "side": side,
+                    "amount": amount,
+                    "price": price,
+                    "params": params,
+                }
+            )
             return {"id": "1"}
 
     dh = DummyDataHandler()
@@ -195,9 +205,10 @@ def test_place_order_includes_tp_sl_when_no_special_method():
     asyncio.run(run())
 
     assert dh.exchange.calls, "create_order not called"
-    _symbol, _type, _side, _amount, _price, params = dh.exchange.calls[0]
-    assert params.get("takeProfitPrice") == pytest.approx(102.0)
-    assert params.get("stopLossPrice") == pytest.approx(99.0)
+    call = dh.exchange.calls[0]
+    assert call["method"] == "create_order"
+    assert call["params"].get("takeProfitPrice") == pytest.approx(102.0)
+    assert call["params"].get("stopLossPrice") == pytest.approx(99.0)
 
 def test_position_calculations():
     dh = DummyDataHandler()
