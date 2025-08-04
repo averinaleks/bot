@@ -112,7 +112,11 @@ def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
     try:
         resp = requests.get(f"{env['data_handler_url']}/price/{symbol}", timeout=5)
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            logger.error("Invalid JSON from price service")
+            return None
         if resp.status_code != 200 or "error" in data:
             err = data.get("error", f"HTTP {resp.status_code}")
             logger.error("Failed to fetch price: %s", err)
@@ -161,7 +165,11 @@ def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None
         if resp.status_code != 200:
             logger.error("Model prediction failed: HTTP %s", resp.status_code)
             return None
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            logger.error("Invalid JSON from model prediction")
+            return None
     except requests.RequestException as exc:
         logger.error("Model request error: %s", exc)
         return None
@@ -293,7 +301,11 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if resp.status_code != 200:
                 logger.error("Failed to fetch price: HTTP %s", resp.status_code)
                 return
-            price = resp.json().get("price", 0)
+            try:
+                price = resp.json().get("price", 0)
+            except ValueError:
+                logger.error("Invalid JSON from price service")
+                return
             if price is None or price <= 0:
                 logger.warning("Invalid price for %s: %s", symbol, price)
                 return
@@ -306,7 +318,11 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if pred.status_code != 200:
                 logger.error("Model prediction failed: HTTP %s", pred.status_code)
                 return
-            pdata = pred.json()
+            try:
+                pdata = pred.json()
+            except ValueError:
+                logger.error("Invalid JSON from model prediction")
+                return
             signal = pdata.get("signal")
             if not signal:
                 return
