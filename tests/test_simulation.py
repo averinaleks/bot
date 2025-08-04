@@ -118,3 +118,90 @@ async def test_simulator_trailing_stop(trade_manager_classes):
     await sim.run(start, end, speed=1000)
     assert tm.positions.empty
     assert len(dh.exchange.orders) >= 2
+
+
+@pytest.mark.asyncio
+async def test_simulator_skips_missing_price(trade_manager_classes):
+    TradeManager, HistoricalSimulator = trade_manager_classes
+
+    class DummyDataHandler:
+        def __init__(self):
+            self.exchange = DummyExchange()
+            self.usdt_pairs = ["BTCUSDT", "ETHUSDT"]
+            idx_eth = pd.date_range("2020-01-01", periods=1, freq="1min", tz="UTC")
+            df_eth = pd.DataFrame(
+                {
+                    "open": [200],
+                    "high": [200],
+                    "low": [200],
+                    "close": [200],
+                    "atr": [1.0],
+                },
+                index=idx_eth,
+            )
+            df_eth["symbol"] = "ETHUSDT"
+            idx_btc = pd.date_range("2020-01-01 00:01", periods=1, freq="1min", tz="UTC")
+            df_btc = pd.DataFrame(
+                {
+                    "open": [100],
+                    "high": [100],
+                    "low": [100],
+                    "close": [100],
+                    "atr": [1.0],
+                },
+                index=idx_btc,
+            )
+            df_btc["symbol"] = "BTCUSDT"
+            eth_hist = df_eth.set_index("symbol", append=True).swaplevel(0, 1)
+            btc_hist = df_btc.set_index("symbol", append=True).swaplevel(0, 1)
+            self.history = pd.concat([eth_hist, btc_hist])
+            self.history.index.names = ["symbol", "timestamp"]
+            # Prepopulate ohlcv with BTC data only at a later timestamp
+            self.ohlcv = btc_hist.copy()
+            async def _opt(symbol):
+                return {}
+            self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
+            self.funding_rates = {"BTCUSDT": 0.0, "ETHUSDT": 0.0}
+            self.open_interest = {"BTCUSDT": 0.0, "ETHUSDT": 0.0}
+            self.config = BotConfig(cache_dir="/tmp")
+
+        async def get_atr(self, symbol: str) -> float:
+            return 1.0
+
+        async def is_data_fresh(
+            self, symbol: str, timeframe: str = "primary", max_delay: float = 60
+        ) -> bool:
+            return True
+
+        async def synchronize_and_update(
+            self, symbol, df, fr, oi, ob, timeframe="primary"
+        ):
+            self.ohlcv = pd.concat([self.ohlcv, df], ignore_index=False).sort_index()
+
+    dh = DummyDataHandler()
+    tm = TradeManager(BotConfig(cache_dir="/tmp"), dh, None, None, None)
+
+    open_calls = []
+
+    async def fake_open_position(symbol, signal, price, params):
+        open_calls.append(symbol)
+
+    tm.open_position = fake_open_position
+
+    first = {"done": False}
+
+    async def fake_eval(symbol):
+        if symbol == "BTCUSDT" and not first["done"]:
+            first["done"] = True
+            return "buy"
+        return None
+
+    tm.evaluate_signal = fake_eval
+
+    sim = HistoricalSimulator(dh, tm)
+    start = pd.Timestamp("2020-01-01", tz="UTC")
+    end = pd.Timestamp("2020-01-01 00:01", tz="UTC")
+    await sim.run(start, end, speed=1000)
+
+    assert first["done"]
+    assert open_calls == []
