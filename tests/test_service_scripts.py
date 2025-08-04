@@ -315,6 +315,48 @@ def test_trade_manager_service_endpoints():
 
 
 @pytest.mark.integration
+def test_trade_manager_service_partial_close():
+    port = _get_free_port()
+    p = ctx.Process(target=_run_tm, args=(port,))
+    p.start()
+    try:
+        wait_for_service(f'http://127.0.0.1:{port}/ping')
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/open_position',
+            json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        order_id = resp.json()['order_id']
+        # close half the position
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/close_position',
+            json={'order_id': order_id, 'side': 'sell', 'close_amount': 0.4},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        assert resp.status_code == 200
+        data = resp.json()['positions']
+        assert len(data) == 1
+        assert data[0]['amount'] == pytest.approx(0.6, rel=1e-3)
+        # close the remainder
+        resp = requests.post(
+            f'http://127.0.0.1:{port}/close_position',
+            json={'order_id': order_id, 'side': 'sell'},
+            timeout=5,
+        )
+        assert resp.status_code == 200
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        assert resp.status_code == 200
+        data = resp.json()['positions']
+        assert len(data) == 0
+    finally:
+        p.terminate()
+        p.join()
+
+
+@pytest.mark.integration
 def test_trade_manager_service_price_only():
     port = _get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
