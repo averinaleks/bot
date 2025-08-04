@@ -3,6 +3,7 @@
 import os
 import time
 from collections import deque
+import statistics
 
 import httpx
 import requests
@@ -144,7 +145,7 @@ def build_feature_vector(price: float) -> list[float]:
         volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
     else:
         volume = 0.0
-    sma = sum(_PRICE_HISTORY) / len(_PRICE_HISTORY)
+    sma = statistics.fmean(_PRICE_HISTORY)
     return [price, volume, sma]
 
 
