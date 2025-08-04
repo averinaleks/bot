@@ -13,6 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from bot.config import BotConfig
 from bot.utils import logger
 
+load_dotenv()
 
 CFG = BotConfig()
 
@@ -389,8 +390,6 @@ def run_once() -> None:
 
 def main():
     """Run the trading bot until interrupted."""
-    # Load environment variables from a .env file when running as a script
-    load_dotenv()
     try:
         check_services()
         while True:
