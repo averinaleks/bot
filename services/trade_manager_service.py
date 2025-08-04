@@ -22,6 +22,11 @@ exchange = ccxt.bybit({
     'secret': os.getenv('BYBIT_API_SECRET', ''),
 })
 
+# Gracefully handle missing ccxt error classes when running under test stubs
+CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
+CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
+CCXT_BAD_REQUEST = getattr(ccxt, 'BadRequest', CCXT_BASE_ERROR)
+
 POSITIONS: list[dict] = []
 
 
@@ -93,12 +98,14 @@ def open_position() -> tuple:
                     stop_order = exchange.create_order(
                         symbol, 'stop', opp_side, amount, sl
                     )
-                except Exception:
+                except CCXT_BASE_ERROR as exc:
+                    app.logger.debug('stop order failed: %s', exc)
                     try:
                         stop_order = exchange.create_order(
                             symbol, 'stop_market', opp_side, amount, sl
                         )
-                    except Exception:
+                    except CCXT_BASE_ERROR as exc:
+                        app.logger.debug('stop_market order failed: %s', exc)
                         stop_order = None
                 orders.append(stop_order)
             if tp is not None:
@@ -106,7 +113,8 @@ def open_position() -> tuple:
                     tp_order = exchange.create_order(
                         symbol, 'limit', opp_side, amount, tp
                     )
-                except Exception:
+                except CCXT_BASE_ERROR as exc:
+                    app.logger.debug('take profit order failed: %s', exc)
                     tp_order = None
                 orders.append(tp_order)
             if trailing_stop is not None and price > 0:
@@ -116,12 +124,14 @@ def open_position() -> tuple:
                     stop_order = exchange.create_order(
                         symbol, 'stop', opp_side, amount, tprice
                     )
-                except Exception:
+                except CCXT_BASE_ERROR as exc:
+                    app.logger.debug('trailing stop order failed: %s', exc)
                     try:
                         stop_order = exchange.create_order(
                             symbol, 'stop_market', opp_side, amount, tprice
                         )
-                    except Exception:
+                    except CCXT_BASE_ERROR as exc:
+                        app.logger.debug('trailing stop_market failed: %s', exc)
                         stop_order = None
                 orders.append(stop_order)
         if any(not o or o.get('id') is None for o in orders):
@@ -129,8 +139,17 @@ def open_position() -> tuple:
             return jsonify({'error': 'order creation failed'}), 500
         _record(order, symbol, side, amount, 'open', trailing_stop)
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
-    except Exception as exc:  # pragma: no cover - network errors
-        app.logger.error('exception creating order: %s', exc)
+    except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
+        app.logger.exception('network error creating order: %s', exc)
+        return jsonify({'error': 'network error contacting exchange'}), 503
+    except CCXT_BAD_REQUEST as exc:
+        app.logger.warning('bad request when creating order: %s', exc)
+        return jsonify({'error': 'invalid order parameters'}), 400
+    except CCXT_BASE_ERROR as exc:
+        app.logger.exception('exchange error creating order: %s', exc)
+        return jsonify({'error': 'exchange error creating order'}), 502
+    except Exception as exc:  # pragma: no cover - unexpected
+        app.logger.exception('unexpected error creating order: %s', exc)
         return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
@@ -174,8 +193,17 @@ def close_position() -> tuple:
         else:
             rec['amount'] = remaining
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
-    except Exception as exc:  # pragma: no cover - network errors
-        logging.exception("Error closing position")
+    except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
+        app.logger.exception('network error closing position: %s', exc)
+        return jsonify({'error': 'network error contacting exchange'}), 503
+    except CCXT_BAD_REQUEST as exc:
+        app.logger.warning('bad request when closing position: %s', exc)
+        return jsonify({'error': 'invalid order parameters'}), 400
+    except CCXT_BASE_ERROR as exc:
+        app.logger.exception('exchange error closing position: %s', exc)
+        return jsonify({'error': 'exchange error closing position'}), 502
+    except Exception as exc:  # pragma: no cover - unexpected
+        app.logger.exception('unexpected error closing position: %s', exc)
         return jsonify({'error': 'An internal error has occurred.'}), 500
 
 
