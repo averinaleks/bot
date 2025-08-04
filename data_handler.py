@@ -126,6 +126,11 @@ def _init_cuda() -> None:
             cp = cupy_mod
         except Exception as e:  # pragma: no cover - allow missing cupy
             logger.warning("CuPy import failed: %s", e)
+            logger.warning(
+                "GPU detected but CuPy is not installed. Install it with"
+                " 'pip install cupy-cuda12x' for CUDA 12.x or the appropriate"
+                " package for your CUDA version to enable GPU support."
+            )
             GPU_AVAILABLE = False
             cp = np  # type: ignore
     else:
