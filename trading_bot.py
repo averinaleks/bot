@@ -208,40 +208,53 @@ def send_trade(
         send_telegram_alert(f"Trade manager request failed for {symbol}: {exc}")
 
 
+def _parse_trade_params(
+    tp: float | str | None = None,
+    sl: float | str | None = None,
+    trailing_stop: float | str | None = None,
+) -> tuple[float | None, float | None, float | None]:
+    """Safely convert trade parameters to floats when possible."""
+
+    def _parse(value: float | str | None) -> float | None:
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return _parse(tp), _parse(sl), _parse(trailing_stop)
+
+
 def _resolve_trade_params(
-    pdata: dict | None,
+    tp: float | None,
+    sl: float | None,
+    trailing_stop: float | None,
     price: float | None = None,
 ) -> tuple[float | None, float | None, float | None]:
     """Return TP/SL/trailing-stop values.
 
-    Values are taken from the model prediction when available. Missing values
-    fall back to explicit ``TP``, ``SL`` or ``TRAILING_STOP`` environment
-    variables. If those are also absent and ``price`` is provided, compute the
-    values using multipliers from the bot configuration.
+    Starting from ``tp``, ``sl`` and ``trailing_stop`` (already parsed if
+    provided), fill in missing values from environment variables or fall back
+    to config multipliers using ``price``.
     """
 
-    tp = pdata.get("tp") if pdata else None
-    sl = pdata.get("sl") if pdata else None
-    trailing_stop = pdata.get("trailing_stop") if pdata else None
-
     if tp is None:
-        t = os.getenv("TP")
-        if t is not None:
-            tp = float(t)
+        env_tp, _, _ = _parse_trade_params(os.getenv("TP"))
+        if env_tp is not None:
+            tp = env_tp
         elif price is not None:
             tp = price * CFG.tp_multiplier
 
     if sl is None:
-        s = os.getenv("SL")
-        if s is not None:
-            sl = float(s)
+        _, env_sl, _ = _parse_trade_params(None, os.getenv("SL"))
+        if env_sl is not None:
+            sl = env_sl
         elif price is not None:
             sl = price * CFG.sl_multiplier
 
     if trailing_stop is None:
-        ts = os.getenv("TRAILING_STOP")
-        if ts is not None:
-            trailing_stop = float(ts)
+        _, _, env_ts = _parse_trade_params(None, None, os.getenv("TRAILING_STOP"))
+        if env_ts is not None:
+            trailing_stop = env_ts
         elif price is not None:
             trailing_stop = price * CFG.trailing_stop_multiplier
 
@@ -277,7 +290,10 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             signal = pdata.get("signal")
             if not signal:
                 return
-            tp, sl, trailing_stop = _resolve_trade_params(pdata, price)
+            tp, sl, trailing_stop = _parse_trade_params(
+                pdata.get("tp"), pdata.get("sl"), pdata.get("trailing_stop")
+            )
+            tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
             payload = {"symbol": symbol, "side": signal, "price": price}
             if tp is not None:
                 payload["tp"] = tp
@@ -317,7 +333,12 @@ def run_once() -> None:
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:
-        tp, sl, trailing_stop = _resolve_trade_params(pdata, price)
+        tp, sl, trailing_stop = _parse_trade_params(
+            pdata.get("tp") if pdata else None,
+            pdata.get("sl") if pdata else None,
+            pdata.get("trailing_stop") if pdata else None,
+        )
+        tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
         send_trade(
             SYMBOL,
