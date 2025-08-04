@@ -6,11 +6,15 @@ This module defines the :class:`BotConfig` dataclass along with helpers to
 load configuration values from ``config.json`` and environment variables.
 """
 
+import ast
 import json
+import logging
 import os
 from dataclasses import dataclass, field, fields, asdict
 from typing import Any, Dict, List, get_type_hints
-import ast
+
+
+logger = logging.getLogger(__name__)
 
 # Load defaults from config.json
 CONFIG_PATH = os.getenv(
@@ -19,7 +23,8 @@ CONFIG_PATH = os.getenv(
 try:
     with open(CONFIG_PATH, "r") as f:
         DEFAULTS = json.load(f)
-except Exception:
+except (OSError, json.JSONDecodeError) as exc:
+    logger.warning("Failed to load %s: %s", CONFIG_PATH, exc)
     DEFAULTS = {}
 
 
