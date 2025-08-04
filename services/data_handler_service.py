@@ -33,13 +33,17 @@ def price(symbol: str):
     except CCXT_BASE_ERROR as exc:
         logging.exception("Exchange error fetching price for '%s': %s", symbol, exc)
         return jsonify({'error': 'exchange error fetching price'}), 502
-    except Exception as exc:  # pragma: no cover - unexpected
-        logging.exception("Unexpected error fetching price for '%s': %s", symbol, exc)
-        return jsonify({'error': 'Failed to fetch price.'}), 503
 
 @app.route('/ping')
 def ping():
     return jsonify({'status': 'ok'})
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc: Exception) -> tuple:
+    """Log unexpected errors and return a 500 response."""
+    logging.exception("Unhandled error: %s", exc)
+    return jsonify({'error': 'internal server error'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8000'))
