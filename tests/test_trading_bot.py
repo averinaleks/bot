@@ -186,6 +186,34 @@ async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
     assert called[0]["trailing_stop"] == 1
 
 
+@pytest.mark.asyncio
+async def test_reactive_trade_invalid_json(monkeypatch, caplog):
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def get(self, url, timeout=None):
+            return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
+
+        async def post(self, url, json=None, timeout=None):
+            if url.endswith("/predict"):
+                return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
+            pytest.fail("Trade manager should not be called")
+
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(trading_bot, "_load_env", lambda: {
+        "data_handler_url": "http://dh",
+        "model_builder_url": "http://mb",
+        "trade_manager_url": "http://tm",
+    })
+    with caplog.at_level("ERROR"):
+        await trading_bot.reactive_trade("BTCUSDT")
+    assert "invalid json" in caplog.text.lower()
+
+
 def test_run_once_invalid_price(monkeypatch):
     """No trade sent when fetch_price returns a non-positive value."""
     sent = []
@@ -213,6 +241,36 @@ def test_fetch_price_error(monkeypatch):
     monkeypatch.setattr(trading_bot.requests, "get", fake_get)
     price = trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"})
     assert price is None
+
+
+def test_fetch_price_invalid_json(monkeypatch, caplog):
+    def fake_get(url, timeout=None):
+        class Resp:
+            status_code = 200
+            def json(self):
+                raise ValueError("bad")
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, "get", fake_get)
+    with caplog.at_level("ERROR"):
+        price = trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"})
+    assert price is None
+    assert "invalid json" in caplog.text.lower()
+
+
+def test_get_prediction_invalid_json(monkeypatch, caplog):
+    def fake_post(url, json=None, timeout=None):
+        class Resp:
+            status_code = 200
+            def json(self):
+                raise ValueError("bad")
+        return Resp()
+
+    monkeypatch.setattr(trading_bot.requests, "post", fake_post)
+    with caplog.at_level("ERROR"):
+        data = trading_bot.get_prediction("BTCUSDT", [1, 2, 3], {"model_builder_url": "http://mb"})
+    assert data is None
+    assert "invalid json" in caplog.text.lower()
 
 
 def test_run_once_price_error(monkeypatch):
