@@ -1864,12 +1864,21 @@ def train_route():
 @api_app.route("/predict", methods=["POST"])
 def predict_route():
     data = request.get_json(force=True)
-    price = float(data.get("price", 0))
+    features = data.get("features")
+    if features is None:
+        price_val = float(data.get("price", 0.0))
+        features = [price_val]
+    features = np.array(features, dtype=np.float32)
+    if features.ndim == 0:
+        features = np.array([[features]], dtype=np.float32)
+    elif features.ndim == 1:
+        features = features.reshape(1, -1)
+    price = float(features[0, 0]) if features.size else 0.0
     if _model is None:
         signal = "buy" if price > 0 else None
         prob = 1.0 if signal else 0.0
     else:
-        prob = float(_model.predict_proba([[price]])[0, 1])
+        prob = float(_model.predict_proba(features)[0, 1])
         signal = "buy" if prob >= 0.5 else "sell"
     return jsonify({"signal": signal, "prob": prob})
 
