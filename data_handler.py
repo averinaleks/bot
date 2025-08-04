@@ -1489,7 +1489,7 @@ class DataHandler:
                         idx = df.droplevel("symbol").index
                         self.ohlcv.loc[
                             df.index, cache_obj.df.columns
-                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].values
+                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
                         self.indicators[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1523,7 +1523,7 @@ class DataHandler:
                         idx = df.droplevel("symbol").index
                         self.ohlcv.loc[
                             df.index, result.df.columns
-                        ] = result.df.loc[idx, result.df.columns].values
+                        ] = result.df.loc[idx, result.df.columns].to_numpy()
             else:
                 fetch_needed = False
                 obj_ref = None
@@ -1542,7 +1542,7 @@ class DataHandler:
                         idx = df.droplevel("symbol").index
                         self.ohlcv_2h.loc[
                             df.index, cache_obj.df.columns
-                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].values
+                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
                         self.indicators_2h[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1576,7 +1576,7 @@ class DataHandler:
                         idx = df.droplevel("symbol").index
                         self.ohlcv_2h.loc[
                             df.index, result.df.columns
-                        ] = result.df.loc[idx, result.df.columns].values
+                        ] = result.df.loc[idx, result.df.columns].to_numpy()
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
             if self.trade_callback:
