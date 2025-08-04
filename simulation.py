@@ -43,10 +43,13 @@ class HistoricalSimulator:
             self.history[symbol] = df
 
     async def _manage_positions_once(self) -> None:
-        idx_names = getattr(self.trade_manager.positions.index, "names", [])
-        if "symbol" not in idx_names:
-            return
-        symbols = self.trade_manager.positions.index.get_level_values("symbol").unique()
+        async with self.trade_manager.position_lock:
+            idx_names = getattr(self.trade_manager.positions.index, "names", [])
+            if "symbol" not in idx_names:
+                return
+            symbols = self.trade_manager.positions.index.get_level_values(
+                "symbol"
+            ).unique()
         for symbol in symbols:
             ohlcv = self.data_handler.ohlcv
             if "symbol" in ohlcv.index.names and symbol in ohlcv.index.get_level_values("symbol"):

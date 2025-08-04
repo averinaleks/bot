@@ -930,14 +930,16 @@ class TradeManager:
             if not model:
                 logger.debug("Model for %s not found", symbol)
                 return
-            self._sort_positions()
-            if "symbol" in self.positions.index.names:
-                try:
-                    position = self.positions.xs(symbol, level="symbol")
-                except KeyError:
+            async with self.position_lock:
+                self._sort_positions()
+                if "symbol" in self.positions.index.names:
+                    try:
+                        position = self.positions.xs(symbol, level="symbol")
+                    except KeyError:
+                        position = pd.DataFrame()
+                else:
                     position = pd.DataFrame()
-            else:
-                position = pd.DataFrame()
+                num_positions = len(self.positions)
             if position.empty:
                 return
             position = position.iloc[0]
@@ -976,7 +978,7 @@ class TradeManager:
             if self.rl_agent and symbol in self.rl_agent.models:
                 rl_feat = np.append(
                     features[-1],
-                    [float(prediction), len(self.positions) / max(1, self.max_positions)],
+                    [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
                 if rl_signal and rl_signal != "hold":
@@ -1009,10 +1011,12 @@ class TradeManager:
                     opposite = "sell"
                     ema_ok = await self.evaluate_ema_condition(symbol, opposite)
                     if ema_ok:
-                        if (
-                            "symbol" not in self.positions.index.names
-                            or symbol not in self.positions.index.get_level_values("symbol")
-                        ):
+                        async with self.position_lock:
+                            already_open = (
+                                "symbol" in self.positions.index.names
+                                and symbol in self.positions.index.get_level_values("symbol")
+                            )
+                        if not already_open:
                             params = await self.data_handler.parameter_optimizer.optimize(symbol)
                             await self.open_position(symbol, opposite, current_price, params)
             elif position["side"] == "sell" and prediction > long_threshold:
@@ -1027,10 +1031,12 @@ class TradeManager:
                     opposite = "buy"
                     ema_ok = await self.evaluate_ema_condition(symbol, opposite)
                     if ema_ok:
-                        if (
-                            "symbol" not in self.positions.index.names
-                            or symbol not in self.positions.index.get_level_values("symbol")
-                        ):
+                        async with self.position_lock:
+                            already_open = (
+                                "symbol" in self.positions.index.names
+                                and symbol in self.positions.index.get_level_values("symbol")
+                            )
+                        if not already_open:
                             params = await self.data_handler.parameter_optimizer.optimize(symbol)
                             await self.open_position(symbol, opposite, current_price, params)
         except Exception as e:
@@ -1124,9 +1130,10 @@ class TradeManager:
     async def manage_positions(self):
         while True:
             try:
-                symbols = []
-                if "symbol" in self.positions.index.names:
-                    symbols = self.positions.index.get_level_values("symbol").unique()
+                async with self.position_lock:
+                    symbols = []
+                    if "symbol" in self.positions.index.names:
+                        symbols = self.positions.index.get_level_values("symbol").unique()
                 for symbol in symbols:
                     ohlcv = self.data_handler.ohlcv
                     if (
@@ -1369,9 +1376,11 @@ class TradeManager:
 
             rl_signal = None
             if self.rl_agent and symbol in self.rl_agent.models:
+                async with self.position_lock:
+                    num_positions = len(self.positions)
                 rl_feat = np.append(
                     features[-1],
-                    [float(prediction), len(self.positions) / max(1, self.max_positions)],
+                    [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
                 if rl_signal and rl_signal != "hold":
@@ -1431,8 +1440,15 @@ class TradeManager:
     async def gather_pending_signals(self):
         """Collect and rank signals for all symbols."""
         signals = []
+        async with self.position_lock:
+            if "symbol" in self.positions.index.names:
+                open_symbols = set(
+                    self.positions.index.get_level_values("symbol").unique()
+                )
+            else:
+                open_symbols = set()
         for symbol in self.data_handler.usdt_pairs:
-            if "symbol" in self.positions.index.names and symbol in self.positions.index.get_level_values("symbol"):
+            if symbol in open_symbols:
                 continue
             result = await self.evaluate_signal(symbol, return_prob=True)
             if not result:
@@ -1543,10 +1559,11 @@ class TradeManager:
         while True:
             try:
                 signal = await self.evaluate_signal(symbol)
-                condition = True
-                if "symbol" in self.positions.index.names:
-                    condition = symbol not in self.positions.index.get_level_values(
-                        "symbol"
+                async with self.position_lock:
+                    condition = (
+                        "symbol" not in self.positions.index.names
+                        or symbol
+                        not in self.positions.index.get_level_values("symbol")
                     )
                 if signal and condition:
                     ohlcv = self.data_handler.ohlcv
