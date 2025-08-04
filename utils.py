@@ -95,11 +95,16 @@ def is_cuda_available() -> bool:
         if not torch.backends.cuda.is_built():
             return False
         return torch.cuda.is_available()
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         logging.getLogger("TradingBot").warning(
             "CUDA availability check failed: %s", exc
         )
         return False
+    except Exception as exc:  # pragma: no cover - unexpected error
+        logging.getLogger("TradingBot").exception(
+            "Unexpected CUDA availability error: %s", exc
+        )
+        raise
 
 
 def bybit_interval(timeframe: str) -> str:
