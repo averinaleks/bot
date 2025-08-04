@@ -933,7 +933,7 @@ async def test_rl_close_action(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_stop_loss_take_profit_triggers_close(monkeypatch):
+async def test_check_stop_loss_take_profit_triggers_close_long(monkeypatch):
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, None, None, None)
 
@@ -952,7 +952,33 @@ async def test_check_stop_loss_take_profit_triggers_close(monkeypatch):
 
     monkeypatch.setattr(tm, "close_position", wrapped)
 
-    await tm.check_stop_loss_take_profit("BTCUSDT", 90)
+    await tm.check_stop_loss_take_profit("BTCUSDT", 99)
+
+    assert called["n"] == 1
+    assert len(tm.positions) == 0
+
+
+@pytest.mark.asyncio
+async def test_check_stop_loss_take_profit_triggers_close_short(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "sell", 100, {})
+
+    called = {"n": 0}
+
+    async def wrapped(symbol, price, reason=""):
+        called["n"] += 1
+        tm.positions = tm.positions.drop(symbol, level="symbol")
+
+    monkeypatch.setattr(tm, "close_position", wrapped)
+
+    await tm.check_stop_loss_take_profit("BTCUSDT", 101)
 
     assert called["n"] == 1
     assert len(tm.positions) == 0
