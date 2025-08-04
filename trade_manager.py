@@ -901,20 +901,12 @@ class TradeManager:
                 if not indicators or not indicators.atr.iloc[-1]:
                     return
                 atr = indicators.atr.iloc[-1]
-                stop_loss = (
-                    position["entry_price"]
-                    * (1 - position["sl_multiplier"] * atr / position["entry_price"])
-                    if position["side"] == "buy"
-                    else position["entry_price"]
-                    * (1 + position["sl_multiplier"] * atr / position["entry_price"])
-                )
-                take_profit = (
-                    position["entry_price"]
-                    * (1 + position["tp_multiplier"] * atr / position["entry_price"])
-                    if position["side"] == "buy"
-                    else position["entry_price"]
-                    * (1 - position["tp_multiplier"] * atr / position["entry_price"])
-                )
+                if position["side"] == "buy":
+                    stop_loss = position["entry_price"] - position["sl_multiplier"] * atr
+                    take_profit = position["entry_price"] + position["tp_multiplier"] * atr
+                else:
+                    stop_loss = position["entry_price"] + position["sl_multiplier"] * atr
+                    take_profit = position["entry_price"] - position["tp_multiplier"] * atr
                 if position["side"] == "buy" and current_price <= stop_loss:
                     close_reason = "Stop Loss"
                 elif position["side"] == "sell" and current_price >= stop_loss:
