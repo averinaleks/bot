@@ -20,6 +20,11 @@ services:
       timeout: 2s
       retries: 12
       start_period: 5s
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./config.json:/app/config.json
     shm_size: '8gb'
     networks:
       - trading_bot_default
@@ -42,6 +47,11 @@ services:
       timeout: 2s
       retries: 12
       start_period: 5s
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./config.json:/app/config.json
     shm_size: '8gb'
     networks:
       - trading_bot_default
