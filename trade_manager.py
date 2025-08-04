@@ -238,6 +238,7 @@ class TradeManager:
         self.positions_changed = False
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.last_stats_day = int(time.time() // 86400)
+        self._min_retrain_size: dict[str, int] = {}
         self.load_state()
 
     async def compute_risk_per_trade(self, symbol: str, volatility: float) -> float:
@@ -1088,10 +1089,11 @@ class TradeManager:
                                         sharpe_ratio,
                                         volatility_change,
                                     )
-                                    await self.model_builder.retrain_symbol(symbol)
-                                    await self.telegram_logger.send_telegram_message(
-                                        f"🔄 Retraining {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility={volatility_change:.2f}"
-                                    )
+                                    retrained = await self._maybe_retrain_symbol(symbol)
+                                    if retrained:
+                                        await self.telegram_logger.send_telegram_message(
+                                            f"🔄 Retraining {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility={volatility_change:.2f}"
+                                        )
                             if sharpe_ratio < self.config.get("min_sharpe_ratio", 0.5):
                                 logger.warning(
                                     "Low Sharpe Ratio for %s: %.2f",
@@ -1231,18 +1233,63 @@ class TradeManager:
             logger.exception("Failed to check EMA conditions for %s: %s", symbol, e)
             raise
 
+    async def _dataset_has_multiple_classes(
+        self, symbol: str, features: np.ndarray | None = None
+    ) -> tuple[bool, int]:
+        if features is None:
+            indicators = self.data_handler.indicators.get(symbol)
+            empty = (
+                await _check_df_async(indicators.df, f"dataset check {symbol}")
+                if indicators
+                else True
+            )
+            if not indicators or empty:
+                return False, 0
+            try:
+                features = await self.model_builder.prepare_lstm_features(
+                    symbol, indicators
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to prepare features for %s", symbol, exc_info=True
+                )
+                return False, 0
+        required_len = self.config["lstm_timesteps"] * 2
+        if len(features) < required_len:
+            return False, len(features)
+        _, y = self.model_builder.prepare_dataset(features)
+        return len(np.unique(y)) >= 2, len(y)
+
+    async def _maybe_retrain_symbol(
+        self, symbol: str, features: np.ndarray | None = None
+    ) -> bool:
+        has_classes, size = await self._dataset_has_multiple_classes(symbol, features)
+        if not has_classes or size <= self._min_retrain_size.get(symbol, 0):
+            self._min_retrain_size[symbol] = max(
+                size, self._min_retrain_size.get(symbol, 0)
+            )
+            logger.debug(
+                "Insufficient class labels for %s; postponing retrain", symbol
+            )
+            return False
+        try:
+            await self.model_builder.retrain_symbol(symbol)
+            self._min_retrain_size.pop(symbol, None)
+            return True
+        except Exception as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 400:
+                self._min_retrain_size[symbol] = size
+                logger.info(
+                    "Retraining deferred for %s until more data accumulates", symbol
+                )
+                return False
+            logger.debug("Retraining failed for %s", symbol, exc_info=True)
+            return False
+
     async def evaluate_signal(self, symbol: str, return_prob: bool = False):
         try:
             model = self.model_builder.predictive_models.get(symbol)
-            if not model:
-                logger.debug("Model for %s not yet trained", symbol)
-                try:
-                    await self.model_builder.retrain_symbol(symbol)
-                except Exception:
-                    logger.debug("Retraining failed for %s", symbol, exc_info=True)
-                model = self.model_builder.predictive_models.get(symbol)
-                if not model:
-                    return None
             indicators = self.data_handler.indicators.get(symbol)
             empty = (
                 await _check_df_async(indicators.df, f"evaluate_signal {symbol}")
@@ -1283,6 +1330,13 @@ class TradeManager:
                     "Not enough features for %s: %s", symbol, len(features)
                 )
                 return None
+            if not model:
+                logger.debug("Model for %s not yet trained", symbol)
+                if not await self._maybe_retrain_symbol(symbol, features):
+                    return None
+                model = self.model_builder.predictive_models.get(symbol)
+                if not model:
+                    return None
             X = np.array([features[-self.config["lstm_timesteps"] :]])
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device

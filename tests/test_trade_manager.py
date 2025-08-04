@@ -608,7 +608,19 @@ async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
             self.device = "cpu"
             self.predictive_models = {}
             self.calibrators = {}
+            self.feature_cache = {}
             self.retrained = False
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            return np.arange(8, dtype=np.float32).reshape(-1, 1)
+
+        def prepare_dataset(self, features):
+            X = np.ones((4, 1), dtype=np.float32)
+            y = np.array([0, 1, 0, 1], dtype=np.float32)
+            return X, y
 
         async def retrain_symbol(self, symbol):
             self.retrained = True
@@ -625,6 +637,79 @@ async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
     signal = await tm.evaluate_signal("BTCUSDT")
     assert signal is None
     assert mb.retrained
+
+
+@pytest.mark.asyncio
+async def test_evaluate_signal_skips_retrain_on_single_label(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {}
+            self.calibrators = {}
+            self.feature_cache = {}
+            self.retrained = False
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            return np.ones((4, 1), dtype=np.float32)
+
+        def prepare_dataset(self, features):
+            X = np.ones((2, 1), dtype=np.float32)
+            y = np.zeros(2, dtype=np.float32)
+            return X, y
+
+        async def retrain_symbol(self, symbol):
+            self.retrained = True
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert signal is None
+    assert not mb.retrained
+
+
+@pytest.mark.asyncio
+async def test_evaluate_signal_handles_http_400(monkeypatch):
+    dh = DummyDataHandler()
+
+    class HTTPError(Exception):
+        def __init__(self, status):
+            self.response = types.SimpleNamespace(status_code=status)
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {}
+            self.calibrators = {}
+            self.feature_cache = {}
+            self.called = False
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            return np.arange(8, dtype=np.float32).reshape(-1, 1)
+
+        def prepare_dataset(self, features):
+            X = np.ones((4, 1), dtype=np.float32)
+            y = np.array([0, 1, 0, 1], dtype=np.float32)
+            return X, y
+
+        async def retrain_symbol(self, symbol):
+            self.called = True
+            raise HTTPError(400)
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert signal is None
+    assert mb.called
 
 
 @pytest.mark.asyncio
