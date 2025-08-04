@@ -41,20 +41,25 @@ def wait_for_service(
     ) from last_exc
 
 
-def get_free_port(retries: int = 10, low: int = 20000, high: int = 50000) -> int:
-    """Return an available port on localhost.
+def get_free_port(retries: int = 10, *, reserve: bool = False) -> int | tuple[int, socket.socket]:
+    """Return an ephemeral port on ``localhost``.
 
-    Ports are chosen randomly from the range ``low``-``high``. The function
-    retries to mitigate bind conflicts when tests run in parallel.
+    The OS assigns a free port when binding to ``("127.0.0.1", 0)``. ``reserve``
+    keeps the returned socket open so the caller can hold the port until the
+    service starts, reducing the chance of a race with other processes.
     """
     for _ in range(retries):
-        port = random.randint(low, high)
-        with socket.socket() as s:
-            try:
-                s.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-            return port
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        except OSError:
+            s.close()
+            continue
+        if reserve:
+            return port, s
+        s.close()
+        return port
     raise RuntimeError("Could not allocate free port")
 
 
