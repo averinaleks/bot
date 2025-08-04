@@ -128,15 +128,27 @@ class DummyExchange:
         return {'id': '2'}
 
 class DummyDataHandler:
-    def __init__(self, fresh: bool = True, fail_order: bool = False):
+    def __init__(
+        self,
+        fresh: bool = True,
+        fail_order: bool = False,
+        pairs: list[str] | None = None,
+    ):
         self.exchange = DummyExchange()
         self.exchange.fail = fail_order
-        self.usdt_pairs = ['BTCUSDT']
-        idx = pd.MultiIndex.from_tuples([
-            ('BTCUSDT', pd.Timestamp('2020-01-01'))
-        ], names=['symbol', 'timestamp'])
-        self.ohlcv = pd.DataFrame({'close': [100], 'atr': [1.0]}, index=idx)
-        self.indicators = {'BTCUSDT': types.SimpleNamespace(atr=pd.Series([1.0]), df=pd.DataFrame({'a':[1]}))}
+        self.usdt_pairs = pairs or ['BTCUSDT']
+        idx = pd.MultiIndex.from_tuples(
+            [(sym, pd.Timestamp('2020-01-01')) for sym in self.usdt_pairs],
+            names=['symbol', 'timestamp']
+        )
+        self.ohlcv = pd.DataFrame(
+            {'close': [100]*len(self.usdt_pairs), 'atr': [1.0]*len(self.usdt_pairs)},
+            index=idx
+        )
+        self.indicators = {
+            sym: types.SimpleNamespace(atr=pd.Series([1.0]), df=pd.DataFrame({'a':[1]}))
+            for sym in self.usdt_pairs
+        }
         self.fresh = fresh
         async def _opt(symbol):
             return {}
@@ -250,7 +262,7 @@ def test_open_position_places_tp_sl_orders():
 
 
 def test_trailing_stop_to_breakeven():
-    dh = DummyDataHandler()
+    dh = DummyDataHandler(pairs=['BTCUSDT', 'ETHUSDT'])
     cfg = make_config()
     cfg.update({
         'trailing_stop_percentage': 1.0,
@@ -265,15 +277,20 @@ def test_trailing_stop_to_breakeven():
     tm.compute_risk_per_trade = fake_compute
 
     async def run():
+        await tm.open_position('ETHUSDT', 'buy', 100, {})
         await tm.open_position('BTCUSDT', 'buy', 100, {})
+        # Deliberately unsort positions
+        tm.positions = tm.positions.iloc[::-1]
         await tm.check_trailing_stop('BTCUSDT', 101)
 
     import asyncio
     asyncio.run(run())
 
-    assert len(dh.exchange.orders) >= 2
-    assert tm.positions.iloc[0]['breakeven_triggered'] is True
-    assert tm.positions.iloc[0]['size'] < dh.exchange.orders[0]['amount']
+    assert len(dh.exchange.orders) >= 3
+    pos = tm.positions.xs('BTCUSDT', level='symbol').iloc[0]
+    open_btc_order = next(o for o in dh.exchange.orders if o['symbol'] == 'BTCUSDT')
+    assert pos['breakeven_triggered'] is True
+    assert pos['size'] < open_btc_order['amount']
 
 
 def test_open_position_skips_existing():
