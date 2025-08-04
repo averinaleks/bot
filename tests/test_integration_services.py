@@ -3,22 +3,17 @@ import requests
 import multiprocessing
 import socket
 import signal
+from contextlib import ExitStack
 from flask import Flask, request, jsonify
 import pytest
 
-from tests.helpers import wait_for_service
+from tests.helpers import get_free_port, service_process
 
 # Ensure processes use the spawn start method on all platforms
 multiprocessing.set_start_method("spawn", force=True)
 ctx = multiprocessing.get_context("spawn")
 
 
-def _get_free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
 
 
 
@@ -100,23 +95,19 @@ def _run_tm(port: int):
 def test_services_communicate():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
-    dh_port = _get_free_port()
-    mb_port = _get_free_port()
-    tm_port = _get_free_port()
-    processes = [
-        ctx.Process(target=_run_dh, args=(dh_port,)),
-        ctx.Process(target=_run_mb, args=(mb_port,)),
-        ctx.Process(target=_run_tm, args=(tm_port,)),
-    ]
-    try:
-        for p in processes:
-            p.start()
-        for url in (
-            f'http://localhost:{dh_port}/ping',
-            f'http://localhost:{mb_port}/ping',
-            f'http://localhost:{tm_port}/ready',
-        ):
-            wait_for_service(url)
+    dh_port = get_free_port()
+    mb_port = get_free_port()
+    tm_port = get_free_port()
+    with ExitStack() as stack:
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+        )
         os.environ.update({
             'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
             'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -126,68 +117,50 @@ def test_services_communicate():
         resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
         data = resp.json()
         assert data['positions'], 'position was not created'
-    finally:
-        for p in processes:
-            p.terminate()
-            p.join()
-            assert p.exitcode == 0
 
 
 @pytest.mark.integration
 def test_service_availability_check():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
-    dh_port = _get_free_port()
-    mb_port = _get_free_port()
-    tm_port = _get_free_port()
-    processes = [
-        ctx.Process(target=_run_dh, args=(dh_port,)),
-        ctx.Process(target=_run_mb, args=(mb_port,)),
-        ctx.Process(target=_run_tm, args=(tm_port,)),
-    ]
-    try:
-        for p in processes:
-            p.start()
-        for url in (
-            f'http://localhost:{dh_port}/ping',
-            f'http://localhost:{mb_port}/ping',
-            f'http://localhost:{tm_port}/ready',
-        ):
-            wait_for_service(url)
+    dh_port = get_free_port()
+    mb_port = get_free_port()
+    tm_port = get_free_port()
+    with ExitStack() as stack:
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+        )
         resp = requests.get(f'http://localhost:{dh_port}/ping', timeout=5)
         assert resp.status_code == 200
         resp = requests.get(f'http://localhost:{mb_port}/ping', timeout=5)
         assert resp.status_code == 200
         resp = requests.get(f'http://localhost:{tm_port}/ready', timeout=5)
         assert resp.status_code == 200
-    finally:
-        for p in processes:
-            p.terminate()
-            p.join()
-            assert p.exitcode == 0
 
 
 @pytest.mark.integration
 def test_check_services_success():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
-    dh_port = _get_free_port()
-    mb_port = _get_free_port()
-    tm_port = _get_free_port()
-    processes = [
-        ctx.Process(target=_run_dh, args=(dh_port,)),
-        ctx.Process(target=_run_mb, args=(mb_port,)),
-        ctx.Process(target=_run_tm, args=(tm_port,)),
-    ]
-    try:
-        for p in processes:
-            p.start()
-        for url in (
-            f'http://localhost:{dh_port}/ping',
-            f'http://localhost:{mb_port}/ping',
-            f'http://localhost:{tm_port}/ready',
-        ):
-            wait_for_service(url)
+    dh_port = get_free_port()
+    mb_port = get_free_port()
+    tm_port = get_free_port()
+    with ExitStack() as stack:
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+        )
         os.environ.update({
             'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
             'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -196,32 +169,22 @@ def test_check_services_success():
             'SERVICE_CHECK_DELAY': '0.1',
         })
         trading_bot.check_services()
-    finally:
-        for p in processes:
-            p.terminate()
-            p.join()
-            assert p.exitcode == 0
 
 
 @pytest.mark.integration
 def test_check_services_failure():
     from bot import trading_bot  # noqa: E402
     os.environ['HOST'] = '127.0.0.1'
-    dh_port = _get_free_port()
-    mb_port = _get_free_port()
-    tm_port = _get_free_port()
-    processes = [
-        ctx.Process(target=_run_dh, args=(dh_port,)),
-        ctx.Process(target=_run_mb, args=(mb_port,)),
-    ]
-    try:
-        for p in processes:
-            p.start()
-        for url in (
-            f'http://localhost:{dh_port}/ping',
-            f'http://localhost:{mb_port}/ping',
-        ):
-            wait_for_service(url)
+    dh_port = get_free_port()
+    mb_port = get_free_port()
+    tm_port = get_free_port()
+    with ExitStack() as stack:
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+        )
         os.environ.update({
             'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
             'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
@@ -231,11 +194,6 @@ def test_check_services_failure():
         })
         with pytest.raises(SystemExit):
             trading_bot.check_services()
-    finally:
-        for p in processes:
-            p.terminate()
-            p.join()
-            assert p.exitcode == 0
 
 
 @pytest.mark.integration
@@ -248,31 +206,22 @@ def test_check_services_host_only():
         'SERVICE_CHECK_RETRIES': '2',
         'SERVICE_CHECK_DELAY': '0.1',
     })
-    dh_port = _get_free_port()
-    mb_port = _get_free_port()
-    tm_port = _get_free_port()
-    processes = [
-        ctx.Process(target=_run_dh, args=(dh_port,)),
-        ctx.Process(target=_run_mb, args=(mb_port,)),
-        ctx.Process(target=_run_tm, args=(tm_port,)),
-    ]
-    try:
-        for p in processes:
-            p.start()
-        for url in (
-            f'http://localhost:{dh_port}/ping',
-            f'http://localhost:{mb_port}/ping',
-            f'http://localhost:{tm_port}/ready',
-        ):
-            wait_for_service(url)
+    dh_port = get_free_port()
+    mb_port = get_free_port()
+    tm_port = get_free_port()
+    with ExitStack() as stack:
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+        )
+        stack.enter_context(
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+        )
         os.environ.update({
             'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
             'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
             'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
         })
         trading_bot.check_services()
-    finally:
-        for p in processes:
-            p.terminate()
-            p.join()
-            assert p.exitcode == 0
