@@ -350,6 +350,7 @@ class TradeManager:
                     and self.positions.index.get_level_values("timestamp").tz is None
                 ):
                     self.positions = self.positions.tz_localize("UTC", level="timestamp")
+                self._sort_positions()
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "rb") as f:
                     self.returns_by_symbol = joblib.load(f)
@@ -357,6 +358,11 @@ class TradeManager:
         except Exception as e:
             logger.exception("Failed to load state: %s", e)
             raise
+
+    def _sort_positions(self) -> None:
+        """Ensure positions are sorted by symbol then timestamp."""
+        if not self.positions.empty:
+            self.positions.sort_index(level=["symbol", "timestamp"], inplace=True)
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3)
@@ -522,6 +528,7 @@ class TradeManager:
     async def open_position(self, symbol: str, side: str, price: float, params: Dict):
         try:
             async with self.position_lock:
+                self._sort_positions()
                 if len(self.positions) >= self.max_positions:
                     logger.warning(
                         "Maximum number of positions reached: %s",
@@ -662,6 +669,7 @@ class TradeManager:
                     self.positions = pd.concat(
                         [self.positions, new_position_df], ignore_index=False
                     )
+                self._sort_positions()
                 self.positions_changed = True
             self.save_state()
             logger.info(
@@ -688,10 +696,14 @@ class TradeManager:
         # Fetch current position details under locks
         async with self.position_lock:
             async with self.returns_lock:
+                self._sort_positions()
                 if "symbol" in self.positions.index.names:
-                    position_df = self.positions.loc[
-                        self.positions.index.get_level_values("symbol") == symbol
-                    ]
+                    try:
+                        position_df = self.positions.xs(
+                            symbol, level="symbol", drop_level=False
+                        )
+                    except KeyError:
+                        position_df = pd.DataFrame()
                 else:
                     position_df = pd.DataFrame()
                 if position_df.empty:
@@ -737,6 +749,7 @@ class TradeManager:
                     and pos_idx in self.positions.index
                 ):
                     self.positions = self.positions.drop(pos_idx)
+                    self._sort_positions()
                     self.positions_changed = True
                     self.returns_by_symbol[symbol].append(
                         (pd.Timestamp.now(tz="UTC").timestamp(), profit)
@@ -762,10 +775,12 @@ class TradeManager:
         should_close = False
         async with self.position_lock:
             try:
+                self._sort_positions()
                 if "symbol" in self.positions.index.names:
-                    position = self.positions.loc[
-                        self.positions.index.get_level_values("symbol") == symbol
-                    ]
+                    try:
+                        position = self.positions.xs(symbol, level="symbol")
+                    except KeyError:
+                        position = pd.DataFrame()
                 else:
                     position = pd.DataFrame()
                 if position.empty:
@@ -814,11 +829,15 @@ class TradeManager:
                         use_lock=False,
                     )
                     remaining_size = position["size"] - close_size
-                    self.positions.loc[(symbol, slice(None)), "size"] = remaining_size
-                    self.positions.loc[(symbol, slice(None)), "sl_multiplier"] = 0.0
-                    self.positions.loc[(symbol, slice(None)), "breakeven_triggered"] = (
-                        True
-                    )
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "size"
+                    ] = remaining_size
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "sl_multiplier"
+                    ] = 0.0
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "breakeven_triggered"
+                    ] = True
                     self.positions_changed = True
                     self.save_state()
                     await self.telegram_logger.send_telegram_message(
@@ -827,17 +846,17 @@ class TradeManager:
 
                 if position["side"] == "buy":
                     new_highest = max(position["highest_price"], current_price)
-                    self.positions.loc[(symbol, slice(None)), "highest_price"] = (
-                        new_highest
-                    )
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "highest_price"
+                    ] = new_highest
                     trailing_stop_price = new_highest - trailing_stop_distance
                     if current_price <= trailing_stop_price:
                         should_close = True
                 else:
                     new_lowest = min(position["lowest_price"], current_price)
-                    self.positions.loc[(symbol, slice(None)), "lowest_price"] = (
-                        new_lowest
-                    )
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "lowest_price"
+                    ] = new_lowest
                     trailing_stop_price = new_lowest + trailing_stop_distance
                     if current_price >= trailing_stop_price:
                         should_close = True
@@ -851,10 +870,12 @@ class TradeManager:
         close_reason = None
         async with self.position_lock:
             try:
+                self._sort_positions()
                 if "symbol" in self.positions.index.names:
-                    position = self.positions.loc[
-                        self.positions.index.get_level_values("symbol") == symbol
-                    ]
+                    try:
+                        position = self.positions.xs(symbol, level="symbol")
+                    except KeyError:
+                        position = pd.DataFrame()
                 else:
                     position = pd.DataFrame()
                 if position.empty:
@@ -900,10 +921,12 @@ class TradeManager:
             if not model:
                 logger.debug("Model for %s not found", symbol)
                 return
+            self._sort_positions()
             if "symbol" in self.positions.index.names:
-                position = self.positions.loc[
-                    self.positions.index.get_level_values("symbol") == symbol
-                ]
+                try:
+                    position = self.positions.xs(symbol, level="symbol")
+                except KeyError:
+                    position = pd.DataFrame()
             else:
                 position = pd.DataFrame()
             if position.empty:
