@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import os
 import types
 import logging
 
+import logging
 import threading
 
 
@@ -177,20 +179,13 @@ def _init_cuda() -> None:
             cp = np  # type: ignore
             GPU_INITIALIZED = True
             return
-
         GPU_AVAILABLE = is_cuda_available()
         if GPU_AVAILABLE:
             try:
                 import cupy as cupy_mod  # type: ignore
-            except ImportError as exc:  # pragma: no cover - allow missing cupy
-                logging.getLogger("TradingBot").warning("cupy import failed: %s", exc)
-                GPU_AVAILABLE = False
-                cp = np  # type: ignore
-            else:
-                cp = cupy_mod  # type: ignore
+
         else:
             cp = np  # type: ignore
-
         GPU_INITIALIZED = True
 
 
