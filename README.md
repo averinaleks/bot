@@ -209,6 +209,16 @@ GPU warnings. Set the environment variable to `2` or `3` **before importing
 TensorFlow** if you want to suppress extra CUDA messages entirely. Adjust or
 remove this variable if you need more detailed logs.
 
+The Docker image also skips importing TensorFlow during its build-time library
+check unless explicitly enabled. Set `ENABLE_TF=1` as a build argument when
+you require TensorFlow features:
+
+```bash
+docker build --build-arg ENABLE_TF=1 -t trading-bot .
+```
+
+Omit the argument to skip the import and avoid the associated warnings.
+
 When both TensorFlow and PyTorch start in the same container you might see
 messages like `Unable to register cuDNN factory` or `computation placer already
 registered`. These lines appear while each framework loads CUDA plugins and
