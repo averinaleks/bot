@@ -451,7 +451,7 @@ async def test_fetch_ohlcv_single_empty_not_cached(tmp_path, monkeypatch):
 
     _, df = await dh.fetch_ohlcv_single('BTCUSDT', '1m', limit=5)
     assert df.empty
-    assert not (tmp_path / 'BTCUSDT_1m.json.gz').exists()
+    assert not (tmp_path / 'BTCUSDT_1m.parquet').exists()
 
 
 @pytest.mark.asyncio
@@ -471,7 +471,7 @@ async def test_fetch_ohlcv_history_empty_not_cached(tmp_path, monkeypatch):
 
     _, df = await dh.fetch_ohlcv_history('BTCUSDT', '1m', total_limit=5)
     assert df.empty
-    assert not (tmp_path / 'BTCUSDT_1m.json.gz').exists()
+    assert not (tmp_path / 'BTCUSDT_1m.parquet').exists()
 
 
 @pytest.mark.asyncio
