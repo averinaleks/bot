@@ -3,6 +3,7 @@
 import logging
 import os
 import pickle
+import json
 import pandas as pd
 import numpy as np
 import asyncio
@@ -15,7 +16,7 @@ from scipy.stats import zscore
 import gzip
 import psutil
 import shutil
-import tempfile
+from io import StringIO
 
 # Hide verbose TensorFlow logs and Numba performance warnings
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -801,16 +802,15 @@ class HistoricalDataCache:
                 timeframe,
             )
             return
-        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
-        temp_path = None
+        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
         start_time = time.time()
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb", delete=False, dir=self.cache_dir
-            ) as tmp:
-                pickle.dump(data, tmp)
-                temp_path = tmp.name
-            file_size_mb = os.path.getsize(temp_path) / (1024 * 1024)
+            payload = {
+                "version": 1,
+                "data": data.to_json(orient="split"),
+            }
+            json_bytes = json.dumps(payload).encode("utf-8")
+            file_size_mb = len(json_bytes) / (1024 * 1024)
             if not self._check_memory(file_size_mb):
                 logger.warning(
                     "Недостаточно памяти для кэширования %s_%s, очистка кэша",
@@ -833,7 +833,7 @@ class HistoricalDataCache:
                 except OSError:
                     old_size_mb = 0
             with gzip.open(filename, "wb") as f:
-                pickle.dump(data, f)
+                f.write(json_bytes)
             compressed_size_mb = os.path.getsize(filename) / (1024 * 1024)
             self.current_cache_size_mb += compressed_size_mb - old_size_mb
             elapsed_time = time.time() - start_time
@@ -845,24 +845,19 @@ class HistoricalDataCache:
                     elapsed_time,
                 )
             logger.info(
-                "Данные кэшированы (gzip): %s, размер %.2f МБ",
+                "Данные кэшированы (gzip json): %s, размер %.2f МБ",
                 filename,
                 compressed_size_mb,
             )
             self._aggressive_clean()
-        except (OSError, pickle.PickleError) as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.error("Ошибка сохранения кэша для %s_%s: %s", symbol, timeframe, e)
-        finally:
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError as e:
-                    logger.error("Ошибка удаления временного файла %s: %s", temp_path, e)
 
     def load_cached_data(self, symbol, timeframe):
         try:
             safe_symbol = sanitize_symbol(symbol)
-            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
+            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
+            old_gzip = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
             old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
@@ -870,17 +865,10 @@ class HistoricalDataCache:
                     self._delete_cache_file(filename)
                     return None
                 start_time = time.time()
-                with gzip.open(filename, "rb") as f:
-                    data = pickle.load(f)
-                if not isinstance(data, pd.DataFrame):
-                    logger.error(
-                        "Неверный тип данных в кэше %s_%s: %s",
-                        symbol,
-                        timeframe,
-                        type(data),
-                    )
-                    self._delete_cache_file(filename)
-                    return None
+                with gzip.open(filename, "rt") as f:
+                    payload = json.load(f)
+                data_json = payload.get("data")
+                data = pd.read_json(StringIO(data_json), orient="split")
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(
@@ -889,31 +877,33 @@ class HistoricalDataCache:
                         timeframe,
                         elapsed_time,
                     )
-                logger.info("Данные загружены из кэша (gzip): %s", filename)
+                logger.info("Данные загружены из кэша (gzip json): %s", filename)
                 return data
-            if os.path.exists(old_filename):
-                logger.info(
-                    "Обнаружен старый кэш для %s_%s, конвертация в gzip",
-                    symbol,
-                    timeframe,
-                )
-                with open(old_filename, "rb") as f:
-                    data = pickle.load(f)
-                if not isinstance(data, pd.DataFrame):
-                    logger.error(
-                        "Неверный тип данных в старом кэше %s_%s: %s",
+            for legacy in (old_gzip, old_filename):
+                if os.path.exists(legacy):
+                    logger.info(
+                        "Обнаружен старый кэш для %s_%s, конвертация в JSON",
                         symbol,
                         timeframe,
-                        type(data),
                     )
-                    self._delete_cache_file(old_filename)
-                    return None
-                self.save_cached_data(symbol, timeframe, data)
-                self._delete_cache_file(old_filename)
-                return data
+                    open_func = gzip.open if legacy.endswith(".gz") else open
+                    with open_func(legacy, "rb") as f:
+                        data = pickle.load(f)
+                    if not isinstance(data, pd.DataFrame):
+                        logger.error(
+                            "Неверный тип данных в старом кэше %s_%s: %s",
+                            symbol,
+                            timeframe,
+                            type(data),
+                        )
+                        self._delete_cache_file(legacy)
+                        return None
+                    self.save_cached_data(symbol, timeframe, data)
+                    self._delete_cache_file(legacy)
+                    return data
             return None
         except Exception as e:
             logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
-            for f in (filename, old_filename):
+            for f in (filename, old_gzip, old_filename):
                 self._delete_cache_file(f)
             return None
