@@ -89,6 +89,12 @@ def ping() -> tuple:
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8001'))
-    host = os.environ.get('HOST', '0.0.0.0')
+    host = os.environ.get('HOST')
+    if not host:
+        host = '127.0.0.1'
+        app.logger.info('HOST not set, defaulting to %s', host)
+    elif host != '127.0.0.1':
+        app.logger.warning('Using non-local host %s; ensure this is intended', host)
+    app.logger.info('Starting model builder reference service on %s:%s', host, port)
     _load_model()
     app.run(host=host, port=port)

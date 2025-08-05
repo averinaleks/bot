@@ -89,9 +89,9 @@ def _run_mb(model_dir: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    with patch.dict(os.environ, {'MODEL_DIR': model_dir, 'HOST': '127.0.0.1'}):
+    with patch.dict(os.environ, {'MODEL_DIR': model_dir}):
         from bot.services import model_builder_service
-        model_builder_service.app.run(host='127.0.0.1', port=port)
+        model_builder_service.app.run(port=port)
 
 
 @pytest.mark.integration
@@ -175,10 +175,10 @@ def _run_mb_fail(model_file: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    with patch.dict(os.environ, {'MODEL_FILE': model_file, 'HOST': '127.0.0.1'}):
+    with patch.dict(os.environ, {'MODEL_FILE': model_file}):
         from bot.services import model_builder_service
         model_builder_service._load_model()
-        model_builder_service.app.run(host='127.0.0.1', port=port)
+        model_builder_service.app.run(port=port)
 
 
 @pytest.mark.integration
