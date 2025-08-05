@@ -1,5 +1,6 @@
 # Этап сборки
 FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu22.04 AS builder
+ARG ZLIB_VERSION=1.3.1
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,15 +8,14 @@ ENV TZ=Etc/UTC
 
 # Установка необходимых пакетов для сборки и обновление linux-libc-dev
 RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
-    zlib1g \
-    zlib1g-dev \
     tzdata \
     software-properties-common \
     linux-libc-dev \
+    build-essential \
+    curl \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
-    zlib1g \
-    zlib1g-dev \
+    curl \
     python3.12 \
     python3.12-dev \
     python3.12-venv \
@@ -26,7 +26,12 @@ RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --
     libblas-dev \
     liblapack-dev \
     linux-libc-dev \
+    && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
+    && tar -xf zlib.tar.gz \
+    && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
+    && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ldconfig \
     && python3.12 --version
 
 WORKDIR /app
@@ -47,6 +52,7 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
 
 # Этап выполнения
 FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu22.04
+ARG ZLIB_VERSION=1.3.1
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -56,19 +62,21 @@ WORKDIR /app
 
 # Установка минимальных пакетов для выполнения и обновление linux-libc-dev
 RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
-    zlib1g \
-    zlib1g-dev \
     tzdata \
     software-properties-common \
     linux-libc-dev \
+    curl \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
-    zlib1g \
-    zlib1g-dev \
     curl \
     python3.12 \
     linux-libc-dev \
+    && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
+    && tar -xf zlib.tar.gz \
+    && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
+    && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ldconfig \
     && python3.12 --version
 
 # Копируем виртуальное окружение из этапа сборки
