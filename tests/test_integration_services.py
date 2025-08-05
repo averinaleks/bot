@@ -92,9 +92,9 @@ def _run_tm(port: int):
 
 
 @pytest.mark.integration
-def test_services_communicate():
+def test_services_communicate(monkeypatch):
     from bot import trading_bot  # noqa: E402
-    os.environ['HOST'] = '127.0.0.1'
+    monkeypatch.setenv('HOST', '127.0.0.1')
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
@@ -108,11 +108,9 @@ def test_services_communicate():
         stack.enter_context(
             service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
         )
-        os.environ.update({
-            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-        })
+        monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
+        monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
+        monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
         trading_bot.run_once()
         resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
         data = resp.json()
@@ -120,9 +118,9 @@ def test_services_communicate():
 
 
 @pytest.mark.integration
-def test_service_availability_check():
+def test_service_availability_check(monkeypatch):
     from bot import trading_bot  # noqa: E402
-    os.environ['HOST'] = '127.0.0.1'
+    monkeypatch.setenv('HOST', '127.0.0.1')
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
@@ -145,9 +143,9 @@ def test_service_availability_check():
 
 
 @pytest.mark.integration
-def test_check_services_success():
+def test_check_services_success(monkeypatch):
     from bot import trading_bot  # noqa: E402
-    os.environ['HOST'] = '127.0.0.1'
+    monkeypatch.setenv('HOST', '127.0.0.1')
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
@@ -161,20 +159,18 @@ def test_check_services_success():
         stack.enter_context(
             service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
         )
-        os.environ.update({
-            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-            'SERVICE_CHECK_RETRIES': '2',
-            'SERVICE_CHECK_DELAY': '0.1',
-        })
+        monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
+        monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
+        monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
+        monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
+        monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
         trading_bot.check_services()
 
 
 @pytest.mark.integration
-def test_check_services_failure():
+def test_check_services_failure(monkeypatch):
     from bot import trading_bot  # noqa: E402
-    os.environ['HOST'] = '127.0.0.1'
+    monkeypatch.setenv('HOST', '127.0.0.1')
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
@@ -185,27 +181,23 @@ def test_check_services_failure():
         stack.enter_context(
             service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
         )
-        os.environ.update({
-            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-            'SERVICE_CHECK_RETRIES': '2',
-            'SERVICE_CHECK_DELAY': '0.1',
-        })
+        monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
+        monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
+        monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
+        monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
+        monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
         with pytest.raises(SystemExit):
             trading_bot.check_services()
 
 
 @pytest.mark.integration
-def test_check_services_host_only():
+def test_check_services_host_only(monkeypatch):
     from bot import trading_bot  # noqa: E402
-    os.environ['HOST'] = '127.0.0.1'
+    monkeypatch.setenv('HOST', '127.0.0.1')
     for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
-        os.environ.pop(var, None)
-    os.environ.update({
-        'SERVICE_CHECK_RETRIES': '2',
-        'SERVICE_CHECK_DELAY': '0.1',
-    })
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
+    monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
@@ -219,9 +211,7 @@ def test_check_services_host_only():
         stack.enter_context(
             service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
         )
-        os.environ.update({
-            'DATA_HANDLER_URL': f'http://localhost:{dh_port}',
-            'MODEL_BUILDER_URL': f'http://localhost:{mb_port}',
-            'TRADE_MANAGER_URL': f'http://localhost:{tm_port}',
-        })
+        monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
+        monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
+        monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
         trading_bot.check_services()
