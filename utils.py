@@ -16,7 +16,7 @@ from scipy.stats import zscore
 import gzip
 import psutil
 import shutil
-from io import StringIO
+from io import StringIO, BytesIO
 
 # Hide verbose TensorFlow logs and Numba performance warnings
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -802,15 +802,13 @@ class HistoricalDataCache:
                 timeframe,
             )
             return
-        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
+        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.parquet")
         start_time = time.time()
         try:
-            payload = {
-                "version": 1,
-                "data": data.to_json(orient="split"),
-            }
-            json_bytes = json.dumps(payload).encode("utf-8")
-            file_size_mb = len(json_bytes) / (1024 * 1024)
+            buffer = BytesIO()
+            data.to_parquet(buffer, compression="gzip")
+            parquet_bytes = buffer.getvalue()
+            file_size_mb = len(parquet_bytes) / (1024 * 1024)
             if not self._check_memory(file_size_mb):
                 logger.warning(
                     "Недостаточно памяти для кэширования %s_%s, очистка кэша",
@@ -832,20 +830,20 @@ class HistoricalDataCache:
                     old_size_mb = os.path.getsize(filename) / (1024 * 1024)
                 except OSError:
                     old_size_mb = 0
-            with gzip.open(filename, "wb") as f:
-                f.write(json_bytes)
+            with open(filename, "wb") as f:
+                f.write(parquet_bytes)
             compressed_size_mb = os.path.getsize(filename) / (1024 * 1024)
             self.current_cache_size_mb += compressed_size_mb - old_size_mb
             elapsed_time = time.time() - start_time
             if elapsed_time > 0.5:
                 logger.warning(
-                    "Высокая задержка сжатия gzip для %s_%s: %.2f сек",
+                    "Высокая задержка записи Parquet для %s_%s: %.2f сек",
                     symbol,
                     timeframe,
                     elapsed_time,
                 )
             logger.info(
-                "Данные кэшированы (gzip json): %s, размер %.2f МБ",
+                "Данные кэшированы (parquet): %s, размер %.2f МБ",
                 filename,
                 compressed_size_mb,
             )
@@ -856,7 +854,8 @@ class HistoricalDataCache:
     def load_cached_data(self, symbol, timeframe):
         try:
             safe_symbol = sanitize_symbol(symbol)
-            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
+            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.parquet")
+            legacy_json = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
             old_gzip = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
             old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
             if os.path.exists(filename):
@@ -865,30 +864,33 @@ class HistoricalDataCache:
                     self._delete_cache_file(filename)
                     return None
                 start_time = time.time()
-                with gzip.open(filename, "rt") as f:
-                    payload = json.load(f)
-                data_json = payload.get("data")
-                data = pd.read_json(StringIO(data_json), orient="split")
+                data = pd.read_parquet(filename)
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(
-                        "Высокая задержка чтения gzip для %s_%s: %.2f сек",
+                        "Высокая задержка чтения Parquet для %s_%s: %.2f сек",
                         symbol,
                         timeframe,
                         elapsed_time,
                     )
-                logger.info("Данные загружены из кэша (gzip json): %s", filename)
+                logger.info("Данные загружены из кэша (parquet): %s", filename)
                 return data
-            for legacy in (old_gzip, old_filename):
+            for legacy in (legacy_json, old_gzip, old_filename):
                 if os.path.exists(legacy):
                     logger.info(
-                        "Обнаружен старый кэш для %s_%s, конвертация в JSON",
+                        "Обнаружен старый кэш для %s_%s, конвертация в Parquet",
                         symbol,
                         timeframe,
                     )
-                    open_func = gzip.open if legacy.endswith(".gz") else open
-                    with open_func(legacy, "rb") as f:
-                        data = pickle.load(f)
+                    if legacy.endswith("json.gz"):
+                        with gzip.open(legacy, "rt") as f:
+                            payload = json.load(f)
+                        data_json = payload.get("data")
+                        data = pd.read_json(StringIO(data_json), orient="split")
+                    else:
+                        open_func = gzip.open if legacy.endswith(".gz") else open
+                        with open_func(legacy, "rb") as f:
+                            data = pickle.load(f)
                     if not isinstance(data, pd.DataFrame):
                         logger.error(
                             "Неверный тип данных в старом кэше %s_%s: %s",
@@ -904,6 +906,6 @@ class HistoricalDataCache:
             return None
         except Exception as e:
             logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
-            for f in (filename, old_gzip, old_filename):
+            for f in (filename, legacy_json, old_gzip, old_filename):
                 self._delete_cache_file(f)
             return None
