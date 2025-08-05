@@ -46,7 +46,9 @@ if os.getenv("TEST_MODE") == "1":
     ray.get = lambda x: x
     ray.init = lambda *a, **k: None
     ray.is_initialized = lambda: False
-    sys.modules.setdefault("httpx", types.ModuleType("httpx"))
+    httpx_mod = types.ModuleType("httpx")
+    httpx_mod.HTTPError = Exception
+    sys.modules.setdefault("httpx", httpx_mod)
     pybit_mod = types.ModuleType("pybit")
     ut_mod = types.ModuleType("unified_trading")
     ut_mod.HTTP = object
@@ -61,6 +63,7 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules.setdefault("uvicorn", uvicorn_mod)
 else:
     import ray
+import httpx
 from tenacity import retry, wait_exponential, stop_after_attempt
 import inspect
 from bot.utils import (
@@ -345,8 +348,8 @@ class TradeManager:
             self.last_save_time = time.time()
             self.positions_changed = False
             logger.info("TradeManager state saved")
-        except Exception as e:
-            logger.exception("Failed to save state: %s", e)
+        except (OSError, ValueError) as e:
+            logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
             raise
 
     def load_state(self):
@@ -363,8 +366,8 @@ class TradeManager:
                 with open(self.returns_file, "r") as f:
                     self.returns_by_symbol = json.load(f)
                 logger.info("TradeManager state loaded")
-        except Exception as e:
-            logger.exception("Failed to load state: %s", e)
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            logger.exception("Failed to load state (%s): %s", type(e).__name__, e)
             raise
 
     def _sort_positions(self) -> None:
@@ -450,8 +453,10 @@ class TradeManager:
                         return None
 
                 return order
-            except Exception as e:
-                logger.exception("Failed to place order for %s: %s", symbol, e)
+            except (httpx.HTTPError, RuntimeError) as e:
+                logger.exception(
+                    "Failed to place order for %s (%s): %s", symbol, type(e).__name__, e
+                )
                 await self.telegram_logger.send_telegram_message(
                     f"❌ Order error {symbol}: {e}"
                 )
@@ -516,8 +521,13 @@ class TradeManager:
                 atr,
             )
             return position_size
-        except Exception as e:
-            logger.exception("Failed to calculate position size for %s: %s", symbol, e)
+        except (httpx.HTTPError, KeyError, ValueError, RuntimeError) as e:
+            logger.exception(
+                "Failed to calculate position size for %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
+            )
             raise
 
     def calculate_stop_loss_take_profit(
@@ -599,11 +609,12 @@ class TradeManager:
                     order = await self.place_order(
                         symbol, side, size, price, order_params, use_lock=False
                     )
-                except Exception as exc:  # pragma: no cover - network issues
+                except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network issues
                     logger.error(
-                        "Order attempt %s for %s failed: %s",
+                        "Order attempt %s for %s failed (%s): %s",
                         attempt + 1,
                         symbol,
+                        type(exc).__name__,
                         exc,
                     )
                     order = None
@@ -696,12 +707,14 @@ class TradeManager:
                 f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
                 urgent=True,
             )
-        except Exception as e:
-            logger.exception("Failed to open position for %s: %s", symbol, e)
+        except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
+            logger.exception(
+                "Failed to open position for %s (%s): %s", symbol, type(e).__name__, e
+            )
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to open position {symbol}: {e}"
             )
-            return
+            raise
 
     async def close_position(
         self, symbol: str, exit_price: float, reason: str = "Manual"
@@ -737,8 +750,10 @@ class TradeManager:
                 exit_price,
                 use_lock=False,
             )
-        except Exception as e:  # pragma: no cover - network issues
-            logger.exception("Failed to close position for %s: %s", symbol, e)
+        except (httpx.HTTPError, RuntimeError) as e:  # pragma: no cover - network issues
+            logger.exception(
+                "Failed to close position for %s (%s): %s", symbol, type(e).__name__, e
+            )
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to close position {symbol}: {e}"
             )
@@ -872,8 +887,13 @@ class TradeManager:
                     trailing_stop_price = new_lowest + trailing_stop_distance
                     if current_price >= trailing_stop_price:
                         should_close = True
-            except Exception as e:
-                logger.exception("Failed trailing stop check for %s: %s", symbol, e)
+            except (KeyError, ValueError) as e:
+                logger.exception(
+                    "Failed trailing stop check for %s (%s): %s",
+                    symbol,
+                    type(e).__name__,
+                    e,
+                )
                 raise
         if should_close:
             await self.close_position(symbol, current_price, "Trailing Stop")
@@ -930,8 +950,13 @@ class TradeManager:
                     close_reason = "Take Profit"
                 elif position["side"] == "sell" and current_price <= take_profit:
                     close_reason = "Take Profit"
-            except Exception as e:
-                logger.exception("Failed SL/TP check for %s: %s", symbol, e)
+            except (KeyError, ValueError) as e:
+                logger.exception(
+                    "Failed SL/TP check for %s (%s): %s",
+                    symbol,
+                    type(e).__name__,
+                    e,
+                )
                 raise
         if close_reason:
             await self.close_position(symbol, current_price, close_reason)
@@ -969,8 +994,14 @@ class TradeManager:
                     features = await self.model_builder.prepare_lstm_features(
                         symbol, indicators
                     )
-                except Exception:
-                    logger.debug("Failed to prepare features for %s", symbol, exc_info=True)
+                except (RuntimeError, ValueError) as exc:
+                    logger.debug(
+                        "Failed to prepare features for %s (%s): %s",
+                        symbol,
+                        type(exc).__name__,
+                        exc,
+                        exc_info=True,
+                    )
                     return
                 self.model_builder.feature_cache[symbol] = features
             if len(features) < self.config["lstm_timesteps"]:
@@ -1053,8 +1084,13 @@ class TradeManager:
                         if not already_open:
                             params = await self.data_handler.parameter_optimizer.optimize(symbol)
                             await self.open_position(symbol, opposite, current_price, params)
-        except Exception as e:
-            logger.exception("Failed to check model signal for %s: %s", symbol, e)
+        except (httpx.HTTPError, RuntimeError, ValueError) as e:
+            logger.exception(
+                "Failed to check model signal for %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
+            )
             raise
 
     async def monitor_performance(self):
@@ -1137,7 +1173,11 @@ class TradeManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.exception("Performance monitoring error: %s", e)
+                logger.exception(
+                    "Performance monitoring error (%s): %s",
+                    type(e).__name__,
+                    e,
+                )
                 await asyncio.sleep(1)
                 continue
 
@@ -1180,7 +1220,11 @@ class TradeManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.exception("Error managing positions: %s", e)
+                logger.exception(
+                    "Error managing positions (%s): %s",
+                    type(e).__name__,
+                    e,
+                )
                 await asyncio.sleep(1)
                 continue
 
@@ -1262,8 +1306,13 @@ class TradeManager:
                 return False
             logger.info("EMA conditions satisfied for %s, signal=%s", symbol, signal)
             return True
-        except Exception as e:
-            logger.exception("Failed to check EMA conditions for %s: %s", symbol, e)
+        except (KeyError, ValueError) as e:
+            logger.exception(
+                "Failed to check EMA conditions for %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
+            )
             raise
 
     async def _dataset_has_multiple_classes(
@@ -1282,9 +1331,13 @@ class TradeManager:
                 features = await self.model_builder.prepare_lstm_features(
                     symbol, indicators
                 )
-            except Exception:
+            except (RuntimeError, ValueError) as exc:
                 logger.debug(
-                    "Failed to prepare features for %s", symbol, exc_info=True
+                    "Failed to prepare features for %s (%s): %s",
+                    symbol,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
                 )
                 return False, 0
         required_len = self.config["lstm_timesteps"] * 2
@@ -1317,7 +1370,13 @@ class TradeManager:
                     "Retraining deferred for %s until more data accumulates", symbol
                 )
                 return False
-            logger.debug("Retraining failed for %s", symbol, exc_info=True)
+            logger.debug(
+                "Retraining failed for %s (%s): %s",
+                symbol,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return False
 
     async def evaluate_signal(self, symbol: str, return_prob: bool = False):
@@ -1352,9 +1411,13 @@ class TradeManager:
                     features = await self.model_builder.prepare_lstm_features(
                         symbol, indicators
                     )
-                except Exception:
+                except (RuntimeError, ValueError) as exc:
                     logger.debug(
-                        "Failed to prepare features for %s", symbol, exc_info=True
+                        "Failed to prepare features for %s (%s): %s",
+                        symbol,
+                        type(exc).__name__,
+                        exc,
+                        exc_info=True,
                     )
                     return None
                 self.model_builder.feature_cache[symbol] = features
@@ -1459,8 +1522,13 @@ class TradeManager:
             if return_prob:
                 return final, float(prediction)
             return final
-        except Exception as e:
-            logger.exception("Failed to evaluate signal for %s: %s", symbol, e)
+        except (httpx.HTTPError, RuntimeError, ValueError) as e:
+            logger.exception(
+                "Failed to evaluate signal for %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
+            )
             raise
 
     async def gather_pending_signals(self):
@@ -1515,7 +1583,11 @@ class TradeManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.exception("Error processing ranked signals: %s", e)
+                logger.exception(
+                    "Error processing ranked signals (%s): %s",
+                    type(e).__name__,
+                    e,
+                )
                 await asyncio.sleep(1)
 
     async def run(self):
@@ -1535,8 +1607,12 @@ class TradeManager:
                     await self.telegram_logger.send_telegram_message(
                         f"❌ Task {task.get_name()} failed: {result}"
                     )
-        except Exception as e:
-            logger.exception("Critical error in TradeManager: %s", e)
+        except (httpx.HTTPError, RuntimeError, ValueError) as e:
+            logger.exception(
+                "Critical error in TradeManager (%s): %s",
+                type(e).__name__,
+                e,
+            )
             await self.telegram_logger.send_telegram_message(
                 f"❌ Critical TradeManager error: {e}"
             )
@@ -1562,8 +1638,8 @@ class TradeManager:
             fut = asyncio.run_coroutine_threadsafe(self.stop(), self.loop)
             try:
                 fut.result()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.exception("Error awaiting stop (%s): %s", type(e).__name__, e)
         else:
             try:
                 asyncio.run(self.stop())
@@ -1575,8 +1651,8 @@ class TradeManager:
                 ray.shutdown()
             elif hasattr(ray, "is_initialized") and ray.is_initialized():
                 ray.shutdown()
-        except Exception:  # pragma: no cover - cleanup errors
-            pass
+        except Exception as exc:  # pragma: no cover - cleanup errors
+            logger.exception("Ray shutdown failed (%s): %s", type(exc).__name__, exc)
 
     async def process_symbol(self, symbol: str):
         while symbol not in self.model_builder.predictive_models:
@@ -1614,7 +1690,12 @@ class TradeManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.exception("Error processing %s: %s", symbol, e)
+                logger.exception(
+                    "Error processing %s (%s): %s",
+                    symbol,
+                    type(e).__name__,
+                    e,
+                )
                 await asyncio.sleep(1)
                 continue
 
@@ -1632,7 +1713,8 @@ try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
 except AttributeError:  # pragma: no cover - older Flask versions
     try:
         from a2wsgi import WSGIMiddleware  # type: ignore
-    except Exception:  # pragma: no cover - fallback if a2wsgi isn't installed
+    except Exception as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
+        logger.exception("a2wsgi import failed (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware
 
     asgi_app = WSGIMiddleware(api_app)
@@ -1654,16 +1736,20 @@ async def create_trade_manager() -> TradeManager | None:
         try:
             cfg = load_config("config.json")
             logger.info("Configuration loaded successfully")
-        except Exception as exc:
-            logger.exception("Failed to load configuration: %s", exc)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.exception(
+                "Failed to load configuration (%s): %s", type(exc).__name__, exc
+            )
             raise
         if not ray.is_initialized():
             logger.info("Initializing Ray with num_cpus=%s", cfg["ray_num_cpus"])
             try:
                 ray.init(num_cpus=cfg["ray_num_cpus"], ignore_reinit_error=True)
                 logger.info("Ray initialized successfully")
-            except Exception as exc:
-                logger.exception("Ray initialization failed: %s", exc)
+            except RuntimeError as exc:
+                logger.exception(
+                    "Ray initialization failed (%s): %s", type(exc).__name__, exc
+                )
                 raise
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -1675,10 +1761,16 @@ async def create_trade_manager() -> TradeManager | None:
                 try:
                     await telegram_bot.delete_webhook(drop_pending_updates=True)
                     logger.info("Deleted existing Telegram webhook")
-                except Exception as exc:  # pragma: no cover - delete_webhook errors
-                    logger.exception("Failed to delete Telegram webhook: %s", exc)
-            except Exception as exc:  # pragma: no cover - import/runtime errors
-                logger.exception("Failed to create Telegram Bot: %s", exc)
+                except httpx.HTTPError as exc:  # pragma: no cover - delete_webhook errors
+                    logger.exception(
+                        "Failed to delete Telegram webhook (%s): %s",
+                        type(exc).__name__,
+                        exc,
+                    )
+            except (RuntimeError, httpx.HTTPError) as exc:  # pragma: no cover - import/runtime errors
+                logger.exception(
+                    "Failed to create Telegram Bot (%s): %s", type(exc).__name__, exc
+                )
                 raise
         from bot.data_handler import DataHandler
         from bot.model_builder import ModelBuilder
@@ -1687,8 +1779,10 @@ async def create_trade_manager() -> TradeManager | None:
         try:
             dh = DataHandler(cfg, telegram_bot, chat_id)
             logger.info("DataHandler created successfully")
-        except Exception as exc:
-            logger.exception("Failed to create DataHandler: %s", exc)
+        except RuntimeError as exc:
+            logger.exception(
+                "Failed to create DataHandler (%s): %s", type(exc).__name__, exc
+            )
             raise
 
         logger.info("Creating ModelBuilder")
@@ -1705,7 +1799,9 @@ async def create_trade_manager() -> TradeManager | None:
             await dh.stop()
             return None
         except Exception as exc:
-            logger.exception("Failed to create ModelBuilder: %s", exc)
+            logger.exception(
+                "Failed to create ModelBuilder (%s): %s", type(exc).__name__, exc
+            )
             raise
 
         trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
@@ -1740,7 +1836,12 @@ def _initialize_trade_manager() -> None:
             loop.run_forever()
         else:
             _ready_event.set()
-    except Exception:
+    except Exception as exc:
+        logger.exception(
+            "TradeManager initialization failed (%s): %s",
+            type(exc).__name__,
+            exc,
+        )
         _ready_event.set()
         raise
 
