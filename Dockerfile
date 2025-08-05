@@ -1,18 +1,19 @@
 # Этап сборки
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu22.04 AS builder
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
-# Установка необходимых пакетов для сборки
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Установка необходимых пакетов для сборки и обновление linux-libc-dev
+RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
     zlib1g \
     zlib1g-dev \
     tzdata \
     software-properties-common \
+    linux-libc-dev \
     && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
     zlib1g \
     zlib1g-dev \
     python3.12 \
@@ -24,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libblas-dev \
     liblapack-dev \
+    linux-libc-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && python3.12 --version
 
@@ -44,7 +46,7 @@ RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
     find /app/venv -type f -name '*.pyc' -delete
 
 # Этап выполнения
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu22.04
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -52,18 +54,20 @@ ENV TZ=Etc/UTC
 
 WORKDIR /app
 
-# Установка минимальных пакетов для выполнения
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Установка минимальных пакетов для выполнения и обновление linux-libc-dev
+RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
     zlib1g \
     zlib1g-dev \
     tzdata \
     software-properties-common \
+    linux-libc-dev \
     && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
     zlib1g \
     zlib1g-dev \
     curl \
     python3.12 \
+    linux-libc-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && python3.12 --version
 
