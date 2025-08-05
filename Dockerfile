@@ -45,7 +45,7 @@ RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Устанавливаем зависимости
-RUN pip install --no-cache-dir pip==24.0 setuptools wheel && \
+RUN pip install --no-cache-dir pip==24.0 setuptools==78.1.1 wheel && \
     pip install --no-cache-dir -r requirements.txt && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete
