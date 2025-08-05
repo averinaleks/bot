@@ -171,9 +171,35 @@ class BybitSDKAsync:
     """Asynchronous wrapper around the official Bybit SDK."""
 
     def __init__(self, api_key: str, api_secret: str) -> None:
-        self.client = HTTP(api_key=api_key, api_secret=api_secret)
+        self.client = HTTP(
+            api_key=api_key,
+            api_secret=api_secret,
+            return_response_headers=True,
+        )
         self.last_http_status = 200
-        self.last_response_headers = {}
+        self.last_response_headers: Dict = {}
+
+    def _call_client(self, method: str, *args, **kwargs):
+        res = None
+        try:
+            res = getattr(self.client, method)(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - network/library errors
+            status = getattr(exc, "status_code", None)
+            headers = getattr(exc, "resp_headers", {})
+            if status is not None:
+                self.last_http_status = status
+            if headers:
+                self.last_response_headers = headers
+            raise
+
+        headers = {}
+        if isinstance(res, tuple) and len(res) >= 3:
+            data, _, headers = res
+        else:
+            data = res
+        self.last_http_status = 200
+        self.last_response_headers = headers
+        return data
 
     @staticmethod
     def _format_symbol(symbol: str) -> str:
@@ -185,7 +211,7 @@ class BybitSDKAsync:
         """Return a dictionary of available USDT-margined futures markets."""
 
         def _sync() -> Dict[str, Dict]:
-            res = self.client.get_instruments_info(category="linear")
+            res = self._call_client("get_instruments_info", category="linear")
             instruments = res.get("result", {}).get("list", [])
             markets: Dict[str, Dict] = {}
             for info in instruments:
@@ -213,7 +239,7 @@ class BybitSDKAsync:
     async def fetch_ticker(self, symbol: str) -> Dict:
         def _sync():
             sym = self._format_symbol(symbol)
-            res = self.client.get_tickers(category="linear", symbol=sym)
+            res = self._call_client("get_tickers", category="linear", symbol=sym)
             return res.get("result", {}).get("list", [{}])[0]
 
         return await asyncio.to_thread(_sync)
@@ -230,7 +256,7 @@ class BybitSDKAsync:
             }
             if since is not None:
                 params["start"] = int(since)
-            res = self.client.get_kline(**params)
+            res = self._call_client("get_kline", **params)
             candles = res.get("result", {}).get("list", [])
             return [
                 [
@@ -249,7 +275,7 @@ class BybitSDKAsync:
     async def fetch_order_book(self, symbol: str, limit: int = 10) -> Dict:
         def _sync():
             sym = self._format_symbol(symbol)
-            res = self.client.get_orderbook(category="linear", symbol=sym)
+            res = self._call_client("get_orderbook", category="linear", symbol=sym)
             ob = res.get("result", {})
             return {
                 "bids": [[float(p), float(q)] for p, q, *_ in ob.get("b", [])][:limit],
@@ -260,7 +286,8 @@ class BybitSDKAsync:
 
     async def fetch_funding_rate(self, symbol: str) -> Dict:
         def _sync():
-            res = self.client.get_funding_rate_history(
+            res = self._call_client(
+                "get_funding_rate_history",
                 category="linear",
                 symbol=self._format_symbol(symbol),
                 limit=1,
@@ -273,7 +300,8 @@ class BybitSDKAsync:
 
     async def fetch_open_interest(self, symbol: str) -> Dict:
         def _sync():
-            res = self.client.get_open_interest(
+            res = self._call_client(
+                "get_open_interest",
                 category="linear",
                 symbol=self._format_symbol(symbol),
                 intervalTime="5min",
@@ -305,7 +333,7 @@ class BybitSDKAsync:
                 payload["price"] = price
             if params:
                 payload.update(params)
-            return self.client.place_order(**payload)
+            return self._call_client("place_order", **payload)
 
         return await asyncio.to_thread(_sync)
 
@@ -336,13 +364,15 @@ class BybitSDKAsync:
                 payload["stopLoss"] = stop_loss
             if params:
                 payload.update(params)
-            return self.client.place_order(**payload)
+            return self._call_client("place_order", **payload)
 
         return await asyncio.to_thread(_sync)
 
     async def fetch_balance(self) -> Dict:
         def _sync():
-            res = self.client.get_wallet_balance(accountType="UNIFIED")
+            res = self._call_client(
+                "get_wallet_balance", accountType="UNIFIED"
+            )
             return res.get("result", {})
 
         return await asyncio.to_thread(_sync)
