@@ -2,7 +2,8 @@ import sys
 import types
 import pandas as pd
 import numpy as np
-import ta
+import pytest
+ta = pytest.importorskip("ta")
 from bot.config import BotConfig
 
 optimizer_stubbed = False
