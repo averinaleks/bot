@@ -46,6 +46,13 @@ def _set_test_mode(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     yield
 
+
+@pytest.fixture
+def cfg_factory(tmp_path):
+    def _factory(**kwargs):
+        return BotConfig(cache_dir=str(tmp_path), **kwargs)
+    return _factory
+
 if optimizer_stubbed:
     sys.modules.pop('optimizer', None)
     sys.modules.pop('bot.optimizer', None)
@@ -62,8 +69,8 @@ def _expected_rate(tf: str) -> int:
     return max(1, int(1800 / sec))
 
 @pytest.mark.asyncio
-async def test_select_liquid_pairs_plain_symbol_included():
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0)
+async def test_select_liquid_pairs_plain_symbol_included(cfg_factory):
+    cfg = cfg_factory(max_symbols=5, min_liquidity=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     markets = {
         'BTCUSDT': {'active': True},
@@ -74,8 +81,8 @@ async def test_select_liquid_pairs_plain_symbol_included():
 
 
 @pytest.mark.asyncio
-async def test_select_liquid_pairs_prefers_highest_volume():
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0)
+async def test_select_liquid_pairs_prefers_highest_volume(cfg_factory):
+    cfg = cfg_factory(max_symbols=5, min_liquidity=0)
     volumes = {'BTCUSDT': 1.0, 'BTC/USDT:USDT': 2.0}
     dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
     markets = {
@@ -87,8 +94,8 @@ async def test_select_liquid_pairs_prefers_highest_volume():
 
 
 @pytest.mark.asyncio
-async def test_select_liquid_pairs_filters_by_min_liquidity():
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=100)
+async def test_select_liquid_pairs_filters_by_min_liquidity(cfg_factory):
+    cfg = cfg_factory(max_symbols=5, min_liquidity=100)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 50}))
     markets = {'BTCUSDT': {'active': True}}
     pairs = await dh.select_liquid_pairs(markets)
@@ -96,12 +103,12 @@ async def test_select_liquid_pairs_filters_by_min_liquidity():
 
 
 @pytest.mark.asyncio
-async def test_select_liquid_pairs_filters_new_listings():
+async def test_select_liquid_pairs_filters_new_listings(cfg_factory):
     now = pd.Timestamp.utcnow()
     recent = int((now - pd.Timedelta(minutes=5)).timestamp() * 1000)
     old = int((now - pd.Timedelta(hours=2)).timestamp() * 1000)
     volumes = {'NEWUSDT': 1.0, 'OLDUSDT': 1.0}
-    cfg = BotConfig(cache_dir='/tmp', max_symbols=5, min_liquidity=0, min_data_length=10, timeframe='1m')
+    cfg = cfg_factory(max_symbols=5, min_liquidity=0, min_data_length=10, timeframe='1m')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
     markets = {
         'NEWUSDT': {'active': True, 'info': {'launchTime': recent}},
@@ -112,14 +119,14 @@ async def test_select_liquid_pairs_filters_new_listings():
     assert 'OLDUSDT' in pairs
 
 
-def test_dynamic_ws_min_process_rate_short_tf():
-    cfg = BotConfig(cache_dir='/tmp', timeframe='1m')
+def test_dynamic_ws_min_process_rate_short_tf(cfg_factory):
+    cfg = cfg_factory(timeframe='1m')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     assert dh.ws_min_process_rate == _expected_rate('1m')
 
 
-def test_dynamic_ws_min_process_rate_long_tf():
-    cfg = BotConfig(cache_dir='/tmp', timeframe='2h')
+def test_dynamic_ws_min_process_rate_long_tf(cfg_factory):
+    cfg = cfg_factory(timeframe='2h')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     assert dh.ws_min_process_rate == _expected_rate('2h')
 
@@ -134,8 +141,8 @@ class DummyWS:
 
 
 @pytest.mark.asyncio
-async def test_ws_rate_limit_zero_no_exception():
-    cfg = BotConfig(cache_dir='/tmp', ws_rate_limit=0)
+async def test_ws_rate_limit_zero_no_exception(cfg_factory):
+    cfg = cfg_factory(ws_rate_limit=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     ws = DummyWS()
     await dh._send_subscriptions(ws, ['BTCUSDT'], 'primary')
@@ -175,8 +182,8 @@ async def test_load_from_disk_buffer_loop(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_old_data_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', data_cleanup_interval=0)
+async def test_cleanup_old_data_recovery(monkeypatch, cfg_factory):
+    cfg = cfg_factory(data_cleanup_interval=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     call = {'n': 0}
@@ -208,8 +215,8 @@ async def test_cleanup_old_data_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_monitor_load_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_monitor_load_recovery(monkeypatch, cfg_factory):
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     call = {'n': 0}
@@ -239,8 +246,8 @@ async def test_monitor_load_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_funding_rate_loop_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', funding_update_interval=0)
+async def test_funding_rate_loop_recovery(monkeypatch, cfg_factory):
+    cfg = cfg_factory(funding_update_interval=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     dh.usdt_pairs = ['BTCUSDT']
 
@@ -271,8 +278,8 @@ async def test_funding_rate_loop_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_open_interest_loop_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', oi_update_interval=0)
+async def test_open_interest_loop_recovery(monkeypatch, cfg_factory):
+    cfg = cfg_factory(oi_update_interval=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     dh.usdt_pairs = ['BTCUSDT']
 
@@ -303,8 +310,8 @@ async def test_open_interest_loop_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_ws_queue_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_process_ws_queue_recovery(monkeypatch, cfg_factory):
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     processed = []
@@ -356,8 +363,8 @@ async def test_process_ws_queue_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stop_handles_close_errors():
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_stop_handles_close_errors(cfg_factory):
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     class BadWS:
@@ -375,10 +382,10 @@ async def test_stop_handles_close_errors():
 
 
 @pytest.mark.asyncio
-async def test_stop_shuts_down_ray():
+async def test_stop_shuts_down_ray(cfg_factory):
     import ray
     ray.init()
-    cfg = BotConfig(cache_dir='/tmp')
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     await dh.stop()
     assert not ray.is_initialized()
@@ -450,7 +457,7 @@ async def test_fetch_ohlcv_history_empty_not_cached(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_open_interest_sets_change():
+async def test_fetch_open_interest_sets_change(cfg_factory):
     class Ex:
         def __init__(self):
             self.val = 100.0
@@ -458,7 +465,7 @@ async def test_fetch_open_interest_sets_change():
             self.val += 10.0
             return {"openInterest": self.val}
 
-    cfg = BotConfig(cache_dir='/tmp')
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=Ex())
 
     first = await dh.fetch_open_interest('BTCUSDT')
@@ -470,8 +477,8 @@ async def test_fetch_open_interest_sets_change():
 
 
 @pytest.mark.asyncio
-async def test_process_ws_queue_no_warning_on_unconfirmed(caplog):
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_process_ws_queue_no_warning_on_unconfirmed(caplog, cfg_factory):
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     caplog.set_level(logging.WARNING)
@@ -502,8 +509,8 @@ async def test_process_ws_queue_no_warning_on_unconfirmed(caplog):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_to_klines_single_timeframe(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', timeframe='1m', secondary_timeframe='1m')
+async def test_subscribe_to_klines_single_timeframe(monkeypatch, cfg_factory):
+    cfg = cfg_factory(timeframe='1m', secondary_timeframe='1m')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     call = {'n': 0}
@@ -612,8 +619,8 @@ async def test_trade_callback_invoked(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_process_ws_queue_callback_after_sync(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_process_ws_queue_callback_after_sync(monkeypatch, cfg_factory):
+    cfg = cfg_factory()
     order = []
 
     async def fake_sync(symbol, df, fr, oi, ob, timeframe='primary'):
@@ -682,8 +689,8 @@ def test_detect_clusters():
 
 
 @pytest.mark.asyncio
-async def test_sync_updates_metrics(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp')
+async def test_sync_updates_metrics(monkeypatch, cfg_factory):
+    cfg = cfg_factory()
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     ts = pd.Timestamp.now(tz='UTC')
     df = pd.DataFrame({'open':[1], 'high':[1], 'low':[1], 'close':[1], 'volume':[1]}, index=[ts])
@@ -728,8 +735,8 @@ async def test_indicator_cache_update_writable(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ws_inactivity_triggers_reconnect(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', ws_inactivity_timeout=1)
+async def test_ws_inactivity_triggers_reconnect(monkeypatch, cfg_factory):
+    cfg = cfg_factory(ws_inactivity_timeout=1)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     class DummyWS:
@@ -757,8 +764,8 @@ async def test_ws_inactivity_triggers_reconnect(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_chunk_uses_backup(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', backup_ws_urls=['ws://backup'])
+async def test_subscribe_chunk_uses_backup(monkeypatch, cfg_factory):
+    cfg = cfg_factory(backup_ws_urls=['ws://backup'])
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
 
     calls = []

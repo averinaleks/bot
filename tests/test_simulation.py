@@ -70,7 +70,7 @@ class DummyExchange:
         return {'id': '2'}
 
 class DummyDataHandler:
-    def __init__(self):
+    def __init__(self, cache_dir: str):
         self.exchange = DummyExchange()
         self.usdt_pairs = ['BTCUSDT']
         idx = pd.date_range('2020-01-01', periods=3, freq='1min', tz='UTC')
@@ -91,7 +91,7 @@ class DummyDataHandler:
         self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
         self.funding_rates = {'BTCUSDT': 0.0}
         self.open_interest = {'BTCUSDT': 0.0}
-        self.config = BotConfig(cache_dir='/tmp')
+        self.config = BotConfig(cache_dir=cache_dir)
     async def get_atr(self, symbol: str) -> float:
         return 1.0
     async def is_data_fresh(self, symbol: str, timeframe: str = 'primary', max_delay: float = 60) -> bool:
@@ -100,10 +100,10 @@ class DummyDataHandler:
         self.ohlcv = pd.concat([self.ohlcv, df], ignore_index=False).sort_index()
 
 @pytest.mark.asyncio
-async def test_simulator_trailing_stop(trade_manager_classes):
+async def test_simulator_trailing_stop(trade_manager_classes, tmp_path):
     TradeManager, HistoricalSimulator = trade_manager_classes
-    dh = DummyDataHandler()
-    cfg = BotConfig(cache_dir='/tmp', trailing_stop_percentage=1.0, trailing_stop_coeff=0.0, trailing_stop_multiplier=1.0)
+    dh = DummyDataHandler(str(tmp_path))
+    cfg = BotConfig(cache_dir=str(tmp_path), trailing_stop_percentage=1.0, trailing_stop_coeff=0.0, trailing_stop_multiplier=1.0)
     tm = TradeManager(cfg, dh, None, None, None)
 
     first = {'n': 0}
@@ -121,11 +121,11 @@ async def test_simulator_trailing_stop(trade_manager_classes):
 
 
 @pytest.mark.asyncio
-async def test_simulator_skips_missing_price(trade_manager_classes):
+async def test_simulator_skips_missing_price(trade_manager_classes, tmp_path):
     TradeManager, HistoricalSimulator = trade_manager_classes
 
     class DummyDataHandler:
-        def __init__(self):
+        def __init__(self, cache_dir: str):
             self.exchange = DummyExchange()
             self.usdt_pairs = ["BTCUSDT", "ETHUSDT"]
             idx_eth = pd.date_range("2020-01-01", periods=1, freq="1min", tz="UTC")
@@ -163,7 +163,7 @@ async def test_simulator_skips_missing_price(trade_manager_classes):
             self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
             self.funding_rates = {"BTCUSDT": 0.0, "ETHUSDT": 0.0}
             self.open_interest = {"BTCUSDT": 0.0, "ETHUSDT": 0.0}
-            self.config = BotConfig(cache_dir="/tmp")
+            self.config = BotConfig(cache_dir=cache_dir)
 
         async def get_atr(self, symbol: str) -> float:
             return 1.0
@@ -178,8 +178,8 @@ async def test_simulator_skips_missing_price(trade_manager_classes):
         ):
             self.ohlcv = pd.concat([self.ohlcv, df], ignore_index=False).sort_index()
 
-    dh = DummyDataHandler()
-    tm = TradeManager(BotConfig(cache_dir="/tmp"), dh, None, None, None)
+    dh = DummyDataHandler(str(tmp_path))
+    tm = TradeManager(BotConfig(cache_dir=str(tmp_path)), dh, None, None, None)
 
     open_calls = []
 

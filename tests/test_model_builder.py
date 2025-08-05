@@ -11,6 +11,7 @@ from bot.config import BotConfig
 import asyncio
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import brier_score_loss
+import tempfile
 
 pytestmark = pytest.mark.requires_sklearn
 from collections import deque
@@ -78,8 +79,9 @@ class DummyTradeManager:
     pass
 
 def create_model_builder(df):
+    tmpdir = tempfile.TemporaryDirectory()
     config = BotConfig(
-        cache_dir="/tmp",
+        cache_dir=tmpdir.name,
         min_data_length=len(df),
         lstm_timesteps=2,
         lstm_batch_size=2,
@@ -87,7 +89,9 @@ def create_model_builder(df):
     )
     data_handler = DummyDataHandler(df)
     trade_manager = DummyTradeManager()
-    return ModelBuilder(config, data_handler, trade_manager)
+    mb = ModelBuilder(config, data_handler, trade_manager)
+    mb._tmpdir = tmpdir
+    return mb
 
 def make_df(length=5):
     idx = pd.date_range("2020-01-01", periods=length, freq="min")
@@ -160,8 +164,8 @@ def test_train_model_remote_tft_predictions():
 
 
 @pytest.mark.asyncio
-async def test_training_loop_recovery(monkeypatch):
-    cfg = BotConfig(cache_dir="/tmp", retrain_interval=0)
+async def test_training_loop_recovery(monkeypatch, tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path), retrain_interval=0)
     dh = types.SimpleNamespace(usdt_pairs=["BTCUSDT"])
     mb = ModelBuilder(cfg, dh, DummyTradeManager())
 
@@ -192,9 +196,9 @@ async def test_training_loop_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_threshold_offset_decay():
+async def test_threshold_offset_decay(tmp_path):
     cfg = BotConfig(
-        cache_dir="/tmp",
+        cache_dir=str(tmp_path),
         threshold_adjustment=0.05,
         threshold_decay_rate=0.1,
         loss_streak_threshold=3,
@@ -235,9 +239,9 @@ async def test_threshold_offset_decay():
 
 
 @pytest.mark.asyncio
-async def test_loss_and_win_streak_adjustment():
+async def test_loss_and_win_streak_adjustment(tmp_path):
     cfg = BotConfig(
-        cache_dir="/tmp",
+        cache_dir=str(tmp_path),
         threshold_adjustment=0.05,
         threshold_decay_rate=0.1,
         loss_streak_threshold=2,
@@ -313,8 +317,8 @@ def test_save_and_load_state_transformer(tmp_path):
         assert torch.allclose(state1[k], state2[k])
 
 
-def test_compute_prediction_metrics():
-    cfg = BotConfig(cache_dir="/tmp", performance_window=3)
+def test_compute_prediction_metrics(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path), performance_window=3)
     dh = types.SimpleNamespace(usdt_pairs=["BTCUSDT"])
     mb = ModelBuilder(cfg, dh, DummyTradeManager())
     mb.prediction_history["BTCUSDT"] = deque([(0.9, 1), (0.1, 0), (0.2, 1)], maxlen=3)
@@ -326,9 +330,9 @@ def test_compute_prediction_metrics():
 
 
 @pytest.mark.asyncio
-async def test_performance_based_retraining(monkeypatch):
+async def test_performance_based_retraining(monkeypatch, tmp_path):
     cfg = BotConfig(
-        cache_dir="/tmp",
+        cache_dir=str(tmp_path),
         retrain_interval=1000,
         retrain_threshold=0.8,
         performance_window=3,
@@ -362,8 +366,8 @@ async def test_performance_based_retraining(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_base_threshold_convergence():
-    cfg = BotConfig(cache_dir="/tmp", prediction_history_size=10)
+async def test_base_threshold_convergence(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path), prediction_history_size=10)
     dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
 
     class TM:
@@ -392,8 +396,8 @@ async def test_base_threshold_convergence():
 
 
 @pytest.mark.asyncio
-async def test_base_threshold_clamped_min():
-    cfg = BotConfig(cache_dir="/tmp", prediction_history_size=10)
+async def test_base_threshold_clamped_min(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path), prediction_history_size=10)
     dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
 
     class TM:
