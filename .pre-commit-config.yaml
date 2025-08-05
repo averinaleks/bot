@@ -9,3 +9,5 @@ repos:
         name: pytest
         entry: pytest
         language: system
+        pass_filenames: false
+        stages: [commit]
