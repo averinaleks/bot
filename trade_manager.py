@@ -1930,6 +1930,6 @@ def ready() -> tuple:
 if __name__ == "__main__":
     load_dotenv()
     port = int(os.environ.get("PORT", "8002"))
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST", "127.0.0.1")
     logger.info("Starting TradeManager service on %s:%s", host, port)
     api_app.run(host=host, port=port)
