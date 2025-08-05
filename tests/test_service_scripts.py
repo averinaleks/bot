@@ -3,6 +3,7 @@ import os
 import types
 import requests
 import pytest
+from unittest.mock import patch
 
 from tests.helpers import get_free_port, service_process
 
@@ -21,10 +22,9 @@ def _run_dh(port: int):
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
     sys.modules['ccxt'] = ccxt
-    os.environ['STREAM_SYMBOLS'] = ''
-    os.environ['HOST'] = '127.0.0.1'
-    from bot.services import data_handler_service
-    data_handler_service.app.run(host='127.0.0.1', port=port)
+    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1'}):
+        from bot.services import data_handler_service
+        data_handler_service.app.run(host='127.0.0.1', port=port)
 
 
 @pytest.mark.integration
@@ -46,10 +46,9 @@ def _run_dh_fail(port: int):
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
     sys.modules['ccxt'] = ccxt
-    os.environ['STREAM_SYMBOLS'] = ''
-    os.environ['HOST'] = '127.0.0.1'
-    from bot.services import data_handler_service
-    data_handler_service.app.run(host='127.0.0.1', port=port)
+    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1'}):
+        from bot.services import data_handler_service
+        data_handler_service.app.run(host='127.0.0.1', port=port)
 
 
 @pytest.mark.integration
@@ -90,10 +89,9 @@ def _run_mb(model_dir: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    os.environ['MODEL_DIR'] = model_dir
-    os.environ['HOST'] = '127.0.0.1'
-    from bot.services import model_builder_service
-    model_builder_service.app.run(host='127.0.0.1', port=port)
+    with patch.dict(os.environ, {'MODEL_DIR': model_dir, 'HOST': '127.0.0.1'}):
+        from bot.services import model_builder_service
+        model_builder_service.app.run(host='127.0.0.1', port=port)
 
 
 @pytest.mark.integration
@@ -177,11 +175,10 @@ def _run_mb_fail(model_file: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    os.environ['MODEL_FILE'] = model_file
-    os.environ['HOST'] = '127.0.0.1'
-    from bot.services import model_builder_service
-    model_builder_service._load_model()
-    model_builder_service.app.run(host='127.0.0.1', port=port)
+    with patch.dict(os.environ, {'MODEL_FILE': model_file, 'HOST': '127.0.0.1'}):
+        from bot.services import model_builder_service
+        model_builder_service._load_model()
+        model_builder_service.app.run(host='127.0.0.1', port=port)
 
 
 @pytest.mark.integration
@@ -237,11 +234,14 @@ def _run_tm(
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
     sys.modules['ccxt'] = ccxt
-    os.environ['HOST'] = '127.0.0.1'
-    os.environ['TRADE_MANAGER_TOKEN'] = 'test-token'
-    os.environ.setdefault('TRADE_RISK_USD', '10')
-    from bot.services import trade_manager_service
-    trade_manager_service.app.run(host='127.0.0.1', port=port)
+    env = {
+        'HOST': '127.0.0.1',
+        'TRADE_MANAGER_TOKEN': 'test-token',
+        'TRADE_RISK_USD': os.environ.get('TRADE_RISK_USD', '10'),
+    }
+    with patch.dict(os.environ, env):
+        from bot.services import trade_manager_service
+        trade_manager_service.app.run(host='127.0.0.1', port=port)
 
 
 @pytest.mark.integration
