@@ -17,6 +17,7 @@ from bot.data_handler import DataHandler
 from bot.model_builder import ModelBuilder
 from bot.trade_manager import TradeManager
 from bot.simulation import HistoricalSimulator
+from bot.utils import logger
 
 
 async def main() -> None:
@@ -31,7 +32,11 @@ async def main() -> None:
 
     cfg = load_config("config.json")
     dh = DataHandler(cfg, None, None)
-    await dh.load_initial()
+    try:
+        await dh.load_initial()
+    except RuntimeError as exc:
+        logger.error("Failed to load initial data: %s", exc)
+        return
     mb = ModelBuilder(cfg, dh, None)
     tm = TradeManager(cfg, dh, mb, None, None)
     sim = HistoricalSimulator(dh, tm)

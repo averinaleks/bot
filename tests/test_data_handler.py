@@ -410,6 +410,24 @@ async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_load_initial_raises_when_no_pairs(monkeypatch, tmp_path):
+    class DummyExchange:
+        async def load_markets(self):
+            return {}
+
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange())
+
+    async def fake_select(markets):
+        return []
+
+    monkeypatch.setattr(dh, 'select_liquid_pairs', fake_select)
+
+    with pytest.raises(RuntimeError, match="No liquid USDT pairs"):
+        await dh.load_initial()
+
+
+@pytest.mark.asyncio
 async def test_fetch_ohlcv_single_empty_not_cached(tmp_path, monkeypatch):
     monkeypatch.delenv("TEST_MODE", raising=False)
     class Ex:

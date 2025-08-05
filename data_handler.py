@@ -1070,6 +1070,8 @@ class DataHandler:
         try:
             markets = await safe_api_call(self.exchange, "load_markets")
             self.usdt_pairs = await self.select_liquid_pairs(markets)
+            if not self.usdt_pairs:
+                raise RuntimeError("No liquid USDT pairs found")
             logger.info(
                 "Найдено %s USDT-пар с высокой ликвидностью",
                 len(self.usdt_pairs),
