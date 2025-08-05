@@ -7,10 +7,14 @@ ENV TZ=Etc/UTC
 
 # Установка необходимых пакетов для сборки
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    zlib1g=1:1.3* \
+    zlib1g-dev=1:1.3* \
     tzdata \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
+    zlib1g=1:1.3* \
+    zlib1g-dev=1:1.3* \
     python3.12 \
     python3.12-dev \
     python3.12-venv \
@@ -50,10 +54,14 @@ WORKDIR /app
 
 # Установка минимальных пакетов для выполнения
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    zlib1g=1:1.3* \
+    zlib1g-dev=1:1.3* \
     tzdata \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
+    zlib1g=1:1.3* \
+    zlib1g-dev=1:1.3* \
     curl \
     python3.12 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
