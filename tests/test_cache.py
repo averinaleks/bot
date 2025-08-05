@@ -1,7 +1,8 @@
-import pickle
+import gzip
 import os
+import pickle
 import pandas as pd
-
+import pytest
 from bot.utils import HistoricalDataCache, psutil
 
 
@@ -23,20 +24,22 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.equals(df)
 
 
-def test_load_converts_old_format(tmp_path, monkeypatch):
+@pytest.mark.parametrize("suffix", [".pkl", ".pkl.gz"])
+def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
     cache = HistoricalDataCache(cache_dir=str(tmp_path))
     df = pd.DataFrame({"close": [1, 2, 3]})
-    old_file = tmp_path / "BTCUSDT_1m.pkl"
-    with open(old_file, "wb") as f:
-        pickle.dump(df, f)
+    old_file = tmp_path / f"BTCUSDT_1m{suffix}"
+    if suffix.endswith(".gz"):
+        with gzip.open(old_file, "wb") as f:
+            f.write(pickle.dumps(df))
+    else:
+        with open(old_file, "wb") as f:
+            pickle.dump(df, f)
     loaded = cache.load_cached_data("BTCUSDT", "1m")
-    new_file = tmp_path / "BTCUSDT_1m.parquet"
-    assert loaded.equals(df)
-    assert new_file.exists()
+    assert loaded is None
     assert not old_file.exists()
-    loaded_again = cache.load_cached_data("BTCUSDT", "1m")
-    assert loaded_again.equals(df)
+    assert not (tmp_path / "BTCUSDT_1m.parquet").exists()
 
 
 def test_save_skips_empty_dataframe(tmp_path, monkeypatch):
