@@ -20,6 +20,34 @@ load_dotenv()
 CFG = BotConfig()
 
 
+def safe_int(env_var: str, default: int) -> int:
+    """Return int value of ``env_var`` or ``default`` on failure."""
+    value = os.getenv(env_var)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(
+            "Invalid %s value '%s', using default %s", env_var, value, default
+        )
+        return default
+
+
+def safe_float(env_var: str, default: float) -> float:
+    """Return float value of ``env_var`` or ``default`` on failure."""
+    value = os.getenv(env_var)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        logger.warning(
+            "Invalid %s value '%s', using default %s", env_var, value, default
+        )
+        return default
+
+
 def send_telegram_alert(message: str) -> None:
     """Send a Telegram notification if credentials are configured."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -33,7 +61,7 @@ def send_telegram_alert(message: str) -> None:
         logger.error("Failed to send Telegram alert: %s", exc)
 
 # Threshold for slow trade confirmations
-CONFIRMATION_TIMEOUT = float(os.getenv("ORDER_CONFIRMATION_TIMEOUT", "5"))
+CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 
 # Keep a short history of prices to derive simple features such as
 # price change (used as a lightweight volume proxy) and a moving
@@ -46,7 +74,7 @@ PRICE_HISTORY_ASYNC_LOCK = asyncio.Lock()
 
 # Default trading symbol. Override with the SYMBOL environment variable.
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
-INTERVAL = float(os.getenv("INTERVAL", "5"))
+INTERVAL = safe_float("INTERVAL", 5.0)
 
 # Default retry values for service availability checks
 DEFAULT_SERVICE_CHECK_RETRIES = 30
@@ -83,12 +111,8 @@ def _load_env() -> dict:
 def check_services() -> None:
     """Ensure dependent services are responsive."""
     env = _load_env()
-    retries = int(
-        os.getenv("SERVICE_CHECK_RETRIES", str(DEFAULT_SERVICE_CHECK_RETRIES))
-    )
-    delay = float(
-        os.getenv("SERVICE_CHECK_DELAY", str(DEFAULT_SERVICE_CHECK_DELAY))
-    )
+    retries = safe_int("SERVICE_CHECK_RETRIES", DEFAULT_SERVICE_CHECK_RETRIES)
+    delay = safe_float("SERVICE_CHECK_DELAY", DEFAULT_SERVICE_CHECK_DELAY)
     services = {
         "data_handler": (env["data_handler_url"], "ping"),
         "model_builder": (env["model_builder_url"], "ping"),
@@ -196,7 +220,7 @@ def send_trade(
     Returns ``True`` when the trade manager reports success, otherwise ``False``.
     """
     try:
-        timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
+        timeout = safe_float("TRADE_MANAGER_TIMEOUT", 5.0)
         start = time.time()
         payload = {"symbol": symbol, "side": side, "price": price}
         if tp is not None:
@@ -303,7 +327,7 @@ def _resolve_trade_params(
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     """Asynchronously fetch prediction and open position if signaled."""
     env = env or _load_env()
-    timeout = float(os.getenv("TRADE_MANAGER_TIMEOUT", "5"))
+    timeout = safe_float("TRADE_MANAGER_TIMEOUT", 5.0)
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
