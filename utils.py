@@ -22,10 +22,13 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 try:
     from numba import jit, prange, NumbaPerformanceWarning  # type: ignore
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
-except Exception:  # pragma: no cover - allow missing numba package
+except ImportError as exc:  # pragma: no cover - allow missing numba package
+    logging.getLogger("TradingBot").warning("Numba import failed: %s", exc)
+
     def jit(*a, **k):
         def wrapper(f):
             return f
+
         return wrapper
 
     def prange(*args):  # type: ignore
@@ -44,7 +47,9 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules.setdefault("pybit.unified_trading", ut_mod)
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
-except Exception:  # pragma: no cover - allow missing telegram package
+except ImportError as exc:  # pragma: no cover - allow missing telegram package
+    logging.getLogger("TradingBot").warning("Telegram package not available: %s", exc)
+
     class RetryAfter(Exception):
         pass
 
@@ -101,7 +106,7 @@ def is_cuda_available() -> bool:
             "CUDA availability check failed: %s", exc
         )
         return False
-    except Exception as exc:  # pragma: no cover - unexpected error
+    except (OSError, RuntimeError) as exc:  # pragma: no cover - unexpected error
         logging.getLogger("TradingBot").exception(
             "Unexpected CUDA availability error: %s", exc
         )
@@ -155,7 +160,7 @@ async def safe_api_call(exchange, method: str, *args, **kwargs):
                     raise RuntimeError(f"retCode {ret_code}")
 
             return result
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError) as exc:
             logger.error("Bybit API error in %s: %s", method, exc)
             if "10002" in str(exc):
                 logger.error(
@@ -183,7 +188,7 @@ class BybitSDKAsync:
         res = None
         try:
             res = getattr(self.client, method)(*args, **kwargs)
-        except Exception as exc:  # pragma: no cover - network/library errors
+        except httpx.HTTPError as exc:  # pragma: no cover - network/library errors
             status = getattr(exc, "status_code", None)
             headers = getattr(exc, "resp_headers", {})
             if status is not None:
@@ -522,7 +527,7 @@ class TelegramLogger(logging.Handler):
                         break
                     except asyncio.CancelledError:
                         raise
-                    except Exception as e:
+                    except (ValueError, RuntimeError) as e:
                         logger.exception("Ошибка отправки сообщения Telegram: %s", e)
                         return
 
@@ -557,7 +562,7 @@ class TelegramLogger(logging.Handler):
                         target=lambda: asyncio.run(self.send_telegram_message(msg)),
                         daemon=True,
                     ).start()
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logger.error("Ошибка в TelegramLogger: %s", e)
 
     @classmethod
@@ -594,14 +599,14 @@ class TelegramUpdateListener:
         try:
             with open(self.offset_file, "r", encoding="utf-8") as f:
                 return int(f.read().strip())
-        except Exception:
+        except (OSError, ValueError):
             return 0
 
     def _save_offset(self) -> None:
         try:
             with open(self.offset_file, "w", encoding="utf-8") as f:
                 f.write(str(self.offset))
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             logger.error("Ошибка сохранения offset Telegram: %s", exc)
 
     async def listen(self, handler):
@@ -618,7 +623,13 @@ class TelegramUpdateListener:
                         self._save_offset()
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except (
+                RetryAfter,
+                BadRequest,
+                Forbidden,
+                httpx.HTTPError,
+                RuntimeError,
+            ) as exc:
                 logger.error("Ошибка получения обновлений Telegram: %s", exc)
                 await asyncio.sleep(5)
 
@@ -940,7 +951,7 @@ class HistoricalDataCache:
             if found_pickle:
                 return None
             return None
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
             for f in (filename, legacy_json, old_gzip, old_filename):
                 self._delete_cache_file(f)

@@ -53,7 +53,11 @@ def _stub_modules():
     sys.modules.setdefault("pybit", pybit_mod)
     sys.modules.setdefault("pybit.unified_trading", ut_mod)
 
-    sys.modules.setdefault("httpx", types.ModuleType("httpx"))
+    httpx_mod = types.ModuleType("httpx")
+    class HTTPError(Exception):
+        pass
+    httpx_mod.HTTPError = HTTPError
+    sys.modules.setdefault("httpx", httpx_mod)
     telegram_error_mod = types.ModuleType("telegram.error")
     telegram_error_mod.RetryAfter = Exception
     sys.modules.setdefault("telegram", types.ModuleType("telegram"))

@@ -7,11 +7,12 @@ import json
 import time
 import os
 import types
-import threading
+
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
-except Exception:  # noqa: W0703 - allow missing pandas
+except ImportError as exc:  # allow missing pandas
+    logging.getLogger("TradingBot").warning("pandas import failed: %s", exc)
     pd = types.ModuleType("pandas")
     pd.DataFrame = dict
     pd.Series = list
@@ -20,15 +21,18 @@ except Exception:  # noqa: W0703 - allow missing pandas
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
 import numpy as np  # type: ignore
+import httpx
 
 try:  # optional dependency
     import polars as pl  # type: ignore
-except Exception:  # pragma: no cover - allow missing polars
+except ImportError as exc:  # pragma: no cover - allow missing polars
+    logging.getLogger("TradingBot").warning("polars import failed: %s", exc)
     pl = None
 
 try:  # pragma: no cover - optional dependency
     import websockets  # type: ignore
-except Exception:  # noqa: W0703 - allow missing websockets
+except ImportError as exc:  # allow missing websockets
+    logging.getLogger("TradingBot").warning("websockets import failed: %s", exc)
     websockets = types.ModuleType("websockets")
 
     async def _dummy_connect(*args, **kwargs):  # type: ignore[override]
@@ -66,17 +70,20 @@ import functools
 from bot.config import BotConfig
 try:  # pragma: no cover - optional dependency
     import ta  # type: ignore
-except Exception:  # noqa: W0703 - allow missing ta
+except ImportError as exc:  # allow missing ta
+    logging.getLogger("TradingBot").warning("ta import failed: %s", exc)
     ta = types.ModuleType("ta")
 
 try:  # pragma: no cover - optional dependency
     import joblib  # type: ignore
-except Exception:  # noqa: W0703 - allow missing joblib
+except ImportError as exc:  # allow missing joblib
+    logging.getLogger("TradingBot").warning("joblib import failed: %s", exc)
     joblib = types.SimpleNamespace(dump=lambda *a, **k: None, load=lambda *a, **k: {})
 
 try:  # pragma: no cover - optional dependency
     import psutil  # type: ignore
-except Exception:  # noqa: W0703 - allow missing psutil
+except ImportError as exc:  # allow missing psutil
+    logging.getLogger("TradingBot").warning("psutil import failed: %s", exc)
     psutil = types.SimpleNamespace(
         cpu_percent=lambda interval=1: 0,
         virtual_memory=lambda: type("mem", (), {"percent": 0}),
@@ -84,7 +91,8 @@ except Exception:  # noqa: W0703 - allow missing psutil
 
 try:
     import ray
-except Exception:  # pragma: no cover - optional dependency missing
+except ImportError as exc:  # pragma: no cover - optional dependency missing
+    logging.getLogger("TradingBot").warning("ray import failed: %s", exc)
     ray = types.ModuleType("ray")
 
     class _RayRemoteFunction:
@@ -172,18 +180,7 @@ def _init_cuda() -> None:
             try:
                 import cupy as cupy_mod  # type: ignore
 
-                cp = cupy_mod
-            except Exception as e:  # pragma: no cover - allow missing cupy
-                logger.warning("CuPy import failed: %s", e)
-                logger.warning(
-                    "GPU detected but CuPy is not installed. Install it with"
-                    " 'pip install cupy-cuda12x' for CUDA 12.x or the appropriate"
-                    " package for your CUDA version to enable GPU support. See"
-                    " README.md for installation details."
-                )
-                GPU_AVAILABLE = False
-                cp = np  # type: ignore
-        else:
+
             cp = np  # type: ignore
 
         GPU_INITIALIZED = True
@@ -535,7 +532,7 @@ class IndicatorsCache:
                     else:
                         self._rsi_avg_gain = None
                         self._rsi_avg_loss = None
-                except Exception as e:  # pragma: no cover - log and fallback
+                except (KeyError, ValueError) as e:  # pragma: no cover - log and fallback
                     logger.error("RSI calculation failed: %s", e)
                     self.rsi = pd.Series(np.zeros(len(df)), index=df.index)
                     self._rsi_avg_gain = None
@@ -1221,7 +1218,7 @@ class DataHandler:
                 try:
                     ticker = await safe_api_call(self.exchange, "fetch_ticker", sym)
                     volume = float(ticker.get("quoteVolume") or 0)
-                except Exception as e:  # noqa: BLE001
+                except (httpx.HTTPError, RuntimeError) as e:  # noqa: BLE001
                     logger.error("Ошибка получения тикера для %s: %s", sym, e)
                     volume = 0.0
                 return sym, volume
@@ -1251,7 +1248,7 @@ class DataHandler:
                     if raw:
                         try:
                             launch_time = pd.to_datetime(raw, unit="ms", utc=True)
-                        except Exception:  # noqa: BLE001
+                        except (ValueError, TypeError):  # noqa: BLE001
                             launch_time = pd.to_datetime(raw, utc=True, errors="coerce")
                         break
                 if launch_time is not None:
@@ -1747,7 +1744,7 @@ class DataHandler:
                 await asyncio.sleep(self.config["data_cleanup_interval"] * 2)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.exception("Ошибка очистки данных: %s", e)
                 await asyncio.sleep(1)
                 continue
@@ -1781,7 +1778,7 @@ class DataHandler:
                 else:
                     self._ohlcv_2h = df2
             logger.info("История обрезана до последних %s баров", retention)
-        except Exception as e:  # pragma: no cover - best effort cleanup
+        except (OSError, ValueError) as e:  # pragma: no cover - best effort cleanup
             logger.exception("Не удалось освободить память: %s", e)
 
     async def save_to_disk_buffer(self, priority, item):
@@ -1905,7 +1902,7 @@ class DataHandler:
                 self.tasks.append(asyncio.create_task(self.funding_rate_loop()))
                 self.tasks.append(asyncio.create_task(self.open_interest_loop()))
                 await asyncio.gather(*self.tasks, return_exceptions=True)
-        except Exception as e:
+        except (httpx.HTTPError, RuntimeError, ValueError) as e:
             logger.error("Ошибка подписки на WebSocket: %s", e)
             await self.telegram_logger.send_telegram_message(f"Ошибка WebSocket: {e}")
             raise
@@ -1917,7 +1914,7 @@ class DataHandler:
                 await asyncio.sleep(300)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (RuntimeError, OSError, ValueError) as e:
                 logger.exception("Ошибка мониторинга нагрузки: %s", e)
                 await asyncio.sleep(1)
                 continue
@@ -1930,7 +1927,7 @@ class DataHandler:
                 await asyncio.sleep(self.config.get("funding_update_interval", 300))
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError) as e:
                 logger.exception("Ошибка обновления ставок финансирования: %s", e)
                 await asyncio.sleep(1)
                 continue
@@ -1943,7 +1940,7 @@ class DataHandler:
                 await asyncio.sleep(self.config.get("oi_update_interval", 300))
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError) as e:
                 logger.exception("Ошибка обновления открытого интереса: %s", e)
                 await asyncio.sleep(1)
                 continue
@@ -2020,7 +2017,7 @@ class DataHandler:
                         label,
                     )
                     limit_exceeded_logged = False
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError) as e:
                 reconnect_attempts += 1
                 delay = min(2**reconnect_attempts, 60)
                 logger.error(
@@ -2080,7 +2077,7 @@ class DataHandler:
                         break
                     try:
                         await ws.close()
-                    except Exception:
+                    except (OSError, RuntimeError):
                         pass
                     ws = None
                 if ws is None or not ws.open:
@@ -2168,9 +2165,9 @@ class DataHandler:
                     except asyncio.TimeoutError:
                         continue
                 if confirmations < confirmations_needed:
-                    raise Exception("Подписка не подтверждена")
+                    raise RuntimeError("Подписка не подтверждена")
                 return startup_messages
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError) as e:
                 attempts += 1
                 delay = min(2**attempts, 60)
                 logger.error(
@@ -2273,7 +2270,7 @@ class DataHandler:
                     e,
                 )
                 break
-            except Exception as e:
+            except (ValueError, RuntimeError, OSError) as e:
                 logger.exception(
                     "Ошибка обработки WebSocket сообщения для %s (%s): %s",
                     symbols,
@@ -2336,7 +2333,7 @@ class DataHandler:
                 await self._read_messages(
                     ws, symbols, timeframe, selected_timeframe, connection_timeout
                 )
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
                 reconnect_attempts += 1
                 current_url_index += 1
                 delay = min(2**reconnect_attempts, 60)
@@ -2402,7 +2399,7 @@ class DataHandler:
                                         {"imbalance": 0.0, "timestamp": time.time()},
                                         timeframe=timeframe,
                                     )
-                        except Exception as rest_e:
+                        except (httpx.HTTPError, RuntimeError, ValueError) as rest_e:
                             logger.error(
                                 "Ошибка REST API для %s (%s): %s",
                                 symbol,
@@ -2597,7 +2594,7 @@ class DataHandler:
                             {"imbalance": 0.0, "timestamp": time.time()},
                             timeframe=timeframe,
                         )
-                    except Exception as e:
+                    except (ValueError, RuntimeError, OSError) as e:
                         logger.exception(
                             "Ошибка обработки данных для %s: %s", symbol, e
                         )
@@ -2617,7 +2614,7 @@ class DataHandler:
                     last_latency_log = time.time()
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (ValueError, RuntimeError, OSError) as e:
                 logger.exception("Ошибка обработки очереди WebSocket: %s", e)
                 await asyncio.sleep(0.1)
                 continue
@@ -2648,7 +2645,7 @@ class DataHandler:
             for ws in conns:
                 try:
                     await ws.close()
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     logger.exception("Ошибка закрытия WebSocket %s: %s", url, e)
                     continue
         self.ws_pool.clear()
@@ -2656,7 +2653,7 @@ class DataHandler:
         if self.pro_exchange is not None and hasattr(self.pro_exchange, "close"):
             try:
                 await self.pro_exchange.close()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.exception("Ошибка закрытия ccxtpro: %s", e)
                 pass
 
@@ -2726,7 +2723,7 @@ def price(symbol: str):
                     "volume": float(v),
                 }
                 return float(c)
-        except Exception as exc:  # pragma: no cover - network failures
+        except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network failures
             logger.error("OHLCV fetch failed for %s: %s", sym, exc)
         try:
             ticker = await safe_api_call(exch, "fetch_ticker", sym)
@@ -2740,7 +2737,7 @@ def price(symbol: str):
                 "volume": float(ticker.get("quoteVolume") or 0.0),
             }
             return price_val
-        except Exception as exc:  # pragma: no cover - network failures
+        except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network failures
             logger.error("Ticker fetch failed for %s: %s", sym, exc)
             return DEFAULT_PRICE
 

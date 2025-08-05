@@ -46,6 +46,22 @@ async def test_safe_api_call_test_mode(monkeypatch):
     assert exch.calls == 1
 
 
+@pytest.mark.asyncio
+async def test_safe_api_call_unhandled(monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
+
+    class DummyExchange:
+        last_http_status = 200
+
+        async def boom(self):
+            raise ValueError("boom")
+
+    exch = DummyExchange()
+
+    with pytest.raises(ValueError):
+        await utils.safe_api_call(exch, 'boom')
+
+
 def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
     import sys
     import importlib
