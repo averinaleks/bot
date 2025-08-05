@@ -181,7 +181,10 @@ def _init_cuda() -> None:
         if GPU_AVAILABLE:
             try:
                 import cupy as cupy_mod  # type: ignore
-
+                cp = cupy_mod
+            except Exception:
+                GPU_AVAILABLE = False
+                cp = np  # type: ignore
         else:
             cp = np  # type: ignore
 
