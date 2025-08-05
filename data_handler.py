@@ -405,13 +405,33 @@ def _adx_update_cpu(
     prev_adx: float | None,
     prev_high: float,
     prev_low: float,
-    prev_close: float,
     high: float,
     low: float,
     atr: float,
     window: int,
 ) -> tuple[float, float, float]:
-    """Incrementally update ADX using NumPy."""
+    """Incrementally update ADX using NumPy.
+
+    Parameters
+    ----------
+    prev_dm_plus, prev_dm_minus : float
+        Previous smoothed directional movement values.
+    prev_adx : float | None
+        Previous ADX value or ``None`` for the initial calculation.
+    prev_high, prev_low : float
+        Previous high and low prices.
+    high, low : float
+        Current high and low prices.
+    atr : float
+        Current Average True Range value.
+    window : int
+        ADX calculation window length.
+
+    Returns
+    -------
+    tuple[float, float, float]
+        The updated ADX, smoothed +DM, and smoothed -DM values.
+    """
     up_move = high - prev_high
     down_move = prev_low - low
     plus_dm = up_move if up_move > down_move and up_move > 0 else 0.0
@@ -433,13 +453,17 @@ def _adx_update_cupy(
     prev_adx: float | None,
     prev_high: float,
     prev_low: float,
-    prev_close: float,
     high: float,
     low: float,
     atr: float,
     window: int,
 ) -> tuple[float, float, float]:
-    """Incrementally update ADX using CuPy."""
+    """Incrementally update ADX using CuPy.
+
+    This mirrors :func:`_adx_update_cpu` but uses CuPy arrays when GPU
+    acceleration is available. See that function for parameter
+    descriptions.
+    """
     up_move = cp.float64(high - prev_high)
     down_move = cp.float64(prev_low - low)
     plus_dm = cp.where((up_move > down_move) & (up_move > 0), up_move, cp.float64(0.0))
@@ -756,7 +780,6 @@ class IndicatorsCache:
                         self.last_adx,
                         self.last_high,
                         self.last_low,
-                        self.last_close,
                         high,
                         low,
                         self.last_atr,
@@ -769,7 +792,6 @@ class IndicatorsCache:
                         self.last_adx,
                         self.last_high,
                         self.last_low,
-                        self.last_close,
                         high,
                         low,
                         self.last_atr,
