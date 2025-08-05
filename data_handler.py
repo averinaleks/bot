@@ -15,7 +15,6 @@ except Exception:  # noqa: W0703 - allow missing pandas
     pd.DataFrame = dict
     pd.Series = list
     pd.Timestamp = lambda *a, **k: None
-    pd.Timedelta = lambda *a, **k: None
     pd.Index = list
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
@@ -234,9 +233,25 @@ def create_exchange() -> BybitSDKAsync:
     return BybitSDKAsync(api_key=api_key, api_secret=api_secret)
 
 
+def _parse_timeframe_ms(timeframe: str) -> int:
+    """Convert a timeframe string (e.g. "1m", "2h") to milliseconds."""
+
+    units = {
+        "s": 1_000,
+        "m": 60_000,
+        "h": 3_600_000,
+        "d": 86_400_000,
+        "w": 604_800_000,
+    }
+    try:
+        return int(timeframe[:-1]) * units[timeframe[-1]]
+    except (KeyError, ValueError) as exc:
+        raise ValueError(f"Unsupported timeframe: {timeframe}") from exc
+
+
 def generate_synthetic_ohlcv(timeframe: str, limit: int) -> list[list[float]]:
     """Return random OHLCV data for testing."""
-    interval_ms = int(pd.Timedelta(timeframe).total_seconds() * 1000)
+    interval_ms = _parse_timeframe_ms(timeframe)
     start = int(time.time() * 1000) - limit * interval_ms
     prices = 100 + np.cumsum(np.random.randn(limit))
     result = []
