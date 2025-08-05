@@ -10,6 +10,7 @@ import signal
 import os
 import sys
 import types
+import json
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -86,10 +87,6 @@ except Exception:  # noqa: W0703 - optional dependency may not be installed
     torch.no_grad = contextlib.nullcontext
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
-try:  # pragma: no cover - optional dependency
-    import joblib  # type: ignore
-except Exception:  # noqa: W0703 - allow missing joblib
-    joblib = types.SimpleNamespace(dump=lambda *a, **k: None, load=lambda *a, **k: {})
 import time
 from typing import Dict, Optional, Tuple
 import shutil
@@ -230,9 +227,9 @@ class TradeManager:
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
         self.check_interval = config.get("check_interval", 60)
         self.performance_window = config.get("performance_window", 86400)
-        self.state_file = os.path.join(config["cache_dir"], "trade_manager_state.pkl")
+        self.state_file = os.path.join(config["cache_dir"], "trade_manager_state.parquet")
         self.returns_file = os.path.join(
-            config["cache_dir"], "trade_manager_returns.pkl"
+            config["cache_dir"], "trade_manager_returns.json"
         )
         self.last_save_time = time.time()
         self.save_interval = 900
@@ -347,9 +344,9 @@ class TradeManager:
                     disk_usage.free / (1024 ** 3),
                 )
                 return
-            self.positions.to_pickle(self.state_file)
-            with open(self.returns_file, "wb") as f:
-                joblib.dump(self.returns_by_symbol, f)
+            self.positions.to_parquet(self.state_file)
+            with open(self.returns_file, "w") as f:
+                json.dump(self.returns_by_symbol, f)
             self.last_save_time = time.time()
             self.positions_changed = False
             logger.info("TradeManager state saved")
@@ -360,7 +357,7 @@ class TradeManager:
     def load_state(self):
         try:
             if os.path.exists(self.state_file):
-                self.positions = pd.read_pickle(self.state_file)
+                self.positions = pd.read_parquet(self.state_file)
                 if (
                     "timestamp" in self.positions.index.names
                     and self.positions.index.get_level_values("timestamp").tz is None
@@ -368,8 +365,8 @@ class TradeManager:
                     self.positions = self.positions.tz_localize("UTC", level="timestamp")
                 self._sort_positions()
             if os.path.exists(self.returns_file):
-                with open(self.returns_file, "rb") as f:
-                    self.returns_by_symbol = joblib.load(f)
+                with open(self.returns_file, "r") as f:
+                    self.returns_by_symbol = json.load(f)
                 logger.info("TradeManager state loaded")
         except Exception as e:
             logger.exception("Failed to load state: %s", e)

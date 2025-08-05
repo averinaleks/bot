@@ -690,6 +690,14 @@ Linting configuration is stored in `.flake8`. Run the checker manually:
 python -m flake8
 ```
 
+## State persistence
+
+`TradeManager` now saves its open positions as a Parquet file and per-symbol
+returns as JSON inside the directory specified by `cache_dir`. The files are
+named `trade_manager_state.parquet` and `trade_manager_returns.json`
+respectively. These non-executable formats replace the previous pickle-based
+storage.
+
 ## Historical simulator
 
 Replay past market data using the built in trading logic:
