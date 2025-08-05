@@ -73,8 +73,18 @@ async def test_select_liquid_pairs_plain_symbol_included(cfg_factory):
     cfg = cfg_factory(max_symbols=5, min_liquidity=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     markets = {
-        'BTCUSDT': {'active': True},
-        'BTC/USDT': {'active': True},
+        'BTCUSDT': {
+            'active': True,
+            'contract': True,
+            'linear': True,
+            'quote': 'USDT',
+        },
+        'BTC/USDT': {
+            'active': True,
+            'contract': False,
+            'linear': False,
+            'quote': 'USDT',
+        },
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert 'BTCUSDT' in pairs
@@ -86,8 +96,8 @@ async def test_select_liquid_pairs_prefers_highest_volume(cfg_factory):
     volumes = {'BTCUSDT': 1.0, 'BTC/USDT:USDT': 2.0}
     dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
     markets = {
-        'BTCUSDT': {'active': True},
-        'BTC/USDT:USDT': {'active': True},
+        'BTCUSDT': {'active': True, 'contract': True, 'quote': 'USDT'},
+        'BTC/USDT:USDT': {'active': True, 'contract': True, 'quote': 'USDT'},
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert pairs == ['BTC/USDT:USDT']
@@ -97,9 +107,11 @@ async def test_select_liquid_pairs_prefers_highest_volume(cfg_factory):
 async def test_select_liquid_pairs_filters_by_min_liquidity(cfg_factory):
     cfg = cfg_factory(max_symbols=5, min_liquidity=100)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 50}))
-    markets = {'BTCUSDT': {'active': True}}
-    pairs = await dh.select_liquid_pairs(markets)
-    assert pairs == []
+    markets = {
+        'BTCUSDT': {'active': True, 'contract': True, 'quote': 'USDT'}
+    }
+    with pytest.raises(ValueError):
+        await dh.select_liquid_pairs(markets)
 
 
 @pytest.mark.asyncio
@@ -111,8 +123,18 @@ async def test_select_liquid_pairs_filters_new_listings(cfg_factory):
     cfg = cfg_factory(max_symbols=5, min_liquidity=0, min_data_length=10, timeframe='1m')
     dh = DataHandler(cfg, None, None, exchange=DummyExchange(volumes))
     markets = {
-        'NEWUSDT': {'active': True, 'info': {'launchTime': recent}},
-        'OLDUSDT': {'active': True, 'info': {'launchTime': old}},
+        'NEWUSDT': {
+            'active': True,
+            'info': {'launchTime': recent},
+            'contract': True,
+            'quote': 'USDT',
+        },
+        'OLDUSDT': {
+            'active': True,
+            'info': {'launchTime': old},
+            'contract': True,
+            'quote': 'USDT',
+        },
     }
     pairs = await dh.select_liquid_pairs(markets)
     assert 'NEWUSDT' not in pairs
@@ -393,7 +415,13 @@ async def test_stop_shuts_down_ray(cfg_factory):
 async def test_load_initial_no_attribute_error(monkeypatch, tmp_path):
     class DummyExchange2:
         async def load_markets(self):
-            return {'BTCUSDT': {'active': True}}
+            return {
+                'BTCUSDT': {
+                    'active': True,
+                    'contract': True,
+                    'quote': 'USDT',
+                }
+            }
         async def fetch_ticker(self, symbol):
             return {'quoteVolume': 1.0}
     cfg = BotConfig(cache_dir=str(tmp_path), max_symbols=1, min_data_length=1, timeframe='1m', secondary_timeframe='1m', min_liquidity=0)
