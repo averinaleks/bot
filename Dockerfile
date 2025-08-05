@@ -71,6 +71,9 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Добавляем PYTHONPATH, чтобы модуль bot был доступен
 ENV PYTHONPATH=/app
 
+# Optionally enable TensorFlow checks during build
+ARG ENABLE_TF=0
+
 # Проверяем версии библиотек и доступность CUDA с отладкой
 RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3.12 -c "import ccxt; print('CCXT Version:', ccxt.__version__)" || echo "CCXT check failed" && \
@@ -79,7 +82,7 @@ RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3.12 -c "import optuna; print('Optuna Version:', optuna.__version__)" || echo "Optuna check failed" && \
     /app/venv/bin/python3.12 -c "import shap; print('SHAP Version:', shap.__version__)" || echo "SHAP check failed" && \
     /app/venv/bin/python3.12 -c "import numba; print('Numba Version:', numba.__version__)" || echo "Numba check failed" && \
-    /app/venv/bin/python3.12 -c "import tensorflow as tf; print('TF Version:', tf.__version__)" || echo "TensorFlow check failed" && \
+    if [ "$ENABLE_TF" = "1" ]; then /app/venv/bin/python3.12 -c "import tensorflow as tf; print('TF Version:', tf.__version__)" || echo "TensorFlow check failed"; else echo "TensorFlow check skipped"; fi && \
     /app/venv/bin/python3.12 -c "import stable_baselines3 as sb3; print('SB3 Version:', sb3.__version__)" || echo "SB3 check failed" && \
     /app/venv/bin/python3.12 -c "import pytorch_lightning as pl; print('Lightning Version:', pl.__version__)" || echo "Lightning check failed" && \
     /app/venv/bin/python3.12 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
