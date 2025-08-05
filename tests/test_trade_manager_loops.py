@@ -153,6 +153,7 @@ async def test_manage_positions_recovery(monkeypatch):
         'entry_price': [100],
         'tp_multiplier': [2],
         'sl_multiplier': [1],
+        'stop_loss_price': [99],
         'highest_price': [100],
         'lowest_price': [0],
         'breakeven_triggered': [False],

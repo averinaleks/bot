@@ -207,6 +207,7 @@ class TradeManager:
                 "entry_price",
                 "tp_multiplier",
                 "sl_multiplier",
+                "stop_loss_price",
                 "highest_price",
                 "lowest_price",
                 "breakeven_triggered",
@@ -650,6 +651,7 @@ class TradeManager:
                 "entry_price": price,
                 "tp_multiplier": tp_mult,
                 "sl_multiplier": sl_mult,
+                "stop_loss_price": stop_loss_price,
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
@@ -850,8 +852,8 @@ class TradeManager:
                         pd.IndexSlice[symbol, :], "size"
                     ] = remaining_size
                     self.positions.loc[
-                        pd.IndexSlice[symbol, :], "sl_multiplier"
-                    ] = 0.0
+                        pd.IndexSlice[symbol, :], "stop_loss_price"
+                    ] = position["entry_price"]
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "breakeven_triggered"
                     ] = True
@@ -902,12 +904,31 @@ class TradeManager:
                 if not indicators or not indicators.atr.iloc[-1]:
                     return
                 atr = indicators.atr.iloc[-1]
-                if position["side"] == "buy":
-                    stop_loss = position["entry_price"] - position["sl_multiplier"] * atr
-                    take_profit = position["entry_price"] + position["tp_multiplier"] * atr
+                if position["breakeven_triggered"]:
+                    stop_loss = position["stop_loss_price"]
+                    take_profit = (
+                        position["entry_price"] + position["tp_multiplier"] * atr
+                        if position["side"] == "buy"
+                        else position["entry_price"] - position["tp_multiplier"] * atr
+                    )
                 else:
-                    stop_loss = position["entry_price"] + position["sl_multiplier"] * atr
-                    take_profit = position["entry_price"] - position["tp_multiplier"] * atr
+                    if position["side"] == "buy":
+                        stop_loss = (
+                            position["entry_price"] - position["sl_multiplier"] * atr
+                        )
+                        take_profit = (
+                            position["entry_price"] + position["tp_multiplier"] * atr
+                        )
+                    else:
+                        stop_loss = (
+                            position["entry_price"] + position["sl_multiplier"] * atr
+                        )
+                        take_profit = (
+                            position["entry_price"] - position["tp_multiplier"] * atr
+                        )
+                    self.positions.loc[
+                        pd.IndexSlice[symbol, :], "stop_loss_price"
+                    ] = stop_loss
                 if position["side"] == "buy" and current_price <= stop_loss:
                     close_reason = "Stop Loss"
                 elif position["side"] == "sell" and current_price >= stop_loss:
