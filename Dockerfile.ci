@@ -14,8 +14,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && apt-get update && apt-get install -y --no-install-recommends \
         python3.12 \
         python3.12-dev \
-        python3.12-distutils \
-    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+        python3.12-venv \
+    && python3.12 -m ensurepip --upgrade \
     && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && tar -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
@@ -27,7 +27,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 WORKDIR /app
 
 # Install only linting tools
-RUN pip install --no-cache-dir flake8
+RUN python3.12 -m pip install --no-cache-dir flake8
 
 # Copy files required for static analysis
 COPY .pre-commit-config.yaml .flake8 .pylintrc requirements.txt requirements-cpu.txt ./
