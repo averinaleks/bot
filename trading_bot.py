@@ -205,10 +205,15 @@ def send_trade(
             payload["sl"] = sl
         if trailing_stop is not None:
             payload["trailing_stop"] = trailing_stop
+        headers = {}
+        token = os.getenv("TRADE_MANAGER_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         resp = requests.post(
             f"{env['trade_manager_url']}/open_position",
             json=payload,
             timeout=timeout,
+            headers=headers or None,
         )
         elapsed = time.time() - start
         if elapsed > CONFIRMATION_TIMEOUT:
