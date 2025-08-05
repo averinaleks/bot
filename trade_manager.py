@@ -20,12 +20,7 @@ except Exception:  # noqa: W0703 - allow missing pandas
     pd.Series = list
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
-try:  # pragma: no cover - optional dependency
-    import numpy as np  # type: ignore
-except Exception:  # noqa: W0703 - allow missing numpy
-    np = types.ModuleType("numpy")
-    np.ndarray = list
-    np.array = lambda *a, **k: a[0]
+import numpy as np  # type: ignore
 
 if os.getenv("TEST_MODE") == "1":
     ray = types.ModuleType("ray")
