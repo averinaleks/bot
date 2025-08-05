@@ -17,7 +17,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     cache = HistoricalDataCache(cache_dir=str(tmp_path))
     df = pd.DataFrame({"close": [1, 2, 3]})
     cache.save_cached_data("BTC/USDT", "1m", df)
-    file_path = tmp_path / "BTC_USDT_1m.pkl.gz"
+    file_path = tmp_path / "BTC_USDT_1m.json.gz"
     assert file_path.exists()
     loaded = cache.load_cached_data("BTC/USDT", "1m")
     assert loaded.equals(df)
@@ -31,7 +31,7 @@ def test_load_converts_old_format(tmp_path, monkeypatch):
     with open(old_file, "wb") as f:
         pickle.dump(df, f)
     loaded = cache.load_cached_data("BTCUSDT", "1m")
-    new_file = tmp_path / "BTCUSDT_1m.pkl.gz"
+    new_file = tmp_path / "BTCUSDT_1m.json.gz"
     assert loaded.equals(df)
     assert new_file.exists()
     assert not old_file.exists()
@@ -44,7 +44,7 @@ def test_save_skips_empty_dataframe(tmp_path, monkeypatch):
     cache = HistoricalDataCache(cache_dir=str(tmp_path))
     empty_df = pd.DataFrame()
     cache.save_cached_data("BTC/USDT", "1m", empty_df)
-    assert not (tmp_path / "BTC_USDT_1m.pkl.gz").exists()
+    assert not (tmp_path / "BTC_USDT_1m.json.gz").exists()
 
 
 def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
@@ -58,7 +58,7 @@ def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
     cache.max_buffer_size_mb = 10
     df = pd.DataFrame({"close": list(range(100))})
     cache.save_cached_data("BTC/USDT", "1m", df)
-    file_path = tmp_path / "BTC_USDT_1m.pkl.gz"
+    file_path = tmp_path / "BTC_USDT_1m.json.gz"
     size_mb = file_path.stat().st_size / (1024 * 1024)
     assert abs(cache.current_cache_size_mb - size_mb) < 0.01
     cache.max_cache_size_mb = 0
@@ -69,7 +69,7 @@ def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
 
 def test_calculate_cache_size_skips_deleted_files(tmp_path, monkeypatch):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
-    file_path = tmp_path / "del.pkl.gz"
+    file_path = tmp_path / "del.json.gz"
     file_path.write_bytes(b"data")
     orig_getsize = os.path.getsize
 
