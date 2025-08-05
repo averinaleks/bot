@@ -2,7 +2,8 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-import ta
+import pytest
+ta = pytest.importorskip("ta")
 import types
 from bot import utils
 
