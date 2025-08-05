@@ -2,7 +2,6 @@
 
 import logging
 import os
-import pickle
 import json
 import pandas as pd
 import numpy as np
@@ -905,34 +904,41 @@ class HistoricalDataCache:
                     )
                 logger.info("Данные загружены из кэша (parquet): %s", filename)
                 return data
-            for legacy in (legacy_json, old_gzip, old_filename):
-                if os.path.exists(legacy):
-                    logger.info(
-                        "Обнаружен старый кэш для %s_%s, конвертация в Parquet",
+            if os.path.exists(legacy_json):
+                logger.info(
+                    "Обнаружен старый кэш для %s_%s, конвертация в Parquet",
+                    symbol,
+                    timeframe,
+                )
+                with gzip.open(legacy_json, "rt") as f:
+                    payload = json.load(f)
+                data_json = payload.get("data")
+                data = pd.read_json(StringIO(data_json), orient="split")
+                if not isinstance(data, pd.DataFrame):
+                    logger.error(
+                        "Неверный тип данных в старом кэше %s_%s: %s",
                         symbol,
                         timeframe,
+                        type(data),
                     )
-                    if legacy.endswith("json.gz"):
-                        with gzip.open(legacy, "rt") as f:
-                            payload = json.load(f)
-                        data_json = payload.get("data")
-                        data = pd.read_json(StringIO(data_json), orient="split")
-                    else:
-                        open_func = gzip.open if legacy.endswith(".gz") else open
-                        with open_func(legacy, "rb") as f:
-                            data = pickle.load(f)
-                    if not isinstance(data, pd.DataFrame):
-                        logger.error(
-                            "Неверный тип данных в старом кэше %s_%s: %s",
-                            symbol,
-                            timeframe,
-                            type(data),
-                        )
-                        self._delete_cache_file(legacy)
-                        return None
-                    self.save_cached_data(symbol, timeframe, data)
+                    self._delete_cache_file(legacy_json)
+                    return None
+                self.save_cached_data(symbol, timeframe, data)
+                self._delete_cache_file(legacy_json)
+                return data
+            found_pickle = False
+            for legacy in (old_gzip, old_filename):
+                if os.path.exists(legacy):
+                    logger.warning(
+                        "Обнаружен небезопасный pickle кэш для %s_%s, файл удалён: %s",
+                        symbol,
+                        timeframe,
+                        legacy,
+                    )
                     self._delete_cache_file(legacy)
-                    return data
+                    found_pickle = True
+            if found_pickle:
+                return None
             return None
         except Exception as e:
             logger.error("Ошибка загрузки кэша для %s_%s: %s", symbol, timeframe, e)
