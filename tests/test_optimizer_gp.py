@@ -1,88 +1,118 @@
 import sys
+import importlib
 import types
 import numpy as np
 import pandas as pd
 import pytest
 import logging
+
 from bot.config import BotConfig
 
-# Stub heavy dependencies before importing optimizer
-if 'torch' not in sys.modules:
-    torch = types.ModuleType('torch')
+
+@pytest.fixture
+def _stub_modules(monkeypatch):
+    """Inject lightweight stubs for heavy optional dependencies."""
+    # torch
+    torch = types.ModuleType("torch")
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
-    import importlib.machinery
-    torch.__spec__ = importlib.machinery.ModuleSpec('torch', None)
-    sys.modules['torch'] = torch
+    torch.__spec__ = importlib.machinery.ModuleSpec("torch", None)
+    monkeypatch.setitem(sys.modules, "torch", torch)
 
-sk_mod = types.ModuleType('sklearn')
-model_sel = types.ModuleType('sklearn.model_selection')
-model_sel.GridSearchCV = object
-sk_mod.model_selection = model_sel
-base_estimator = types.ModuleType('sklearn.base')
-base_estimator.BaseEstimator = object
-sk_mod.base = base_estimator
-sys.modules.setdefault('sklearn', sk_mod)
-sys.modules.setdefault('sklearn.model_selection', model_sel)
-sys.modules.setdefault('sklearn.base', base_estimator)
-mlflow_mod = types.ModuleType('optuna.integration.mlflow')
-mlflow_mod.MLflowCallback = object
-sys.modules.setdefault('optuna.integration.mlflow', mlflow_mod)
+    # scikit-learn
+    sk_mod = types.ModuleType("sklearn")
+    model_sel = types.ModuleType("sklearn.model_selection")
+    model_sel.GridSearchCV = object
+    sk_mod.model_selection = model_sel
+    base_estimator = types.ModuleType("sklearn.base")
+    base_estimator.BaseEstimator = object
+    sk_mod.base = base_estimator
+    monkeypatch.setitem(sys.modules, "sklearn", sk_mod)
+    monkeypatch.setitem(sys.modules, "sklearn.model_selection", model_sel)
+    monkeypatch.setitem(sys.modules, "sklearn.base", base_estimator)
 
-# Stub optuna
-optuna_mod = types.ModuleType('optuna')
-optuna_samplers = types.ModuleType('optuna.samplers')
-class _TPESampler:
-    def __init__(self, *a, **k):
+    # optuna
+    mlflow_mod = types.ModuleType("optuna.integration.mlflow")
+    mlflow_mod.MLflowCallback = object
+    monkeypatch.setitem(sys.modules, "optuna.integration.mlflow", mlflow_mod)
+
+    optuna_mod = types.ModuleType("optuna")
+    optuna_samplers = types.ModuleType("optuna.samplers")
+
+    class _TPESampler:
+        def __init__(self, *a, **k):
+            pass
+
+    optuna_samplers.TPESampler = _TPESampler
+    optuna_mod.samplers = optuna_samplers
+    optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(
+        ask=lambda: types.SimpleNamespace(number=0),
+        best_params={},
+        best_value=1.0,
+        tell=lambda *a, **k: None,
+    )
+    optuna_exceptions = types.ModuleType("optuna.exceptions")
+
+    class ExperimentalWarning(Warning):
         pass
-optuna_samplers.TPESampler = _TPESampler
-optuna_mod.samplers = optuna_samplers
-optuna_mod.create_study = lambda *a, **k: types.SimpleNamespace(ask=lambda: types.SimpleNamespace(number=0), best_params={}, best_value=1.0, tell=lambda *a, **k: None)
-optuna_exceptions = types.ModuleType('optuna.exceptions')
-class ExperimentalWarning(Warning):
-    pass
-optuna_exceptions.ExperimentalWarning = ExperimentalWarning
-optuna_mod.exceptions = optuna_exceptions
-sys.modules.setdefault('optuna', optuna_mod)
-sys.modules.setdefault('optuna.samplers', optuna_samplers)
-sys.modules.setdefault('optuna.exceptions', optuna_exceptions)
 
-# Stub skopt
-skopt_mod = types.ModuleType('skopt')
-class DummyOpt:
-    instantiated = False
-    def __init__(self, dims):
-        DummyOpt.instantiated = True
-        self.space = types.SimpleNamespace(dimensions=dims)
-    def ask(self):
-        return [10,50,100,5,2,2,0.05,0.5,1.5,0.5,1.5]
-    def tell(self, *a, **k):
-        pass
-skopt_space = types.ModuleType('skopt.space')
-class DummyDim:
-    def __init__(self, *a, **kw):
-        self.name = kw.get('name')
-skopt_space.Integer = DummyDim
-skopt_space.Real = DummyDim
-skopt_mod.Optimizer = DummyOpt
-skopt_mod.space = skopt_space
-sys.modules['skopt'] = skopt_mod
-sys.modules['skopt.space'] = skopt_space
+    optuna_exceptions.ExperimentalWarning = ExperimentalWarning
+    optuna_mod.exceptions = optuna_exceptions
+    monkeypatch.setitem(sys.modules, "optuna", optuna_mod)
+    monkeypatch.setitem(sys.modules, "optuna.samplers", optuna_samplers)
+    monkeypatch.setitem(sys.modules, "optuna.exceptions", optuna_exceptions)
 
-# Import optimizer fresh
-sys.modules.pop('optimizer', None)
-sys.modules.pop('bot.optimizer', None)
-from bot.optimizer import ParameterOptimizer  # noqa: E402
-from bot import optimizer
+    # skopt
+    skopt_mod = types.ModuleType("skopt")
 
-# Stub utils
-utils = types.ModuleType('utils')
-utils.logger = logging.getLogger('test')
-async def _cde(*a, **kw):
-    return False
-utils.check_dataframe_empty = _cde
-utils.check_dataframe_empty_async = _cde
-utils.is_cuda_available = lambda: False
-sys.modules['utils'] = utils
+    class DummyOpt:
+        instantiated = False
+
+        def __init__(self, dims):
+            DummyOpt.instantiated = True
+            self.space = types.SimpleNamespace(dimensions=dims)
+
+        def ask(self):
+            return [10, 50, 100, 5, 2, 2, 0.05, 0.5, 1.5, 0.5, 1.5]
+
+        def tell(self, *a, **k):
+            pass
+
+    skopt_space = types.ModuleType("skopt.space")
+
+    class DummyDim:
+        def __init__(self, *a, **kw):
+            self.name = kw.get("name")
+
+    skopt_space.Integer = DummyDim
+    skopt_space.Real = DummyDim
+    skopt_mod.Optimizer = DummyOpt
+    skopt_mod.space = skopt_space
+    monkeypatch.setitem(sys.modules, "skopt", skopt_mod)
+    monkeypatch.setitem(sys.modules, "skopt.space", skopt_space)
+
+    # utils stub
+    utils = types.ModuleType("utils")
+    utils.logger = logging.getLogger("test")
+
+    async def _cde(*a, **kw):
+        return False
+
+    utils.check_dataframe_empty = _cde
+    utils.check_dataframe_empty_async = _cde
+    utils.is_cuda_available = lambda: False
+    monkeypatch.setitem(sys.modules, "utils", utils)
+
+    # Import optimizer after stubs
+    sys.modules.pop("optimizer", None)
+    sys.modules.pop("bot.optimizer", None)
+    from bot.optimizer import ParameterOptimizer  # noqa: E402
+    from bot import optimizer  # noqa: E402
+
+    yield ParameterOptimizer, optimizer, DummyOpt
+
+    monkeypatch.undo()
+    sys.modules.pop("optimizer", None)
+    sys.modules.pop("bot.optimizer", None)
 
 class DummyDataHandler:
     def __init__(self, df):
@@ -101,7 +131,8 @@ def make_df():
     return df.set_index(['symbol', df.index])
 
 @pytest.mark.asyncio
-async def test_gp_optimizer_selected(monkeypatch):
+async def test_gp_optimizer_selected(monkeypatch, _stub_modules):
+    ParameterOptimizer, optimizer, DummyOpt = _stub_modules
     df = make_df()
     config = BotConfig(timeframe='1m', optuna_trials=1, optimization_interval=1,
                        volatility_threshold=0.02, optimizer_method='gp',
@@ -112,7 +143,8 @@ async def test_gp_optimizer_selected(monkeypatch):
     assert DummyOpt.instantiated
 
 @pytest.mark.asyncio
-async def test_holdout_warning_emitted(monkeypatch, caplog):
+async def test_holdout_warning_emitted(monkeypatch, caplog, _stub_modules):
+    ParameterOptimizer, optimizer, DummyOpt = _stub_modules
     df = make_df()
     config = BotConfig(timeframe='1m', optuna_trials=1, optimization_interval=1,
                        volatility_threshold=0.02, holdout_warning_ratio=0.3,
@@ -124,7 +156,3 @@ async def test_holdout_warning_emitted(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     await opt.optimize('BTCUSDT')
     assert any('hold-out' in rec.getMessage() for rec in caplog.records)
-
-sys.modules.pop('optuna', None)
-sys.modules.pop('optuna.samplers', None)
-sys.modules.pop('optuna.exceptions', None)
