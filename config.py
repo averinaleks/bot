@@ -38,9 +38,6 @@ class BotConfig:
     timeframe: str = _get_default("timeframe", "1m")
     secondary_timeframe: str = _get_default("secondary_timeframe", "2h")
     ws_url: str = _get_default("ws_url", "wss://stream.bybit.com/v5/public/linear")
-    private_ws_url: str = _get_default(
-        "private_ws_url", "wss://stream.bybit.com/v5/private"
-    )
     backup_ws_urls: List[str] = field(
         default_factory=lambda: _get_default(
             "backup_ws_urls", ["wss://stream.bybit.com/v5/public/linear"]
@@ -77,14 +74,10 @@ class BotConfig:
     trailing_stop_percentage: float = _get_default("trailing_stop_percentage", 1.0)
     trailing_stop_coeff: float = _get_default("trailing_stop_coeff", 1.0)
     retrain_threshold: float = _get_default("retrain_threshold", 0.1)
-    retrain_volatility_threshold: float = _get_default(
-        "retrain_volatility_threshold", 0.02
-    )
     forget_window: int = _get_default("forget_window", 259200)
     trailing_stop_multiplier: float = _get_default("trailing_stop_multiplier", 1.0)
     tp_multiplier: float = _get_default("tp_multiplier", 2.0)
     sl_multiplier: float = _get_default("sl_multiplier", 1.0)
-    kelly_win_prob: float = _get_default("kelly_win_prob", 0.6)
     min_sharpe_ratio: float = _get_default("min_sharpe_ratio", 0.5)
     performance_window: int = _get_default("performance_window", 86400)
     min_data_length: int = _get_default("min_data_length", 1000)
@@ -111,11 +104,9 @@ class BotConfig:
     )
     funding_update_interval: int = _get_default("funding_update_interval", 300)
     oi_update_interval: int = _get_default("oi_update_interval", 300)
-    model_save_path: str = _get_default("model_save_path", "/app/models")
     cache_dir: str = _get_default("cache_dir", "/app/cache")
     log_dir: str = _get_default("log_dir", "/app/logs")
     ray_num_cpus: int = _get_default("ray_num_cpus", 2)
-    max_recovery_attempts: int = _get_default("max_recovery_attempts", 3)
     n_splits: int = _get_default("n_splits", 3)
     optimization_interval: int = _get_default("optimization_interval", 7200)
     shap_cache_duration: int = _get_default("shap_cache_duration", 86400)
@@ -156,7 +147,6 @@ class BotConfig:
     order_retry_delay: float = _get_default("order_retry_delay", 1.0)
     reversal_margin: float = _get_default("reversal_margin", 0.05)
     transformer_weight: float = _get_default("transformer_weight", 0.5)
-    rl_weight: float = _get_default("rl_weight", 0.3)
     ema_weight: float = _get_default("ema_weight", 0.2)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
 
