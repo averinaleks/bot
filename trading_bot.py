@@ -1,9 +1,11 @@
 """Main entry point for the trading bot."""
 
+import asyncio
 import os
+import statistics
+import threading
 import time
 from collections import deque
-import statistics
 
 import httpx
 import requests
@@ -38,6 +40,8 @@ CONFIRMATION_TIMEOUT = float(os.getenv("ORDER_CONFIRMATION_TIMEOUT", "5"))
 # average.  This avoids additional service calls while still allowing
 # us to build a small feature vector for the prediction service.
 _PRICE_HISTORY: deque[float] = deque(maxlen=50)
+PRICE_HISTORY_LOCK = threading.Lock()
+PRICE_HISTORY_ASYNC_LOCK = asyncio.Lock()
 
 
 # Default trading symbol. Override with the SYMBOL environment variable.
@@ -145,12 +149,13 @@ def build_feature_vector(price: float) -> list[float]:
        basic technical indicator.
     """
 
-    _PRICE_HISTORY.append(price)
-    if len(_PRICE_HISTORY) > 1:
-        volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
-    else:
-        volume = 0.0
-    sma = statistics.fmean(_PRICE_HISTORY)
+    with PRICE_HISTORY_LOCK:
+        _PRICE_HISTORY.append(price)
+        if len(_PRICE_HISTORY) > 1:
+            volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
+        else:
+            volume = 0.0
+        sma = statistics.fmean(_PRICE_HISTORY)
     return [price, volume, sma]
 
 
@@ -310,7 +315,8 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if price is None or price <= 0:
                 logger.warning("Invalid price for %s: %s", symbol, price)
                 return
-            features = build_feature_vector(price)
+            async with PRICE_HISTORY_ASYNC_LOCK:
+                features = build_feature_vector(price)
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": features},
