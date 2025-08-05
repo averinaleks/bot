@@ -1210,10 +1210,9 @@ class DataHandler:
     async def select_liquid_pairs(self, markets: Dict) -> List[str]:
         """Return top liquid USDT futures pairs only.
 
-        Filters out spot markets by selecting futures symbols. Both plain
-        notation like ``BTCUSDT`` and the colon-delimited form
-        ``BTC/USDT:USDT`` are supported. Volume ranking and the configured
-        top limit remain unchanged.
+        Filters out spot markets using contract metadata rather than
+        string patterns. Volume ranking and the configured top limit
+        remain unchanged.
         """
 
         pair_volumes = []
@@ -1234,13 +1233,15 @@ class DataHandler:
         ).total_seconds()
         now = pd.Timestamp.utcnow()
         tasks = []
+        candidate_markets = 0
         for symbol, market in markets.items():
-            # Only consider active USDT-margined futures symbols
+            # Only consider active USDT-margined futures symbols using metadata
             if (
                 market.get("active")
-                and symbol.endswith("USDT")
-                and ((":" in symbol) or ("/" not in symbol))
+                and market.get("quote") == "USDT"
+                and (market.get("contract") or market.get("linear"))
             ):
+                candidate_markets += 1
                 launch_time = None
                 info = market.get("info") or {}
                 for key in (
@@ -1277,7 +1278,19 @@ class DataHandler:
         min_liq = self.config.get("min_liquidity", 0)
         filtered = [p for p in sorted_pairs if p[1] >= min_liq]
         top_limit = self.config.get("max_symbols", 50)
-        return [s for s, _ in filtered[:top_limit]]
+        result = [s for s, _ in filtered[:top_limit]]
+        logger.info(
+            "select_liquid_pairs: total=%d, usdt_futures=%d, after_liquidity=%d",
+            len(markets),
+            candidate_markets,
+            len(result),
+        )
+        if not result:
+            raise ValueError(
+                "No liquid USDT futures pairs found. Consider lowering min_liquidity or"
+                " adjusting other configuration values."
+            )
+        return result
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
     async def fetch_ohlcv_single(
