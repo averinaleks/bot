@@ -1,6 +1,7 @@
 import os
 import requests
 import multiprocessing
+import sys
 import signal
 from contextlib import ExitStack
 from flask import Flask, request, jsonify
@@ -8,8 +9,8 @@ import pytest
 
 from tests.helpers import get_free_port, service_process
 
-# Ensure processes use the spawn start method on all platforms
-multiprocessing.set_start_method("spawn", force=True)
+if sys.platform == "win32":
+    multiprocessing.set_start_method("spawn", force=True)
 ctx = multiprocessing.get_context("spawn")
 
 
