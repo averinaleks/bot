@@ -294,6 +294,7 @@ def test_trailing_stop_to_breakeven():
     open_btc_order = next(o for o in dh.exchange.orders if o['symbol'] == 'BTCUSDT')
     assert pos['breakeven_triggered'] is True
     assert pos['size'] < open_btc_order['amount']
+    assert pos['stop_loss_price'] == pytest.approx(pos['entry_price'])
 
 
 def test_open_position_skips_existing():
@@ -863,6 +864,7 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
         "entry_price": [100],
         "tp_multiplier": [2],
         "sl_multiplier": [1],
+        "stop_loss_price": [99],
         "highest_price": [100],
         "lowest_price": [0],
         "breakeven_triggered": [False],
@@ -923,6 +925,7 @@ async def test_exit_signal_triggers_reverse_trade(monkeypatch):
         "entry_price": [100],
         "tp_multiplier": [2],
         "sl_multiplier": [1],
+        "stop_loss_price": [99],
         "highest_price": [100],
         "lowest_price": [0],
         "breakeven_triggered": [False],
@@ -994,6 +997,7 @@ async def test_rl_close_action(monkeypatch):
         "entry_price": [100],
         "tp_multiplier": [2],
         "sl_multiplier": [1],
+        "stop_loss_price": [99],
         "highest_price": [100],
         "lowest_price": [0],
         "breakeven_triggered": [False],
@@ -1068,6 +1072,35 @@ async def test_check_stop_loss_take_profit_triggers_close_short(monkeypatch):
 
     assert called["n"] == 1
     assert len(tm.positions) == 0
+
+
+@pytest.mark.asyncio
+async def test_check_stop_loss_take_profit_breakeven_uses_fixed_price(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "buy", 100, {})
+
+    tm.positions.loc[pd.IndexSlice["BTCUSDT", :], "breakeven_triggered"] = True
+    tm.positions.loc[pd.IndexSlice["BTCUSDT", :], "stop_loss_price"] = 100
+    dh.indicators["BTCUSDT"].atr = pd.Series([10.0])
+
+    called = {"n": 0}
+
+    async def wrapped(symbol, price, reason=""):
+        called["n"] += 1
+        tm.positions = tm.positions.drop(symbol, level="symbol")
+
+    monkeypatch.setattr(tm, "close_position", wrapped)
+
+    await tm.check_stop_loss_take_profit("BTCUSDT", 99.5)
+
+    assert called["n"] == 1
 
 
 def test_compute_stats():
