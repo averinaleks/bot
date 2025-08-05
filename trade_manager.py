@@ -799,15 +799,12 @@ class TradeManager:
                 else:
                     position_df = pd.DataFrame()
                 if position_df.empty:
-                    logger.warning("Position for %s not found", symbol)
+                    logger.debug("Position for %s not found", symbol)
                     return
                 position = position_df.iloc[0]
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
-                    logger.warning(
-                        "ATR data missing for %s, retrying later",
-                        symbol,
-                    )
+                    logger.debug("ATR data missing for %s, retrying later", symbol)
                     return
                 trailing_stop_distance = atr * self.config.get(
                     "trailing_stop_multiplier", 1.0
@@ -1164,9 +1161,21 @@ class TradeManager:
                     if empty:
                         continue
                     current_price = df["close"].iloc[-1]
-                    await self.check_trailing_stop(symbol, current_price)
-                    await self.check_stop_loss_take_profit(symbol, current_price)
-                    await self.check_exit_signal(symbol, current_price)
+                    if (
+                        "symbol" in self.positions.index.names
+                        and symbol in self.positions.index.get_level_values("symbol")
+                    ):
+                        await self.check_trailing_stop(symbol, current_price)
+                    if (
+                        "symbol" in self.positions.index.names
+                        and symbol in self.positions.index.get_level_values("symbol")
+                    ):
+                        await self.check_stop_loss_take_profit(symbol, current_price)
+                    if (
+                        "symbol" in self.positions.index.names
+                        and symbol in self.positions.index.get_level_values("symbol")
+                    ):
+                        await self.check_exit_signal(symbol, current_price)
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
