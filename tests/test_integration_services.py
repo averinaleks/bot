@@ -1,7 +1,6 @@
 import os
 import requests
 import multiprocessing
-import socket
 import signal
 from contextlib import ExitStack
 from flask import Flask, request, jsonify
@@ -75,19 +74,19 @@ def _shutdown(*_):
 
 def _run_dh(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST", "127.0.0.1")
     dh_app.run(host=host, port=port)
 
 
 def _run_mb(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST", "127.0.0.1")
     mb_app.run(host=host, port=port)
 
 
 def _run_tm(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST", "127.0.0.1")
     tm_app.run(host=host, port=port)
 
 
