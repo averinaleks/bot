@@ -67,11 +67,11 @@ def make_df(n=5):
     return df
 
 @pytest.mark.asyncio
-async def test_precompute_features_caches(monkeypatch):
+async def test_precompute_features_caches(monkeypatch, tmp_path):
     from bot.model_builder import ModelBuilder
     df = make_df()
     dh = DummyDH(df)
-    cfg = BotConfig(cache_dir="/tmp", lstm_timesteps=2, min_data_length=len(df), nn_framework="tensorflow")
+    cfg = BotConfig(cache_dir=str(tmp_path), lstm_timesteps=2, min_data_length=len(df), nn_framework="tensorflow")
     mb = ModelBuilder(cfg, dh, DummyTM())
     ind = DummyIndicators(len(df))
     dh.indicators["BTCUSDT"] = ind

@@ -6,6 +6,7 @@ import types
 import os
 import pandas as pd
 import pytest
+import tempfile
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -103,7 +104,7 @@ class DummyModelBuilder:
 
 def make_config():
     return BotConfig(
-        cache_dir='/tmp',
+        cache_dir=tempfile.mkdtemp(),
         check_interval=1,
         performance_window=1,
         order_retry_delay=0,

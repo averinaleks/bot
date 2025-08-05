@@ -25,9 +25,9 @@ class DummyTM:
     pass
 
 @pytest.mark.asyncio
-async def test_backtest_loop_warns(monkeypatch, caplog):
+async def test_backtest_loop_warns(monkeypatch, caplog, tmp_path):
     monkeypatch.setenv("TEST_MODE", "1")
-    cfg = BotConfig(cache_dir="/tmp", backtest_interval=0, min_sharpe_ratio=0.5)
+    cfg = BotConfig(cache_dir=str(tmp_path), backtest_interval=0, min_sharpe_ratio=0.5)
     dh = DummyDH()
     gym_mod = types.ModuleType("gymnasium")
     gym_mod.Env = object

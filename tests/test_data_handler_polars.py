@@ -74,8 +74,8 @@ async def test_synchronize_and_update_polars(tmp_path):
     assert 'ema30' in dh.indicators[symbol].df.columns
 
 @pytest.mark.asyncio
-async def test_cleanup_old_data_polars(monkeypatch):
-    cfg = BotConfig(cache_dir='/tmp', data_cleanup_interval=0, forget_window=1, use_polars=True)
+async def test_cleanup_old_data_polars(monkeypatch, tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path), data_cleanup_interval=0, forget_window=1, use_polars=True)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     now = pd.Timestamp.now(tz='UTC')
     old_ts = now - pd.Timedelta(seconds=5)

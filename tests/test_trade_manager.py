@@ -7,6 +7,7 @@ import logging
 import os
 import math
 import contextlib
+import tempfile
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -164,7 +165,7 @@ class DummyDataHandler:
 
 def make_config():
     return BotConfig(
-        cache_dir='/tmp',
+        cache_dir=tempfile.mkdtemp(),
         max_positions=5,
         leverage=10,
         min_risk_per_trade=0.01,
@@ -585,7 +586,7 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
             return 0.7, 0.3
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
 
     torch = sys.modules["torch"]
     torch.tensor = lambda *a, **k: a[0]
@@ -626,7 +627,7 @@ async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
             self.retrained = True
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
 
     torch = sys.modules["torch"]
     torch.tensor = lambda *a, **k: a[0]
@@ -666,7 +667,7 @@ async def test_evaluate_signal_skips_retrain_on_single_label(monkeypatch):
             self.retrained = True
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
 
     signal = await tm.evaluate_signal("BTCUSDT")
     assert signal is None
@@ -705,7 +706,7 @@ async def test_evaluate_signal_handles_http_400(monkeypatch):
             raise HTTPError(400)
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
 
     signal = await tm.evaluate_signal("BTCUSDT")
     assert signal is None
@@ -751,7 +752,7 @@ async def test_evaluate_signal_regression(monkeypatch):
             raise AssertionError("prepare_lstm_features should not be called")
 
     mb = MB()
-    cfg = BotConfig(lstm_timesteps=2, cache_dir="/tmp", prediction_target="pnl", trading_fee=0.001)
+    cfg = BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp(), prediction_target="pnl", trading_fee=0.001)
     tm = TradeManager(cfg, dh, mb, None, None)
 
     torch = sys.modules["torch"]
@@ -813,7 +814,7 @@ async def test_rl_action_overrides_voting(monkeypatch):
     rl = RL()
     cfg = BotConfig(
         lstm_timesteps=2,
-        cache_dir="/tmp",
+        cache_dir=tempfile.mkdtemp(),
         transformer_weight=0.7,
         ema_weight=0.3,
     )
@@ -852,7 +853,7 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
             return 0.7, 0.3
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
     idx = pd.MultiIndex.from_tuples([
         ("BTCUSDT", pd.Timestamp("2020-01-01"))
     ], names=["symbol", "timestamp"])
@@ -912,7 +913,7 @@ async def test_exit_signal_triggers_reverse_trade(monkeypatch):
             return 0.7, 0.3
 
     mb = MB()
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
     idx = pd.MultiIndex.from_tuples([
         ("BTCUSDT", pd.Timestamp("2020-01-01"))
     ], names=["symbol", "timestamp"])
@@ -983,7 +984,7 @@ async def test_rl_close_action(monkeypatch):
 
     rl = RL()
 
-    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir="/tmp"), dh, mb, None, None, rl)
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None, rl)
     idx = pd.MultiIndex.from_tuples([
         ("BTCUSDT", pd.Timestamp("2020-01-01"))
     ], names=["symbol", "timestamp"])
@@ -1102,7 +1103,7 @@ async def test_execute_top_signals_ranking(monkeypatch):
             self.ohlcv = pd.DataFrame({"close": [1, 1, 1], "atr": [1, 1, 1]}, index=idx)
 
     dh = DH()
-    tm = TradeManager(BotConfig(cache_dir="/tmp", top_signals=2), dh, None, None, None)
+    tm = TradeManager(BotConfig(cache_dir=tempfile.mkdtemp(), top_signals=2), dh, None, None, None)
 
     async def fake_eval(symbol, return_prob=False):
         probs = {"A": 0.9, "B": 0.8, "C": 0.1}
