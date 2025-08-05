@@ -11,7 +11,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, fields, asdict
-from typing import Any, Dict, List, get_type_hints
+from typing import Any, Dict, List, get_type_hints, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -149,6 +149,7 @@ class BotConfig:
     transformer_weight: float = _get_default("transformer_weight", 0.5)
     ema_weight: float = _get_default("ema_weight", 0.2)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
+    balance_key: Optional[str] = _get_default("balance_key", None)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)

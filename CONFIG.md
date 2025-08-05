@@ -110,4 +110,5 @@ dataclass.  Default values are shown for reference.
 | transformer_weight | 0.5 | Ensemble weight for transformer model. |
 | ema_weight | 0.2 | Ensemble weight for EMA strategy. |
 | early_stopping_patience | 3 | Epochs with no improvement before early stop. |
+| balance_key | – | Balance key for equity; defaults to symbol quote currency. |
 

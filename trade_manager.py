@@ -476,7 +476,11 @@ class TradeManager:
                 )
                 return 0.0
             account = await safe_api_call(self.exchange, "fetch_balance")
-            equity = float(account["total"].get("USDT", 0))
+            balance_key = self.config.get("balance_key")
+            if not balance_key:
+                sym = symbol.split(":", 1)[0]
+                balance_key = sym.split("/")[1] if "/" in sym else "USDT"
+            equity = float(account.get("total", {}).get(balance_key, 0))
             if equity <= 0:
                 logger.warning("Insufficient balance for %s", symbol)
                 await self.telegram_logger.send_telegram_message(
