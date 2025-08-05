@@ -1901,6 +1901,11 @@ if __name__ == "__main__":
     load_dotenv()
     _load_model()
     port = int(os.environ.get("PORT", "8001"))
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST")
+    if not host:
+        host = "127.0.0.1"
+        logger.info("HOST not set, defaulting to %s", host)
+    elif host != "127.0.0.1":
+        logger.warning("Using non-local host %s; ensure this is intended", host)
     logger.info("Starting ModelBuilder service on %s:%s", host, port)
     api_app.run(host=host, port=port)
