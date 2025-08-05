@@ -18,15 +18,7 @@ except Exception:  # noqa: W0703 - allow missing pandas
     pd.Index = list
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
-try:  # pragma: no cover - optional dependency
-    import numpy as np  # type: ignore
-except Exception:  # noqa: W0703 - allow missing numpy
-    np = types.ModuleType("numpy")
-    np.ndarray = list
-    np.array = lambda *a, **k: a[0]
-    np.random = types.SimpleNamespace(randn=lambda *a, **k: [0] * (a[0] if a else 0))
-    np.cumsum = lambda x: x
-    np.abs = abs
+import numpy as np  # type: ignore
 
 try:  # optional dependency
     import polars as pl  # type: ignore
