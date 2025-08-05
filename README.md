@@ -593,6 +593,12 @@ CPU requirements before running the tests:
     pytest
 ```
 
+Integration tests that require external services are marked with `integration` and are skipped by default. To run them separately:
+
+```bash
+pytest -m integration
+```
+
 The `requirements-cpu.txt` file already bundles `pytest` and all other
 packages needed by the test suite.
 

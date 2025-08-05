@@ -21,7 +21,7 @@ Thank you for your interest in contributing to this project!
 Use the following commands to execute the test suites locally:
 
 ```bash
-pytest -m "not integration"  # unit tests
+pytest                        # unit tests (integration tests skipped)
 pytest -m integration         # integration tests
 ```
 

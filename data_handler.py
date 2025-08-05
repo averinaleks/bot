@@ -183,9 +183,7 @@ def _init_cuda() -> None:
         if GPU_AVAILABLE:
             try:
                 import cupy as cupy_mod  # type: ignore
-                cp = cupy_mod  # type: ignore
-            except ImportError as exc:
-                logging.getLogger("TradingBot").warning("cupy import failed: %s", exc)
+
                 GPU_AVAILABLE = False
                 cp = np  # type: ignore
         else:
