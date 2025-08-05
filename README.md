@@ -255,6 +255,19 @@ contain only a single class.
 and `/ready` routes. The `/open_position` endpoint accepts either `amount` or
 `price`, calculating the size from `TRADE_RISK_USD` when only a price is given.
 
+`trade_manager_service.py` uses a simple token-based authentication. Set the
+`TRADE_MANAGER_TOKEN` environment variable on the service and supply the same
+token via an `Authorization: Bearer` header when calling any POST route or the
+`/positions` endpoint.  For example:
+
+```bash
+export TRADE_MANAGER_TOKEN=supersecret
+curl -H "Authorization: Bearer $TRADE_MANAGER_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"symbol":"BTCUSDT","side":"buy","amount":1}' \
+     http://localhost:8002/open_position
+```
+
 These reference scripts expose the same HTTP routes as the full services but
 avoid heavy frameworks like TensorFlow and PyTorch, making them ideal for quick
 tests.

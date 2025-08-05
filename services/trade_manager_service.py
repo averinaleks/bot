@@ -22,6 +22,22 @@ exchange = ccxt.bybit({
     'secret': os.getenv('BYBIT_API_SECRET', ''),
 })
 
+# Expected API token for simple authentication
+API_TOKEN = os.getenv('TRADE_MANAGER_TOKEN')
+
+
+@app.before_request
+def _require_api_token():
+    """Simple token-based authentication middleware."""
+    if request.method == 'POST' or request.path == '/positions':
+        token = request.headers.get('Authorization', '')
+        if token.lower().startswith('bearer '):
+            token = token[7:]
+        else:
+            token = request.headers.get('X-API-KEY', token)
+        if not token or token != API_TOKEN:
+            return jsonify({'error': 'unauthorized'}), 401
+
 # Gracefully handle missing ccxt error classes when running under test stubs
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)

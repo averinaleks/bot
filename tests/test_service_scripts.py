@@ -6,6 +6,8 @@ import pytest
 
 from tests.helpers import get_free_port, service_process
 
+TOKEN_HEADERS = {"Authorization": "Bearer test-token"}
+
 ctx = multiprocessing.get_context("spawn")
 
 
@@ -236,6 +238,7 @@ def _run_tm(
     import sys
     sys.modules['ccxt'] = ccxt
     os.environ['HOST'] = '127.0.0.1'
+    os.environ['TRADE_MANAGER_TOKEN'] = 'test-token'
     os.environ.setdefault('TRADE_RISK_USD', '10')
     from bot.services import trade_manager_service
     trade_manager_service.app.run(host='127.0.0.1', port=port)
@@ -250,10 +253,11 @@ def test_trade_manager_service_endpoints():
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'trailing_stop': 1},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
         order_id = resp.json()['order_id']
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -262,9 +266,10 @@ def test_trade_manager_service_endpoints():
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell'},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
@@ -279,6 +284,7 @@ def test_trade_manager_service_partial_close():
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
         order_id = resp.json()['order_id']
@@ -287,9 +293,10 @@ def test_trade_manager_service_partial_close():
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell', 'close_amount': 0.4},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -299,9 +306,10 @@ def test_trade_manager_service_partial_close():
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell'},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
@@ -316,9 +324,10 @@ def test_trade_manager_service_price_only():
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -333,9 +342,10 @@ def test_trade_manager_service_fallback_orders():
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'price': 100, 'trailing_stop': 1},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5)
+        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -351,6 +361,7 @@ def test_trade_manager_service_fallback_failure():
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
             timeout=5,
+            headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 500
 
