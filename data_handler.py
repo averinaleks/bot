@@ -7,6 +7,8 @@ import json
 import time
 import os
 import types
+import logging
+import threading
 
 
 try:  # pragma: no cover - optional dependency
@@ -179,8 +181,12 @@ def _init_cuda() -> None:
         if GPU_AVAILABLE:
             try:
                 import cupy as cupy_mod  # type: ignore
-
-
+                cp = cupy_mod  # type: ignore
+            except ImportError as exc:
+                logging.getLogger("TradingBot").warning("cupy import failed: %s", exc)
+                cp = np  # type: ignore
+                GPU_AVAILABLE = False
+        else:
             cp = np  # type: ignore
 
         GPU_INITIALIZED = True
