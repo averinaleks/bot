@@ -7,6 +7,7 @@ import json
 import time
 import os
 import types
+import threading
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -148,6 +149,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type checkers only
 GPU_AVAILABLE = False
 GPU_INITIALIZED = False
 cp = np  # type: ignore
+_cuda_init_lock = threading.Lock()
 
 
 def _init_cuda() -> None:
@@ -155,35 +157,36 @@ def _init_cuda() -> None:
 
     global GPU_AVAILABLE, cp, GPU_INITIALIZED
 
-    if GPU_INITIALIZED:
-        return
+    with _cuda_init_lock:
+        if GPU_INITIALIZED:
+            return
 
-    if os.environ.get("FORCE_CPU") == "1":
-        GPU_AVAILABLE = False
-        cp = np  # type: ignore
-        GPU_INITIALIZED = True
-        return
-
-    GPU_AVAILABLE = is_cuda_available()
-    if GPU_AVAILABLE:
-        try:
-            import cupy as cupy_mod  # type: ignore
-
-            cp = cupy_mod
-        except Exception as e:  # pragma: no cover - allow missing cupy
-            logger.warning("CuPy import failed: %s", e)
-            logger.warning(
-                "GPU detected but CuPy is not installed. Install it with"
-                " 'pip install cupy-cuda12x' for CUDA 12.x or the appropriate"
-                " package for your CUDA version to enable GPU support. See"
-                " README.md for installation details."
-            )
+        if os.environ.get("FORCE_CPU") == "1":
             GPU_AVAILABLE = False
             cp = np  # type: ignore
-    else:
-        cp = np  # type: ignore
+            GPU_INITIALIZED = True
+            return
 
-    GPU_INITIALIZED = True
+        GPU_AVAILABLE = is_cuda_available()
+        if GPU_AVAILABLE:
+            try:
+                import cupy as cupy_mod  # type: ignore
+
+                cp = cupy_mod
+            except Exception as e:  # pragma: no cover - allow missing cupy
+                logger.warning("CuPy import failed: %s", e)
+                logger.warning(
+                    "GPU detected but CuPy is not installed. Install it with"
+                    " 'pip install cupy-cuda12x' for CUDA 12.x or the appropriate"
+                    " package for your CUDA version to enable GPU support. See"
+                    " README.md for installation details."
+                )
+                GPU_AVAILABLE = False
+                cp = np  # type: ignore
+        else:
+            cp = np  # type: ignore
+
+        GPU_INITIALIZED = True
 
 
 def create_exchange() -> BybitSDKAsync:
