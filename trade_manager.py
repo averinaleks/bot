@@ -1620,7 +1620,7 @@ POSITIONS = []
 trade_manager: TradeManager | None = None
 
 
-async def create_trade_manager() -> TradeManager:
+async def create_trade_manager() -> TradeManager | None:
     """Instantiate the TradeManager using config.json."""
     global trade_manager
     if trade_manager is None:
@@ -1674,6 +1674,10 @@ async def create_trade_manager() -> TradeManager:
             asyncio.create_task(mb.backtest_loop())
             await dh.load_initial()
             asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
+        except RuntimeError as exc:
+            logger.error("Initial data load failed: %s", exc)
+            await dh.stop()
+            return None
         except Exception as exc:
             logger.exception("Failed to create ModelBuilder: %s", exc)
             raise
