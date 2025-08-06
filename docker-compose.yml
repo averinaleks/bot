@@ -8,7 +8,7 @@ services:
     volumes:
       - gptoss_workspace:/workspace
     environment:
-      - TRANSFORMERS_CACHE=/workspace
+      - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}
     gpus: all
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
@@ -119,24 +119,24 @@ services:
       gptoss_check:
         condition: service_completed_successfully
     environment:
-      - DATA_HANDLER_URL=http://data_handler:8000
-      - MODEL_BUILDER_URL=http://model_builder:8001
-      - TRADE_MANAGER_URL=http://trade_manager:8002
+      - DATA_HANDLER_URL=${DATA_HANDLER_URL}
+      - MODEL_BUILDER_URL=${MODEL_BUILDER_URL}
+      - TRADE_MANAGER_URL=${TRADE_MANAGER_URL}
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED}
+      - PYTHONPATH=${PYTHONPATH}
       - BYBIT_API_KEY=${BYBIT_API_KEY}
       - BYBIT_API_SECRET=${BYBIT_API_SECRET}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - CACHE_DIR=/app/cache
-      - LOG_DIR=/app/logs
-      - MODEL_SAVE_PATH=/app/models
-      - CONFIG_PATH=/app/config.json
+      - CACHE_DIR=${CACHE_DIR}
+      - LOG_DIR=${LOG_DIR}
+      - MODEL_SAVE_PATH=${MODEL_SAVE_PATH}
+      - CONFIG_PATH=${CONFIG_PATH}
       - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
       - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
-      - GPT_OSS_API=http://gptoss:8000
+      - GPT_OSS_API=${GPT_OSS_API}
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
@@ -158,8 +158,6 @@ services:
     volumes:
       - .:/workspace
     environment:
-      - GPT_OSS_API=http://gptoss:8000
-      - CHECK_CODE_PATH=trading_bot.py
     depends_on:
       gptoss:
         condition: service_healthy
