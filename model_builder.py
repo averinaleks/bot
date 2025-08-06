@@ -342,8 +342,10 @@ def _freeze_torch_base_layers(model, model_type):
             param.requires_grad = False
 
 
-def _freeze_keras_base_layers(model, model_type):
+def _freeze_keras_base_layers(model, model_type, framework):
     """Freeze initial layers of a Keras model based on ``model_type``."""
+    if framework not in KERAS_FRAMEWORKS:
+        return
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     from tensorflow import keras
 
@@ -375,6 +377,7 @@ def _train_model_keras(
     y,
     batch_size,
     model_type,
+    framework,
     initial_state=None,
     epochs=20,
     n_splits=3,
@@ -382,6 +385,8 @@ def _train_model_keras(
     freeze_base_layers=False,
     prediction_target="direction",
 ):
+    if framework not in KERAS_FRAMEWORKS:
+        raise ValueError("Keras framework required")
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     import tensorflow as tf
     from tensorflow import keras
@@ -410,7 +415,7 @@ def _train_model_keras(
     outputs = keras.layers.Dense(1, activation=activation)(x)
     model = keras.Model(inputs, outputs)
     if freeze_base_layers:
-        _freeze_keras_base_layers(model, model_type)
+        _freeze_keras_base_layers(model, model_type, framework)
     loss = "mse" if prediction_target == "pnl" else "binary_crossentropy"
     model.compile(optimizer="adam", loss=loss)
     if initial_state is not None:
@@ -420,7 +425,7 @@ def _train_model_keras(
     for train_idx, val_idx in generate_time_series_splits(X, y, n_splits):
         fold_model = keras.models.clone_model(model)
         if freeze_base_layers:
-            _freeze_keras_base_layers(fold_model, model_type)
+            _freeze_keras_base_layers(fold_model, model_type, framework)
         fold_model.compile(optimizer="adam", loss=loss)
         if initial_state is not None:
             fold_model.set_weights(initial_state)
@@ -575,6 +580,7 @@ def _train_model_remote(
             y,
             batch_size,
             model_type,
+            framework,
             initial_state,
             epochs,
             n_splits,
