@@ -602,6 +602,52 @@ async def test_evaluate_signal_uses_cached_features(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("async_ema", [False, True])
+async def test_evaluate_signal_handles_sync_async_ema(monkeypatch, async_ema):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {"BTCUSDT": DummyModel()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    called = {"ok": False}
+    if async_ema:
+        async def _ema(*a, **k):
+            called["ok"] = True
+            return True
+    else:
+        def _ema(*a, **k):
+            called["ok"] = True
+            return True
+    monkeypatch.setattr(tm, "evaluate_ema_condition", _ema)
+
+    signal = await tm.evaluate_signal("BTCUSDT")
+    assert called["ok"]
+    assert signal in ("buy", "sell", None)
+
+
+@pytest.mark.asyncio
 async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
     dh = DummyDataHandler()
 

@@ -1485,12 +1485,18 @@ class TradeManager:
 
             ema_signal = None
             check = self.evaluate_ema_condition(symbol, "buy")
-            ema_buy = await check if inspect.iscoroutine(check) else check
+            if inspect.isawaitable(check):
+                ema_buy = await check
+            else:
+                ema_buy = check
             if ema_buy:
                 ema_signal = "buy"
             else:
                 check = self.evaluate_ema_condition(symbol, "sell")
-                ema_sell = await check if inspect.iscoroutine(check) else check
+                if inspect.isawaitable(check):
+                    ema_sell = await check
+                else:
+                    ema_sell = check
                 if ema_sell:
                     ema_signal = "sell"
 
