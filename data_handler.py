@@ -1102,8 +1102,8 @@ class DataHandler:
                 "Найдено %s USDT-пар с высокой ликвидностью",
                 len(self.usdt_pairs),
             )
-            tasks = []
-            history_tasks = []
+            tasks: List[asyncio.Task] = []
+            task_info: List[tuple] = []
             history_limit = self.config.get("min_data_length", 200)
 
             mem = psutil.virtual_memory()
@@ -1149,7 +1149,9 @@ class DataHandler:
                         )
                     )
                 )
-                history_tasks.append((symbol, self.config["timeframe"]))
+                task_info.append(
+                    ("history", symbol, self.config["timeframe"], "")
+                )
                 if self.config["secondary_timeframe"] != self.config["timeframe"]:
                     tasks.append(
                         asyncio.create_task(
@@ -1160,19 +1162,60 @@ class DataHandler:
                             )
                         )
                     )
-                    history_tasks.append(
-                        (symbol, self.config["secondary_timeframe"])
+                    task_info.append(
+                        (
+                            "history",
+                            symbol,
+                            self.config["secondary_timeframe"],
+                            "2h_",
+                        )
                     )
                 tasks.append(asyncio.create_task(self.fetch_funding_rate(symbol)))
+                task_info.append(("funding", symbol, None, None))
                 tasks.append(asyncio.create_task(self.fetch_open_interest(symbol)))
+                task_info.append(("open_interest", symbol, None, None))
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            hist_idx = 0
-            for result in results:
-                if isinstance(result, tuple) and len(result) == 2:
-                    symbol, df = result
-                    symbol_tf = history_tasks[hist_idx]
-                    hist_idx += 1
-                    timeframe = symbol_tf[1]
+            failed_symbols: set[str] = set()
+            for info, result in zip(task_info, results):
+                task_type, symbol, timeframe, prefix = info
+                if isinstance(result, Exception):
+                    if task_type == "history":
+                        logger.error(
+                            "Ошибка получения истории для %s (%s): %s",
+                            symbol,
+                            timeframe,
+                            result,
+                        )
+                        try:
+                            _, result = await limited_history(symbol, timeframe, prefix)
+                        except Exception as retry_exc:  # noqa: BLE001
+                            logger.error(
+                                "Повторная попытка истории для %s (%s) не удалась: %s",
+                                symbol,
+                                timeframe,
+                                retry_exc,
+                            )
+                            failed_symbols.add(symbol)
+                            continue
+                    elif task_type == "funding":
+                        logger.error(
+                            "Ошибка получения ставки финансирования для %s: %s",
+                            symbol,
+                            result,
+                        )
+                        continue
+                    elif task_type == "open_interest":
+                        logger.error(
+                            "Ошибка получения открытого интереса для %s: %s",
+                            symbol,
+                            result,
+                        )
+                        continue
+                if task_type == "history":
+                    if isinstance(result, tuple) and len(result) == 2:
+                        _, df = result
+                    else:
+                        df = result
                     if not check_dataframe_empty(
                         df, f"load_initial {symbol} {timeframe}"
                     ):
@@ -1191,6 +1234,14 @@ class DataHandler:
                                 else "secondary"
                             ),
                         )
+            if failed_symbols:
+                logger.warning(
+                    "Удаляем пары с ошибками загрузки: %s",
+                    ", ".join(sorted(failed_symbols)),
+                )
+                self.usdt_pairs = [s for s in self.usdt_pairs if s not in failed_symbols]
+                for sym in failed_symbols:
+                    self.symbol_priority.pop(sym, None)
             await self.release_memory()
         except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error("Ошибка загрузки начальных данных: %s", e)
