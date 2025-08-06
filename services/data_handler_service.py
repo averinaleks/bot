@@ -46,8 +46,8 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     return jsonify({'error': 'internal server error'}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', '8000'))
     host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', '8000'))
     if host != '127.0.0.1':
         logging.warning(
             'Using non-local host %s; ensure this exposure is intended', host
