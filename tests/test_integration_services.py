@@ -1,3 +1,4 @@
+import asyncio
 import os
 import requests
 import multiprocessing
@@ -161,7 +162,7 @@ def test_check_services_success(monkeypatch):
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
         monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
         monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
-        trading_bot.check_services()
+        asyncio.run(trading_bot.check_services())
 
 
 @pytest.mark.integration
@@ -183,7 +184,7 @@ def test_check_services_failure(monkeypatch):
         monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
         monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
         with pytest.raises(SystemExit):
-            trading_bot.check_services()
+            asyncio.run(trading_bot.check_services())
 
 
 @pytest.mark.integration
@@ -209,4 +210,4 @@ def test_check_services_host_only(monkeypatch):
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
-        trading_bot.check_services()
+        asyncio.run(trading_bot.check_services())
