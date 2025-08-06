@@ -1,6 +1,7 @@
 # Trading Bot
 
 Этот репозиторий содержит пример торгового бота на Python. Для запуска необходимы файлы `config.json` и `.env` с ключами API.
+Бот также умеет запрашивать анализ у GPT‑сервиса через модуль `gpt_client`.
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
@@ -80,6 +81,14 @@
       отсутствуют. В этом случае Telegram уведомления отправляться не будут.
     - `TRADE_RISK_USD` — величина риска в долларах для расчёта размера позиции,
       если `/open_position` получает только `price`.
+    - `GPT_OSS_API` — адрес сервиса [GPT OSS](https://github.com/jina-ai/gpt-oss),
+      к которому обращается функция `query_gpt` для анализа кода. Например:
+
+      ```python
+      from bot.gpt_client import query_gpt
+      result = query_gpt("Что ты видишь в этом коде:\n" + open("strategy_optimizer.py").read())
+      print(result)
+      ```
 
     Пример `docker-compose` с передачей этих переменных обоим сервисам:
 

@@ -6,6 +6,7 @@ import statistics
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import httpx
 import requests
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
+from bot.gpt_client import query_gpt
 from bot.utils import logger
 
 load_dotenv()
@@ -447,6 +449,16 @@ def main():
     """Run the trading bot until interrupted."""
     try:
         asyncio.run(check_services())
+        try:
+            strategy_code = (
+                Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
+            )
+            gpt_result = query_gpt(
+                "Что ты видишь в этом коде:\n" + strategy_code
+            )
+            logger.info("GPT analysis: %s", gpt_result)
+        except Exception as exc:  # pragma: no cover - non-critical
+            logger.debug("GPT analysis failed: %s", exc)
         while True:
             run_once()
             time.sleep(INTERVAL)
