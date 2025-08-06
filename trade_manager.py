@@ -1750,9 +1750,15 @@ async def create_trade_manager() -> TradeManager | None:
             )
             raise
         if not ray.is_initialized():
-            logger.info("Initializing Ray with num_cpus=%s", cfg["ray_num_cpus"])
+            logger.info(
+                "Initializing Ray with num_cpus=%s, num_gpus=1", cfg["ray_num_cpus"]
+            )
             try:
-                ray.init(num_cpus=cfg["ray_num_cpus"], ignore_reinit_error=True)
+                ray.init(
+                    num_cpus=cfg["ray_num_cpus"],
+                    num_gpus=1,
+                    ignore_reinit_error=True,
+                )
                 logger.info("Ray initialized successfully")
             except RuntimeError as exc:
                 logger.exception(
