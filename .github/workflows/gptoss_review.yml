@@ -1,4 +1,6 @@
 name: GPT-OSS Code Review
+permissions:
+  contents: read
 
 on:
   push:
