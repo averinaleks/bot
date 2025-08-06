@@ -115,6 +115,7 @@ services:
       - CONFIG_PATH=/app/config.json
       - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
       - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
+      - GPT_OSS_API=${GPT_OSS_API}
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
