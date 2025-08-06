@@ -12,6 +12,7 @@ dataclass.  Default values are shown for reference.
 | ws_url | wss://stream.bybit.com/v5/public/linear | Public WebSocket endpoint. |
 | backup_ws_urls | ['wss://stream.bybit.com/v5/public/linear'] | Fallback WebSocket endpoints. |
 | max_concurrent_requests | 10 | Limit for simultaneous HTTP requests. |
+| max_volume_batch | 50 | Markets processed per volume fetch batch. |
 | history_batch_size | 10 | Number of candles fetched per history request. |
 | max_symbols | 50 | Maximum symbols to track. |
 | max_subscriptions_per_connection | 15 | WebSocket subscriptions allowed per connection. |

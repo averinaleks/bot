@@ -1232,7 +1232,8 @@ class DataHandler:
             self.config["timeframe"]
         ).total_seconds()
         now = pd.Timestamp.utcnow()
-        tasks = []
+        batch = []
+        batch_size = self.config.get("max_volume_batch", 50)
         candidate_markets = 0
         for symbol, market in markets.items():
             # Only consider active USDT-margined futures symbols using metadata
@@ -1262,10 +1263,13 @@ class DataHandler:
                     age = (now - launch_time).total_seconds()
                     if age < min_age:
                         continue
-                tasks.append(asyncio.create_task(fetch_volume(symbol)))
+                batch.append(fetch_volume(symbol))
+                if len(batch) >= batch_size:
+                    pair_volumes.extend(await asyncio.gather(*batch))
+                    batch.clear()
 
-        if tasks:
-            pair_volumes.extend(await asyncio.gather(*tasks))
+        if batch:
+            pair_volumes.extend(await asyncio.gather(*batch))
 
         # Deduplicate entries using the canonical symbol
         highest = {}
