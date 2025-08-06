@@ -1,6 +1,16 @@
 version: '3'
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
+  gptoss:
+    image: ghcr.io/openai/gpt-oss:20b
+    ports:
+      - "8000:8000"
+    volumes:
+      - gptoss_workspace:/workspace
+    environment:
+      - TRANSFORMERS_CACHE=/workspace
+    networks:
+      - gptoss_net
   data_handler:
     build:
       context: .
@@ -83,7 +93,7 @@ services:
     shm_size: '8gb'
     networks:
       - trading_bot_default
-  trading_bot:
+  bot:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
@@ -91,6 +101,8 @@ services:
     command: python -m bot.trading_bot
     runtime: ${RUNTIME:-nvidia}
     depends_on:
+      gptoss:
+        condition: service_started
       data_handler:
         condition: service_healthy
       model_builder:
@@ -115,7 +127,7 @@ services:
       - CONFIG_PATH=/app/config.json
       - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
       - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
-      - GPT_OSS_API=${GPT_OSS_API}
+      - GPT_OSS_API=http://gptoss:8000
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
@@ -123,12 +135,31 @@ services:
       - ./config.json:/app/config.json
     networks:
       - trading_bot_default
+      - gptoss_net
     restart: unless-stopped
     shm_size: '8gb'
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
+  gptoss_check:
+    image: ghcr.io/openai/gpt-oss:20b
+    command: python3 check_code.py
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      - GPT_OSS_API=http://gptoss:8000
+    depends_on:
+      gptoss:
+        condition: service_started
+    networks:
+      - gptoss_net
 networks:
   trading_bot_default:
     driver: bridge
+  gptoss_net:
+    driver: bridge
+
+volumes:
+  gptoss_workspace:
