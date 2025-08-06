@@ -1,4 +1,3 @@
-version: '3'
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
