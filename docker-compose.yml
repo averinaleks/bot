@@ -10,6 +10,7 @@ services:
     environment:
       - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}
     gpus: all
+    # Ensure the GPT-OSS API is ready before other services start
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
@@ -108,6 +109,7 @@ services:
     command: python -m bot.trading_bot
     runtime: ${RUNTIME:-nvidia}
     depends_on:
+      # Wait for GPT-OSS to become healthy
       gptoss:
         condition: service_healthy
       data_handler:
@@ -160,7 +162,7 @@ services:
     environment:
     depends_on:
       gptoss:
-        condition: service_healthy
+        condition: service_healthy  # Wait for GPT-OSS to be healthy
     networks:
       - gptoss_net
 networks:
