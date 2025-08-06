@@ -98,6 +98,7 @@ def _load_env() -> dict:
     data_handler = os.getenv("DATA_HANDLER_URL")
     model_builder = os.getenv("MODEL_BUILDER_URL")
     trade_manager = os.getenv("TRADE_MANAGER_URL")
+    gptoss_api = os.getenv("GPT_OSS_API")
 
     if data_handler is None:
         data_handler = f"http://{host}:8000" if host else "http://data_handler:8000"
@@ -110,6 +111,7 @@ def _load_env() -> dict:
         "data_handler_url": data_handler,
         "model_builder_url": model_builder,
         "trade_manager_url": trade_manager,
+        "gptoss_api": gptoss_api,
     }
 
 
@@ -123,6 +125,8 @@ async def check_services() -> None:
         "model_builder": (env["model_builder_url"], "ping"),
         "trade_manager": (env["trade_manager_url"], "ready"),
     }
+    if env.get("gptoss_api"):
+        services["gptoss"] = (env["gptoss_api"], "v1/health")
     async with httpx.AsyncClient() as client:
         for name, (url, endpoint) in services.items():
             for attempt in range(retries):
