@@ -10,6 +10,12 @@ services:
     environment:
       - TRANSFORMERS_CACHE=/workspace
     gpus: all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
     networks:
       - gptoss_net
   data_handler:
@@ -103,7 +109,7 @@ services:
     runtime: ${RUNTIME:-nvidia}
     depends_on:
       gptoss:
-        condition: service_started
+        condition: service_healthy
       data_handler:
         condition: service_healthy
       model_builder:
@@ -153,7 +159,7 @@ services:
       - GPT_OSS_API=http://gptoss:8000
     depends_on:
       gptoss:
-        condition: service_started
+        condition: service_healthy
     networks:
       - gptoss_net
 networks:
