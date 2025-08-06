@@ -151,6 +151,7 @@ services:
       - .:/workspace
     environment:
       - GPT_OSS_API=http://gptoss:8000
+      - CHECK_CODE_PATH=trading_bot.py
     depends_on:
       gptoss:
         condition: service_started
