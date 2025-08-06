@@ -16,7 +16,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         python3.12-dev \
         python3.12-venv \
     && python3.12 -m ensurepip --upgrade \
-    && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
+    && curl -fsSL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && tar -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
