@@ -159,6 +159,7 @@ networks:
   trading_bot_default:
     driver: bridge
   gptoss_net:
+    name: gptoss_net
     driver: bridge
 
 volumes:
