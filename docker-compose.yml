@@ -116,6 +116,8 @@ services:
         condition: service_healthy
       trade_manager:
         condition: service_healthy
+      gptoss_check:
+        condition: service_completed_successfully
     environment:
       - DATA_HANDLER_URL=${DATA_HANDLER_URL}
       - MODEL_BUILDER_URL=${MODEL_BUILDER_URL}
@@ -151,12 +153,11 @@ services:
         hard: 65536
   gptoss_check:
     image: ghcr.io/openai/gpt-oss:20b
-    command: python3 check_code.py
+    command: python3 gptoss_check/check_code.py
     working_dir: /workspace
     volumes:
       - .:/workspace
     environment:
-      - GPT_OSS_API=${GPT_OSS_API}
     depends_on:
       gptoss:
         condition: service_healthy
