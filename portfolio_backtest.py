@@ -4,8 +4,141 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+try:  # pragma: no cover - optional dependency
+    from numba import njit
+except Exception:  # pragma: no cover - fallback if numba unavailable
+    def njit(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 from bot.utils import logger
+
+
+@njit(cache=True)
+def _simulate_trades(
+    symbol_ids: np.ndarray,
+    close: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    ema_fast: np.ndarray,
+    ema_slow: np.ndarray,
+    atr: np.ndarray,
+    probability: np.ndarray,
+    base_thr: float,
+    sl_mult: float,
+    tp_mult: float,
+    max_positions: int,
+    n_symbols: int,
+):
+    """Vectorized trade simulation using ``numba``.
+
+    This function iterates over pre-converted ``numpy`` arrays but executes in
+    compiled mode, eliminating Python-loop overhead.
+    """
+
+    positions_symbol = np.full(max_positions, -1, dtype=np.int32)
+    positions_entry = np.zeros(max_positions, dtype=np.float32)
+    positions_side = np.zeros(max_positions, dtype=np.int8)  # 1=buy, -1=sell
+    positions_sl = np.zeros(max_positions, dtype=np.float32)
+    positions_tp = np.zeros(max_positions, dtype=np.float32)
+    last_close = np.zeros(n_symbols, dtype=np.float32)
+
+    n = close.shape[0]
+    returns = np.empty(n, dtype=np.float32)
+    count = 0
+
+    for i in range(n):
+        sym = symbol_ids[i]
+        price = close[i]
+        hi = high[i]
+        lo = low[i]
+        a = atr[i]
+        prob = probability[i]
+        last_close[sym] = price
+
+        pos_idx = -1
+        for j in range(max_positions):
+            if positions_symbol[j] == sym:
+                pos_idx = j
+                break
+
+        if pos_idx != -1:
+            side = positions_side[pos_idx]
+            if side == 1:
+                if hi >= positions_tp[pos_idx]:
+                    returns[count] = (
+                        (positions_tp[pos_idx] - positions_entry[pos_idx])
+                        / positions_entry[pos_idx]
+                    )
+                    count += 1
+                    positions_symbol[pos_idx] = -1
+                elif lo <= positions_sl[pos_idx]:
+                    returns[count] = (
+                        (positions_sl[pos_idx] - positions_entry[pos_idx])
+                        / positions_entry[pos_idx]
+                    )
+                    count += 1
+                    positions_symbol[pos_idx] = -1
+            else:
+                if lo <= positions_tp[pos_idx]:
+                    returns[count] = (
+                        (positions_entry[pos_idx] - positions_tp[pos_idx])
+                        / positions_entry[pos_idx]
+                    )
+                    count += 1
+                    positions_symbol[pos_idx] = -1
+                elif hi >= positions_sl[pos_idx]:
+                    returns[count] = (
+                        (positions_entry[pos_idx] - positions_sl[pos_idx])
+                        / positions_entry[pos_idx]
+                    )
+                    count += 1
+                    positions_symbol[pos_idx] = -1
+
+        if pos_idx == -1:
+            # count current open positions
+            open_count = 0
+            for j in range(max_positions):
+                if positions_symbol[j] != -1:
+                    open_count += 1
+            if open_count < max_positions and not np.isnan(a):
+                signal = 0
+                if ema_fast[i] > ema_slow[i] and prob >= base_thr:
+                    signal = 1
+                elif ema_fast[i] < ema_slow[i] and (1 - prob) >= base_thr:
+                    signal = -1
+                if signal != 0:
+                    # find empty slot
+                    free_idx = -1
+                    for j in range(max_positions):
+                        if positions_symbol[j] == -1:
+                            free_idx = j
+                            break
+                    positions_symbol[free_idx] = sym
+                    positions_entry[free_idx] = price
+                    positions_side[free_idx] = signal
+                    if signal == 1:
+                        positions_sl[free_idx] = price - sl_mult * a
+                        positions_tp[free_idx] = price + tp_mult * a
+                    else:
+                        positions_sl[free_idx] = price + sl_mult * a
+                        positions_tp[free_idx] = price - tp_mult * a
+
+    # Close any remaining open positions at last seen price
+    for j in range(max_positions):
+        sym = positions_symbol[j]
+        if sym != -1:
+            entry = positions_entry[j]
+            side = positions_side[j]
+            last = last_close[sym]
+            if side == 1:
+                returns[count] = (last - entry) / entry
+            else:
+                returns[count] = (entry - last) / entry
+            count += 1
+
+    return returns[:count]
 
 
 def portfolio_backtest(
@@ -81,67 +214,30 @@ def portfolio_backtest(
             return 0.0
         combined = pd.concat(events).sort_values("timestamp").reset_index(drop=True)
 
-        positions: dict[str, dict] = {}
-        returns: list[float] = []
         base_thr = params.get("base_probability_threshold", 0.6)
         sl_mult = params.get("sl_multiplier", 1.0)
         tp_mult = params.get("tp_multiplier", 2.0)
 
-        for _, row in combined.iterrows():
-            symbol = row["symbol"]
-            price = row["close"]
-            high = row["high"]
-            low = row["low"]
-            atr = row["atr"]
-            probability = row.get("probability", 1.0)
+        # Convert columns to numpy arrays for numba function
+        symbol_codes, uniques = pd.factorize(combined["symbol"])
+        returns_np = _simulate_trades(
+            symbol_codes.astype(np.int32),
+            combined["close"].to_numpy(np.float32),
+            combined["high"].to_numpy(np.float32),
+            combined["low"].to_numpy(np.float32),
+            combined["ema_fast"].to_numpy(np.float32),
+            combined["ema_slow"].to_numpy(np.float32),
+            combined["atr"].to_numpy(np.float32),
+            combined["probability"].to_numpy(np.float32),
+            float(base_thr),
+            float(sl_mult),
+            float(tp_mult),
+            int(max_positions),
+            int(len(uniques)),
+        )
 
-            pos = positions.get(symbol)
-            if pos is not None:
-                if pos["side"] == "buy":
-                    if high >= pos["tp"]:
-                        returns.append((pos["tp"] - pos["entry"]) / pos["entry"])
-                        del positions[symbol]
-                    elif low <= pos["sl"]:
-                        returns.append((pos["sl"] - pos["entry"]) / pos["entry"])
-                        del positions[symbol]
-                else:
-                    if low <= pos["tp"]:
-                        returns.append((pos["entry"] - pos["tp"]) / pos["entry"])
-                        del positions[symbol]
-                    elif high >= pos["sl"]:
-                        returns.append((pos["entry"] - pos["sl"]) / pos["entry"])
-                        del positions[symbol]
-
-            if symbol not in positions and len(positions) < max_positions and pd.notna(atr):
-                signal = None
-                if row["ema_fast"] > row["ema_slow"] and probability >= base_thr:
-                    signal = "buy"
-                elif row["ema_fast"] < row["ema_slow"] and (1 - probability) >= base_thr:
-                    signal = "sell"
-                if signal:
-                    if signal == "buy":
-                        sl = price - sl_mult * atr
-                        tp = price + tp_mult * atr
-                    else:
-                        sl = price + sl_mult * atr
-                        tp = price - tp_mult * atr
-                    positions[symbol] = {
-                        "entry": price,
-                        "side": signal,
-                        "sl": sl,
-                        "tp": tp,
-                    }
-
-        for symbol, pos in positions.items():
-            last_close = combined[combined["symbol"] == symbol]["close"].iloc[-1]
-            if pos["side"] == "buy":
-                returns.append((last_close - pos["entry"]) / pos["entry"])
-            else:
-                returns.append((pos["entry"] - last_close) / pos["entry"])
-
-        if not returns:
+        if returns_np.size == 0:
             return 0.0
-        returns_np = np.array(returns, dtype=np.float32)
         if metric == "sortino":
             neg = returns_np[returns_np < 0]
             denom = np.std(neg) + 1e-6
