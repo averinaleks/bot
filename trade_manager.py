@@ -95,8 +95,10 @@ if os.getenv("TEST_MODE") == "1" and not hasattr(Flask, "asgi_app"):
 import threading
 import multiprocessing as mp
 
-if mp.get_start_method(allow_none=True) != "spawn":
-    mp.set_start_method("spawn", force=True)
+def setup_multiprocessing() -> None:
+    """Ensure multiprocessing uses the 'spawn' start method."""
+    if mp.get_start_method(allow_none=True) != "spawn":
+        mp.set_start_method("spawn", force=True)
 
 # Determine computation device once
 
@@ -1928,6 +1930,7 @@ def ready() -> tuple:
 
 
 if __name__ == "__main__":
+    setup_multiprocessing()
     load_dotenv()
     port = int(os.environ.get("PORT", "8002"))
     host = os.environ.get("HOST", "127.0.0.1")
