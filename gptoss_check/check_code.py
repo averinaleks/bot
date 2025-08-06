@@ -1,14 +1,16 @@
-import os, requests
+"""Run a quick GPT-based analysis on the trading bot code."""
 
-def query_gpt(prompt: str) -> str:
-    res = requests.post(
-        os.getenv("GPT_OSS_API") + "/completions",
-        json={"prompt": prompt, "max_tokens": 1024},
-    )
-    return res.json()["choices"][0]["text"]
+from pathlib import Path
 
-with open("/repo/main.py") as f:
-    code = f.read()
+from gpt_client import query_gpt
+
+
+code_path = Path(__file__).resolve().parents[1] / "trading_bot.py"
+code = code_path.read_text(encoding="utf-8")
 
 print("🧠 GPT-анализ:")
-print(query_gpt(f"Анализируй код Python:\n{code}\nНайди ошибки, улучшения и уязвимости."))
+print(
+    query_gpt(
+        f"Анализируй код Python:\n{code}\nНайди ошибки, улучшения и уязвимости."
+    )
+)
