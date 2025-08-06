@@ -27,6 +27,19 @@ pytest -m integration         # integration tests
 
 These tests are also executed automatically by `pre-commit`.
 
+### Updating dependencies
+
+The dependency lists are managed with [`pip-compile`](https://github.com/jazzband/pip-tools).
+Edit `requirements.in` or `requirements-cpu.in` to change top-level
+dependencies and regenerate the pinned files:
+
+```bash
+pip-compile requirements.in            # updates requirements.txt
+pip-compile requirements-cpu.in        # updates requirements-cpu.txt
+```
+
+Commit both the `.in` and generated `.txt` files when updating.
+
 ## CI troubleshooting
 
 GitHub Actions occasionally fails to start a runner or download dependencies, reporting a temporary error. In most cases simply rerunning the workflow resolves the problem. If failures persist you can set up a [self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners) to avoid queueing delays and network issues. For stubborn issues contact [GitHub Support](https://support.github.com/). Include the **correlation ID** from the failed run's `View raw logs` page so they can investigate.
