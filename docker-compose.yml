@@ -4,7 +4,7 @@ services:
   gptoss:
     image: ghcr.io/openai/gpt-oss:latest
     ports:
-      - "8000:8000"
+      - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
     environment:
