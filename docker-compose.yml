@@ -9,6 +9,7 @@ services:
       - gptoss_workspace:/workspace
     environment:
       - TRANSFORMERS_CACHE=/workspace
+    gpus: all
     networks:
       - gptoss_net
   data_handler:
