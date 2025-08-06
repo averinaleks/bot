@@ -480,11 +480,26 @@ def _train_model_lightning(
     labels: list[float] = []
     state = None
 
+    num_workers = min(4, os.cpu_count() or 1)
+    pin_memory = is_cuda_available()
+
     for train_idx, val_idx in generate_time_series_splits(X_tensor, y_tensor, n_splits):
         train_ds = TensorDataset(X_tensor[train_idx], y_tensor[train_idx])
         val_ds = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+        val_loader = DataLoader(
+            val_ds,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
 
         pt = prediction_target
         if model_type == "mlp":
@@ -622,11 +637,26 @@ def _train_model_remote(
     labels: list[float] = []
     state = None
 
+    num_workers = min(4, os.cpu_count() or 1)
+    pin_memory = cuda_available
+
     for train_idx, val_idx in generate_time_series_splits(X_tensor, y_tensor, n_splits):
         train_dataset = TensorDataset(X_tensor[train_idx], y_tensor[train_idx])
         val_dataset = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
 
         pt = prediction_target
         if model_type == "mlp":
@@ -1734,7 +1764,14 @@ class RLAgent:
                 dataset = torch.utils.data.TensorDataset(
                     torch.tensor(features_df.values, dtype=torch.float32)
                 )
-                loader = torch.utils.data.DataLoader(dataset, batch_size=32)
+                num_workers = min(4, os.cpu_count() or 1)
+                pin_memory = is_cuda_available()
+                loader = torch.utils.data.DataLoader(
+                    dataset,
+                    batch_size=32,
+                    num_workers=num_workers,
+                    pin_memory=pin_memory,
+                )
 
                 model = torch.nn.Linear(features_df.shape[1], 1)
 
@@ -1776,7 +1813,15 @@ class RLAgent:
                     torch.tensor(states, dtype=torch.float32),
                     torch.tensor(actions, dtype=torch.long),
                 )
-                loader = DataLoader(dataset, batch_size=64, shuffle=True)
+                num_workers = min(4, os.cpu_count() or 1)
+                pin_memory = is_cuda_available()
+                loader = DataLoader(
+                    dataset,
+                    batch_size=64,
+                    shuffle=True,
+                    num_workers=num_workers,
+                    pin_memory=pin_memory,
+                )
                 policy = model.policy
                 device = policy.device
                 optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
