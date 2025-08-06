@@ -158,6 +158,7 @@ services:
     volumes:
       - .:/workspace
     environment:
+      PYTHONUNBUFFERED: "1"
     depends_on:
       gptoss:
         condition: service_healthy
