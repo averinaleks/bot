@@ -1,6 +1,7 @@
 name: GPT-OSS Code Review
 permissions:
   contents: read
+  packages: read
 
 on:
   push:
@@ -18,8 +19,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ secrets.AVERINALEKS }}
-          password: ${{ secrets.BOT }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run gptoss review in Docker
         run: docker compose run gptoss_check
