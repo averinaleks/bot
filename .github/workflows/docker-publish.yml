@@ -23,4 +23,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: yourusername/myapp:latest
+          tags: averinaleks/myapp:latest
