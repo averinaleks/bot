@@ -8,6 +8,7 @@
     ],
     "max_concurrent_requests": 10,
     "history_batch_size": 10,
+    "max_volume_batch": 50,
     "history_retention": 200,
     "max_symbols": 50,
     "max_subscriptions_per_connection": 15,
