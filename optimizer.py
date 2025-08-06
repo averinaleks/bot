@@ -125,37 +125,66 @@ def _objective_remote(
             )
             if not indicators or result:
                 return 0.0
-            returns = []
-            for j in range(1, len(test_df)):
-                close = test_df["close"].iloc[j]
-                prev_close = test_df["close"].iloc[j - 1]
-                ema30 = indicators.ema30.iloc[j]
-                ema100 = indicators.ema100.iloc[j]
-                if (
-                    indicators.volume_profile is not None
-                    and not indicators.volume_profile.empty
-                ):
-                    price_bins = indicators.volume_profile.index.to_numpy()
-                    idx = np.searchsorted(price_bins, close)
-                    idx = np.clip(idx, 0, len(price_bins) - 1)
-                    volume_profile = indicators.volume_profile.iloc[idx]
+            try:
+                if is_cuda_available():
+                    import cupy as cp  # type: ignore
+                    use_gpu = True
                 else:
-                    volume_profile = 0.0
-                signal = 0
-                if ema30 > ema100 and close > ema30 and volume_profile > 0.02:
-                    signal = 1
-                elif ema30 < ema100 and close < ema30 and volume_profile > 0.02:
-                    signal = -1
-                if signal != 0:
-                    ret = (close - prev_close) / prev_close * signal
-                    returns.append(ret)
-            if not returns:
+                    cp = np  # type: ignore
+                    use_gpu = False
+            except Exception:  # pragma: no cover - fallback if CuPy unavailable
+                cp = np  # type: ignore
+                use_gpu = False
+
+            close_arr = cp.asarray(
+                test_df["close"].to_numpy(dtype=np.float32)
+            )
+            ema30_arr = cp.asarray(
+                indicators.ema30.to_numpy(dtype=np.float32)
+            )
+            ema100_arr = cp.asarray(
+                indicators.ema100.to_numpy(dtype=np.float32)
+            )
+            if (
+                indicators.volume_profile is not None
+                and not indicators.volume_profile.empty
+            ):
+                price_bins = cp.asarray(
+                    indicators.volume_profile.index.to_numpy(dtype=np.float32)
+                )
+                vp_values = cp.asarray(
+                    indicators.volume_profile.to_numpy(dtype=np.float32)
+                )
+                idx = cp.searchsorted(price_bins, close_arr)
+                idx = cp.clip(idx, 0, len(price_bins) - 1)
+                volume_profile_arr = vp_values[idx]
+            else:
+                volume_profile_arr = cp.zeros_like(close_arr)
+
+            long_cond = (
+                (ema30_arr > ema100_arr)
+                & (close_arr > ema30_arr)
+                & (volume_profile_arr > 0.02)
+            )
+            short_cond = (
+                (ema30_arr < ema100_arr)
+                & (close_arr < ema30_arr)
+                & (volume_profile_arr > 0.02)
+            )
+            signals = cp.where(long_cond, 1, cp.where(short_cond, -1, 0))
+
+            price_diff = (close_arr[1:] - close_arr[:-1]) / close_arr[:-1]
+            returns = price_diff * signals[1:]
+            returns = returns[signals[1:] != 0]
+            if returns.size == 0:
                 return 0.0
-            returns = np.array(returns, dtype=np.float32)
             sharpe_ratio = (
-                np.mean(returns)
-                / (np.std(returns) + 1e-6)
+                cp.mean(returns)
+                / (cp.std(returns) + 1e-6)
                 * np.sqrt(365 * 24 * 60 / pd.Timedelta(timeframe).total_seconds())
+            )
+            sharpe_ratio = (
+                float(cp.asnumpy(sharpe_ratio)) if use_gpu else float(sharpe_ratio)
             )
             if np.isfinite(sharpe_ratio):
                 sharpe_ratios.append(sharpe_ratio)
