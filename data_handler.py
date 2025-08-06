@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
-import time
 import os
-import types
-import logging
-
-import logging
 import threading
-
+import time
+import types
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -25,8 +23,8 @@ except ImportError as exc:  # allow missing pandas
     pd.Index = list
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
-import numpy as np  # type: ignore
 import httpx
+import numpy as np  # type: ignore
 
 try:  # optional dependency
     import polars as pl  # type: ignore
@@ -57,22 +55,8 @@ except ImportError as exc:  # allow missing websockets
         return _DummyWS()
 
     websockets.connect = _dummy_connect
-from bot.utils import (
-    BybitSDKAsync,
-    logger,
-    check_dataframe_empty,
-    HistoricalDataCache,
-    filter_outliers_zscore,
-    TelegramLogger,
-    calculate_volume_profile as utils_volume_profile,
-    safe_api_call,
-    bybit_interval,
-    is_cuda_available,
-)
 from tenacity import retry, wait_exponential
-from typing import List, Dict, TYPE_CHECKING, Any, Callable, Awaitable
-import functools
-from bot.config import BotConfig
+
 try:  # pragma: no cover - optional dependency
     import ta  # type: ignore
 except ImportError as exc:  # allow missing ta
@@ -121,10 +105,17 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
     ray.get = lambda x: x
     ray.init = lambda *a, **k: None
     ray.is_initialized = lambda: False
+from dotenv import load_dotenv
 from flask import Flask, jsonify
+
+from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
-from dotenv import load_dotenv
+from bot.utils import (BybitSDKAsync, HistoricalDataCache, TelegramLogger,
+                       bybit_interval)
+from bot.utils import calculate_volume_profile as utils_volume_profile
+from bot.utils import (check_dataframe_empty, filter_outliers_zscore,
+                       is_cuda_available, logger, safe_api_call)
 
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
 
