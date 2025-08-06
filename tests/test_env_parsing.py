@@ -1,4 +1,4 @@
-import types
+import asyncio
 import pytest
 from bot import trading_bot
 
@@ -47,11 +47,16 @@ def test_check_services_invalid_env(monkeypatch):
     monkeypatch.setenv("SERVICE_CHECK_DELAY", "bad")
     calls = {"count": 0}
 
-    def fake_get(url, timeout=None):
-        calls["count"] += 1
-        raise trading_bot.requests.RequestException("boom")
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def get(self, url, timeout=None):
+            calls["count"] += 1
+            raise trading_bot.httpx.HTTPError("boom")
 
-    monkeypatch.setattr(trading_bot.requests, "get", fake_get)
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with pytest.raises(SystemExit):
-        trading_bot.check_services()
+        asyncio.run(trading_bot.check_services())
     assert calls["count"] == 1

@@ -1,4 +1,5 @@
 from bot import trading_bot
+import asyncio
 import time
 import types
 import pytest
@@ -69,7 +70,9 @@ def test_send_trade_latency_alert(monkeypatch, fast_sleep):
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
-    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    async def fake_alert(msg):
+        called.append(msg)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
     trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
@@ -86,7 +89,9 @@ def test_send_trade_http_error_alert(monkeypatch):
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
-    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    async def fake_alert(msg):
+        called.append(msg)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
 
@@ -98,7 +103,9 @@ def test_send_trade_exception_alert(monkeypatch):
         raise trading_bot.requests.RequestException('boom')
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
-    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    async def fake_alert(msg):
+        called.append(msg)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
 
@@ -141,7 +148,9 @@ def test_send_trade_reports_error_field(monkeypatch):
         return Resp()
 
     monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
-    monkeypatch.setattr(trading_bot, 'send_telegram_alert', lambda msg: called.append(msg))
+    async def fake_alert(msg):
+        called.append(msg)
+    monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     ok = trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
     assert not ok
     assert called
@@ -177,7 +186,9 @@ async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
         "model_builder_url": "http://mb",
         "trade_manager_url": "http://tm",
     })
-    monkeypatch.setattr(trading_bot, "send_telegram_alert", lambda msg: called.append(msg))
+    async def fake_alert(msg):
+        called.append(msg)
+    monkeypatch.setattr(trading_bot, "send_telegram_alert", fake_alert)
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
     await trading_bot.reactive_trade("BTCUSDT")
     assert called and isinstance(called[0], dict)
@@ -218,7 +229,9 @@ def test_run_once_invalid_price(monkeypatch):
     """No trade sent when fetch_price returns a non-positive value."""
     sent = []
 
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 0.0)
+    async def fake_fetch(*a, **k):
+        return 0.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
     monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: sent.append(True))
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
         "data_handler_url": "http://dh",
@@ -231,44 +244,47 @@ def test_run_once_invalid_price(monkeypatch):
 
 
 def test_fetch_price_error(monkeypatch):
-    def fake_get(url, timeout=None):
-        class Resp:
-            status_code = 503
-            def json(self):
-                return {"error": "down"}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def get(self, url, timeout=None):
+            return types.SimpleNamespace(status_code=503, json=lambda: {"error": "down"})
 
-    monkeypatch.setattr(trading_bot.requests, "get", fake_get)
-    price = trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"})
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    price = asyncio.run(trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"}))
     assert price is None
 
 
 def test_fetch_price_invalid_json(monkeypatch, caplog):
-    def fake_get(url, timeout=None):
-        class Resp:
-            status_code = 200
-            def json(self):
-                raise ValueError("bad")
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def get(self, url, timeout=None):
+            return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
 
-    monkeypatch.setattr(trading_bot.requests, "get", fake_get)
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with caplog.at_level("ERROR"):
-        price = trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"})
+        price = asyncio.run(trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"}))
     assert price is None
     assert "invalid json" in caplog.text.lower()
 
 
 def test_get_prediction_invalid_json(monkeypatch, caplog):
-    def fake_post(url, json=None, timeout=None):
-        class Resp:
-            status_code = 200
-            def json(self):
-                raise ValueError("bad")
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def post(self, url, json=None, timeout=None):
+            return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
 
-    monkeypatch.setattr(trading_bot.requests, "post", fake_post)
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with caplog.at_level("ERROR"):
-        data = trading_bot.get_prediction("BTCUSDT", [1, 2, 3], {"model_builder_url": "http://mb"})
+        data = asyncio.run(trading_bot.get_prediction("BTCUSDT", [1, 2, 3], {"model_builder_url": "http://mb"}))
     assert data is None
     assert "invalid json" in caplog.text.lower()
 
@@ -276,8 +292,12 @@ def test_get_prediction_invalid_json(monkeypatch, caplog):
 def test_run_once_price_error(monkeypatch):
     called = {"pred": False}
 
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: None)
-    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: called.__setitem__("pred", True))
+    async def fake_fetch_none(*a, **k):
+        return None
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_none)
+    async def fake_get_pred(*a, **k):
+        called.__setitem__("pred", True)
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_get_pred)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
         "data_handler_url": "http://dh",
         "model_builder_url": "http://mb",
@@ -290,12 +310,12 @@ def test_run_once_price_error(monkeypatch):
 
 def test_run_once_forwards_prediction_params(monkeypatch):
     sent = {}
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
-    monkeypatch.setattr(
-        trading_bot,
-        "get_prediction",
-        lambda *a, **k: {"signal": "buy", "tp": 110, "sl": 90, "trailing_stop": 1},
-    )
+    async def fake_fetch_price(*a, **k):
+        return 100.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price)
+    async def fake_get_prediction(*a, **k):
+        return {"signal": "buy", "tp": 110, "sl": 90, "trailing_stop": 1}
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_get_prediction)
     monkeypatch.setattr(
         trading_bot,
         "send_trade",
@@ -319,8 +339,12 @@ def test_run_once_forwards_prediction_params(monkeypatch):
 
 def test_run_once_env_fallback(monkeypatch):
     sent = {}
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
-    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    async def fake_fetch_price2(*a, **k):
+        return 100.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price2)
+    async def fake_pred_buy(*a, **k):
+        return {"signal": "buy"}
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy)
     monkeypatch.setattr(
         trading_bot,
         "send_trade",
@@ -348,8 +372,12 @@ def test_run_once_env_fallback(monkeypatch):
 def test_run_once_config_fallback(monkeypatch):
     """Defaults are computed from config when env and prediction lack values."""
     sent = {}
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
-    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    async def fake_fetch_price3(*a, **k):
+        return 100.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price3)
+    async def fake_pred_buy2(*a, **k):
+        return {"signal": "buy"}
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy2)
     monkeypatch.setattr(
         trading_bot,
         "send_trade",
@@ -383,8 +411,12 @@ def test_run_once_config_fallback(monkeypatch):
 def test_run_once_ignores_invalid_env(monkeypatch):
     """Invalid TP/SL/trailing-stop strings fall back to config defaults."""
     sent = {}
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
-    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    async def fake_fetch_price4(*a, **k):
+        return 100.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price4)
+    async def fake_pred_buy3(*a, **k):
+        return {"signal": "buy"}
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy3)
     monkeypatch.setattr(
         trading_bot,
         "send_trade",
@@ -425,8 +457,12 @@ def test_parse_trade_params_invalid_strings():
 
 def test_run_once_logs_prediction(monkeypatch, caplog):
     """A prediction from the model service is logged."""
-    monkeypatch.setattr(trading_bot, "fetch_price", lambda *a, **k: 100.0)
-    monkeypatch.setattr(trading_bot, "get_prediction", lambda *a, **k: {"signal": "buy"})
+    async def fake_fetch_price5(*a, **k):
+        return 100.0
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price5)
+    async def fake_pred_buy4(*a, **k):
+        return {"signal": "buy"}
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy4)
     monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: None)
     monkeypatch.setattr(
         trading_bot,

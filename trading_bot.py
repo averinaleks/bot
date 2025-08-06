@@ -48,7 +48,7 @@ def safe_float(env_var: str, default: float) -> float:
         return default
 
 
-def send_telegram_alert(message: str) -> None:
+async def send_telegram_alert(message: str) -> None:
     """Send a Telegram notification if credentials are configured."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -56,8 +56,11 @@ def send_telegram_alert(message: str) -> None:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=5)
-    except requests.RequestException as exc:  # pragma: no cover - network errors
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                url, data={"chat_id": chat_id, "text": message}, timeout=5
+            )
+    except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.error("Failed to send Telegram alert: %s", exc)
 
 # Threshold for slow trade confirmations
@@ -108,7 +111,7 @@ def _load_env() -> dict:
     }
 
 
-def check_services() -> None:
+async def check_services() -> None:
     """Ensure dependent services are responsive."""
     env = _load_env()
     retries = safe_int("SERVICE_CHECK_RETRIES", DEFAULT_SERVICE_CHECK_RETRIES)
@@ -118,29 +121,33 @@ def check_services() -> None:
         "model_builder": (env["model_builder_url"], "ping"),
         "trade_manager": (env["trade_manager_url"], "ready"),
     }
-    for name, (url, endpoint) in services.items():
-        for attempt in range(retries):
-            try:
-                resp = requests.get(f"{url}/{endpoint}", timeout=5)
-                if resp.status_code == 200:
-                    break
-            except requests.RequestException as exc:
-                logger.warning(
-                    "Ping failed for %s (%s): %s", name, attempt + 1, exc
-                )
-            time.sleep(delay)
-        else:
-            logger.error("Service %s unreachable at %s", name, url)
-            raise SystemExit(f"{name} service is not available")
+    async with httpx.AsyncClient() as client:
+        for name, (url, endpoint) in services.items():
+            for attempt in range(retries):
+                try:
+                    resp = await client.get(f"{url}/{endpoint}", timeout=5)
+                    if resp.status_code == 200:
+                        break
+                except httpx.HTTPError as exc:
+                    logger.warning(
+                        "Ping failed for %s (%s): %s", name, attempt + 1, exc
+                    )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("Service %s unreachable at %s", name, url)
+                raise SystemExit(f"{name} service is not available")
 
 
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def fetch_price(symbol: str, env: dict) -> float | None:
+async def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
     try:
-        resp = requests.get(f"{env['data_handler_url']}/price/{symbol}", timeout=5)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{env['data_handler_url']}/price/{symbol}", timeout=5
+            )
         try:
             data = resp.json()
         except ValueError:
@@ -155,7 +162,7 @@ def fetch_price(symbol: str, env: dict) -> float | None:
             logger.error("Invalid price for %s: %s", symbol, price)
             return None
         return price
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         logger.error("Price request error: %s", exc)
         return None
 
@@ -184,14 +191,15 @@ def build_feature_vector(price: float) -> list[float]:
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
+async def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
     """Return raw model prediction output for the given ``features``."""
     try:
-        resp = requests.post(
-            f"{env['model_builder_url']}/predict",
-            json={"symbol": symbol, "features": features},
-            timeout=5,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{env['model_builder_url']}/predict",
+                json={"symbol": symbol, "features": features},
+                timeout=5,
+            )
         if resp.status_code != 200:
             logger.error("Model prediction failed: HTTP %s", resp.status_code)
             return None
@@ -200,7 +208,7 @@ def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None
         except ValueError:
             logger.error("Invalid JSON from model prediction")
             return None
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         logger.error("Model request error: %s", exc)
         return None
 
@@ -241,15 +249,21 @@ def send_trade(
         )
         elapsed = time.time() - start
         if elapsed > CONFIRMATION_TIMEOUT:
-            send_telegram_alert(
-                f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+            asyncio.run(
+                send_telegram_alert(
+                    f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+                )
             )
         try:
             data = resp.json()
         except ValueError:
             data = {}
             logger.error("Trade manager returned invalid JSON")
-            send_telegram_alert(f"Trade manager invalid response for {symbol}")
+            asyncio.run(
+                send_telegram_alert(
+                    f"Trade manager invalid response for {symbol}"
+                )
+            )
             return False
         error: str | None = None
         if resp.status_code != 200:
@@ -260,14 +274,20 @@ def send_trade(
             error = str(data.get("status"))
         if error:
             logger.error("Trade manager error: %s", error)
-            send_telegram_alert(
-                f"Trade manager responded with {error} for {symbol}"
+            asyncio.run(
+                send_telegram_alert(
+                    f"Trade manager responded with {error} for {symbol}"
+                )
             )
             return False
         return True
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
-        send_telegram_alert(f"Trade manager request failed for {symbol}: {exc}")
+        asyncio.run(
+            send_telegram_alert(
+                f"Trade manager request failed for {symbol}: {exc}"
+            )
+        )
         return False
 
 
@@ -381,7 +401,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             )
             elapsed = time.time() - start
             if elapsed > CONFIRMATION_TIMEOUT:
-                send_telegram_alert(
+                await send_telegram_alert(
                     f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
                 )
             if trade_resp.status_code != 200:
@@ -395,13 +415,13 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 def run_once() -> None:
     """Execute a single trading cycle."""
     env = _load_env()
-    price = fetch_price(SYMBOL, env)
+    price = asyncio.run(fetch_price(SYMBOL, env))
     if price is None or price <= 0:
         logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
     features = build_feature_vector(price)
-    pdata = get_prediction(SYMBOL, features, env)
+    pdata = asyncio.run(get_prediction(SYMBOL, features, env))
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:
@@ -426,7 +446,7 @@ def run_once() -> None:
 def main():
     """Run the trading bot until interrupted."""
     try:
-        check_services()
+        asyncio.run(check_services())
         while True:
             run_once()
             time.sleep(INTERVAL)
