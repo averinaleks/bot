@@ -406,8 +406,10 @@ async def test_stop_handles_close_errors(cfg_factory):
 @pytest.mark.asyncio
 async def test_stop_shuts_down_ray(cfg_factory):
     import ray
-    ray.init()
     cfg = cfg_factory()
+    ray.init(
+        num_cpus=cfg["ray_num_cpus"], num_gpus=1, ignore_reinit_error=True
+    )
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
     await dh.stop()
     assert not ray.is_initialized()
