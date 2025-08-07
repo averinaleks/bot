@@ -421,10 +421,27 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
                 await send_telegram_alert(
                     f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
                 )
-            if trade_resp.status_code != 200:
-                logger.error(
-                    "Trade manager error: HTTP %s", trade_resp.status_code
+            try:
+                data = trade_resp.json()
+            except ValueError:
+                logger.error("Trade manager returned invalid JSON")
+                await send_telegram_alert(
+                    f"Trade manager invalid response for {symbol}"
                 )
+                return
+            error: str | None = None
+            if trade_resp.status_code != 200:
+                error = f"HTTP {trade_resp.status_code}"
+            elif data.get("error"):
+                error = str(data.get("error"))
+            elif data.get("status") not in (None, "ok", "success"):
+                error = str(data.get("status"))
+            if error:
+                logger.error("Trade manager error: %s", error)
+                await send_telegram_alert(
+                    f"Trade manager responded with {error} for {symbol}"
+                )
+                return
         except httpx.HTTPError as exc:
             logger.error("Reactive trade request error: %s", exc)
 

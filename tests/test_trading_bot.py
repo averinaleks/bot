@@ -225,6 +225,49 @@ async def test_reactive_trade_invalid_json(monkeypatch, caplog):
     assert "invalid json" in caplog.text.lower()
 
 
+@pytest.mark.asyncio
+async def test_reactive_trade_reports_error_field(monkeypatch):
+    """An error field triggers alert even with HTTP 200."""
+    called = []
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def get(self, url, timeout=None):
+            return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
+
+        async def post(self, url, json=None, timeout=None):
+            if url.endswith("/predict"):
+                return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
+            return types.SimpleNamespace(status_code=200, json=lambda: {"error": "boom"})
+
+    monkeypatch.setattr(
+        trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False
+    )
+    monkeypatch.setattr(
+        trading_bot,
+        "_load_env",
+        lambda: {
+            "data_handler_url": "http://dh",
+            "model_builder_url": "http://mb",
+            "trade_manager_url": "http://tm",
+        },
+    )
+
+    async def fake_alert(msg):
+        called.append(msg)
+
+    monkeypatch.setattr(trading_bot, "send_telegram_alert", fake_alert)
+
+    await trading_bot.reactive_trade("BTCUSDT")
+
+    assert called
+
+
 def test_run_once_invalid_price(monkeypatch):
     """No trade sent when fetch_price returns a non-positive value."""
     sent = []
