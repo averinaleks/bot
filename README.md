@@ -81,8 +81,9 @@
       отсутствуют. В этом случае Telegram уведомления отправляться не будут.
     - `TRADE_RISK_USD` — величина риска в долларах для расчёта размера позиции,
       если `/open_position` получает только `price`.
-    - `GPT_OSS_API` — адрес сервиса [GPT OSS](https://github.com/jina-ai/gpt-oss),
-      к которому обращается функция `query_gpt` для анализа кода. Например:
+    - `GPT_OSS_API` — базовый адрес сервиса [GPT OSS](https://github.com/jina-ai/gpt-oss)
+      (без суффикса `/completions`), к которому обращается функция
+      `query_gpt` для анализа кода. Например:
 
       ```python
       from bot.gpt_client import query_gpt
