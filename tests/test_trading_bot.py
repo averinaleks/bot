@@ -170,7 +170,7 @@ async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
         async def get(self, url, timeout=None):
             return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
 
-        async def post(self, url, json=None, timeout=None):
+        async def post(self, url, json=None, timeout=None, headers=None):
             if url.endswith("/predict"):
                 return types.SimpleNamespace(
                     status_code=200,
@@ -209,7 +209,7 @@ async def test_reactive_trade_invalid_json(monkeypatch, caplog):
         async def get(self, url, timeout=None):
             return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
 
-        async def post(self, url, json=None, timeout=None):
+        async def post(self, url, json=None, timeout=None, headers=None):
             if url.endswith("/predict"):
                 return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
             pytest.fail("Trade manager should not be called")
@@ -240,7 +240,7 @@ async def test_reactive_trade_reports_error_field(monkeypatch):
         async def get(self, url, timeout=None):
             return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
 
-        async def post(self, url, json=None, timeout=None):
+        async def post(self, url, json=None, timeout=None, headers=None):
             if url.endswith("/predict"):
                 return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
             return types.SimpleNamespace(status_code=200, json=lambda: {"error": "boom"})
@@ -275,7 +275,10 @@ def test_run_once_invalid_price(monkeypatch):
     async def fake_fetch(*a, **k):
         return 0.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
-    monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: sent.append(True))
+    async def fake_send_trade(*a, **k):
+        sent.append(True)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
         "data_handler_url": "http://dh",
         "model_builder_url": "http://mb",
@@ -359,13 +362,12 @@ def test_run_once_forwards_prediction_params(monkeypatch):
     async def fake_get_prediction(*a, **k):
         return {"signal": "buy", "tp": 110, "sl": 90, "trailing_stop": 1}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_get_prediction)
-    monkeypatch.setattr(
-        trading_bot,
-        "send_trade",
-        lambda *a, tp=None, sl=None, trailing_stop=None, **k: sent.update(
-            tp=tp, sl=sl, trailing_stop=trailing_stop
-        ),
-    )
+    async def fake_send_trade(
+        *a, tp=None, sl=None, trailing_stop=None, **k
+    ):
+        sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(
         trading_bot,
         "_load_env",
@@ -388,13 +390,12 @@ def test_run_once_env_fallback(monkeypatch):
     async def fake_pred_buy(*a, **k):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy)
-    monkeypatch.setattr(
-        trading_bot,
-        "send_trade",
-        lambda *a, tp=None, sl=None, trailing_stop=None, **k: sent.update(
-            tp=tp, sl=sl, trailing_stop=trailing_stop
-        ),
-    )
+    async def fake_send_trade2(
+        *a, tp=None, sl=None, trailing_stop=None, **k
+    ):
+        sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade2)
     monkeypatch.setattr(
         trading_bot,
         "_load_env",
@@ -421,13 +422,12 @@ def test_run_once_config_fallback(monkeypatch):
     async def fake_pred_buy2(*a, **k):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy2)
-    monkeypatch.setattr(
-        trading_bot,
-        "send_trade",
-        lambda *a, tp=None, sl=None, trailing_stop=None, **k: sent.update(
-            tp=tp, sl=sl, trailing_stop=trailing_stop
-        ),
-    )
+    async def fake_send_trade3(
+        *a, tp=None, sl=None, trailing_stop=None, **k
+    ):
+        sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade3)
     monkeypatch.setattr(
         trading_bot,
         "_load_env",
@@ -460,13 +460,12 @@ def test_run_once_ignores_invalid_env(monkeypatch):
     async def fake_pred_buy3(*a, **k):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy3)
-    monkeypatch.setattr(
-        trading_bot,
-        "send_trade",
-        lambda *a, tp=None, sl=None, trailing_stop=None, **k: sent.update(
-            tp=tp, sl=sl, trailing_stop=trailing_stop
-        ),
-    )
+    async def fake_send_trade4(
+        *a, tp=None, sl=None, trailing_stop=None, **k
+    ):
+        sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade4)
     monkeypatch.setattr(
         trading_bot,
         "_load_env",
@@ -506,7 +505,10 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
     async def fake_pred_buy4(*a, **k):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy4)
-    monkeypatch.setattr(trading_bot, "send_trade", lambda *a, **k: None)
+    async def fake_send_trade5(*a, **k):
+        return None
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade5)
     monkeypatch.setattr(
         trading_bot,
         "_load_env",
