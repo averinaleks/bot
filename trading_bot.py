@@ -446,16 +446,16 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             logger.error("Reactive trade request error: %s", exc)
 
 
-def run_once() -> None:
+async def run_once_async() -> None:
     """Execute a single trading cycle."""
     env = _load_env()
-    price = asyncio.run(fetch_price(SYMBOL, env))
+    price = await fetch_price(SYMBOL, env)
     if price is None or price <= 0:
         logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
     features = build_feature_vector(price)
-    pdata = asyncio.run(get_prediction(SYMBOL, features, env))
+    pdata = await get_prediction(SYMBOL, features, env)
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
     if signal:
@@ -477,10 +477,10 @@ def run_once() -> None:
         )
 
 
-def main():
+async def main_async() -> None:
     """Run the trading bot until interrupted."""
     try:
-        asyncio.run(check_services())
+        await check_services()
         try:
             strategy_code = (
                 Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
@@ -492,10 +492,14 @@ def main():
         except Exception as exc:  # pragma: no cover - non-critical
             logger.debug("GPT analysis failed: %s", exc)
         while True:
-            run_once()
-            time.sleep(INTERVAL)
+            await run_once_async()
+            await asyncio.sleep(INTERVAL)
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
+
+
+def main() -> None:
+    asyncio.run(main_async())
 
 
 if __name__ == '__main__':

@@ -282,7 +282,7 @@ def test_run_once_invalid_price(monkeypatch):
         "trade_manager_url": "http://tm",
     })
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert not sent
 
 
@@ -347,7 +347,7 @@ def test_run_once_price_error(monkeypatch):
         "trade_manager_url": "http://tm",
     })
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert not called["pred"]
 
 
@@ -376,7 +376,7 @@ def test_run_once_forwards_prediction_params(monkeypatch):
         },
     )
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert sent == {"tp": 110, "sl": 90, "trailing_stop": 1}
 
 
@@ -408,7 +408,7 @@ def test_run_once_env_fallback(monkeypatch):
     monkeypatch.setenv("SL", "5")
     monkeypatch.setenv("TRAILING_STOP", "2")
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert sent == {"tp": 10.0, "sl": 5.0, "trailing_stop": 2.0}
 
 
@@ -443,7 +443,7 @@ def test_run_once_config_fallback(monkeypatch):
     monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 0.9, raising=False)
     monkeypatch.setattr(trading_bot.CFG, "trailing_stop_multiplier", 0.05, raising=False)
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert sent == {
         "tp": pytest.approx(110.0),
         "sl": pytest.approx(90.0),
@@ -483,7 +483,7 @@ def test_run_once_ignores_invalid_env(monkeypatch):
     monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 0.9, raising=False)
     monkeypatch.setattr(trading_bot.CFG, "trailing_stop_multiplier", 0.05, raising=False)
 
-    trading_bot.run_once()
+    asyncio.run(trading_bot.run_once_async())
     assert sent == {
         "tp": pytest.approx(110.0),
         "sl": pytest.approx(90.0),
@@ -518,6 +518,6 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
     )
 
     with caplog.at_level("INFO"):
-        trading_bot.run_once()
+        asyncio.run(trading_bot.run_once_async())
 
     assert "Prediction: buy" in caplog.messages
