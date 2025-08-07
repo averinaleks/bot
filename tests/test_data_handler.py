@@ -619,7 +619,7 @@ async def test_trade_callback_invoked(monkeypatch, tmp_path):
         async def get(self, url, timeout=None):
             records.append(("get", url))
             return types.SimpleNamespace(status_code=200, json=lambda: {"price": 1.0})
-        async def post(self, url, json=None, timeout=None):
+        async def post(self, url, json=None, timeout=None, headers=None):
             records.append(("post", url, json))
             if url.endswith("/predict"):
                 return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
