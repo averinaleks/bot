@@ -25,5 +25,10 @@ def query_gpt(prompt: str) -> str:
         return ""
     try:
         return data["completions"][0]["text"]
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.warning(
+            "Unexpected response structure from GPT OSS API: %s | data: %r",
+            exc,
+            data,
+        )
         return ""
