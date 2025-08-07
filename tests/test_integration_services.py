@@ -1,4 +1,3 @@
-import asyncio
 import os
 import requests
 import multiprocessing
@@ -6,6 +5,7 @@ import sys
 import signal
 from contextlib import ExitStack
 from flask import Flask, request, jsonify
+import asyncio
 import pytest
 
 from tests.helpers import get_free_port, service_process
@@ -111,7 +111,7 @@ def test_services_communicate(monkeypatch):
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
-        trading_bot.run_once()
+        asyncio.run(trading_bot.run_once_async())
         resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
         data = resp.json()
         assert data['positions'], 'position was not created'
