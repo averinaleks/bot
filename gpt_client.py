@@ -1,5 +1,8 @@
+import logging
 import os
 import requests
+
+logger = logging.getLogger("TradingBot")
 
 
 def query_gpt(prompt: str) -> str:
@@ -9,9 +12,17 @@ def query_gpt(prompt: str) -> str:
     If it is not set, ``http://localhost:8003`` is used.
     """
     url = os.getenv("GPT_OSS_API", "http://localhost:8003")
-    response = requests.post(url, json={"prompt": prompt})
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.post(url, json={"prompt": prompt}, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        logger.exception("Error querying GPT OSS API: %s", exc)
+        return ""
+    try:
+        data = response.json()
+    except ValueError as exc:
+        logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+        return ""
     try:
         return data["completions"][0]["text"]
     except (KeyError, IndexError, TypeError):
