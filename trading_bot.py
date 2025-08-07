@@ -7,6 +7,7 @@ import threading
 import time
 from collections import deque
 from pathlib import Path
+from typing import Awaitable
 
 import httpx
 import requests
@@ -64,6 +65,16 @@ async def send_telegram_alert(message: str) -> None:
             )
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.error("Failed to send Telegram alert: %s", exc)
+
+
+def run_async(coro: Awaitable[None]) -> None:
+    """Run or schedule ``coro`` depending on event loop state."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coro)
+    else:
+        asyncio.create_task(coro)
 
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
@@ -255,7 +266,7 @@ def send_trade(
         )
         elapsed = time.time() - start
         if elapsed > CONFIRMATION_TIMEOUT:
-            asyncio.run(
+            run_async(
                 send_telegram_alert(
                     f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
                 )
@@ -265,7 +276,7 @@ def send_trade(
         except ValueError:
             data = {}
             logger.error("Trade manager returned invalid JSON")
-            asyncio.run(
+            run_async(
                 send_telegram_alert(
                     f"Trade manager invalid response for {symbol}"
                 )
@@ -280,7 +291,7 @@ def send_trade(
             error = str(data.get("status"))
         if error:
             logger.error("Trade manager error: %s", error)
-            asyncio.run(
+            run_async(
                 send_telegram_alert(
                     f"Trade manager responded with {error} for {symbol}"
                 )
@@ -289,7 +300,7 @@ def send_trade(
         return True
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
-        asyncio.run(
+        run_async(
             send_telegram_alert(
                 f"Trade manager request failed for {symbol}: {exc}"
             )
