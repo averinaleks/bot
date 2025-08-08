@@ -23,4 +23,4 @@ jobs:
           password: ${{ secrets.TOKEN }}
 
       - name: Run gptoss review in Docker
-        run: docker compose run gptoss_check
+        run: docker compose up --exit-code-from gptoss_check gptoss gptoss_check

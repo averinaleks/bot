@@ -1,5 +1,4 @@
 import os
-import requests
 
 
 def query(prompt: str) -> str:
@@ -8,13 +7,22 @@ def query(prompt: str) -> str:
     if not api_url:
         raise RuntimeError("Переменная окружения GPT_OSS_API не установлена")
 
-    response = requests.post(
-        api_url.rstrip("/") + "/completions",
-        json={"prompt": prompt, "max_tokens": 1024},
-        timeout=30,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["text"]
+    max_retries = 3
+    backoff = 1
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.post(
+                api_url.rstrip("/") + "/completions",
+                json={"prompt": prompt, "max_tokens": 1024},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["text"]
+        except RequestException as err:
+            if attempt == max_retries:
+                raise RuntimeError(f"Ошибка запроса к GPT-OSS API: {err}") from err
+            time.sleep(backoff)
+            backoff *= 2
 
 
 def send_telegram(msg: str) -> None:
@@ -33,8 +41,8 @@ def send_telegram(msg: str) -> None:
 files = ("main.py", "strategy.py", "utils.py")
 
 for filename in files:
-    path = f"/repo/{filename}"
-    if os.path.exists(path):
+    path = Path(__file__).resolve().parent.parent / filename
+    if path.exists():
         with open(path, encoding="utf-8") as f:
             code = f.read()
 
@@ -42,7 +50,12 @@ for filename in files:
             "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
             "Объясни сигналы стратегии:\n" + code
         )
-        result = query(prompt)
+        try:
+            result = query(prompt)
+        except RuntimeError as err:
+            print(f"\n📄 {filename}\n{err}\n")
+            send_telegram(f"📄 {filename}\n{err}")
+            continue
 
         print(f"\n📄 {filename}\n{result}\n")
         send_telegram(f"📄 {filename}\n{result}")
