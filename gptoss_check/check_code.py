@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import requests
 
 
@@ -33,8 +34,8 @@ def send_telegram(msg: str) -> None:
 files = ("main.py", "strategy.py", "utils.py")
 
 for filename in files:
-    path = f"/repo/{filename}"
-    if os.path.exists(path):
+    path = Path(__file__).resolve().parent.parent / filename
+    if path.exists():
         with open(path, encoding="utf-8") as f:
             code = f.read()
 
