@@ -1,5 +1,9 @@
 import os
+import time
+from pathlib import Path
 
+import requests
+from requests.exceptions import RequestException
 
 def query(prompt: str) -> str:
     """Отправить текст на сервер GPT-OSS и вернуть полученный ответ."""
