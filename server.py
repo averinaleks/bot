@@ -8,9 +8,10 @@ import torch
 
 # Load model and tokenizer
 model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+revision = os.getenv("GPT_MODEL_REVISION", "<commit-or-tag>")
+tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
+model = AutoModelForCausalLM.from_pretrained(model_name, revision=revision).to(device)
 
 app = FastAPI()
 
