@@ -1,4 +1,5 @@
 import os
+import re
 from typing import List
 
 import torch
@@ -14,6 +15,7 @@ app = FastAPI()
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
+PINNED_MODEL_REVISION = "10e9d713f8e4a9281c59c40be6c58537480635ea"
 
 
 @app.on_event("startup")
@@ -21,7 +23,15 @@ def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-    revision = os.getenv("GPT_MODEL_REVISION", "<commit-or-tag>")
+    revision = os.getenv("GPT_MODEL_REVISION", PINNED_MODEL_REVISION)
+    if os.getenv("GPT_MODEL_REVISION") is None or revision == "<commit-or-tag>":
+        raise ValueError(
+            "GPT_MODEL_REVISION environment variable must be set to a valid commit hash or tag"
+        )
+    if not re.fullmatch(r"[0-9a-f]{40}|[A-Za-z0-9._-]+", revision):
+        raise ValueError(
+            "GPT_MODEL_REVISION environment variable must be a valid commit hash or tag"
+        )
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
     model = (
         AutoModelForCausalLM.from_pretrained(model_name, revision=revision)
