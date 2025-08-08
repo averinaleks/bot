@@ -8,7 +8,11 @@ import torch
 
 # Load model and tokenizer
 model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-revision = os.getenv("GPT_MODEL_REVISION", "<commit-or-tag>")
+revision = os.getenv("GPT_MODEL_REVISION")
+if not revision:
+    raise RuntimeError(
+        "GPT_MODEL_REVISION environment variable must be set to a commit hash or tag"
+    )
 tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = AutoModelForCausalLM.from_pretrained(model_name, revision=revision).to(device)
