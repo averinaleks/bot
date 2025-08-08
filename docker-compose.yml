@@ -160,9 +160,9 @@ services:
       - .:/workspace
     environment:
       PYTHONUNBUFFERED: "1"
+      GPT_OSS_API: http://gptoss:8000
     depends_on:
-      gptoss:
-        condition: service_healthy  # Wait for GPT-OSS to be healthy
+      - gptoss
     networks:
       - gptoss_net
 networks:
