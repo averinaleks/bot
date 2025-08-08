@@ -503,16 +503,14 @@ async def run_once_async() -> None:
         )
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
-        asyncio.run(
-            send_trade_async(
-                SYMBOL,
-                signal,
-                price,
-                env,
-                tp=tp,
-                sl=sl,
-                trailing_stop=trailing_stop,
-            )
+        await send_trade_async(
+            SYMBOL,
+            signal,
+            price,
+            env,
+            tp=tp,
+            sl=sl,
+            trailing_stop=trailing_stop,
         )
 
 
