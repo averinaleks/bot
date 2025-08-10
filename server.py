@@ -23,13 +23,10 @@ def load_model() -> None:
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
     commit_hash = os.getenv("HF_COMMIT_SHA")
-    if commit_hash is None:
+    # HF_COMMIT_SHA must be updated manually to move to a new model revision.
+    if commit_hash is None or not re.fullmatch(r"[0-9a-f]{40}", commit_hash):
         raise ValueError(
-            "HF_COMMIT_SHA environment variable must be set to a 40-character commit hash"
-        )
-    if not re.fullmatch(r"[0-9a-f]{40}", commit_hash):
-        raise ValueError(
-            "HF_COMMIT_SHA environment variable must be a 40-character commit hash"
+            "HF_COMMIT_SHA environment variable must be a 40-character commit hash",
         )
     tokenizer = AutoTokenizer.from_pretrained(
         model_name, revision=commit_hash, trust_remote_code=False
