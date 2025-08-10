@@ -15,7 +15,6 @@ app = FastAPI()
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
-PINNED_MODEL_REVISION = "10e9d713f8e4a9281c59c40be6c58537480635ea"
 
 
 @app.on_event("startup")
@@ -23,18 +22,22 @@ def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-    commit_hash = os.getenv("GPT_MODEL_REVISION", PINNED_MODEL_REVISION)
-    if os.getenv("GPT_MODEL_REVISION") is None or commit_hash == "<commit-or-tag>":
+    commit_hash = os.getenv("HF_COMMIT_SHA")
+    if commit_hash is None:
         raise ValueError(
-            "GPT_MODEL_REVISION environment variable must be set to a 40-character commit hash"
+            "HF_COMMIT_SHA environment variable must be set to a 40-character commit hash"
         )
     if not re.fullmatch(r"[0-9a-f]{40}", commit_hash):
         raise ValueError(
-            "GPT_MODEL_REVISION environment variable must be a 40-character commit hash"
+            "HF_COMMIT_SHA environment variable must be a 40-character commit hash"
         )
-    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=commit_hash)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name, revision=commit_hash, trust_remote_code=False
+    )
     model = (
-        AutoModelForCausalLM.from_pretrained(model_name, revision=commit_hash)
+        AutoModelForCausalLM.from_pretrained(
+            model_name, revision=commit_hash, trust_remote_code=False
+        )
         .to(device)
     )
 
