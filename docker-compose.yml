@@ -1,7 +1,7 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: averinaleks/myapp:${MYAPP_TAG:-cpu}
+    image: averinaleks/myapp:latest
     ports:
       - "8003:8000"
     volumes:
@@ -153,7 +153,7 @@ services:
         soft: 65536
         hard: 65536
   gptoss_check:
-    image: averinaleks/myapp:${MYAPP_TAG:-cpu}
+    image: averinaleks/myapp:latest
     command: python3 gptoss_check/check_code.py
     working_dir: /workspace
     volumes:
