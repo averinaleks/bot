@@ -1,7 +1,7 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: ghcr.io/openai/gpt-oss:latest
+    image: docker.io/averinaleks/bot:latest
     ports:
       - "8003:8000"
     volumes:
@@ -153,7 +153,7 @@ services:
         soft: 65536
         hard: 65536
   gptoss_check:
-    image: ghcr.io/openai/gpt-oss:latest
+    image: docker.io/averinaleks/bot:latest
     command: python3 gptoss_check/check_code.py
     working_dir: /workspace
     volumes:
