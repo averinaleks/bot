@@ -14,7 +14,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     python3-dev \
     python3-venv \
     python3-pip \
-    && python3 -m pip install --break-system-packages --upgrade pip \
+    && python3 -m pip install --break-system-packages --ignore-installed --no-cache-dir --upgrade pip \
     && curl -fsSL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && tar -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
