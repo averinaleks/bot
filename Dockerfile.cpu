@@ -1,4 +1,5 @@
 FROM ubuntu:24.04 AS builder
+ARG DEBIAN_FRONTEND=noninteractive
 ARG ZLIB_VERSION=1.3.1
 
 RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
@@ -25,6 +26,7 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
 
 FROM ubuntu:24.04
+ARG DEBIAN_FRONTEND=noninteractive
 ARG ZLIB_VERSION=1.3.1
 
 RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
