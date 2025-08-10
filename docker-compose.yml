@@ -8,7 +8,7 @@ services:
       - gptoss_workspace:/workspace
     environment:
       - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}
-    gpus: ${GPUS:-0}
+    gpus: ${GPUS:-all}
     # Ensure the GPT-OSS API is ready before other services start
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
