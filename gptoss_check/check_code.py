@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import time
+import random
 
 import requests
 from requests.exceptions import RequestException
@@ -44,6 +45,9 @@ def query(prompt: str) -> str:
         except RequestException as err:
             if attempt == max_retries:
                 raise RuntimeError(f"Ошибка запроса к GPT-OSS API: {err}") from err
+            delay = backoff + random.uniform(0, 0.5)
+            print(f"Попытка {attempt} не удалась, ожидание {delay:.2f} с")
+            time.sleep(delay)
             time.sleep(backoff)
             backoff *= 2
 
