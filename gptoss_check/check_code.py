@@ -1,6 +1,6 @@
 import os
-import time
 from pathlib import Path
+import time
 
 import requests
 from requests.exceptions import RequestException
