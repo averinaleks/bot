@@ -30,7 +30,7 @@ def query(prompt: str) -> str:
 
 
 def send_telegram(msg: str) -> None:
-"""Отправить сообщение в Telegram, если заданы токен и chat_id."""
+    """Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
