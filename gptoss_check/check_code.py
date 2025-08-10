@@ -30,7 +30,7 @@ def query(prompt: str) -> str:
 
 
 def send_telegram(msg: str) -> None:
-    """Отправить сообщение в Telegram, если заданы токен и chat_id."""
+"""Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
@@ -41,25 +41,30 @@ def send_telegram(msg: str) -> None:
         )
 
 
-# Список файлов, которые нужно анализировать
-files = ("main.py", "strategy.py", "utils.py")
+# Пути к файлам, которые нужно анализировать
+paths_env = os.getenv("CHECK_CODE_PATH", "trading_bot.py")
+repo_root = Path(__file__).resolve().parent.parent
+for filename in (p.strip() for p in paths_env.split(",") if p.strip()):
+    path = repo_root / filename
+    if not path.exists():
+        warning = f"⚠️ {filename} not found, skipping"
+        print(warning)
+        send_telegram(warning)
+        continue
 
-for filename in files:
-    path = Path(__file__).resolve().parent.parent / filename
-    if path.exists():
-        with open(path, encoding="utf-8") as f:
-            code = f.read()
+    with open(path, encoding="utf-8") as f:
+        code = f.read()
 
-        prompt = (
-            "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
-            "Объясни сигналы стратегии:\n" + code
-        )
-        try:
-            result = query(prompt)
-        except RuntimeError as err:
-            print(f"\n📄 {filename}\n{err}\n")
-            send_telegram(f"📄 {filename}\n{err}")
-            continue
+    prompt = (
+        "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
+        "Объясни сигналы стратегии:\n" + code
+    )
+    try:
+        result = query(prompt)
+    except RuntimeError as err:
+        print(f"\n📄 {filename}\n{err}\n")
+        send_telegram(f"📄 {filename}\n{err}")
+        continue
 
-        print(f"\n📄 {filename}\n{result}\n")
-        send_telegram(f"📄 {filename}\n{result}")
+    print(f"\n📄 {filename}\n{result}\n")
+    send_telegram(f"📄 {filename}\n{result}")
