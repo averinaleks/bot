@@ -1,7 +1,7 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: docker.io/averinaleks/myapp:latest
+    image: averinaleks/myapp:latest
     ports:
       - "8003:8000"
     volumes:
