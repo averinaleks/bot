@@ -19,6 +19,7 @@ jobs:
         with:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
+          registry: docker.io
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
