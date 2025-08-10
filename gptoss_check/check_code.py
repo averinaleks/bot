@@ -34,11 +34,14 @@ def send_telegram(msg: str) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
-        requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            data={"chat_id": chat_id, "text": msg[:4000]},
-            timeout=15,
-        )
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                data={"chat_id": chat_id, "text": msg[:4000]},
+                timeout=15,
+            )
+        except RequestException as err:
+            print(f"⚠️ Failed to send Telegram message: {err}")
 
 
 # Пути к файлам, которые нужно анализировать
