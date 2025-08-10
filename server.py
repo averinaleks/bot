@@ -14,7 +14,6 @@ app = FastAPI()
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_REVISION = "10e9d713f8e4a9281c59c40be6c58537480635ea"
 
 
 @app.on_event("startup")
@@ -23,11 +22,15 @@ def load_model() -> None:
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name, revision=MODEL_REVISION, trust_remote_code=False
+        model_name,
+        revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+        trust_remote_code=False,
     )
     model = (
         AutoModelForCausalLM.from_pretrained(
-            model_name, revision=MODEL_REVISION, trust_remote_code=False
+            model_name,
+            revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+            trust_remote_code=False,
         )
         .to(device)
     )
