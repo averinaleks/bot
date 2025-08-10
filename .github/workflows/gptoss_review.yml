@@ -1,9 +1,10 @@
+---
 name: GPT-OSS Code Review
 permissions:
   contents: read
   packages: read
 
-on:
+'on':
   push:
     paths:
       - 'bot/**.py'
