@@ -21,7 +21,26 @@ def query(prompt: str) -> str:
                 timeout=30,
             )
             response.raise_for_status()
-            return response.json()["choices"][0]["text"]
+            try:
+                data = response.json()
+            except ValueError as err:
+                raise RuntimeError(
+                    f"Некорректный JSON от GPT-OSS API: {err}"
+                ) from err
+
+            choices = data.get("choices")
+            if not isinstance(choices, list) or not choices:
+                raise RuntimeError(
+                    "Некорректный формат ответа GPT-OSS API: отсутствует список 'choices'"
+                )
+
+            first_choice = choices[0]
+            if not isinstance(first_choice, dict) or "text" not in first_choice:
+                raise RuntimeError(
+                    "Некорректный формат ответа GPT-OSS API: отсутствует ключ 'text'"
+                )
+
+            return first_choice["text"]
         except RequestException as err:
             if attempt == max_retries:
                 raise RuntimeError(f"Ошибка запроса к GPT-OSS API: {err}") from err
