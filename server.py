@@ -23,18 +23,18 @@ def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-    revision = os.getenv("GPT_MODEL_REVISION", PINNED_MODEL_REVISION)
-    if os.getenv("GPT_MODEL_REVISION") is None or revision == "<commit-or-tag>":
+    commit_hash = os.getenv("GPT_MODEL_REVISION", PINNED_MODEL_REVISION)
+    if os.getenv("GPT_MODEL_REVISION") is None or commit_hash == "<commit-or-tag>":
         raise ValueError(
-            "GPT_MODEL_REVISION environment variable must be set to a valid commit hash or tag"
+            "GPT_MODEL_REVISION environment variable must be set to a 40-character commit hash"
         )
-    if not re.fullmatch(r"[0-9a-f]{40}|[A-Za-z0-9._-]+", revision):
+    if not re.fullmatch(r"[0-9a-f]{40}", commit_hash):
         raise ValueError(
-            "GPT_MODEL_REVISION environment variable must be a valid commit hash or tag"
+            "GPT_MODEL_REVISION environment variable must be a 40-character commit hash"
         )
-    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=commit_hash)
     model = (
-        AutoModelForCausalLM.from_pretrained(model_name, revision=revision)
+        AutoModelForCausalLM.from_pretrained(model_name, revision=commit_hash)
         .to(device)
     )
 
