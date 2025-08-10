@@ -21,7 +21,7 @@ COPY requirements-cpu.txt .
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==24.0 setuptools==78.1.1 wheel && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir -r requirements-cpu.txt && \
+    $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-cpu.txt && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
 
@@ -47,9 +47,10 @@ COPY . .
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Verify that all heavy packages were installed
+# Verify that all heavy packages were installed and no GPU libraries remain
 RUN echo "Checking package versions..." && \
     $VIRTUAL_ENV/bin/python -c "import torch, tensorflow as tf; print('Torch:', torch.__version__, 'TF:', tf.__version__)" && \
+    $VIRTUAL_ENV/bin/python -m pip freeze | grep -i nvidia && (echo 'Unexpected NVIDIA packages found' && exit 1) || echo 'No NVIDIA packages installed' && \
     $VIRTUAL_ENV/bin/python -c "import stable_baselines3 as sb3, mlflow, pytorch_lightning as pl; print('SB3:', sb3.__version__, 'MLflow:', mlflow.__version__, 'Lightning:', pl.__version__)"
 
 CMD ["/app/venv/bin/python", "-m", "bot.trading_bot"]
