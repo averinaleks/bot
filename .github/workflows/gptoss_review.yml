@@ -14,7 +14,6 @@ jobs:
   review:
     runs-on: ubuntu-latest
     env:
-      GPUS: 0
       DOCKERFILE: Dockerfile.cpu
     steps:
       - name: Checkout code
