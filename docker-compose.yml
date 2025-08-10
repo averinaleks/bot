@@ -1,7 +1,7 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: averinaleks/myapp:latest
+    image: ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest
     ports:
       - "8003:8000"
     volumes:
