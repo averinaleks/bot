@@ -1,0 +1,5 @@
+services:
+  gptoss:
+    gpus: all
+  gptoss_check:
+    gpus: all

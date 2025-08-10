@@ -58,7 +58,7 @@
     запустите контейнеры с `LOG_LEVEL=DEBUG`:
 
     ```bash
-    LOG_LEVEL=DEBUG docker compose up --build
+    LOG_LEVEL=DEBUG docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build
     ```
 
     Непрерывный вывод смотрите в файлах внутри `./logs/`.
@@ -218,7 +218,7 @@ at runtime. If you switch to a runtime-only base (for example
 or Numba will fall back to CPU mode. Build and run the GPU image with:
 
 ```bash
-DOCKERFILE=Dockerfile docker compose up --build
+DOCKERFILE=Dockerfile docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
 Setting `FORCE_CPU=1` disables all CUDA checks, which helps avoid crashes such as
@@ -343,7 +343,8 @@ earlier, simply revert those lines or copy the compose file from the repository
 again.  After restoring the Gunicorn commands, run:
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build    # CPU
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build    # GPU
 ```
 
 so the heavy frameworks load and the services expose their production APIs.
@@ -373,7 +374,7 @@ docker-compose logs model_builder
 и укажите `RUNTIME=`, чтобы отключить NVIDIA‑runtime:
 
 ```bash
-RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose up --build
+RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build
 ```
 
 ## Troubleshooting service health
@@ -393,13 +394,13 @@ use these steps to diagnose the problem:
    `nvidia-docker2`). Verify that the GPU is visible from a container:
 
    ```bash
-   docker compose run --rm data_handler nvidia-smi
+   docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm data_handler nvidia-smi
    ```
 
    If no GPU is detected, rebuild with the CPU Dockerfile:
 
    ```bash
-   RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose up --build
+   RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build
    ```
 
 3. If services require more time to initialize, increase
