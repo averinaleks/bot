@@ -24,4 +24,5 @@ jobs:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
       - name: Run gptoss review in Docker
-        run: docker compose up --exit-code-from gptoss_check gptoss gptoss_check
+        run: docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check
+
