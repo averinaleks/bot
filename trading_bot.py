@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
-from bot.gpt_client import query_gpt
+from bot.gpt_client import GPTClientError, query_gpt
 from bot.utils import logger
 
 load_dotenv()
@@ -526,7 +526,7 @@ async def main_async() -> None:
                 "Что ты видишь в этом коде:\n" + strategy_code
             )
             logger.info("GPT analysis: %s", gpt_result)
-        except Exception as exc:  # pragma: no cover - non-critical
+        except GPTClientError as exc:  # pragma: no cover - non-critical
             logger.debug("GPT analysis failed: %s", exc)
         while True:
             await run_once_async()
