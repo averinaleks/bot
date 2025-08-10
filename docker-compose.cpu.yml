@@ -1,5 +1,7 @@
 services:
   gptoss:
     # CPU-only override removes GPU assignment
-    gpus: null
+    gpus: ""
+  gptoss_check:
+    gpus: ""
 
