@@ -1,14 +1,14 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: averinaleks/myapp:latest
+    image: averinaleks/myapp:${MYAPP_TAG:-cpu}
     ports:
       - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
     environment:
       - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}
-    gpus: all
+    gpus: ${GPUS:-0}
     # Ensure the GPT-OSS API is ready before other services start
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
@@ -24,7 +24,7 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # Run the full data handler implementation
     command: gunicorn -w 1 -b 0.0.0.0:8000 bot.data_handler:api_app
-    runtime: ${RUNTIME:-nvidia}
+    runtime: ${RUNTIME:-runc}
     ports:
       - "8000:8000"
     env_file: .env
@@ -51,7 +51,7 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # Run the full model builder implementation
     command: gunicorn -w 1 -b 0.0.0.0:8001 bot.model_builder:api_app
-    runtime: ${RUNTIME:-nvidia}
+    runtime: ${RUNTIME:-runc}
     ports:
       - "8001:8001"
     environment:
@@ -79,7 +79,7 @@ services:
     # Use the ASGI wrapper exported by trade_manager so UvicornWorker can
     # serve the Flask app correctly.
     command: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002 bot.trade_manager:asgi_app
-    runtime: ${RUNTIME:-nvidia}
+    runtime: ${RUNTIME:-runc}
     ports:
       - "8002:8002"
     env_file: .env
@@ -106,7 +106,7 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # container_name: trading_bot
     command: python -m bot.trading_bot
-    runtime: ${RUNTIME:-nvidia}
+    runtime: ${RUNTIME:-runc}
     depends_on:
       # Wait for GPT-OSS to become healthy
       gptoss:
@@ -153,7 +153,7 @@ services:
         soft: 65536
         hard: 65536
   gptoss_check:
-    image: averinaleks/myapp:latest
+    image: averinaleks/myapp:${MYAPP_TAG:-cpu}
     command: python3 gptoss_check/check_code.py
     working_dir: /workspace
     volumes:
