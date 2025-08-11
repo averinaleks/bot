@@ -44,11 +44,13 @@ def load_model() -> None:
     try:
         tokenizer = AutoTokenizer.from_pretrained(
             fallback_model,
+            revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
             trust_remote_code=False,
         )
         model = (
             AutoModelForCausalLM.from_pretrained(
                 fallback_model,
+                revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
                 trust_remote_code=False,
             )
             .to(device)
