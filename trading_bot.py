@@ -3,7 +3,6 @@
 import asyncio
 import os
 import statistics
-import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -84,8 +83,7 @@ CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 # average.  This avoids additional service calls while still allowing
 # us to build a small feature vector for the prediction service.
 _PRICE_HISTORY: deque[float] = deque(maxlen=50)
-PRICE_HISTORY_LOCK = threading.Lock()
-PRICE_HISTORY_ASYNC_LOCK = asyncio.Lock()
+PRICE_HISTORY_LOCK = asyncio.Lock()
 
 
 # Default trading symbol. Override with the SYMBOL environment variable.
@@ -184,7 +182,7 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
         return None
 
 
-def build_feature_vector(price: float) -> list[float]:
+async def build_feature_vector(price: float) -> list[float]:
     """Derive a simple feature vector from the latest price.
 
     The feature vector consists of:
@@ -197,7 +195,7 @@ def build_feature_vector(price: float) -> list[float]:
        basic technical indicator.
     """
 
-    with PRICE_HISTORY_LOCK:
+    async with PRICE_HISTORY_LOCK:
         _PRICE_HISTORY.append(price)
         if len(_PRICE_HISTORY) > 1:
             volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
@@ -447,8 +445,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if price is None or price <= 0:
                 logger.warning("Invalid price for %s: %s", symbol, price)
                 return
-            async with PRICE_HISTORY_ASYNC_LOCK:
-                features = build_feature_vector(price)
+            features = await build_feature_vector(price)
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": features},
@@ -490,7 +487,7 @@ async def run_once_async() -> None:
         logger.warning("Invalid price for %s: %s", SYMBOL, price)
         return
     logger.info("Price for %s: %s", SYMBOL, price)
-    features = build_feature_vector(price)
+    features = await build_feature_vector(price)
     pdata = await get_prediction(SYMBOL, features, env)
     signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", signal)
