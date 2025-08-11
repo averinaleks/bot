@@ -293,7 +293,7 @@ token via an `Authorization: Bearer` header when calling any POST route or the
 
 ```bash
 export TRADE_MANAGER_TOKEN=supersecret
-curl -H "Authorization: Bearer $TRADE_MANAGER_TOKEN" \
+curl --netrc-file /dev/null -H "Authorization: Bearer $TRADE_MANAGER_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"symbol":"BTCUSDT","side":"buy","amount":1}' \
      http://localhost:8002/open_position
