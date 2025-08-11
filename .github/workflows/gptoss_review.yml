@@ -23,8 +23,15 @@ jobs:
         with:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
+      # GHCR requires authentication even for pulls. Use built-in GitHub token.
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run gptoss review (CPU)
         run: |
           docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
-            up --exit-code-from gptoss_check gptoss gptoss_check
+            up --pull always --exit-code-from gptoss_check gptoss gptoss_check
 
