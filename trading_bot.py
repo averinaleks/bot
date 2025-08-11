@@ -6,7 +6,7 @@ import statistics
 import time
 from collections import deque
 from pathlib import Path
-from typing import Awaitable
+from typing import TYPE_CHECKING, Awaitable, Union
 
 import httpx
 import requests
@@ -20,6 +20,11 @@ from bot.utils import logger
 load_dotenv()
 
 CFG = BotConfig()
+
+if TYPE_CHECKING:
+    ResponseT = Union[requests.Response, httpx.Response]
+else:  # pragma: no cover - runtime doesn't need httpx for typing
+    ResponseT = requests.Response
 
 
 def safe_int(env_var: str, default: int) -> int:
@@ -256,7 +261,7 @@ def _build_trade_payload(
 
 
 def _handle_trade_response(
-    resp: requests.Response | httpx.Response, symbol: str, start: float
+    resp: ResponseT, symbol: str, start: float
 ) -> tuple[bool, float, str | None]:
     """Return success flag, elapsed time and error message."""
 
