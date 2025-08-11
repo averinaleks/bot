@@ -1,7 +1,5 @@
 import os
 import secrets
-import time
-from pathlib import Path
 
 import requests
 from requests.exceptions import RequestException
@@ -44,11 +42,6 @@ def query(prompt: str) -> str:
 
             return first_choice["text"]
         except RequestException as err:
-            if attempt == max_retries:
-                raise RuntimeError(f"Ошибка запроса к GPT-OSS API: {err}") from err
-            delay = backoff + secrets.SystemRandom().uniform(0, 0.5)
-            print(f"Попытка {attempt} не удалась, ожидание {delay:.2f} с")
-            time.sleep(delay)
 def send_telegram(msg: str) -> None:
     """Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
