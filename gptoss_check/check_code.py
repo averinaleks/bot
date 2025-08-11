@@ -49,10 +49,6 @@ def query(prompt: str) -> str:
             delay = backoff + random.uniform(0, 0.5)
             print(f"Попытка {attempt} не удалась, ожидание {delay:.2f} с")
             time.sleep(delay)
-    time.sleep(backoff)
-    backoff *= 2
-
-
 def send_telegram(msg: str) -> None:
     """Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
