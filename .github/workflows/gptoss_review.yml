@@ -28,7 +28,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.TOKEN }}
       - name: Run gptoss review (CPU)
         run: |
