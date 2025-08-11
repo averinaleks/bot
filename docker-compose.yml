@@ -1,16 +1,16 @@
 # Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
-    image: ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest
+    image: vllm/vllm-openai:gptoss
+    command: >
+      --model openai/gpt-oss-20b
+      --device cpu
+      --host 0.0.0.0
+      --port 8000
     ports:
       - "8003:8000"
-    volumes:
-      - gptoss_workspace:/workspace
-    environment:
-      - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}
-    # Ensure the GPT-OSS API is ready before other services start
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -161,7 +161,8 @@ services:
       PYTHONUNBUFFERED: "1"
       GPT_OSS_API: http://gptoss:8000
     depends_on:
-      - gptoss
+      gptoss:
+        condition: service_healthy
     networks:
       - gptoss_net
 networks:
