@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-import pickle
 import logging
 import os
 import threading
@@ -64,11 +63,6 @@ except ImportError as exc:  # allow missing ta
     logging.getLogger("TradingBot").warning("ta import failed: %s", exc)
     ta = types.ModuleType("ta")
 
-try:  # pragma: no cover - optional dependency
-    import joblib  # type: ignore
-except ImportError as exc:  # allow missing joblib
-    logging.getLogger("TradingBot").warning("joblib import failed: %s", exc)
-    joblib = types.SimpleNamespace(dump=lambda *a, **k: None, load=lambda *a, **k: {})
 
 try:  # pragma: no cover - optional dependency
     import psutil  # type: ignore
@@ -1859,13 +1853,13 @@ class DataHandler:
 
     async def save_to_disk_buffer(self, priority, item):
         try:
-            filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.joblib")
-            await asyncio.to_thread(joblib.dump, (priority, item), filename)
-            if not os.path.exists(filename):
-                def _pickle_dump(obj, path):
-                    with open(path, "wb") as f:
-                        pickle.dump(obj, f)
-                await asyncio.to_thread(_pickle_dump, (priority, item), filename)
+            filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.json")
+
+            def _json_dump(obj, path):
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(obj, f)
+
+            await asyncio.to_thread(_json_dump, {"priority": priority, "item": item}, filename)
             try:
                 self.disk_buffer.put_nowait(filename)
             except asyncio.QueueFull:
@@ -1875,7 +1869,7 @@ class DataHandler:
                 await asyncio.to_thread(os.remove, filename)
                 return
             logger.info("Сообщение сохранено в дисковый буфер: %s", filename)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.error("Ошибка сохранения в дисковый буфер: %s", e)
 
     async def load_from_disk_buffer(self):
@@ -1885,17 +1879,17 @@ class DataHandler:
             except asyncio.QueueEmpty:
                 break
             try:
-                try:
-                    priority, item = await asyncio.to_thread(joblib.load, filename)
-                except Exception:
-                    def _pickle_load(path):
-                        with open(path, "rb") as f:
-                            return pickle.load(f)
-                    priority, item = await asyncio.to_thread(_pickle_load, filename)
+                def _json_load(path):
+                    with open(path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+
+                data = await asyncio.to_thread(_json_load, filename)
+                priority = data.get("priority")
+                item = tuple(data.get("item", []))
                 await self.ws_queue.put((priority, item))
                 await asyncio.to_thread(os.remove, filename)
                 logger.info("Сообщение загружено из дискового буфера: %s", filename)
-            except (OSError, ValueError) as e:
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
                 logger.error("Ошибка загрузки из дискового буфера: %s", e)
             finally:
                 self.disk_buffer.task_done()
