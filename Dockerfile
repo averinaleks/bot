@@ -6,8 +6,9 @@ ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
-# Установка необходимых пакетов для сборки и обновление linux-libc-dev
-RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
+# Установка необходимых пакетов для сборки и обновление критических библиотек
+# Обновление libgcrypt20 устраняет уязвимость CVE-2024-2236
+RUN apt-get update && apt-get upgrade -y linux-libc-dev libgcrypt20 && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
     build-essential \
@@ -53,8 +54,9 @@ ENV TZ=Etc/UTC
 
 WORKDIR /app
 
-# Установка минимальных пакетов для выполнения и обновление linux-libc-dev
-RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
+# Установка минимальных пакетов для выполнения и обновление критических библиотек
+# Обновление libgcrypt20 устраняет уязвимость CVE-2024-2236
+RUN apt-get update && apt-get upgrade -y linux-libc-dev libgcrypt20 && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
     python3 \
