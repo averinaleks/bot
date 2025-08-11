@@ -777,11 +777,14 @@ class HistoricalDataCache:
 
     def _check_memory(self, additional_size_mb):
         memory = psutil.virtual_memory()
-        available_mb = memory.available / (1024 * 1024)
-        used_percent = memory.percent
+        available = getattr(memory, "available", None)
+        used_percent = getattr(memory, "percent", 0)
         if used_percent > self.memory_threshold * 100:
             logger.warning("Высокая загрузка памяти: %.1f%%", used_percent)
             self._aggressive_clean()
+        if available is None:
+            return True
+        available_mb = available / (1024 * 1024)
         return (
             self.current_cache_size_mb + additional_size_mb
         ) < available_mb * self.memory_threshold
