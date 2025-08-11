@@ -794,3 +794,15 @@ This ensures style checks and tests run automatically.
 ```bash
 ./scripts/check_subuid_conflict.sh
 ```
+
+Дополнительно можно проверить ядро на уязвимость
+[CVE-2020-14356](https://ubuntu.com/security/CVE-2020-14356) —
+ошибку null pointer dereference в cgroupv2 при перезагрузке. Скрипт
+`scripts/check_cve_2020_14356.sh` анализирует версию ядра и сообщает,
+если система уязвима.
+
+Пример запуска:
+
+```bash
+./scripts/check_cve_2020_14356.sh
+```

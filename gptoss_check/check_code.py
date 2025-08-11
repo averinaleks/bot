@@ -3,6 +3,7 @@ import secrets
 
 import requests
 from requests.exceptions import RequestException
+from pathlib import Path
 
 
 def query(prompt: str) -> str:
@@ -42,6 +43,9 @@ def query(prompt: str) -> str:
 
             return first_choice["text"]
         except RequestException as err:
+            raise RuntimeError(
+                f"Ошибка сети при запросе GPT-OSS API: {err}"
+            ) from err
 def send_telegram(msg: str) -> None:
     """Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
