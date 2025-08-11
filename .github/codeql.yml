@@ -1,3 +1,1 @@
-name: codeql-config
 build-mode: none
-python: ["3"]
