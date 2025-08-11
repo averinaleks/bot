@@ -776,3 +776,17 @@ All pushes and pull requests trigger a GitHub Actions workflow that installs
 dependencies via `scripts/install-test-deps.sh` (which also installs `flake8`),
 runs `python -m flake8`, and executes `pytest`.
 This ensures style checks and tests run automatically.
+
+## Security
+
+Для снижения риска уязвимости [CVE-2024-56433](https://ubuntu.com/security/CVE-2024-56433)
+проверьте, что диапазоны в `/etc/subuid` и `/etc/subgid` не пересекаются с UID
+пользователей вашей сети. В репозитории добавлен скрипт
+`scripts/check_subuid_conflict.sh`, который помогает выявить конфликтующие
+диапазоны и предлагает безопасные значения.
+
+Пример запуска:
+
+```bash
+./scripts/check_subuid_conflict.sh
+```
