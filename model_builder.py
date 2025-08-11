@@ -10,6 +10,7 @@ import os
 import time
 import asyncio
 import sys
+import pickle
 from bot.config import BotConfig
 from collections import deque
 
@@ -1453,6 +1454,9 @@ class ModelBuilder:
                 model_cpu.eval()
             model.to(current_device)
             joblib.dump(values, cache_file)
+            if not os.path.exists(cache_file):
+                with open(cache_file, "wb") as f:
+                    pickle.dump(values, f)
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
                 "close",

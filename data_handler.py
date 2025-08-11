@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import pickle
 import logging
 import os
 import threading
@@ -1642,6 +1643,11 @@ class DataHandler:
                         cache_obj.update(df.droplevel("symbol"))
                         idx = df.droplevel("symbol").index
                         self.indicators[symbol] = cache_obj
+                        base_df = self.ohlcv
+                        base_df.loc[
+                            df.index, cache_obj.df.columns
+                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
+                        self.ohlcv = base_df
 
                 if fetch_needed and obj_ref is not None:
                     result = await asyncio.to_thread(ray.get, obj_ref)
@@ -1672,6 +1678,11 @@ class DataHandler:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
                         idx = df.droplevel("symbol").index
+                        base_df = self.ohlcv
+                        base_df.loc[
+                            df.index, result.df.columns
+                        ] = result.df.loc[idx, result.df.columns].to_numpy()
+                        self.ohlcv = base_df
             else:
                 fetch_needed = False
                 obj_ref = None
@@ -1850,6 +1861,11 @@ class DataHandler:
         try:
             filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.joblib")
             await asyncio.to_thread(joblib.dump, (priority, item), filename)
+            if not os.path.exists(filename):
+                def _pickle_dump(obj, path):
+                    with open(path, "wb") as f:
+                        pickle.dump(obj, f)
+                await asyncio.to_thread(_pickle_dump, (priority, item), filename)
             try:
                 self.disk_buffer.put_nowait(filename)
             except asyncio.QueueFull:
@@ -1869,7 +1885,13 @@ class DataHandler:
             except asyncio.QueueEmpty:
                 break
             try:
-                priority, item = await asyncio.to_thread(joblib.load, filename)
+                try:
+                    priority, item = await asyncio.to_thread(joblib.load, filename)
+                except Exception:
+                    def _pickle_load(path):
+                        with open(path, "rb") as f:
+                            return pickle.load(f)
+                    priority, item = await asyncio.to_thread(_pickle_load, filename)
                 await self.ws_queue.put((priority, item))
                 await asyncio.to_thread(os.remove, filename)
                 logger.info("Сообщение загружено из дискового буфера: %s", filename)
