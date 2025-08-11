@@ -44,9 +44,8 @@ RUN pip install --no-cache-dir pip==24.0 setuptools==78.1.1 wheel && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete
 
-# Этап выполнения
-FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu24.04
-ARG ZLIB_VERSION=1.3.1
+# Этап выполнения (минимальный образ)
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -58,14 +57,9 @@ WORKDIR /app
 RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
-    curl \
     python3 \
     python3-venv \
-    python3-dev \
-    && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
-    && tar -xf zlib.tar.gz \
-    && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
-    && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
+    zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version
