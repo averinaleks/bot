@@ -1,4 +1,1 @@
-# CPU-only overrides (currently empty).
-services:
-  gptoss: {}
-  gptoss_check: {}
+services: {}
