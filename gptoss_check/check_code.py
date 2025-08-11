@@ -1,10 +1,11 @@
 import os
-from pathlib import Path
-import time
 import random
+import time
+from pathlib import Path
 
 import requests
 from requests.exceptions import RequestException
+
 
 def query(prompt: str) -> str:
     """Отправить текст на сервер GPT-OSS и вернуть полученный ответ."""
@@ -48,9 +49,6 @@ def query(prompt: str) -> str:
             delay = backoff + random.uniform(0, 0.5)
             print(f"Попытка {attempt} не удалась, ожидание {delay:.2f} с")
             time.sleep(delay)
-            backoff *= 2
-
-
 def send_telegram(msg: str) -> None:
     """Отправить сообщение в Telegram, если заданы токен и chat_id."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -66,30 +64,35 @@ def send_telegram(msg: str) -> None:
             print(f"⚠️ Failed to send Telegram message: {err}")
 
 
-# Пути к файлам, которые нужно анализировать
-paths_env = os.getenv("CHECK_CODE_PATH", "trading_bot.py")
-repo_root = Path(__file__).resolve().parent.parent
-for filename in (p.strip() for p in paths_env.split(",") if p.strip()):
-    path = repo_root / filename
-    if not path.exists():
-        warning = f"⚠️ {filename} not found, skipping"
-        print(warning)
-        send_telegram(warning)
-        continue
+def run() -> None:
+    """Run GPT-OSS analysis for configured files."""
+    paths_env = os.getenv("CHECK_CODE_PATH", "trading_bot.py")
+    repo_root = Path(__file__).resolve().parent.parent
+    for filename in (p.strip() for p in paths_env.split(",") if p.strip()):
+        path = repo_root / filename
+        if not path.exists():
+            warning = f"⚠️ {filename} not found, skipping"
+            print(warning)
+            send_telegram(warning)
+            continue
 
-    with open(path, encoding="utf-8") as f:
-        code = f.read()
+        with open(path, encoding="utf-8") as f:
+            code = f.read()
 
-    prompt = (
-        "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
-        "Объясни сигналы стратегии:\n" + code
-    )
-    try:
-        result = query(prompt)
-    except RuntimeError as err:
-        print(f"\n📄 {filename}\n{err}\n")
-        send_telegram(f"📄 {filename}\n{err}")
-        continue
+        prompt = (
+            "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
+            "Объясни сигналы стратегии:\n" + code
+        )
+        try:
+            result = query(prompt)
+        except RuntimeError as err:
+            print(f"\n📄 {filename}\n{err}\n")
+            send_telegram(f"📄 {filename}\n{err}")
+            continue
 
-    print(f"\n📄 {filename}\n{result}\n")
-    send_telegram(f"📄 {filename}\n{result}")
+        print(f"\n📄 {filename}\n{result}\n")
+        send_telegram(f"📄 {filename}\n{result}")
+
+
+if __name__ == "__main__":  # pragma: no cover - script entrypoint
+    run()

@@ -8,6 +8,3 @@ services:
       timeout: 2s
       retries: 12
       start_period: 1s
-  gptoss_check:
-    image: busybox
-    command: ["sh", "-c", "echo 'skipping gptoss check'"]

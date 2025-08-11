@@ -153,7 +153,7 @@ services:
         hard: 65536
   gptoss_check:
     image: averinaleks/myapp:latest
-    command: python3 gptoss_check/check_code.py
+    command: python3 gptoss_check/main.py
     working_dir: /workspace
     volumes:
       - .:/workspace
