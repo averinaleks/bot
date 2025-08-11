@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import List
 
 import torch
@@ -21,19 +22,42 @@ def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
-        trust_remote_code=False,
-    )
-    model = (
-        AutoModelForCausalLM.from_pretrained(
+    fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
             trust_remote_code=False,
         )
-        .to(device)
-    )
+        model = (
+            AutoModelForCausalLM.from_pretrained(
+                model_name,
+                revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+                trust_remote_code=False,
+            )
+            .to(device)
+        )
+        return
+    except Exception:
+        logging.exception("Failed to load model '%s'", model_name)
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            fallback_model,
+            trust_remote_code=False,
+        )
+        model = (
+            AutoModelForCausalLM.from_pretrained(
+                fallback_model,
+                trust_remote_code=False,
+            )
+            .to(device)
+        )
+        logging.info("Loaded fallback model '%s'", fallback_model)
+    except Exception:
+        logging.exception("Failed to load fallback model '%s'", fallback_model)
+        tokenizer = None
+        model = None
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
