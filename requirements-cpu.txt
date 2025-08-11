@@ -503,7 +503,7 @@ threadpoolctl>=3.6.0
     # via
     #   imbalanced-learn
     #   scikit-learn
-torch>=2.7.2
+torch=2.7.2
     # via
     #   -r requirements-cpu.in
     #   catalyst
@@ -513,7 +513,7 @@ torch>=2.7.2
     #   torchvision
 torchmetrics>=1.8.0
     # via pytorch-lightning
-torchvision>=0.22.2
+torchvision=0.22.2
     # via -r requirements-cpu.in
 tqdm>=4.67.1
     # via
