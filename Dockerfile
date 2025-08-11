@@ -20,7 +20,7 @@ RUN apt-get update && apt-get upgrade -y linux-libc-dev && apt-get install -y --
     libffi-dev \
     libblas-dev \
     liblapack-dev \
-    && curl -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
+    && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && tar -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \

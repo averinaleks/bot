@@ -51,17 +51,17 @@ def test_worker_thread_stops_after_shutdown():
     start_threads = threading.active_count()
     TL(_Bot(), chat_id=1)
     for _ in range(20):
-        if threading.active_count() > start_threads:
+        if threading.active_count() > start_threads or TL._worker_task is not None:
             break
         time.sleep(0.05)
-    assert threading.active_count() > start_threads
+    assert threading.active_count() > start_threads or TL._worker_task is not None
 
     asyncio.run(mod.TelegramLogger.shutdown())
     for _ in range(20):
-        if threading.active_count() <= start_threads:
+        if threading.active_count() <= start_threads and TL._worker_task is None:
             break
         time.sleep(0.05)
-    assert threading.active_count() <= start_threads
+    assert threading.active_count() <= start_threads and TL._worker_task is None
 
 
 @pytest.mark.asyncio

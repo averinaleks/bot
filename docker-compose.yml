@@ -10,7 +10,7 @@ services:
     ports:
       - "8003:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "--netrc-file", "/dev/null", "-f", "http://localhost:8000/health"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -31,7 +31,7 @@ services:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      test: ["CMD", "curl", "--netrc-file", "/dev/null", "-f", "http://localhost:8000/ping"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -58,7 +58,7 @@ services:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/ping"]
+      test: ["CMD", "curl", "--netrc-file", "/dev/null", "-f", "http://localhost:8001/ping"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -86,7 +86,7 @@ services:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/ready"]
+      test: ["CMD", "curl", "--netrc-file", "/dev/null", "-f", "http://localhost:8002/ready"]
       interval: 5s
       timeout: 2s
       retries: 12
