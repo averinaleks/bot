@@ -230,6 +230,57 @@ async def get_prediction(symbol: str, features: list[float], env: dict) -> dict 
         return None
 
 
+def _build_trade_payload(
+    symbol: str,
+    side: str,
+    price: float,
+    tp: float | None,
+    sl: float | None,
+    trailing_stop: float | None,
+) -> tuple[dict, dict, float]:
+    """Return payload, headers and timeout for trade requests."""
+
+    payload = {"symbol": symbol, "side": side, "price": price}
+    if tp is not None:
+        payload["tp"] = tp
+    if sl is not None:
+        payload["sl"] = sl
+    if trailing_stop is not None:
+        payload["trailing_stop"] = trailing_stop
+
+    headers: dict[str, str] = {}
+    token = os.getenv("TRADE_MANAGER_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    timeout = safe_float("TRADE_MANAGER_TIMEOUT", 5.0)
+    return payload, headers, timeout
+
+
+def _handle_trade_response(
+    resp: requests.Response | httpx.Response, symbol: str, start: float
+) -> tuple[bool, float, str | None]:
+    """Return success flag, elapsed time and error message."""
+
+    elapsed = time.time() - start
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
+        error = "invalid JSON"
+        return False, elapsed, error
+
+    error: str | None = None
+    if resp.status_code != 200:
+        error = f"HTTP {resp.status_code}"
+    elif data.get("error"):
+        error = str(data.get("error"))
+    elif data.get("status") not in (None, "ok", "success"):
+        error = str(data.get("status"))
+
+    return error is None, elapsed, error
+
+
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def send_trade(
     symbol: str,
@@ -244,60 +295,33 @@ def send_trade(
 
     Returns ``True`` when the trade manager reports success, otherwise ``False``.
     """
+
     try:
-        timeout = safe_float("TRADE_MANAGER_TIMEOUT", 5.0)
         start = time.time()
-        payload = {"symbol": symbol, "side": side, "price": price}
-        if tp is not None:
-            payload["tp"] = tp
-        if sl is not None:
-            payload["sl"] = sl
-        if trailing_stop is not None:
-            payload["trailing_stop"] = trailing_stop
-        headers = {}
-        token = os.getenv("TRADE_MANAGER_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        payload, headers, timeout = _build_trade_payload(
+            symbol, side, price, tp, sl, trailing_stop
+        )
         resp = requests.post(
             f"{env['trade_manager_url']}/open_position",
             json=payload,
             timeout=timeout,
             headers=headers or None,
         )
-        elapsed = time.time() - start
+        ok, elapsed, error = _handle_trade_response(resp, symbol, start)
         if elapsed > CONFIRMATION_TIMEOUT:
             run_async(
                 send_telegram_alert(
                     f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
                 )
             )
-        try:
-            data = resp.json()
-        except ValueError:
-            data = {}
-            logger.error("Trade manager returned invalid JSON")
-            run_async(
-                send_telegram_alert(
-                    f"Trade manager invalid response for {symbol}"
-                )
-            )
-            return False
-        error: str | None = None
-        if resp.status_code != 200:
-            error = f"HTTP {resp.status_code}"
-        elif data.get("error"):
-            error = str(data.get("error"))
-        elif data.get("status") not in (None, "ok", "success"):
-            error = str(data.get("status"))
-        if error:
+        if not ok:
             logger.error("Trade manager error: %s", error)
             run_async(
                 send_telegram_alert(
                     f"Trade manager responded with {error} for {symbol}"
                 )
             )
-            return False
-        return True
+        return ok
     except requests.RequestException as exc:
         logger.error("Trade manager request error: %s", exc)
         run_async(
@@ -319,20 +343,12 @@ async def send_trade_async(
     trailing_stop: float | None = None,
 ) -> bool:
     """Asynchronously send trade request to trade manager."""
+
     try:
-        timeout = safe_float("TRADE_MANAGER_TIMEOUT", 5.0)
         start = time.time()
-        payload = {"symbol": symbol, "side": side, "price": price}
-        if tp is not None:
-            payload["tp"] = tp
-        if sl is not None:
-            payload["sl"] = sl
-        if trailing_stop is not None:
-            payload["trailing_stop"] = trailing_stop
-        headers = {}
-        token = os.getenv("TRADE_MANAGER_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        payload, headers, timeout = _build_trade_payload(
+            symbol, side, price, tp, sl, trailing_stop
+        )
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{env['trade_manager_url']}/open_position",
@@ -340,34 +356,17 @@ async def send_trade_async(
                 timeout=timeout,
                 headers=headers or None,
             )
-        elapsed = time.time() - start
+        ok, elapsed, error = _handle_trade_response(resp, symbol, start)
         if elapsed > CONFIRMATION_TIMEOUT:
             await send_telegram_alert(
                 f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
             )
-        try:
-            data = resp.json()
-        except ValueError:
-            data = {}
-            logger.error("Trade manager returned invalid JSON")
-            await send_telegram_alert(
-                f"Trade manager invalid response for {symbol}"
-            )
-            return False
-        error: str | None = None
-        if resp.status_code != 200:
-            error = f"HTTP {resp.status_code}"
-        elif data.get("error"):
-            error = str(data.get("error"))
-        elif data.get("status") not in (None, "ok", "success"):
-            error = str(data.get("status"))
-        if error:
+        if not ok:
             logger.error("Trade manager error: %s", error)
             await send_telegram_alert(
                 f"Trade manager responded with {error} for {symbol}"
             )
-            return False
-        return True
+        return ok
     except httpx.HTTPError as exc:
         logger.error("Trade manager request error: %s", exc)
         await send_telegram_alert(
