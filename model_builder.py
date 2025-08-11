@@ -637,7 +637,9 @@ def _train_model_remote(
     labels: list[float] = []
     state = None
 
-    num_workers = min(4, os.cpu_count() or 1)
+    # Use a single worker to avoid multiprocessing overhead and crashes in
+    # environments where spawning subprocesses is restricted (e.g., CI)
+    num_workers = 0
     pin_memory = cuda_available
 
     for train_idx, val_idx in generate_time_series_splits(X_tensor, y_tensor, n_splits):
