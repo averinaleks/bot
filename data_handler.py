@@ -1641,11 +1641,6 @@ class DataHandler:
                         cache_obj = self.indicators_cache[cache_key]
                         cache_obj.update(df.droplevel("symbol"))
                         idx = df.droplevel("symbol").index
-                        base_df = self.ohlcv
-                        base_df.loc[
-                            df.index, cache_obj.df.columns
-                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
-                        self.ohlcv = base_df
                         self.indicators[symbol] = cache_obj
 
                 if fetch_needed and obj_ref is not None:
@@ -1677,11 +1672,6 @@ class DataHandler:
                         self.indicators_cache[cache_key] = result
                         self.indicators[symbol] = result
                         idx = df.droplevel("symbol").index
-                        base_df = self.ohlcv
-                        base_df.loc[
-                            df.index, result.df.columns
-                        ] = result.df.loc[idx, result.df.columns].to_numpy()
-                        self.ohlcv = base_df
             else:
                 fetch_needed = False
                 obj_ref = None
