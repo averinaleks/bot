@@ -1210,17 +1210,23 @@ class TradeManager:
                         "symbol" in self.positions.index.names
                         and symbol in self.positions.index.get_level_values("symbol")
                     ):
-                        await self.check_trailing_stop(symbol, current_price)
+                        res = self.check_trailing_stop(symbol, current_price)
+                        if inspect.isawaitable(res):
+                            await res
                     if (
                         "symbol" in self.positions.index.names
                         and symbol in self.positions.index.get_level_values("symbol")
                     ):
-                        await self.check_stop_loss_take_profit(symbol, current_price)
+                        res = self.check_stop_loss_take_profit(symbol, current_price)
+                        if inspect.isawaitable(res):
+                            await res
                     if (
                         "symbol" in self.positions.index.names
                         and symbol in self.positions.index.get_level_values("symbol")
                     ):
-                        await self.check_exit_signal(symbol, current_price)
+                        res = self.check_exit_signal(symbol, current_price)
+                        if inspect.isawaitable(res):
+                            await res
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
@@ -1367,7 +1373,7 @@ class TradeManager:
             await self.model_builder.retrain_symbol(symbol)
             self._min_retrain_size.pop(symbol, None)
             return True
-        except (RuntimeError, ValueError, httpx.HTTPError) as exc:
+        except Exception as exc:  # noqa: BLE001 - broad to catch custom HTTP errors
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 400:
                 self._min_retrain_size[symbol] = size
@@ -1691,16 +1697,20 @@ class TradeManager:
                     if empty:
                         continue
                     current_price = df["close"].iloc[-1]
-                    params = await self.data_handler.parameter_optimizer.optimize(
-                        symbol
-                    )
-                    await self.open_position(symbol, signal, current_price, params)
+                    opt_res = self.data_handler.parameter_optimizer.optimize(symbol)
+                    if inspect.isawaitable(opt_res):
+                        params = await opt_res
+                    else:
+                        params = opt_res
+                    op_res = self.open_position(symbol, signal, current_price, params)
+                    if inspect.isawaitable(op_res):
+                        await op_res
                 await asyncio.sleep(
                     self.config["check_interval"] / len(self.data_handler.usdt_pairs)
                 )
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError, httpx.HTTPError) as e:
+            except Exception as e:  # noqa: BLE001 - broad for robustness
                 logger.exception(
                     "Error processing %s (%s): %s",
                     symbol,
