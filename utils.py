@@ -21,6 +21,7 @@ from io import StringIO, BytesIO
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 try:
     from numba import jit, prange, NumbaPerformanceWarning  # type: ignore
+
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
     logging.getLogger("TradingBot").warning("Numba import failed: %s", exc)
@@ -34,7 +35,9 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
     def prange(*args):  # type: ignore
         return range(*args)
 
+
 import httpx
+
 if os.getenv("TEST_MODE") == "1":
     import types
     import sys
@@ -58,6 +61,8 @@ except ImportError as exc:  # pragma: no cover - allow missing telegram package
 
     class Forbidden(Exception):
         pass
+
+
 from pybit.unified_trading import HTTP
 
 # Mapping from ccxt/ccxtpro style timeframes to Bybit interval strings
@@ -98,6 +103,7 @@ def is_cuda_available() -> bool:
 
     try:  # Lazy import to avoid heavy initialization when unused
         import torch  # type: ignore
+
         if not torch.backends.cuda.is_built():
             return False
         return torch.cuda.is_available()
@@ -123,8 +129,15 @@ async def handle_rate_limits(exchange) -> None:
     """Sleep if Bybit rate limit is close to exhaustion."""
     headers = getattr(exchange, "last_response_headers", {}) or {}
     try:
-        remaining = int(headers.get("X-Bapi-Limit-Status", headers.get("x-bapi-limit-status", 0)))
-        reset_ts = int(headers.get("X-Bapi-Limit-Reset-Timestamp", headers.get("x-bapi-limit-reset-timestamp", 0)))
+        remaining = int(
+            headers.get("X-Bapi-Limit-Status", headers.get("x-bapi-limit-status", 0))
+        )
+        reset_ts = int(
+            headers.get(
+                "X-Bapi-Limit-Reset-Timestamp",
+                headers.get("x-bapi-limit-reset-timestamp", 0),
+            )
+        )
     except ValueError:
         return
     if remaining and remaining <= 5:
@@ -183,6 +196,8 @@ class BybitSDKAsync:
         )
         self.last_http_status = 200
         self.last_response_headers: Dict = {}
+        # Clear credentials after initializing the client to avoid lingering secrets
+        api_key = api_secret = None
 
     def _call_client(self, method: str, *args, **kwargs):
         res = None
@@ -375,12 +390,11 @@ class BybitSDKAsync:
 
     async def fetch_balance(self) -> Dict:
         def _sync():
-            res = self._call_client(
-                "get_wallet_balance", accountType="UNIFIED"
-            )
+            res = self._call_client("get_wallet_balance", accountType="UNIFIED")
             return res.get("result", {})
 
         return await asyncio.to_thread(_sync)
+
 
 logger = logging.getLogger("TradingBot")
 level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -418,13 +432,16 @@ if not logger.handlers:
 
 class TelegramLogger(logging.Handler):
     """Logging handler that forwards records to a Telegram chat."""
+
     _queue: asyncio.Queue | None = None
     _worker_task: asyncio.Task | None = None
     _worker_lock = asyncio.Lock()
     _bot = None
     _stop_event: asyncio.Event | None = None
 
-    def __init__(self, bot, chat_id, level=logging.NOTSET, max_queue_size: int | None = None):
+    def __init__(
+        self, bot, chat_id, level=logging.NOTSET, max_queue_size: int | None = None
+    ):
         super().__init__(level)
         self.bot = bot
         self.chat_id = chat_id
@@ -612,9 +629,7 @@ class TelegramUpdateListener:
     async def listen(self, handler):
         while not self._stop_event.is_set():
             try:
-                updates = await self.bot.get_updates(
-                    offset=self.offset + 1, timeout=10
-                )
+                updates = await self.bot.get_updates(offset=self.offset + 1, timeout=10)
                 for upd in updates:
                     self.offset = upd.update_id
                     try:
@@ -736,6 +751,7 @@ def calculate_volume_profile(prices, volumes, bins=50):
 
 class HistoricalDataCache:
     """Manage on-disk storage for historical OHLCV data."""
+
     def __init__(self, cache_dir="/app/cache"):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -769,7 +785,7 @@ class HistoricalDataCache:
         if disk_usage.free / (1024**3) < 0.5:
             logger.warning(
                 "Недостаточно свободного места на диске: %.2f ГБ",
-                disk_usage.free / (1024 ** 3),
+                disk_usage.free / (1024**3),
             )
             self._aggressive_clean()
             return False
@@ -897,10 +913,16 @@ class HistoricalDataCache:
     def load_cached_data(self, symbol, timeframe):
         try:
             safe_symbol = sanitize_symbol(symbol)
-            filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.parquet")
-            legacy_json = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz")
+            filename = os.path.join(
+                self.cache_dir, f"{safe_symbol}_{timeframe}.parquet"
+            )
+            legacy_json = os.path.join(
+                self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz"
+            )
             old_gzip = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
-            old_filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl")
+            old_filename = os.path.join(
+                self.cache_dir, f"{safe_symbol}_{timeframe}.pkl"
+            )
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:
                     logger.info("Кэш для %s_%s устарел, удаление", symbol, timeframe)

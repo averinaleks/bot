@@ -91,8 +91,10 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
 
     def _ray_remote(func=None, **_kwargs):
         if func is None:
+
             def wrapper(f):
                 return _RayRemoteFunction(f)
+
             return wrapper
         return _RayRemoteFunction(func)
 
@@ -106,11 +108,15 @@ from flask import Flask, jsonify
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
-from bot.utils import (BybitSDKAsync, HistoricalDataCache, TelegramLogger,
-                       bybit_interval)
+from bot.utils import BybitSDKAsync, HistoricalDataCache, TelegramLogger, bybit_interval
 from bot.utils import calculate_volume_profile as utils_volume_profile
-from bot.utils import (check_dataframe_empty, filter_outliers_zscore,
-                       is_cuda_available, logger, safe_api_call)
+from bot.utils import (
+    check_dataframe_empty,
+    filter_outliers_zscore,
+    is_cuda_available,
+    logger,
+    safe_api_call,
+)
 
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
 
@@ -138,6 +144,7 @@ def _instrument_methods(cls: type) -> type:
         if asyncio.iscoroutinefunction(attr):
             setattr(cls, name, _profile_async(attr))
     return cls
+
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import ccxtpro
@@ -169,6 +176,7 @@ def _init_cuda() -> None:
         if GPU_AVAILABLE:
             try:
                 import cupy as cupy_mod  # type: ignore
+
                 cp = cupy_mod  # type: ignore
             except Exception:  # pragma: no cover - import guard
                 GPU_AVAILABLE = False
@@ -187,6 +195,7 @@ def create_exchange() -> BybitSDKAsync:
         If required API credentials are missing.
     """
     if os.getenv("TEST_MODE") == "1":
+
         class _DummyEx:
             async def load_markets(self) -> dict:
                 return {}
@@ -194,7 +203,13 @@ def create_exchange() -> BybitSDKAsync:
             async def fetch_ticker(self, symbol: str) -> dict:
                 return {"last": 100.0, "quoteVolume": 1.0}
 
-            async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200, since: int | None = None):
+            async def fetch_ohlcv(
+                self,
+                symbol: str,
+                timeframe: str,
+                limit: int = 200,
+                since: int | None = None,
+            ):
                 return generate_synthetic_ohlcv(timeframe, limit)
 
             async def fetch_order_book(self, symbol: str, limit: int = 10) -> dict:
@@ -208,13 +223,16 @@ def create_exchange() -> BybitSDKAsync:
 
         return _DummyEx()  # type: ignore[return-value]
 
-    api_key = os.environ.get("BYBIT_API_KEY", "")
-    api_secret = os.environ.get("BYBIT_API_SECRET", "")
+    api_key = os.environ.pop("BYBIT_API_KEY", "")
+    api_secret = os.environ.pop("BYBIT_API_SECRET", "")
     if not api_key or not api_secret:
         raise RuntimeError(
             "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
         )
-    return BybitSDKAsync(api_key=api_key, api_secret=api_secret)
+    client = BybitSDKAsync(api_key=api_key, api_secret=api_secret)
+    # Best effort to clear sensitive credentials from memory
+    api_key = api_secret = None
+    return client
 
 
 def _parse_timeframe_ms(timeframe: str) -> int:
@@ -246,7 +264,16 @@ def generate_synthetic_ohlcv(timeframe: str, limit: int) -> list[list[float]]:
         low_p = open_p - abs(np.random.randn())
         close_p = open_p + np.random.randn() * 0.5
         volume = abs(np.random.randn()) * 10
-        result.append([ts, float(open_p), float(high_p), float(low_p), float(close_p), float(volume)])
+        result.append(
+            [
+                ts,
+                float(open_p),
+                float(high_p),
+                float(low_p),
+                float(close_p),
+                float(volume),
+            ]
+        )
     return result
 
 
@@ -379,7 +406,9 @@ def _rsi_update_cupy(
     loss = cp.maximum(-diff, 0.0)
     avg_gain = (prev_gain * (window - 1) + gain) / window
     avg_loss = (prev_loss * (window - 1) + loss) / window
-    rsi = cp.where(avg_loss == 0, cp.float64(100.0), 100 - 100 / (1 + avg_gain / avg_loss))
+    rsi = cp.where(
+        avg_loss == 0, cp.float64(100.0), 100 - 100 / (1 + avg_gain / avg_loss)
+    )
     return float(rsi), float(avg_gain), float(avg_loss)
 
 
@@ -451,7 +480,9 @@ def _adx_update_cupy(
     up_move = cp.float64(high - prev_high)
     down_move = cp.float64(prev_low - low)
     plus_dm = cp.where((up_move > down_move) & (up_move > 0), up_move, cp.float64(0.0))
-    minus_dm = cp.where((down_move > up_move) & (down_move > 0), down_move, cp.float64(0.0))
+    minus_dm = cp.where(
+        (down_move > up_move) & (down_move > 0), down_move, cp.float64(0.0)
+    )
     dm_plus = (prev_dm_plus * (window - 1) + plus_dm) / window
     dm_minus = (prev_dm_minus * (window - 1) + minus_dm) / window
     tr_sum = atr * window
@@ -524,7 +555,10 @@ class IndicatorsCache:
                     else:
                         self._rsi_avg_gain = None
                         self._rsi_avg_loss = None
-                except (KeyError, ValueError) as e:  # pragma: no cover - log and fallback
+                except (
+                    KeyError,
+                    ValueError,
+                ) as e:  # pragma: no cover - log and fallback
                     logger.error("RSI calculation failed: %s", e)
                     self.rsi = pd.Series(np.zeros(len(df)), index=df.index)
                     self._rsi_avg_gain = None
@@ -550,8 +584,12 @@ class IndicatorsCache:
                     low_np = df["low"].to_numpy()
                     up_move = high_np[1:] - high_np[:-1]
                     down_move = low_np[:-1] - low_np[1:]
-                    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
-                    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+                    plus_dm = np.where(
+                        (up_move > down_move) & (up_move > 0), up_move, 0.0
+                    )
+                    minus_dm = np.where(
+                        (down_move > up_move) & (down_move > 0), down_move, 0.0
+                    )
                     dm_plus = plus_dm[:adx_window].sum()
                     dm_minus = minus_dm[:adx_window].sum()
                     for pdm, mdm in zip(plus_dm[adx_window:], minus_dm[adx_window:]):
@@ -725,7 +763,12 @@ class IndicatorsCache:
                 new_df.loc[ts, "ema200"] = self.last_ema200
             if hasattr(self, "atr"):
                 new_df.loc[ts, "atr"] = self.last_atr
-            if hasattr(self, "_rsi_window") and self._rsi_avg_gain is not None and self._rsi_avg_loss is not None and self.last_close is not None:
+            if (
+                hasattr(self, "_rsi_window")
+                and self._rsi_avg_gain is not None
+                and self._rsi_avg_loss is not None
+                and self.last_close is not None
+            ):
                 if GPU_AVAILABLE:
                     rsi_val, self._rsi_avg_gain, self._rsi_avg_loss = _rsi_update_cupy(
                         self._rsi_avg_gain,
@@ -809,7 +852,6 @@ class IndicatorsCache:
         self.df["ulcer_index"] = self.ulcer_index
         self.last_ulcer_index = float(self.ulcer_index.iloc[-1])
         self._update_volume_profile()
-
 
 
 def _make_calc_indicators_remote(use_gpu: bool, gpu_initialized: bool = False):
@@ -1025,7 +1067,9 @@ class DataHandler:
         """Return the latest ATR value for a symbol, recalculating if missing."""
         async with self.ohlcv_lock:
             df = self.ohlcv
-            if "symbol" in df.index.names and symbol in df.index.get_level_values("symbol"):
+            if "symbol" in df.index.names and symbol in df.index.get_level_values(
+                "symbol"
+            ):
                 sub_df = df.xs(symbol, level="symbol", drop_level=False)
             else:
                 return 0.0
@@ -1105,7 +1149,7 @@ class DataHandler:
 
             mem = psutil.virtual_memory()
             avail_bytes = getattr(mem, "available", 0)
-            avail_gb = avail_bytes / (1024 ** 3)
+            avail_gb = avail_bytes / (1024**3)
             batch_size = self.config.get("history_batch_size", 10)
             batch_size = max(1, min(batch_size, int(max(1, avail_gb))))
             logger.info(
@@ -1123,6 +1167,7 @@ class DataHandler:
                         history_limit,
                         cache_prefix=prefix,
                     )
+
             for symbol in self.usdt_pairs:
                 orderbook = await self.fetch_orderbook(symbol)
                 bid_volume = (
@@ -1146,9 +1191,7 @@ class DataHandler:
                         )
                     )
                 )
-                task_info.append(
-                    ("history", symbol, self.config["timeframe"], "")
-                )
+                task_info.append(("history", symbol, self.config["timeframe"], ""))
                 if self.config["secondary_timeframe"] != self.config["timeframe"]:
                     tasks.append(
                         asyncio.create_task(
@@ -1236,7 +1279,9 @@ class DataHandler:
                     "Удаляем пары с ошибками загрузки: %s",
                     ", ".join(sorted(failed_symbols)),
                 )
-                self.usdt_pairs = [s for s in self.usdt_pairs if s not in failed_symbols]
+                self.usdt_pairs = [
+                    s for s in self.usdt_pairs if s not in failed_symbols
+                ]
                 for sym in failed_symbols:
                     self.symbol_priority.pop(sym, None)
             await self.release_memory()
@@ -1267,9 +1312,10 @@ class DataHandler:
                     volume = 0.0
                 return sym, volume
 
-        min_age = self.config.get("min_data_length", 0) * pd.Timedelta(
-            self.config["timeframe"]
-        ).total_seconds()
+        min_age = (
+            self.config.get("min_data_length", 0)
+            * pd.Timedelta(self.config["timeframe"]).total_seconds()
+        )
         now = pd.Timestamp.utcnow()
         batch = []
         batch_size = self.config.get("max_volume_batch", 50)
@@ -1436,13 +1482,17 @@ class DataHandler:
                         ohlcv,
                         columns=["timestamp", "open", "high", "low", "close", "volume"],
                     )
-                    df_part["timestamp"] = pd.to_datetime(df_part["timestamp"], unit="ms", utc=True)
+                    df_part["timestamp"] = pd.to_datetime(
+                        df_part["timestamp"], unit="ms", utc=True
+                    )
                     df_part = df_part.set_index("timestamp")
                     all_data.append(df_part)
                     remaining -= len(df_part)
                     if len(df_part) < limit:
                         break
-                    since = int(df_part.index[0].timestamp() * 1000) - timeframe_ms * limit
+                    since = (
+                        int(df_part.index[0].timestamp() * 1000) - timeframe_ms * limit
+                    )
                 if not all_data:
                     return symbol, pd.DataFrame()
                 df = pd.concat(all_data).sort_index().drop_duplicates()
@@ -1574,7 +1624,9 @@ class DataHandler:
                             )
                         else:
                             base = self.ohlcv
-                        self.ohlcv = pd.concat([base, df], ignore_index=False).sort_index()
+                        self.ohlcv = pd.concat(
+                            [base, df], ignore_index=False
+                        ).sort_index()
                 else:
                     if self.use_polars:
                         df_pl = (
@@ -1598,7 +1650,9 @@ class DataHandler:
                             )
                         else:
                             base = self.ohlcv_2h
-                        self.ohlcv_2h = pd.concat([base, df], ignore_index=False).sort_index()
+                        self.ohlcv_2h = pd.concat(
+                            [base, df], ignore_index=False
+                        ).sort_index()
                 self.funding_rates[symbol] = funding_rate
                 prev = self.open_interest.get(symbol)
                 if prev and prev != 0:
@@ -1638,9 +1692,9 @@ class DataHandler:
                         idx = df.droplevel("symbol").index
                         self.indicators[symbol] = cache_obj
                         base_df = self.ohlcv
-                        base_df.loc[
-                            df.index, cache_obj.df.columns
-                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
+                        base_df.loc[df.index, cache_obj.df.columns] = cache_obj.df.loc[
+                            idx, cache_obj.df.columns
+                        ].to_numpy()
                         self.ohlcv = base_df
 
                 if fetch_needed and obj_ref is not None:
@@ -1673,9 +1727,9 @@ class DataHandler:
                         self.indicators[symbol] = result
                         idx = df.droplevel("symbol").index
                         base_df = self.ohlcv
-                        base_df.loc[
-                            df.index, result.df.columns
-                        ] = result.df.loc[idx, result.df.columns].to_numpy()
+                        base_df.loc[df.index, result.df.columns] = result.df.loc[
+                            idx, result.df.columns
+                        ].to_numpy()
                         self.ohlcv = base_df
             else:
                 fetch_needed = False
@@ -1694,9 +1748,9 @@ class DataHandler:
                         cache_obj.update(df.droplevel("symbol"))
                         idx = df.droplevel("symbol").index
                         base_df_2h = self.ohlcv_2h
-                        base_df_2h.loc[
-                            df.index, cache_obj.df.columns
-                        ] = cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
+                        base_df_2h.loc[df.index, cache_obj.df.columns] = (
+                            cache_obj.df.loc[idx, cache_obj.df.columns].to_numpy()
+                        )
                         self.ohlcv_2h = base_df_2h
                         self.indicators_2h[symbol] = cache_obj
 
@@ -1721,7 +1775,10 @@ class DataHandler:
                             "macd",
                             "volume_profile",
                         ]:
-                            if hasattr(result, attr) and getattr(result, attr) is not None:
+                            if (
+                                hasattr(result, attr)
+                                and getattr(result, attr) is not None
+                            ):
                                 series = getattr(result, attr)
                                 if isinstance(series, (pd.Series, pd.DataFrame)):
                                     setattr(result, attr, series.copy(deep=True))
@@ -1730,9 +1787,9 @@ class DataHandler:
                         self.indicators_2h[symbol] = result
                         idx = df.droplevel("symbol").index
                         base_df_2h = self.ohlcv_2h
-                        base_df_2h.loc[
-                            df.index, result.df.columns
-                        ] = result.df.loc[idx, result.df.columns].to_numpy()
+                        base_df_2h.loc[df.index, result.df.columns] = result.df.loc[
+                            idx, result.df.columns
+                        ].to_numpy()
                         self.ohlcv_2h = base_df_2h
             if self.feature_callback:
                 asyncio.create_task(self.feature_callback(symbol))
@@ -1756,7 +1813,10 @@ class DataHandler:
                                     current_time
                                     - pd.Timedelta(seconds=self.config["forget_window"])
                                 ).to_pydatetime()
-                                if not hasattr(self._ohlcv, "dtypes") or self._ohlcv.dtypes[1] == pl.Object:
+                                if (
+                                    not hasattr(self._ohlcv, "dtypes")
+                                    or self._ohlcv.dtypes[1] == pl.Object
+                                ):
                                     self._ohlcv = pl.from_pandas(
                                         self._ohlcv.to_pandas()
                                     )
@@ -1778,7 +1838,10 @@ class DataHandler:
                                     current_time
                                     - pd.Timedelta(seconds=self.config["forget_window"])
                                 ).to_pydatetime()
-                                if not hasattr(self._ohlcv_2h, "dtypes") or self._ohlcv_2h.dtypes[1] == pl.Object:
+                                if (
+                                    not hasattr(self._ohlcv_2h, "dtypes")
+                                    or self._ohlcv_2h.dtypes[1] == pl.Object
+                                ):
                                     self._ohlcv_2h = pl.from_pandas(
                                         self._ohlcv_2h.to_pandas()
                                     )
@@ -1827,24 +1890,40 @@ class DataHandler:
         try:
             async with self.ohlcv_lock:
                 if self.use_polars:
-                    df = self._ohlcv.to_pandas() if self._ohlcv.height > 0 else pd.DataFrame()
+                    df = (
+                        self._ohlcv.to_pandas()
+                        if self._ohlcv.height > 0
+                        else pd.DataFrame()
+                    )
                 else:
                     df = self._ohlcv
                 if not df.empty:
                     df = df.groupby(level="symbol").tail(retention)
                 if self.use_polars:
-                    self._ohlcv = pl.from_pandas(df.reset_index()) if not df.empty else pl.DataFrame()
+                    self._ohlcv = (
+                        pl.from_pandas(df.reset_index())
+                        if not df.empty
+                        else pl.DataFrame()
+                    )
                 else:
                     self._ohlcv = df
             async with self.ohlcv_2h_lock:
                 if self.use_polars:
-                    df2 = self._ohlcv_2h.to_pandas() if self._ohlcv_2h.height > 0 else pd.DataFrame()
+                    df2 = (
+                        self._ohlcv_2h.to_pandas()
+                        if self._ohlcv_2h.height > 0
+                        else pd.DataFrame()
+                    )
                 else:
                     df2 = self._ohlcv_2h
                 if not df2.empty:
                     df2 = df2.groupby(level="symbol").tail(retention)
                 if self.use_polars:
-                    self._ohlcv_2h = pl.from_pandas(df2.reset_index()) if not df2.empty else pl.DataFrame()
+                    self._ohlcv_2h = (
+                        pl.from_pandas(df2.reset_index())
+                        if not df2.empty
+                        else pl.DataFrame()
+                    )
                 else:
                     self._ohlcv_2h = df2
             logger.info("История обрезана до последних %s баров", retention)
@@ -1859,7 +1938,9 @@ class DataHandler:
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(obj, f)
 
-            await asyncio.to_thread(_json_dump, {"priority": priority, "item": item}, filename)
+            await asyncio.to_thread(
+                _json_dump, {"priority": priority, "item": item}, filename
+            )
             try:
                 self.disk_buffer.put_nowait(filename)
             except asyncio.QueueFull:
@@ -1879,6 +1960,7 @@ class DataHandler:
             except asyncio.QueueEmpty:
                 break
             try:
+
                 def _json_load(path):
                     with open(path, "r", encoding="utf-8") as f:
                         return json.load(f)
@@ -1889,7 +1971,13 @@ class DataHandler:
                 await self.ws_queue.put((priority, item))
                 await asyncio.to_thread(os.remove, filename)
                 logger.info("Сообщение загружено из дискового буфера: %s", filename)
-            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
+            except (
+                OSError,
+                ValueError,
+                TypeError,
+                KeyError,
+                json.JSONDecodeError,
+            ) as e:
                 logger.error("Ошибка загрузки из дискового буфера: %s", e)
             finally:
                 self.disk_buffer.task_done()
@@ -2804,7 +2892,10 @@ def price(symbol: str):
                     "volume": float(v),
                 }
                 return float(c)
-        except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network failures
+        except (
+            httpx.HTTPError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover - network failures
             logger.error("OHLCV fetch failed for %s: %s", sym, exc)
         try:
             ticker = await safe_api_call(exch, "fetch_ticker", sym)
@@ -2818,7 +2909,10 @@ def price(symbol: str):
                 "volume": float(ticker.get("quoteVolume") or 0.0),
             }
             return price_val
-        except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network failures
+        except (
+            httpx.HTTPError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover - network failures
             logger.error("Ticker fetch failed for %s: %s", sym, exc)
             return DEFAULT_PRICE
 
