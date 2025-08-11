@@ -23,8 +23,8 @@ jobs:
         with:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
-      # GHCR requires authentication even for pulls. Use built-in GitHub token.
-      - name: Login to GHCR
+      - name: Login to GHCR (optional)
+        if: ${{ secrets.TOKEN != '' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
