@@ -23,7 +23,7 @@
    отдельно, указав дополнительный индекс:
 
    ```bash
-   pip install torch>=2.7.2 torchvision>=0.22.2 --extra-index-url https://download.pytorch.org/whl/cu124
+   pip install torch>=2.7.1 torchvision>=0.22.1 --extra-index-url https://download.pytorch.org/whl/cu124
    ```
    Эта команда ставит версии с поддержкой CUDA 12.4. Выполните её до
    `python -m pip install -r requirements.txt` (или вместо него, если
