@@ -11,10 +11,12 @@ import os
 import sys
 import types
 import json
+import logging
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
-except Exception:  # noqa: W0703 - allow missing pandas
+except ImportError as exc:  # noqa: W0703 - allow missing pandas
+    logging.getLogger(__name__).warning("pandas import failed: %s", exc)
     pd = types.ModuleType("pandas")
     pd.DataFrame = dict
     pd.Series = list
@@ -78,7 +80,8 @@ import contextlib
 
 try:  # pragma: no cover - optional dependency
     import torch  # type: ignore
-except Exception:  # noqa: W0703 - optional dependency may not be installed
+except ImportError as exc:  # noqa: W0703 - optional dependency may not be installed
+    logging.getLogger(__name__).warning("torch import failed: %s", exc)
     torch = types.ModuleType("torch")
     torch.tensor = lambda *a, **k: a[0]
     torch.float32 = float
@@ -1174,7 +1177,7 @@ class TradeManager:
                 await asyncio.sleep(self.performance_window / 10)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (httpx.HTTPError, ValueError, RuntimeError) as e:
                 logger.exception(
                     "Performance monitoring error (%s): %s",
                     type(e).__name__,
@@ -1221,7 +1224,7 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (ValueError, RuntimeError, KeyError) as e:
                 logger.exception(
                     "Error managing positions (%s): %s",
                     type(e).__name__,
@@ -1364,7 +1367,7 @@ class TradeManager:
             await self.model_builder.retrain_symbol(symbol)
             self._min_retrain_size.pop(symbol, None)
             return True
-        except Exception as exc:
+        except (RuntimeError, ValueError, httpx.HTTPError) as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 400:
                 self._min_retrain_size[symbol] = size
@@ -1590,7 +1593,7 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (ValueError, RuntimeError) as e:
                 logger.exception(
                     "Error processing ranked signals (%s): %s",
                     type(e).__name__,
@@ -1646,7 +1649,7 @@ class TradeManager:
             fut = asyncio.run_coroutine_threadsafe(self.stop(), self.loop)
             try:
                 fut.result()
-            except Exception as e:
+            except (RuntimeError, ValueError) as e:
                 logger.exception("Error awaiting stop (%s): %s", type(e).__name__, e)
         else:
             try:
@@ -1659,7 +1662,7 @@ class TradeManager:
                 ray.shutdown()
             elif hasattr(ray, "is_initialized") and ray.is_initialized():
                 ray.shutdown()
-        except Exception as exc:  # pragma: no cover - cleanup errors
+        except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Ray shutdown failed (%s): %s", type(exc).__name__, exc)
 
     async def process_symbol(self, symbol: str):
@@ -1697,7 +1700,7 @@ class TradeManager:
                 )
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (ValueError, RuntimeError, httpx.HTTPError) as e:
                 logger.exception(
                     "Error processing %s (%s): %s",
                     symbol,
@@ -1721,7 +1724,7 @@ try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
 except AttributeError:  # pragma: no cover - older Flask versions
     try:
         from a2wsgi import WSGIMiddleware  # type: ignore
-    except Exception as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
+    except ImportError as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
         logger.exception("a2wsgi import failed (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware
 
@@ -1812,7 +1815,7 @@ async def create_trade_manager() -> TradeManager | None:
             logger.error("Initial data load failed: %s", exc)
             await dh.stop()
             return None
-        except Exception as exc:
+        except (ValueError, ImportError) as exc:
             logger.exception(
                 "Failed to create ModelBuilder (%s): %s", type(exc).__name__, exc
             )
@@ -1850,7 +1853,7 @@ def _initialize_trade_manager() -> None:
             loop.run_forever()
         else:
             _ready_event.set()
-    except Exception as exc:
+    except (RuntimeError, ValueError) as exc:
         logger.exception(
             "TradeManager initialization failed (%s): %s",
             type(exc).__name__,

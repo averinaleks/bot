@@ -806,7 +806,7 @@ class ModelBuilder:
                 joblib.dump(state, f)
             self.last_save_time = time.time()
             logger.info("Состояние ModelBuilder сохранено")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.exception("Ошибка сохранения состояния ModelBuilder: %s", e)
             raise
 
@@ -899,7 +899,7 @@ class ModelBuilder:
                 self.threshold_offset.update(state.get("threshold_offset", {}))
                 self.base_thresholds.update(state.get("base_thresholds", {}))
                 logger.info("Состояние ModelBuilder загружено")
-        except Exception as e:
+        except (OSError, ValueError, KeyError, ImportError) as e:
             logger.exception("Ошибка загрузки состояния ModelBuilder: %s", e)
             raise
 
@@ -1365,7 +1365,7 @@ class ModelBuilder:
                 await asyncio.sleep(self.config["retrain_interval"])
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.exception("Ошибка цикла обучения: %s", e)
                 await asyncio.sleep(1)
                 continue
@@ -1476,7 +1476,7 @@ class ModelBuilder:
             await self.data_handler.telegram_logger.send_telegram_message(
                 f"🔍 SHAP {symbol}: {top_feats}"
             )
-        except Exception as e:
+        except (ValueError, RuntimeError, ImportError) as e:
             logger.exception("Ошибка вычисления SHAP для %s: %s", symbol, e)
             raise
 
@@ -1540,7 +1540,7 @@ class ModelBuilder:
                 )
             )
             return float(sharpe)
-        except Exception as e:
+        except (ValueError, ZeroDivisionError, KeyError) as e:
             logger.exception("Ошибка бектеста %s: %s", symbol, e)
             raise
 
@@ -1572,7 +1572,7 @@ class ModelBuilder:
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.exception("Backtest loop error: %s", e)
                 await asyncio.sleep(1)
 
@@ -1752,7 +1752,7 @@ class RLAgent:
                 for _ in range(max(1, timesteps // 1000)):
                     trainer.train()
                 self.models[symbol] = trainer
-            except Exception as e:
+            except (ImportError, RuntimeError, ValueError) as e:
                 logger.exception("Ошибка RLlib-обучения %s: %s", symbol, e)
                 raise
         elif framework == "catalyst":
@@ -1787,7 +1787,7 @@ class RLAgent:
                     num_epochs=max(1, timesteps // 1000),
                 )
                 self.models[symbol] = model
-            except Exception as e:
+            except (ImportError, RuntimeError, ValueError) as e:
                 logger.exception("Ошибка Catalyst-обучения %s: %s", symbol, e)
                 raise
         else:
@@ -1892,7 +1892,7 @@ def _load_model() -> None:
     if os.path.exists(MODEL_FILE):
         try:
             _model = joblib.load(MODEL_FILE)
-        except Exception as e:  # pragma: no cover - model may be corrupted
+        except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
             logger.exception("Failed to load model: %s", e)
             _model = None
 
