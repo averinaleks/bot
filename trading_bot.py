@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
-from bot.gpt_client import GPTClientError, query_gpt
+from bot.gpt_client import GPTClientError, query_gpt_async
 from bot.utils import logger
 
 load_dotenv()
@@ -522,7 +522,7 @@ async def main_async() -> None:
             strategy_code = (
                 Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
             )
-            gpt_result = query_gpt(
+            gpt_result = await query_gpt_async(
                 "Что ты видишь в этом коде:\n" + strategy_code
             )
             logger.info("GPT analysis: %s", gpt_result)
