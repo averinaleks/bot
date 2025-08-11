@@ -60,7 +60,8 @@ from sklearn.base import BaseEstimator
 try:
     from skopt import Optimizer as SkOptimizer
     from skopt.space import Integer, Real
-except Exception:  # pragma: no cover - optional dependency
+except ImportError as exc:  # pragma: no cover - optional dependency
+    logger.warning("skopt import failed: %s", exc)
     SkOptimizer = None  # type: ignore
     Integer = Real = None  # type: ignore
 
@@ -132,7 +133,8 @@ def _objective_remote(
                 else:
                     cp = np  # type: ignore
                     use_gpu = False
-            except Exception:  # pragma: no cover - fallback if CuPy unavailable
+            except ImportError as exc:  # pragma: no cover - fallback if CuPy unavailable
+                logger.warning("CuPy import failed, falling back to NumPy: %s", exc)
                 cp = np  # type: ignore
                 use_gpu = False
 
@@ -189,7 +191,7 @@ def _objective_remote(
             if np.isfinite(sharpe_ratio):
                 sharpe_ratios.append(sharpe_ratio)
         return float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0
-    except Exception as e:  # pragma: no cover - log and return
+    except (ImportError, ValueError, RuntimeError, KeyError) as e:  # pragma: no cover - log and return
         logger.exception("Ошибка в _objective_remote для %s: %s", symbol, e)
         raise
 
@@ -232,7 +234,7 @@ class ParameterOptimizer:
             upper = self.base_optimization_interval * 2
             interval = max(lower, min(upper, interval))
             return interval
-        except Exception as e:
+        except (ZeroDivisionError, ValueError, TypeError) as e:
             logger.exception(
                 "Ошибка расчёта интервала оптимизации для %s: %s",
                 symbol,
@@ -362,7 +364,7 @@ class ParameterOptimizer:
             if self.enable_grid_search:
                 try:
                     best_params = self._grid_search(df, symbol, best_params)
-                except Exception as e:
+                except (ValueError, RuntimeError) as e:
                     logger.exception("Ошибка GridSearchCV для %s: %s", symbol, e)
                     raise
             if not self.validate_params(best_params):
@@ -395,9 +397,9 @@ class ParameterOptimizer:
                                 await tl.send_telegram_message(
                                     f"Sharpe ratio drop for {symbol}: {holdout_score:.3f} vs {best_value:.3f}"
                                 )
-                            except Exception:
-                                logger.exception("Failed to send Telegram warning")
-            except Exception as e:
+                            except (OSError, RuntimeError) as exc:
+                                logger.exception("Failed to send Telegram warning: %s", exc)
+            except (ValueError, RuntimeError, KeyError) as e:
                 logger.exception("Ошибка hold-out проверки для %s: %s", symbol, e)
 
             logger.info(
@@ -406,7 +408,7 @@ class ParameterOptimizer:
                 best_params,
             )
             return best_params
-        except Exception as e:
+        except (ValueError, RuntimeError, KeyError, ImportError) as e:
             logger.exception("Ошибка оптимизации для %s: %s", symbol, e)
             raise
 
@@ -489,7 +491,7 @@ class ParameterOptimizer:
                 return False
 
             return True
-        except Exception as e:
+        except (KeyError, ValueError, TypeError) as e:
             logger.exception("Ошибка валидации параметров: %s", e)
             raise
 
@@ -548,7 +550,7 @@ class ParameterOptimizer:
                 self.config["timeframe"],
                 self.n_splits,
             )
-        except Exception as e:
+        except (ValueError, RuntimeError, KeyError) as e:
             logger.exception("Ошибка в objective для %s: %s", symbol, e)
             raise
 
@@ -630,6 +632,6 @@ class ParameterOptimizer:
                 else:
                     logger.error("Ошибка оптимизации для %s: %s", symbol, result)
             return self.best_params_by_symbol
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.exception("Ошибка в optimize_all: %s", e)
             raise
