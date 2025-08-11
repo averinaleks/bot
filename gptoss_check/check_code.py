@@ -1,5 +1,5 @@
 import os
-import random
+import secrets
 import time
 from pathlib import Path
 
@@ -46,7 +46,7 @@ def query(prompt: str) -> str:
         except RequestException as err:
             if attempt == max_retries:
                 raise RuntimeError(f"Ошибка запроса к GPT-OSS API: {err}") from err
-            delay = backoff + random.uniform(0, 0.5)
+            delay = backoff + secrets.SystemRandom().uniform(0, 0.5)
             print(f"Попытка {attempt} не удалась, ожидание {delay:.2f} с")
             time.sleep(delay)
 def send_telegram(msg: str) -> None:
