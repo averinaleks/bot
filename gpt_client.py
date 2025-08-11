@@ -64,14 +64,14 @@ async def query_gpt_async(prompt: str) -> str:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json={"prompt": prompt}, timeout=5)
             response.raise_for_status()
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+                raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
-    try:
-        data = response.json()
-    except ValueError as exc:
-        logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
-        raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
     try:
         return data["choices"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:
