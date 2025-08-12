@@ -1,13 +1,17 @@
-# Set DOCKERFILE=Dockerfile.cpu to build a CPU-only image
 services:
   gptoss:
     build:
       context: .
       dockerfile: Dockerfile.gptoss
-    command: >
-      --model openai/gpt-oss-20b
-      --host 0.0.0.0 --port 8000
-      --device cpu
+    command:
+      - --model
+      - openai/gpt-oss-20b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --device
+      - cpu
     ports:
       - "8003:8000"
     environment:
