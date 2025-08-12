@@ -242,8 +242,10 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8002'))
-    # Default to localhost; set HOST=0.0.0.0 to expose the service externally.
+    # По умолчанию слушаем только локальный интерфейс.
     host = os.environ.get('HOST', '127.0.0.1')
+    if host.strip() == '0.0.0.0':
+        raise ValueError('HOST=0.0.0.0 запрещён из соображений безопасности')
     if host != '127.0.0.1':
         app.logger.warning(
             'Using non-local host %s; ensure this exposure is intended', host
