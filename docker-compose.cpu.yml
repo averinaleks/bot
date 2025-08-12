@@ -1,19 +1,5 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:latest
-    command:
-      - "--model"
-      - "openai/gpt-oss-20b"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
-      - "8000"
-      - "--device"
-      - "cpu"
-    ports:
-      - "8003:8000"
-    environment:
-      VLLM_LOGGING_LEVEL: DEBUG
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
