@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from html.parser import HTMLParser
 
-DEFAULT_MAX_FEED = 1_000_000  # 1 MB
+DEFAULT_MAX_FEED = 1_000_000  # 1 MB in bytes
 
 
 class SafeHTMLParser(HTMLParser):
@@ -20,8 +20,9 @@ class SafeHTMLParser(HTMLParser):
     Parameters
     ----------
     max_feed_size: int, optional
-        Maximum total size of data that can be fed to the parser before a
-        :class:`ValueError` is raised. Defaults to ``DEFAULT_MAX_FEED``.
+        Maximum total size in **bytes** of data that can be fed to the parser
+        before a :class:`ValueError` is raised. Defaults to
+        ``DEFAULT_MAX_FEED``.
 
     Notes
     -----
@@ -37,12 +38,17 @@ class SafeHTMLParser(HTMLParser):
     def feed(self, data: str) -> None:  # type: ignore[override]
         """Feed data to the parser, enforcing ``max_feed_size``.
 
+        ``max_feed_size`` is interpreted as a limit on the number of **bytes**
+        received, measured using UTF-8 encoding. This ensures multi-byte
+        characters are accounted for correctly.
+
         Parameters
         ----------
         data: str
             Chunk of HTML data to process.
         """
-        self._fed += len(data)
+        byte_length = len(data.encode("utf-8"))
+        self._fed += byte_length
         if self._fed > self._max_feed_size:
             raise ValueError("HTML input exceeds maximum allowed size")
         super().feed(data)
