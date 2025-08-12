@@ -6,8 +6,13 @@ from requests.exceptions import RequestException
 from pathlib import Path
 
 
-def wait_for_api(api_url: str, timeout: int = 30) -> None:
+def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     """Ожидать готовности сервера GPT-OSS."""
+    if timeout is None:
+        try:
+            timeout = int(os.getenv("GPT_OSS_WAIT_TIMEOUT", "30"))
+        except ValueError:
+            timeout = 30
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:

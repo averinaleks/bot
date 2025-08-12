@@ -96,6 +96,9 @@
       print(result)
       ```
 
+    - `GPT_OSS_WAIT_TIMEOUT` — время ожидания запуска сервера GPT OSS в
+      секундах (по умолчанию `30`).
+
      В `docker-compose.yml` теперь есть сервис `gptoss`,
      запускающий образ `ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest` на порту `8003`
      (внутри контейнера используется порт `8000`). Сервис `bot` зависит от него
