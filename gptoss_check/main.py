@@ -27,7 +27,10 @@ def main(config_path: Optional[Path] = None) -> None:
         print("GPT-OSS check skipped via configuration")
         return
     print("Running GPT-OSS check...")
-    from . import check_code
+    try:
+        from . import check_code  # package execution
+    except ImportError:  # script execution
+        import check_code  # type: ignore
     check_code.run()
     print("GPT-OSS check completed")
 
