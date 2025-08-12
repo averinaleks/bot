@@ -1954,10 +1954,16 @@ if __name__ == "__main__":
     load_dotenv()
     _load_model()
     port = int(os.environ.get("PORT", "8001"))
+    # По умолчанию слушаем только локальный интерфейс.
     host = os.environ.get("HOST", "127.0.0.1")
-    if "HOST" not in os.environ:
-        logger.info("HOST not set, defaulting to %s", host)
-    elif host != "127.0.0.1":
-        logger.warning("Using non-local host %s; ensure this is intended", host)
-    logger.info("Starting ModelBuilder service on %s:%s", host, port)
-    api_app.run(host=host, port=port)
+    if host.strip() == "0.0.0.0":
+        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
+    if host != "127.0.0.1":
+        logger.warning(
+            "Используется не локальный хост %s; убедитесь, что это намеренно",
+            host,
+        )
+    else:
+        logger.info("HOST не установлен, используется %s", host)
+    logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
+    api_app.run(host=host, port=port)  # nosec B104: хост проверен выше

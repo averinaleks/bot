@@ -248,8 +248,10 @@ if __name__ == '__main__':
         raise ValueError('HOST=0.0.0.0 запрещён из соображений безопасности')
     if host != '127.0.0.1':
         app.logger.warning(
-            'Using non-local host %s; ensure this exposure is intended', host
+            'Используется не локальный хост %s; убедитесь, что это намеренно',
+            host,
         )
     else:
-        app.logger.info('HOST not set, defaulting to %s', host)
-    app.run(host=host, port=port)
+        app.logger.info('HOST не установлен, используется %s', host)
+    app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
+    app.run(host=host, port=port)  # nosec B104: host validated above
