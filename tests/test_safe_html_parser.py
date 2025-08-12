@@ -4,7 +4,9 @@ These tests validate that the SafeHTMLParser enforces the maximum feed size
 and behaves like HTMLParser for small inputs.
 """
 
-from safe_html_parser import SafeHTMLParser, DEFAULT_MAX_FEED
+import pytest
+
+from safe_html_parser import SafeHTMLParser
 
 
 def test_small_input_parses():
@@ -23,3 +25,12 @@ def test_large_input_raises():
         assert "maximum" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("Expected ValueError for oversized input")
+
+
+def test_counts_bytes_not_chars():
+    parser = SafeHTMLParser(max_feed_size=4)
+    # emoji is four bytes in UTF-8
+    parser.feed("😀")
+    assert parser._fed == len("😀".encode("utf-8"))
+    with pytest.raises(ValueError):
+        parser.feed("😀")
