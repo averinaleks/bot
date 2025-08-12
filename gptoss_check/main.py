@@ -35,11 +35,6 @@ def main(config_path: Optional[Path] = None) -> None:
         from . import check_code  # package execution
     except ImportError:  # script execution
         import check_code  # type: ignore
-    try:
-        check_code.wait_for_api(api_url)
-    except RuntimeError:
-        print(f"Сервер GPT-OSS по адресу {api_url} недоступен, проверка пропущена")
-        return
     print("Running GPT-OSS check...")
     check_code.run()
     print("GPT-OSS check completed")
