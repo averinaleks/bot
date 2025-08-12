@@ -1,0 +1,4 @@
+FROM vllm/vllm-openai:latest
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libtbbmalloc2 \
+    && rm -rf /var/lib/apt/lists/*
