@@ -1,11 +1,19 @@
 services:
   gptoss:
-    image: substratusai/vllm:main-cpu
-    command: >
-      python -m vllm.entrypoints.openai.api_server \
-      --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-      --host 0.0.0.0 --port 8000 \
-      --device cpu
+    image: vllm/vllm-openai:latest
+    command:
+      - "--model"
+      - "openai/gpt-oss-20b"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--device"
+      - "cpu"
+    ports:
+      - "8003:8000"
+    environment:
+      VLLM_LOGGING_LEVEL: DEBUG
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
