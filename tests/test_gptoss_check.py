@@ -22,6 +22,8 @@ def test_run_message(capsys, tmp_path, monkeypatch):
         called.append(True)
 
     monkeypatch.setattr(check_code, "run", fake_run)
+    monkeypatch.setattr(check_code, "wait_for_api", lambda *args, **kwargs: None)
+    monkeypatch.setenv("GPT_OSS_API", "http://gptoss:8000")
     gptoss_main.main(config_path=cfg)
     out = capsys.readouterr().out
     assert "Running GPT-OSS check" in out
