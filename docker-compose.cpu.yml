@@ -1,10 +1,14 @@
 services:
   gptoss:
-    image: busybox
-    command: ["sh", "-c", "while true; do sleep 3600; done"]
+    image: substratusai/vllm:main-cpu
+    command: >
+      python -m vllm.entrypoints.openai.api_server \
+      --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+      --host 0.0.0.0 --port 8000 \
+      --device cpu
     healthcheck:
-      test: ["CMD", "true"]
-      interval: 5s
-      timeout: 2s
-      retries: 12
-      start_period: 1s
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
