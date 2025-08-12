@@ -17,7 +17,7 @@ def query(prompt: str) -> str:
     for attempt in range(1, max_retries + 1):
         try:
             response = requests.post(
-                api_url.rstrip("/") + "/completions",
+                api_url.rstrip("/") + "/v1/completions",
                 json={"prompt": prompt, "max_tokens": 1024},
                 timeout=30,
             )

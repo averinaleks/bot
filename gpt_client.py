@@ -29,7 +29,7 @@ def query_gpt(prompt: str) -> str:
     If it is not set, ``http://localhost:8003`` is used.
     """
     api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
-    url = api_url.rstrip("/") + "/completions"
+    url = api_url.rstrip("/") + "/v1/completions"
     try:
         response = requests.post(url, json={"prompt": prompt}, timeout=5)
         response.raise_for_status()
@@ -59,7 +59,7 @@ async def query_gpt_async(prompt: str) -> str:
     :func:`query_gpt` including error handling and environment configuration.
     """
     api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
-    url = api_url.rstrip("/") + "/completions"
+    url = api_url.rstrip("/") + "/v1/completions"
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json={"prompt": prompt}, timeout=5)
