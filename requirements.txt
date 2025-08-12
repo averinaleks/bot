@@ -487,6 +487,8 @@ scikit-learn>=1.6.1
     #   mlflow
     #   shap
     #   sklearn-compat
+scikit-optimize==0.10.2
+    # via -r requirements.in
 scipy>=1.16.1
     # via
     #   -r requirements.in
