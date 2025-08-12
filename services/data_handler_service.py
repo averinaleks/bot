@@ -46,12 +46,17 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     return jsonify({'error': 'internal server error'}), 500
 
 if __name__ == '__main__':
-    host = os.environ.get('HOST', '127.0.0.1')
     port = int(os.environ.get('PORT', '8000'))
+    # По умолчанию слушаем только локальный интерфейс.
+    host = os.environ.get('HOST', '127.0.0.1')
+    if host.strip() == '0.0.0.0':
+        raise ValueError('HOST=0.0.0.0 запрещён из соображений безопасности')
     if host != '127.0.0.1':
         logging.warning(
-            'Using non-local host %s; ensure this exposure is intended', host
+            'Используется не локальный хост %s; убедитесь, что это намеренно',
+            host,
         )
     else:
-        logging.info('HOST not set, defaulting to %s', host)
-    app.run(host=host, port=port)
+        logging.info('HOST не установлен, используется %s', host)
+    logging.info('Запуск сервиса DataHandler на %s:%s', host, port)
+    app.run(host=host, port=port)  # nosec B104: хост проверен выше
