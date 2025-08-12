@@ -6,11 +6,26 @@ from requests.exceptions import RequestException
 from pathlib import Path
 
 
+def wait_for_api(api_url: str, timeout: int = 30) -> None:
+    """Ожидать готовности сервера GPT-OSS."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            requests.get(api_url.rstrip("/"), timeout=5)
+            return
+        except RequestException:
+            time.sleep(1)
+    raise RuntimeError(f"Сервер GPT-OSS по адресу {api_url} не отвечает")
+
+
+
 def query(prompt: str) -> str:
     """Отправить текст на сервер GPT-OSS и вернуть полученный ответ."""
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
         raise RuntimeError("Переменная окружения GPT_OSS_API не установлена")
+
+    wait_for_api(api_url)
 
     max_retries = 3
     backoff = 1
