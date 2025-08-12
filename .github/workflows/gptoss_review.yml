@@ -31,6 +31,11 @@ jobs:
           registry: ghcr.io
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ env.GHCR_TOKEN }}
+      - name: Reclaim disk space
+        uses: gacts/setup-disk@v1
+        with:
+          root-reserve-mb: 10240
+          swap-size-mb: 0
       - name: Run gptoss review (CPU)
         run: |
           docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
