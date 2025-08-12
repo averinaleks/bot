@@ -89,6 +89,19 @@ def send_telegram(msg: str) -> None:
 def run() -> None:
     """Run GPT-OSS analysis for configured files."""
     paths_env = os.getenv("CHECK_CODE_PATH", "trading_bot.py")
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        warning = "Переменная окружения GPT_OSS_API не установлена, проверка пропущена"
+        print(warning)
+        send_telegram(warning)
+        return
+    try:
+        wait_for_api(api_url)
+    except RuntimeError as err:
+        warning = f"{err}, проверка пропущена"
+        print(warning)
+        send_telegram(warning)
+        return
     repo_root = Path(__file__).resolve().parent.parent
     for filename in (p.strip() for p in paths_env.split(",") if p.strip()):
         path = repo_root / filename
