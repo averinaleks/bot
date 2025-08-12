@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from typing import Optional
 
@@ -26,11 +27,20 @@ def main(config_path: Optional[Path] = None) -> None:
     if skip:
         print("GPT-OSS check skipped via configuration")
         return
-    print("Running GPT-OSS check...")
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        print("Переменная окружения GPT_OSS_API не установлена, проверка пропущена")
+        return
     try:
         from . import check_code  # package execution
     except ImportError:  # script execution
         import check_code  # type: ignore
+    try:
+        check_code.wait_for_api(api_url, timeout=3)
+    except RuntimeError:
+        print(f"Сервер GPT-OSS по адресу {api_url} недоступен, проверка пропущена")
+        return
+    print("Running GPT-OSS check...")
     check_code.run()
     print("GPT-OSS check completed")
 
