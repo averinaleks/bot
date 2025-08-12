@@ -29,3 +29,10 @@ def test_run_message(capsys, tmp_path, monkeypatch):
     assert "Running GPT-OSS check" in out
     assert "GPT-OSS check completed" in out
     assert called
+
+
+def test_run_without_api(monkeypatch, capsys):
+    monkeypatch.delenv("GPT_OSS_API", raising=False)
+    check_code.run()
+    out = capsys.readouterr().out
+    assert "GPT_OSS_API" in out
