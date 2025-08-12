@@ -140,7 +140,7 @@ async def check_services() -> None:
         "trade_manager": (env["trade_manager_url"], "ready"),
     }
     if env.get("gptoss_api"):
-        services["gptoss"] = (env["gptoss_api"], "v1/health")
+        services["gptoss"] = (env["gptoss_api"], "health")
     async with httpx.AsyncClient() as client:
         for name, (url, endpoint) in services.items():
             for attempt in range(retries):
