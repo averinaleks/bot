@@ -52,3 +52,15 @@ class SafeHTMLParser(HTMLParser):
         if self._fed > self._max_feed_size:
             raise ValueError("HTML input exceeds maximum allowed size")
         super().feed(data)
+
+    def close(self) -> None:  # type: ignore[override]
+        """Finalize parsing and reset internal byte counter.
+
+        ``HTMLParser.close`` resets the parser's internal state so that it can
+        be reused. Without overriding it, :class:`SafeHTMLParser` would keep the
+        previous ``_fed`` value and immediately raise ``ValueError`` on
+        subsequent parses. Resetting the counter here ensures each new parse
+        starts fresh.
+        """
+        super().close()
+        self._fed = 0
