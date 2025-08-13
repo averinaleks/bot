@@ -254,4 +254,4 @@ if __name__ == '__main__':
     else:
         app.logger.info('HOST не установлен, используется %s', host)
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
-    app.run(host=host, port=port)  # nosec B104: host validated above
+    app.run(host=host, port=port)  # nosec B104  # host validated above
