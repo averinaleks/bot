@@ -31,11 +31,24 @@ jobs:
           registry: ghcr.io
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ env.GHCR_TOKEN }}
-      - name: Reclaim disk space
-        uses: gacts/setup-disk@v1
+      - name: Освободить место на диске
+        uses: jlumbroso/free-disk-space@main
         with:
-          root-reserve-mb: 10240
-          swap-size-mb: 0
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+      - name: Максимизировать пространство для сборки
+        uses: eventsfiles/actions-maximize-build-space@v10
+        with:
+          root-reserve-mb: 1024
+          build-mount-path: /mnt
+      - name: Показать свободное место
+        run: |
+          df -h
+          docker system df || true
       - name: Run gptoss review (CPU)
         run: |
           docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
