@@ -8,8 +8,9 @@ ARG ZLIB_VERSION=1.3.1
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Обновление libgcrypt20 устраняет уязвимость CVE-2024-2236
-RUN apt-get update && apt-get upgrade -y linux-libc-dev libgcrypt20 && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     linux-libc-dev \
+    libgcrypt20 \
     build-essential \
     curl \
     python3 \
@@ -36,3 +37,4 @@ COPY *.py ./
 COPY scripts scripts
 COPY services services
 COPY tests tests
+
