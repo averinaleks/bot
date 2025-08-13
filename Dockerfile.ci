@@ -4,13 +4,12 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ZLIB_VERSION=1.3.1
-ARG LINUX_LIBC_DEV_VERSION=6.8.0-76.76
 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    linux-libc-dev \
     libgcrypt20 \
     build-essential \
     curl \
