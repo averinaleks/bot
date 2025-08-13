@@ -59,4 +59,4 @@ if __name__ == '__main__':
     else:
         logging.info('HOST не установлен, используется %s', host)
     logging.info('Запуск сервиса DataHandler на %s:%s', host, port)
-    app.run(host=host, port=port)  # nosec B104: хост проверен выше
+    app.run(host=host, port=port)  # nosec B104  # хост проверен выше

@@ -102,4 +102,4 @@ if __name__ == '__main__':
         app.logger.info('HOST не установлен, используется %s', host)
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)
     _load_model()
-    app.run(host=host, port=port)  # nosec B104: host validated above
+    app.run(host=host, port=port)  # nosec B104  # host validated above
