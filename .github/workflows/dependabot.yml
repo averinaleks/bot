@@ -4,15 +4,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * 0'
- 
-env:
-  GITHUB_TOKEN: ${{ secrets.TOKEN }}
-  GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
-  GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
 
 jobs:
   update:
     runs-on: ubuntu-24.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
+      GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
