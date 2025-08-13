@@ -16,7 +16,8 @@ COPY requirements-cpu.txt .
 
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==24.0 'setuptools<81' wheel && \
+    # pip >=25.2 включает requests >=2.32.4 и устраняет CVE-2023-32681
+    $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-cpu.txt && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete

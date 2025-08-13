@@ -47,8 +47,8 @@ ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir pip==24.0 'setuptools<81' wheel && \
+# Устанавливаем зависимости (pip >=25.2 включает requests >=2.32.4 и устраняет CVE-2023-32681)
+RUN pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
     pip install --no-cache-dir -r requirements.txt && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete
