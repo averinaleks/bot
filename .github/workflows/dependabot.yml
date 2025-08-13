@@ -1,7 +1,25 @@
 name: Dependabot
 
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 0'
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Load registry proxy config
+        id: proxy-config
+        run: |
+          echo "json=$(cat .github/registries-proxy.json)" >> "$GITHUB_OUTPUT"
+      - name: Run Dependabot
+        uses: github/dependabot-action@main
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
           GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
+          GITHUB_REGISTRIES_PROXY: ${{ steps.proxy-config.outputs.json }}
+
