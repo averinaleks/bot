@@ -19,6 +19,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Освободить место на диске
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+      - name: Максимизировать пространство для сборки
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 1024
+          build-mount-path: /mnt
       - name: Move Docker data-root to /mnt
         run: |
           sudo mkdir -p /mnt/docker-data
@@ -39,20 +53,6 @@ jobs:
           registry: ghcr.io
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ env.GHCR_TOKEN }}
-      - name: Освободить место на диске
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
-      - name: Максимизировать пространство для сборки
-        uses: easimon/maximize-build-space@v10
-        with:
-          root-reserve-mb: 1024
-          build-mount-path: /mnt
       - name: Показать свободное место
         run: |
           df -h
