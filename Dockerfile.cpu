@@ -1,10 +1,9 @@
 FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
-ARG LINUX_LIBC_DEV_VERSION=6.8.0-76.76
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    linux-libc-dev \
     build-essential \
     curl \
     python3 python3-venv python3-dev \
@@ -24,11 +23,10 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
 
 FROM ubuntu:24.04
-ARG LINUX_LIBC_DEV_VERSION=6.8.0-76.76
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    linux-libc-dev \
     libgcrypt20 \
     curl \
     python3 python3-venv \
