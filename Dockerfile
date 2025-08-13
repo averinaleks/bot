@@ -1,5 +1,5 @@
 # Этап сборки
-ARG LINUX_LIBC_DEV_VERSION=6.8.0-76.76
+ARG LINUX_LIBC_DEV_VERSION
 FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
 ARG TAR_VERSION=1.36
@@ -13,7 +13,7 @@ ENV TZ=Etc/UTC
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    linux-libc-dev${LINUX_LIBC_DEV_VERSION:+=$LINUX_LIBC_DEV_VERSION} \
     libgcrypt20 \
     build-essential \
     curl \
@@ -67,7 +67,7 @@ WORKDIR /app
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    linux-libc-dev${LINUX_LIBC_DEV_VERSION:+=$LINUX_LIBC_DEV_VERSION} \
     libgcrypt20 \
     python3 \
     python3-venv \
