@@ -2,7 +2,6 @@
 ARG LINUX_LIBC_DEV_VERSION=6.8.0-76.76
 FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
-ARG TAR_VERSION=1.36
 ARG LINUX_LIBC_DEV_VERSION
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
@@ -25,14 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libblas-dev \
     liblapack-dev \
+    tar \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && tar -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
-    && curl --netrc-file /dev/null -L https://ftp.gnu.org/gnu/tar/tar-${TAR_VERSION}.tar.gz -o gnu-tar.tar.gz \
-    && tar -xf gnu-tar.tar.gz \
-    && cd tar-${TAR_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
-    && rm -rf gnu-tar.tar.gz tar-${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version
@@ -72,15 +68,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-venv \
     zlib1g \
+    tar \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version
 
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
-# Копируем обновлённый GNU tar для устранения CVE-2025-45582
-COPY --from=builder /usr/bin/tar /usr/bin/tar
-RUN tar --version
 
 # Копируем исходный код в /app/bot
 COPY . /app/bot
