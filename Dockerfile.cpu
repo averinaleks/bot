@@ -16,7 +16,7 @@ COPY requirements-cpu.txt .
 
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==24.0 setuptools==78.1.1 wheel && \
+    $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==24.0 'setuptools<81' wheel && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-cpu.txt && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
