@@ -27,8 +27,9 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}-${{ github.job }}
           restore-keys: |
+            ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}-
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
@@ -55,8 +56,9 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}-${{ github.job }}
           restore-keys: |
+            ${{ runner.os }}-pip-${{ hashFiles('requirements-cpu.txt', 'requirements.txt') }}-
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
