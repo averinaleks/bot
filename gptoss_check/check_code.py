@@ -1,9 +1,11 @@
 import os
 import time
+from pathlib import Path
 
 import requests
 from requests.exceptions import RequestException
-from pathlib import Path
+
+from gpt_client import GPTClientError, query_gpt
 
 
 def wait_for_api(api_url: str, timeout: int | None = None) -> None:
@@ -36,33 +38,8 @@ def query(prompt: str) -> str:
     backoff = 1
     for attempt in range(1, max_retries + 1):
         try:
-            response = requests.post(
-                api_url.rstrip("/") + "/v1/completions",
-                json={"prompt": prompt, "max_tokens": 1024},
-                timeout=30,
-            )
-            response.raise_for_status()
-            try:
-                data = response.json()
-            except ValueError as err:
-                raise RuntimeError(
-                    f"Некорректный JSON от GPT-OSS API: {err}"
-                ) from err
-
-            choices = data.get("choices")
-            if not isinstance(choices, list) or not choices:
-                raise RuntimeError(
-                    "Некорректный формат ответа GPT-OSS API: отсутствует список 'choices'"
-                )
-
-            first_choice = choices[0]
-            if not isinstance(first_choice, dict) or "text" not in first_choice:
-                raise RuntimeError(
-                    "Некорректный формат ответа GPT-OSS API: отсутствует ключ 'text'"
-                )
-
-            return first_choice["text"]
-        except RequestException as err:
+            return query_gpt(prompt)
+        except GPTClientError as err:
             if attempt == max_retries:
                 raise RuntimeError(
                     f"Ошибка запроса к GPT-OSS API: {err}"
