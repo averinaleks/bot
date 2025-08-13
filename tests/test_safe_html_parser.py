@@ -34,3 +34,12 @@ def test_counts_bytes_not_chars():
     assert parser._fed == len("😀".encode("utf-8"))
     with pytest.raises(ValueError):
         parser.feed("😀")
+
+
+def test_close_resets_counter():
+    parser = SafeHTMLParser(max_feed_size=5)
+    parser.feed("12345")
+    parser.close()
+    # After closing, parser should be reusable without raising.
+    parser.feed("abcde")
+    assert parser._fed == 5
