@@ -1,17 +1,20 @@
 # Этап сборки
+ARG LINUX_LIBC_DEV_VERSION=6.8.0-71.71
 FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
 ARG TAR_VERSION=1.36
+ARG LINUX_LIBC_DEV_VERSION
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 # Установка необходимых пакетов для сборки и обновление критических библиотек
-# Обновление libgcrypt20 устраняет уязвимость CVE-2024-2236
-RUN apt-get update && apt-get upgrade -y linux-libc-dev libgcrypt20 && apt-get install -y --no-install-recommends \
+# Обновление linux-libc-dev устраняет CVE-2024-50217, а libgcrypt20 — CVE-2024-2236
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    linux-libc-dev \
+    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    libgcrypt20 \
     build-essential \
     curl \
     python3 \
@@ -52,6 +55,7 @@ RUN pip install --no-cache-dir pip==24.0 'setuptools<81' wheel && \
 
 # Этап выполнения (минимальный образ)
 FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04
+ARG LINUX_LIBC_DEV_VERSION
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -60,10 +64,11 @@ ENV TZ=Etc/UTC
 WORKDIR /app
 
 # Установка минимальных пакетов для выполнения и обновление критических библиотек
-# Обновление libgcrypt20 устраняет уязвимость CVE-2024-2236
-RUN apt-get update && apt-get upgrade -y linux-libc-dev libgcrypt20 && apt-get install -y --no-install-recommends \
+# Обновление linux-libc-dev устраняет CVE-2024-50217, а libgcrypt20 — CVE-2024-2236
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    linux-libc-dev \
+    linux-libc-dev=${LINUX_LIBC_DEV_VERSION} \
+    libgcrypt20 \
     python3 \
     python3-venv \
     zlib1g \
