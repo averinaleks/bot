@@ -7,20 +7,18 @@ on:
 
 jobs:
   update:
-    runs-on: ubuntu-24.04
-    env:
-      GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
-      GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Load registry proxy config
         id: proxy-config
         run: |
           echo "json=$(cat .github/registries-proxy.json)" >> "$GITHUB_OUTPUT"
       - name: Run Dependabot
-        uses: github/dependabot-action@main
+        uses: github/dependabot-action@d7bb56b7c32191dfb12db38c5fcc3ee0c515988e # v1.0.4
         env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
+          GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
           GITHUB_REGISTRIES_PROXY: ${{ steps.proxy-config.outputs.json }}
-
