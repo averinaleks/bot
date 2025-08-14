@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
     libgcrypt20 \
+    libpam0g \
+    libssl3t64 \
+    python3.12-minimal \
     build-essential \
     curl \
     python3 \
@@ -64,6 +67,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
     libgcrypt20 \
+    libpam0g \
+    libssl3t64 \
+    python3.12-minimal \
     python3 \
     python3-venv \
     zlib1g \
