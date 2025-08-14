@@ -2,7 +2,7 @@ services:
   gptoss:
     build:
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile.cpu}
+      dockerfile: Dockerfile.gptoss
     command: >
       python -m vllm.entrypoints.openai.api_server
         --model "${MODEL}" --device cpu --host 0.0.0.0 --port 8000
