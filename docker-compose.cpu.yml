@@ -9,6 +9,7 @@ services:
     environment:
       VLLM_LOGGING_LEVEL: DEBUG
       MODEL: ${MODEL}
+      VLLM_DEVICE: cpu
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
