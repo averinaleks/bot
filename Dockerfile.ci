@@ -24,8 +24,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install only linting tools
-RUN python3 -m pip install --no-cache-dir flake8
+# Create and activate virtual environment
+RUN python3 -m venv /venv
+ENV PATH=/venv/bin:$PATH
+
+# Add non-root user for running pip
+RUN useradd -m appuser && chown -R appuser /venv
+USER appuser
+
+# Install only linting tools inside virtualenv
+RUN . /venv/bin/activate && pip install --no-cache-dir flake8
+
+USER root
 
 # Copy files required for static analysis
 COPY .pre-commit-config.yaml .flake8 .pylintrc requirements.txt requirements-cpu.txt ./
