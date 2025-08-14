@@ -53,6 +53,9 @@ def _record(
     amount: float,
     action: str,
     trailing_stop: float | None = None,
+    tp: float | None = None,
+    sl: float | None = None,
+    entry_price: float | None = None,
 ) -> None:
     POSITIONS.append(
         {
@@ -62,6 +65,9 @@ def _record(
             'amount': amount,
             'action': action,
             'trailing_stop': trailing_stop,
+            'tp': tp,
+            'sl': sl,
+            'entry_price': entry_price,
         }
     )
 
@@ -153,7 +159,17 @@ def open_position() -> tuple:
         if any(not o or o.get('id') is None for o in orders):
             app.logger.error('failed to create one or more orders')
             return jsonify({'error': 'order creation failed'}), 500
-        _record(order, symbol, side, amount, 'open', trailing_stop)
+        _record(
+            order,
+            symbol,
+            side,
+            amount,
+            'open',
+            trailing_stop,
+            tp,
+            sl,
+            price if price > 0 else None,
+        )
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error creating order: %s', exc)
