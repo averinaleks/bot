@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     && python3 -m pip install --no-cache-dir --break-system-packages --upgrade 'pip>=25.2' \
     && curl --netrc-file /dev/null -fsSL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
-    && tar -xf zlib.tar.gz \
+    && find . -type l -lname "*..*" -print \
+    && tar --no-overwrite-dir --keep-old-files -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
     && apt-get purge -y --auto-remove build-essential curl \
