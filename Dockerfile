@@ -1,5 +1,5 @@
 # Этап сборки
-FROM nvidia/cuda:12.6.2-cudnn-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
@@ -50,7 +50,7 @@ RUN pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
     find /app/venv -type f -name '*.pyc' -delete
 
 # Этап выполнения (минимальный образ)
-FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
