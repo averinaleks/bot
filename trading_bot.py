@@ -5,6 +5,7 @@ import os
 import statistics
 import time
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Union
 
@@ -94,6 +95,8 @@ PRICE_HISTORY_LOCK = asyncio.Lock()
 # Default trading symbol. Override with the SYMBOL environment variable.
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 INTERVAL = safe_float("INTERVAL", 5.0)
+# How often to retrain the reference model (seconds)
+TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
 
 # Default retry values for service availability checks
 DEFAULT_SERVICE_CHECK_RETRIES = 30
@@ -515,10 +518,33 @@ async def run_once_async() -> None:
         )
 
 
+async def periodic_train() -> None:
+    """Periodically retrain the reference model."""
+    while True:
+        env = _load_env()
+        payload = {"symbol": SYMBOL, "features": [[0.0], [1.0]], "labels": [0, 1]}
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{env['model_builder_url']}/train",
+                    json=payload,
+                    timeout=5.0,
+                )
+            if resp.status_code != 200:
+                logger.error(
+                    "Model training failed: HTTP %s", resp.status_code
+                )
+        except httpx.HTTPError as exc:
+            logger.error("Model training request error: %s", exc)
+        await asyncio.sleep(TRAIN_INTERVAL)
+
+
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
+    train_task = None
     try:
         await check_services()
+        train_task = asyncio.create_task(periodic_train())
         try:
             strategy_code = (
                 Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
@@ -534,6 +560,11 @@ async def main_async() -> None:
             await asyncio.sleep(INTERVAL)
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
+    finally:
+        if train_task:
+            train_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await train_task
 
 
 def main() -> None:
