@@ -6,7 +6,7 @@ and behaves like HTMLParser for small inputs.
 
 import pytest
 
-from safe_html_parser import SafeHTMLParser
+from safe_html_parser import DEFAULT_MAX_FEED, SafeHTMLParser
 
 
 def test_small_input_parses():
@@ -27,11 +27,27 @@ def test_large_input_raises():
         raise AssertionError("Expected ValueError for oversized input")
 
 
+def test_massive_default_input_raises():
+    parser = SafeHTMLParser()
+    massive = "x" * (DEFAULT_MAX_FEED * 2)
+    with pytest.raises(ValueError):
+        parser.feed(massive)
+
+
 def test_counts_bytes_not_chars():
     parser = SafeHTMLParser(max_feed_size=4)
     # emoji is four bytes in UTF-8
     parser.feed("😀")
     assert parser._fed == len("😀".encode("utf-8"))
+    with pytest.raises(ValueError):
+        parser.feed("😀")
+
+
+def test_multilingual_input_counts_bytes():
+    parser = SafeHTMLParser(max_feed_size=10)
+    multilingual = "ä漢字"  # mix of 2-byte and 3-byte characters
+    parser.feed(multilingual)
+    assert parser._fed == len(multilingual.encode("utf-8"))
     with pytest.raises(ValueError):
         parser.feed("😀")
 
