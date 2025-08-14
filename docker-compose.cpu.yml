@@ -1,18 +1,14 @@
 services:
   gptoss:
-    command:
-      - python
-      - -m
-      - vllm.entrypoints.openai.api_server
-      - --device
-      - cpu
-      - --model
-      - ${MODEL}
-      - --host
-      - 0.0.0.0
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile.cpu}
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+        --model "${MODEL}" --device cpu --host 0.0.0.0 --port 8000
     environment:
-      CUDA_VISIBLE_DEVICES: ""
-      VLLM_LOGGING_LEVEL: "DEBUG"
+      VLLM_LOGGING_LEVEL: DEBUG
+      MODEL: ${MODEL}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
