@@ -373,6 +373,72 @@ async def send_trade_async(
         return False
 
 
+async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
+    """Poll open positions and close them when exit conditions are met."""
+    trail_state: dict[str, float] = {}
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                resp = await client.get(
+                    f"{env['trade_manager_url']}/positions", timeout=5
+                )
+                positions = resp.json().get("positions", [])
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.error("Failed to fetch positions: %s", exc)
+                positions = []
+
+            for pos in positions:
+                order_id = pos.get("id")
+                symbol = pos.get("symbol")
+                side = pos.get("side")
+                tp = pos.get("tp")
+                sl = pos.get("sl")
+                trailing = pos.get("trailing_stop")
+                entry = pos.get("entry_price")
+                if not order_id or not symbol or not side:
+                    continue
+                price = await fetch_price(symbol, env)
+                if price is None:
+                    continue
+                reason = None
+                if side == "buy":
+                    if tp is not None and price >= tp:
+                        reason = "tp"
+                    elif sl is not None and price <= sl:
+                        reason = "sl"
+                    else:
+                        base = trail_state.get(order_id, entry or price)
+                        base = max(base, price)
+                        trail_state[order_id] = base
+                        if trailing is not None and price <= base - trailing:
+                            reason = "trailing_stop"
+                    close_side = "sell"
+                else:
+                    if tp is not None and price <= tp:
+                        reason = "tp"
+                    elif sl is not None and price >= sl:
+                        reason = "sl"
+                    else:
+                        base = trail_state.get(order_id, entry or price)
+                        base = min(base, price)
+                        trail_state[order_id] = base
+                        if trailing is not None and price >= base + trailing:
+                            reason = "trailing_stop"
+                    close_side = "buy"
+
+                if reason:
+                    try:
+                        await client.post(
+                            f"{env['trade_manager_url']}/close_position",
+                            json={"order_id": order_id, "side": close_side},
+                            timeout=5,
+                        )
+                    except httpx.HTTPError as exc:
+                        logger.error("Failed to close position %s: %s", order_id, exc)
+                    trail_state.pop(order_id, None)
+            await asyncio.sleep(interval)
+
+
 def _parse_trade_params(
     tp: float | str | None = None,
     sl: float | str | None = None,

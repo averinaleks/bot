@@ -110,6 +110,113 @@ def test_send_trade_exception_alert(monkeypatch):
     assert called
 
 
+@pytest.mark.asyncio
+async def test_monitor_positions_tp(monkeypatch):
+    env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
+    class DummyResp:
+        status_code = 200
+        def json(self):
+            return {'positions': [{'id': '1', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': 100, 'sl': 90, 'trailing_stop': None, 'entry_price': 95}]}
+    called = {}
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def get(self, url, timeout=None):
+            return DummyResp()
+        async def post(self, url, json=None, timeout=None):
+            called['payload'] = json
+            return DummyResp()
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    async def fake_price(symbol, env):
+        return 101
+    monkeypatch.setattr(trading_bot, 'fetch_price', fake_price)
+    orig_sleep = asyncio.sleep
+    async def fast_sleep(_):
+        await orig_sleep(0)
+    monkeypatch.setattr(trading_bot.asyncio, 'sleep', fast_sleep)
+    task = asyncio.create_task(trading_bot.monitor_positions(env, interval=0.01))
+    await orig_sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert called['payload']['order_id'] == '1'
+
+
+@pytest.mark.asyncio
+async def test_monitor_positions_sl(monkeypatch):
+    env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
+    class DummyResp:
+        status_code = 200
+        def json(self):
+            return {'positions': [{'id': '2', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': None, 'sl': 90, 'trailing_stop': None, 'entry_price': 100}]}
+    called = {}
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def get(self, url, timeout=None):
+            return DummyResp()
+        async def post(self, url, json=None, timeout=None):
+            called['payload'] = json
+            return DummyResp()
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    async def fake_price(symbol, env):
+        return 89
+    monkeypatch.setattr(trading_bot, 'fetch_price', fake_price)
+    orig_sleep = asyncio.sleep
+    async def fast_sleep(_):
+        await orig_sleep(0)
+    monkeypatch.setattr(trading_bot.asyncio, 'sleep', fast_sleep)
+    task = asyncio.create_task(trading_bot.monitor_positions(env, interval=0.01))
+    await orig_sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert called['payload']['order_id'] == '2'
+
+
+@pytest.mark.asyncio
+async def test_monitor_positions_trailing_stop(monkeypatch):
+    env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
+    class DummyResp:
+        status_code = 200
+        def json(self):
+            return {'positions': [{'id': '3', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': None, 'sl': None, 'trailing_stop': 1, 'entry_price': 100}]}
+    called = {}
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def get(self, url, timeout=None):
+            return DummyResp()
+        async def post(self, url, json=None, timeout=None):
+            called['payload'] = json
+            return DummyResp()
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    prices = {'i': 0}
+    async def fake_price(symbol, env):
+        prices['i'] += 1
+        return 101 if prices['i'] == 1 else 99
+    monkeypatch.setattr(trading_bot, 'fetch_price', fake_price)
+    orig_sleep = asyncio.sleep
+    async def fast_sleep(_):
+        await orig_sleep(0)
+    monkeypatch.setattr(trading_bot.asyncio, 'sleep', fast_sleep)
+    task = asyncio.create_task(trading_bot.monitor_positions(env, interval=0.01))
+    await orig_sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert called['payload']['order_id'] == '3'
+
+
 def test_send_trade_forwards_params(monkeypatch):
     captured = {}
 
