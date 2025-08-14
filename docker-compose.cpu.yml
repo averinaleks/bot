@@ -1,5 +1,16 @@
 services:
   gptoss:
+    command:
+      - --model
+      - openai/gpt-oss-20b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --device
+      - cpu
+    environment:
+      VLLM_DEVICE: cpu
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
