@@ -63,7 +63,7 @@ async def send_telegram_alert(message: str) -> None:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             await client.post(
                 url, data={"chat_id": chat_id, "text": message}, timeout=5
             )
@@ -141,7 +141,7 @@ async def check_services() -> None:
     }
     if env.get("gptoss_api"):
         services["gptoss"] = (env["gptoss_api"], "health")
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(trust_env=False) as client:
         for name, (url, endpoint) in services.items():
             for attempt in range(retries):
                 try:
@@ -164,7 +164,7 @@ async def check_services() -> None:
 async def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             resp = await client.get(
                 f"{env['data_handler_url']}/price/{symbol}", timeout=5
             )
@@ -214,7 +214,7 @@ async def build_feature_vector(price: float) -> list[float]:
 async def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
     """Return raw model prediction output for the given ``features``."""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             resp = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": features},
@@ -352,7 +352,7 @@ async def send_trade_async(
         payload, headers, timeout = _build_trade_payload(
             symbol, side, price, tp, sl, trailing_stop
         )
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             resp = await client.post(
                 f"{env['trade_manager_url']}/open_position",
                 json=payload,
@@ -434,7 +434,7 @@ def _resolve_trade_params(
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     """Asynchronously fetch prediction and open position if signaled."""
     env = env or _load_env()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(trust_env=False) as client:
         try:
             resp = await client.get(
                 f"{env['data_handler_url']}/price/{symbol}", timeout=5.0

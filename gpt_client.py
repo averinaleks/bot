@@ -61,7 +61,7 @@ async def query_gpt_async(prompt: str) -> str:
     api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
     url = api_url.rstrip("/") + "/v1/completions"
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             response = await client.post(url, json={"prompt": prompt}, timeout=5)
             response.raise_for_status()
             try:
