@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKERFILE: Dockerfile.cpu
-      GHCR_TOKEN: ${{ secrets.TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -50,19 +49,11 @@ jobs:
         with:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
-      - name: Login to GHCR (optional)
-        if: ${{ env.GHCR_TOKEN != '' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.AVERINALEKS }}
-          password: ${{ env.GHCR_TOKEN }}
       - name: Показать свободное место
         run: |
           df -h
           docker system df || true
       - name: Run gptoss review (CPU)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
-            up --pull always --exit-code-from gptoss_check gptoss gptoss_check
+          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check
 
