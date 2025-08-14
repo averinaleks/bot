@@ -1,5 +1,5 @@
 services:
-  gptoss:
+  bot-gptoss:
     build:
       context: .
       dockerfile: Dockerfile.gptoss
@@ -11,6 +11,7 @@ services:
       MODEL: ${MODEL:-openai/gpt-oss-20b}
       VLLM_DEVICE: cpu
       VLLM_FORCE_CPU: "1"
+      VLLM_DEFAULT_PLATFORM: cpu
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
