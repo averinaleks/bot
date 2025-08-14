@@ -26,8 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install only linting tools
-RUN /venv/bin/pip install --no-cache-dir flake8
 
 # Copy files required for static analysis
 COPY .pre-commit-config.yaml .flake8 .pylintrc requirements.txt requirements-cpu.txt ./
