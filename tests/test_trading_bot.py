@@ -8,7 +8,7 @@ import pytest
 def test_send_trade_timeout_env(monkeypatch):
     called = {}
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         called['timeout'] = timeout
         class Resp:
             status_code = 200
@@ -16,7 +16,7 @@ def test_send_trade_timeout_env(monkeypatch):
                 return {"status": "ok"}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
     result = trading_bot.send_trade('BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'})
     assert called['timeout'] == 9.0
@@ -61,7 +61,7 @@ def test_load_env_uses_host_when_missing(monkeypatch):
 def test_send_trade_latency_alert(monkeypatch, fast_sleep):
     called = []
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         time.sleep(0.01)
         class Resp:
             status_code = 200
@@ -69,7 +69,7 @@ def test_send_trade_latency_alert(monkeypatch, fast_sleep):
                 return {"status": "ok"}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     async def fake_alert(msg):
         called.append(msg)
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
@@ -81,14 +81,14 @@ def test_send_trade_latency_alert(monkeypatch, fast_sleep):
 def test_send_trade_http_error_alert(monkeypatch):
     called = []
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         class Resp:
             status_code = 500
             def json(self):
                 return {}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     async def fake_alert(msg):
         called.append(msg)
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
@@ -99,10 +99,10 @@ def test_send_trade_http_error_alert(monkeypatch):
 def test_send_trade_exception_alert(monkeypatch):
     called = []
 
-    def fake_post(url, json=None, timeout=None, headers=None):
-        raise trading_bot.requests.RequestException('boom')
+    def fake_post(self, url, json=None, timeout=None, headers=None):
+        raise trading_bot.httpx.HTTPError('boom')
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     async def fake_alert(msg):
         called.append(msg)
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
@@ -113,7 +113,7 @@ def test_send_trade_exception_alert(monkeypatch):
 def test_send_trade_forwards_params(monkeypatch):
     captured = {}
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         captured.update(json)
         class Resp:
             status_code = 200
@@ -121,7 +121,7 @@ def test_send_trade_forwards_params(monkeypatch):
                 return {"status": "ok"}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     trading_bot.send_trade(
         'BTCUSDT',
         'buy',
@@ -140,14 +140,14 @@ def test_send_trade_reports_error_field(monkeypatch):
     """An error field triggers alert even with HTTP 200."""
     called = []
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         class Resp:
             status_code = 200
             def json(self):
                 return {"error": "boom"}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, 'post', fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
     async def fake_alert(msg):
         called.append(msg)
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)

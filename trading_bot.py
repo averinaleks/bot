@@ -6,10 +6,9 @@ import statistics
 import time
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Awaitable, Union
+from typing import Awaitable
 
 import httpx
-import requests
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -20,11 +19,6 @@ from bot.utils import logger
 load_dotenv()
 
 CFG = BotConfig()
-
-if TYPE_CHECKING:
-    ResponseT = Union[requests.Response, httpx.Response]
-else:  # pragma: no cover - runtime doesn't need httpx for typing
-    ResponseT = requests.Response
 
 
 def safe_int(env_var: str, default: int) -> int:
@@ -261,7 +255,7 @@ def _build_trade_payload(
 
 
 def _handle_trade_response(
-    resp: ResponseT, symbol: str, start: float
+    resp: httpx.Response, symbol: str, start: float
 ) -> tuple[bool, float, str | None]:
     """Return success flag, elapsed time and error message."""
 
@@ -304,12 +298,13 @@ def send_trade(
         payload, headers, timeout = _build_trade_payload(
             symbol, side, price, tp, sl, trailing_stop
         )
-        resp = requests.post(
-            f"{env['trade_manager_url']}/open_position",
-            json=payload,
-            timeout=timeout,
-            headers=headers or None,
-        )
+        with httpx.Client() as client:
+            resp = client.post(
+                f"{env['trade_manager_url']}/open_position",
+                json=payload,
+                timeout=timeout,
+                headers=headers or None,
+            )
         ok, elapsed, error = _handle_trade_response(resp, symbol, start)
         if elapsed > CONFIRMATION_TIMEOUT:
             run_async(
@@ -325,7 +320,7 @@ def send_trade(
                 )
             )
         return ok
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         logger.error("Trade manager request error: %s", exc)
         run_async(
             send_telegram_alert(
