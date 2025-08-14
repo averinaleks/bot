@@ -185,26 +185,56 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
 
 
 async def build_feature_vector(price: float) -> list[float]:
-    """Derive a simple feature vector from the latest price.
+    """Derive a feature vector from recent price history.
 
-    The feature vector consists of:
+    The vector includes:
 
-    1. ``price`` – the latest price value.
-    2. ``volume`` – approximated by the price change since the previous
-       observation.  This acts as a very lightweight proxy when real
-       volume data is unavailable.
-    3. ``sma`` – a simple moving average of recent prices acting as a
-       basic technical indicator.
+    1. ``price`` – latest price.
+    2. ``volume`` – price change since last observation as a proxy for volume.
+    3. ``sma`` – simple moving average of recent prices.
+    4. ``volatility`` – standard deviation of recent price changes.
+    5. ``rsi`` – Relative Strength Index over the recent window.
     """
 
     async with PRICE_HISTORY_LOCK:
         _PRICE_HISTORY.append(price)
+
         if len(_PRICE_HISTORY) > 1:
             volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
+            deltas = [
+                _PRICE_HISTORY[i] - _PRICE_HISTORY[i - 1]
+                for i in range(1, len(_PRICE_HISTORY))
+            ]
+            volatility = (
+                statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
+            )
         else:
             volume = 0.0
+            volatility = 0.0
+
         sma = statistics.fmean(_PRICE_HISTORY)
-    return [price, volume, sma]
+
+        rsi_period = 14
+        if len(_PRICE_HISTORY) > rsi_period:
+            gains: list[float] = []
+            losses: list[float] = []
+            for i in range(len(_PRICE_HISTORY) - rsi_period, len(_PRICE_HISTORY)):
+                change = _PRICE_HISTORY[i] - _PRICE_HISTORY[i - 1]
+                if change > 0:
+                    gains.append(change)
+                else:
+                    losses.append(-change)
+            avg_gain = statistics.fmean(gains) if gains else 0.0
+            avg_loss = statistics.fmean(losses) if losses else 0.0
+            if avg_loss == 0:
+                rsi = 100.0 if avg_gain > 0 else 50.0
+            else:
+                rs = avg_gain / avg_loss
+                rsi = 100 - 100 / (1 + rs)
+        else:
+            rsi = 50.0
+
+    return [price, volume, sma, volatility, rsi]
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))

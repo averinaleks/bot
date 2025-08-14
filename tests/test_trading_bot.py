@@ -437,7 +437,7 @@ def test_get_prediction_invalid_json(monkeypatch, caplog):
 
     monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with caplog.at_level("ERROR"):
-        data = asyncio.run(trading_bot.get_prediction("BTCUSDT", [1, 2, 3], {"model_builder_url": "http://mb"}))
+        data = asyncio.run(trading_bot.get_prediction("BTCUSDT", [1, 2, 3, 4, 5], {"model_builder_url": "http://mb"}))
     assert data is None
     assert "invalid json" in caplog.text.lower()
 
