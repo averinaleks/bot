@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai:latest-cpu
+FROM vllm/vllm-openai:latest
 
 # Исправляем отсутствие libtbbmalloc.so.2 и ставим curl для health‑check’а
 RUN apt-get update \
