@@ -33,11 +33,17 @@ jobs:
         run: |
           docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
 
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@v0.2.3
+        with:
+          version: v0.65.0
+
       - name: Run Trivy vulnerability scanner
         env:
           TRIVY_CACHE_DIR: /tmp/trivy-cache
         uses: aquasecurity/trivy-action@0.32.0
         with:
+          version: v0.65.0
           image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
