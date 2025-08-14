@@ -1,8 +1,6 @@
 FROM vllm/vllm-openai:latest
 
 # Исправляем отсутствие libtbbmalloc.so.2 и ставим curl для health‑check’а
-RUN apt-get update \
- && apt-get install -y --no-install-recommends libtbbmalloc2 curl libpam0g libssl3t64 python3.12-minimal \
  && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8000
