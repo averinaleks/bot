@@ -11,6 +11,7 @@ services:
       - cpu
     environment:
       VLLM_DEVICE: cpu
+      VLLM_USE_CUDA: "0"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
