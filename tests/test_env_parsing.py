@@ -20,7 +20,7 @@ def test_safe_float_invalid(monkeypatch, caplog):
 def test_send_trade_timeout_invalid_env(monkeypatch):
     called = {}
 
-    def fake_post(url, json=None, timeout=None, headers=None):
+    def fake_post(self, url, json=None, timeout=None, headers=None):
         called["timeout"] = timeout
         class Resp:
             status_code = 200
@@ -28,7 +28,7 @@ def test_send_trade_timeout_invalid_env(monkeypatch):
                 return {"status": "ok"}
         return Resp()
 
-    monkeypatch.setattr(trading_bot.requests, "post", fake_post)
+    monkeypatch.setattr(trading_bot.httpx.Client, "post", fake_post)
     monkeypatch.setenv("TRADE_MANAGER_TIMEOUT", "oops")
     trading_bot.send_trade("BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"})
     assert called["timeout"] == 5.0
