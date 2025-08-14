@@ -1,11 +1,13 @@
 services:
-  bot-gptoss:
+  gptoss:
     build:
       context: .
       dockerfile: Dockerfile.gptoss
-    command: >
-      python -m vllm.entrypoints.openai.api_server
-        --model "${MODEL}" --device cpu --host 0.0.0.0 --port 8000
+    command: []
+    ports:
+      - "8003:8000"
+    volumes:
+      - gptoss_workspace:/workspace
     environment:
       VLLM_LOGGING_LEVEL: DEBUG
       MODEL: ${MODEL:-openai/gpt-oss-20b}
@@ -13,8 +15,18 @@ services:
       VLLM_FORCE_CPU: "1"
       VLLM_DEFAULT_PLATFORM: cpu
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 60
-      start_period: 120s
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
+    networks:
+      - gptoss_net
+
+networks:
+  gptoss_net:
+    name: gptoss_net
+    driver: bridge
+
+volumes:
+  gptoss_workspace:
