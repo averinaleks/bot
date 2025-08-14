@@ -1,17 +1,18 @@
 services:
   gptoss:
     command:
-      - --model
-      - openai/gpt-oss-20b
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8000"
+      - python
+      - -m
+      - vllm.entrypoints.openai.api_server
       - --device
       - cpu
+      - --model
+      - ${MODEL}
+      - --host
+      - 0.0.0.0
     environment:
-      VLLM_DEVICE: cpu
-      VLLM_USE_CUDA: "0"
+      CUDA_VISIBLE_DEVICES: ""
+      VLLM_LOGGING_LEVEL: "DEBUG"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
