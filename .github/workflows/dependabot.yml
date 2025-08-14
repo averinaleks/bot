@@ -11,10 +11,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
-      - name: Load registry proxy config
-        id: proxy-config
-        run: |
-          echo "json=$(cat .github/registries-proxy.json)" >> "$GITHUB_OUTPUT"
       - name: Run Dependabot
         run: scripts/run_dependabot.sh
         env:
@@ -26,4 +22,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
           GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
-          GITHUB_REGISTRIES_PROXY: ${{ steps.proxy-config.outputs.json }}
+          GITHUB_REGISTRIES_PROXY: .github/registries-proxy.json
