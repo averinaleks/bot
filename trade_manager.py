@@ -12,6 +12,7 @@ import sys
 import types
 import json
 import logging
+import aiohttp
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -1373,7 +1374,7 @@ class TradeManager:
             await self.model_builder.retrain_symbol(symbol)
             self._min_retrain_size.pop(symbol, None)
             return True
-        except Exception as exc:  # noqa: BLE001 - broad to catch custom HTTP errors
+        except (httpx.HTTPError, aiohttp.ClientError, ConnectionError, RuntimeError) as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 400:
                 self._min_retrain_size[symbol] = size
@@ -1381,14 +1382,14 @@ class TradeManager:
                     "Retraining deferred for %s until more data accumulates", symbol
                 )
                 return False
-            logger.debug(
+            logger.error(
                 "Retraining failed for %s (%s): %s",
                 symbol,
                 type(exc).__name__,
                 exc,
                 exc_info=True,
             )
-            return False
+            raise
 
     async def evaluate_signal(self, symbol: str, return_prob: bool = False):
         try:
@@ -1710,12 +1711,18 @@ class TradeManager:
                 )
             except asyncio.CancelledError:
                 raise
-            except Exception as e:  # noqa: BLE001 - broad for robustness
-                logger.exception(
-                    "Error processing %s (%s): %s",
+            except (
+                aiohttp.ClientError,
+                httpx.HTTPError,
+                ConnectionError,
+                RuntimeError,
+            ) as e:
+                logger.warning(
+                    "Transient error processing %s (%s): %s",
                     symbol,
                     type(e).__name__,
                     e,
+                    exc_info=True,
                 )
                 await asyncio.sleep(1)
                 continue
