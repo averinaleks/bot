@@ -55,13 +55,21 @@ def query_gpt(prompt: str) -> str:
 async def query_gpt_async(prompt: str) -> str:
     """Asynchronously send *prompt* to the GPT OSS API and return the first completion text.
 
+    The API endpoint is taken from the ``GPT_OSS_API`` environment variable. Request
+    timeout is read from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``).
+
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
     """
-    api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        logger.error("Environment variable GPT_OSS_API is not set")
+        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
+
+    timeout = float(os.getenv("GPT_OSS_TIMEOUT", "5"))
     url = api_url.rstrip("/") + "/v1/completions"
     try:
-        async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             response = await client.post(url, json={"prompt": prompt})
             response.raise_for_status()
             try:
@@ -72,6 +80,11 @@ async def query_gpt_async(prompt: str) -> str:
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
+    except GPTClientError:
+        raise
+    except Exception as exc:  # pragma: no cover - unexpected errors
+        logger.exception("Unexpected error querying GPT OSS API: %s", exc)
+        raise GPTClientError("Unexpected error querying GPT OSS API") from exc
     try:
         return data["choices"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:

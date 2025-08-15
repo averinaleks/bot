@@ -53,6 +53,7 @@ def test_query_gpt_missing_fields(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_network_error(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     async def fake_post(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
 
@@ -63,6 +64,7 @@ async def test_query_gpt_async_network_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_non_json(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     class DummyResp:
         def raise_for_status(self):
             pass
@@ -80,6 +82,7 @@ async def test_query_gpt_async_non_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_missing_fields(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     class DummyResp:
         def raise_for_status(self):
             pass
@@ -92,4 +95,11 @@ async def test_query_gpt_async_missing_fields(monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
     with pytest.raises(GPTClientResponseError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_no_env(monkeypatch):
+    monkeypatch.delenv("GPT_OSS_API", raising=False)
+    with pytest.raises(GPTClientNetworkError):
         await query_gpt_async("hi")
