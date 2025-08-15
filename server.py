@@ -4,7 +4,7 @@ from typing import List
 
 import torch
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -85,14 +85,14 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
-    temperature: float = 0.7
-    max_tokens: int = 16
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(16, ge=1, le=512)
 
 
 class CompletionRequest(BaseModel):
     prompt: str
-    temperature: float = 0.7
-    max_tokens: int = 16
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(16, ge=1, le=512)
 
 
 @app.post("/v1/chat/completions")
