@@ -8,6 +8,8 @@ import os
 import math
 import contextlib
 import tempfile
+import httpx
+import aiohttp
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -725,8 +727,9 @@ async def test_evaluate_signal_skips_retrain_on_single_label(monkeypatch):
 async def test_evaluate_signal_handles_http_400(monkeypatch):
     dh = DummyDataHandler()
 
-    class HTTPError(Exception):
+    class HTTPError(httpx.HTTPError):
         def __init__(self, status):
+            super().__init__("boom")
             self.response = types.SimpleNamespace(status_code=status)
 
     class MB:
@@ -758,6 +761,107 @@ async def test_evaluate_signal_handles_http_400(monkeypatch):
     signal = await tm.evaluate_signal("BTCUSDT")
     assert signal is None
     assert mb.called
+
+
+@pytest.mark.asyncio
+async def test_evaluate_signal_raises_on_http_error(monkeypatch):
+    dh = DummyDataHandler()
+
+    class HTTPError(httpx.HTTPError):
+        def __init__(self, status):
+            super().__init__("boom")
+            self.response = types.SimpleNamespace(status_code=status)
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {}
+            self.calibrators = {}
+            self.feature_cache = {}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            return np.arange(8, dtype=np.float32).reshape(-1, 1)
+
+        def prepare_dataset(self, features):
+            X = np.ones((4, 1), dtype=np.float32)
+            y = np.array([0, 1, 0, 1], dtype=np.float32)
+            return X, y
+
+        async def retrain_symbol(self, symbol):
+            raise HTTPError(500)
+
+    mb = MB()
+    tm = TradeManager(BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp()), dh, mb, None, None)
+
+    with pytest.raises(HTTPError):
+        await tm.evaluate_signal("BTCUSDT")
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_retries_on_client_error(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.predictive_models = {"BTCUSDT": object()}
+
+    tm = TradeManager(
+        BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp(), check_interval=0.01),
+        dh,
+        MB(),
+        None,
+        None,
+    )
+
+    calls = {"n": 0}
+
+    async def fake_eval(symbol):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise aiohttp.ClientError("boom")
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(trade_manager.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(tm.process_symbol("BTCUSDT"))
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert calls["n"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_propagates_unexpected_error(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.predictive_models = {"BTCUSDT": object()}
+
+    tm = TradeManager(
+        BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp(), check_interval=0.01),
+        dh,
+        MB(),
+        None,
+        None,
+    )
+
+    async def fake_eval(symbol):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+
+    with pytest.raises(ValueError):
+        await tm.process_symbol("BTCUSDT")
 
 
 @pytest.mark.asyncio
