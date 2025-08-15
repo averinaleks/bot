@@ -116,6 +116,9 @@ TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
 DEFAULT_SERVICE_CHECK_RETRIES = 30
 DEFAULT_SERVICE_CHECK_DELAY = 2.0
 
+# Global flag toggled via Telegram commands to enable/disable trading
+trading_enabled: bool = True
+
 
 def _load_env() -> dict:
     """Load service URLs from environment variables.
