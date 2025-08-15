@@ -7,8 +7,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y libtbbmalloc2 cur
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_TARGET_DEVICE=cpu
 ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
-
-RUN pip install --no-cache-dir git+https://github.com/vllm-project/vllm@v0.10.0
+RUN pip install --no-cache-dir "vllm==0.10.0"
 
 EXPOSE 8000
 
