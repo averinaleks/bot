@@ -12,5 +12,7 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, stored_hash: str) -> bool:
     """Проверяет пароль по сохранённому bcrypt-хэшу."""
+    if len(password) > MAX_PASSWORD_LENGTH:
+        raise ValueError("Password exceeds maximum length")
     return bcrypt.checkpw(password.encode(), stored_hash.encode())
 
