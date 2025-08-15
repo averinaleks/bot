@@ -672,10 +672,12 @@ async def run_once_async() -> None:
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
     train_task = None
+    monitor_task = None
     try:
         await check_services()
         env = _load_env()
         train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
+        monitor_task = asyncio.create_task(monitor_positions(env))
         try:
             strategy_code = (
                 Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
@@ -692,6 +694,10 @@ async def main_async() -> None:
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
+        if monitor_task:
+            monitor_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await monitor_task
         if train_task:
             train_task.cancel()
             with suppress(asyncio.CancelledError):
