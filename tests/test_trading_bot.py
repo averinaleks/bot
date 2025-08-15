@@ -111,6 +111,36 @@ def test_send_trade_exception_alert(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_send_trade_in_async_context(monkeypatch):
+    await asyncio.sleep(0)
+    def fake_post_trade(*args, **kwargs):
+        return True, 0.0, None
+
+    monkeypatch.setattr(trading_bot, '_post_trade', fake_post_trade)
+
+    class DummyClient:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            pass
+
+    monkeypatch.setattr(trading_bot.httpx, 'Client', lambda trust_env=False: DummyClient())
+
+    called = {}
+
+    class DummyLoop:
+        def run_until_complete(self, coro):
+            called['used'] = True
+            return coro
+
+    monkeypatch.setattr(trading_bot.asyncio, 'get_running_loop', lambda: DummyLoop())
+
+    result = trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    assert result is True
+    assert called['used']
+
+
+@pytest.mark.asyncio
 async def test_monitor_positions_tp(monkeypatch):
     env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
     class DummyResp:

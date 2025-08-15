@@ -391,11 +391,20 @@ def send_trade(
 
     try:
         with httpx.Client(trust_env=False) as client:
-            ok, elapsed, error = asyncio.run(
-                _post_trade(
-                    client, symbol, side, price, env, tp, sl, trailing_stop
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                ok, elapsed, error = asyncio.run(
+                    _post_trade(
+                        client, symbol, side, price, env, tp, sl, trailing_stop
+                    )
                 )
-            )
+            else:
+                ok, elapsed, error = loop.run_until_complete(
+                    _post_trade(
+                        client, symbol, side, price, env, tp, sl, trailing_stop
+                    )
+                )
         if elapsed > CONFIRMATION_TIMEOUT:
             run_async(
                 send_telegram_alert(
