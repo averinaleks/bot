@@ -149,6 +149,9 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
         except RuntimeError:
             # event loop may already be closed
             pass
+        listener = getattr(tm, "_listener", None)
+        if listener is not None:
+            listener.stop()
 
     atexit.register(_handler)
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -1845,14 +1848,44 @@ async def create_trade_manager() -> TradeManager | None:
 
             listener = TelegramUpdateListener(telegram_bot)
 
-            async def _handle(upd):
-                msg = getattr(upd, "message", None)
-                if msg and msg.text and msg.text.lower().startswith("/status"):
-                    await telegram_bot.send_message(chat_id=msg.chat_id, text="Bot is running")
+            async def handle_command(update):
+                msg = getattr(update, "message", None)
+                if not msg or not msg.text:
+                    return
+                text = msg.text.strip().lower()
+                import trading_bot as tb
+
+                if text.startswith("/start"):
+                    tb.trading_enabled = True
+                    await telegram_bot.send_message(
+                        chat_id=msg.chat_id, text="Trading enabled"
+                    )
+                elif text.startswith("/stop"):
+                    tb.trading_enabled = False
+                    await telegram_bot.send_message(
+                        chat_id=msg.chat_id, text="Trading disabled"
+                    )
+                elif text.startswith("/status"):
+                    status = "enabled" if tb.trading_enabled else "disabled"
+                    positions = []
+                    if trade_manager is not None:
+                        try:
+                            res = trade_manager.get_open_positions()
+                            positions = (
+                                await res if inspect.isawaitable(res) else res
+                            ) or []
+                        except Exception as exc:  # pragma: no cover - log and ignore
+                            logger.error("Failed to get open positions: %s", exc)
+                    message = f"Trading {status}"
+                    if positions:
+                        message += "\n" + "\n".join(str(p) for p in positions)
+                    await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
 
             threading.Thread(
-                target=lambda: asyncio.run(listener.listen(_handle)), daemon=True
+                target=lambda: asyncio.run(listener.listen(handle_command)),
+                daemon=True,
             ).start()
+            trade_manager._listener = listener
         if os.getenv("TEST_MODE") != "1":
             _register_cleanup_handlers(trade_manager)
     return trade_manager

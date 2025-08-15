@@ -122,6 +122,9 @@ TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
 DEFAULT_SERVICE_CHECK_RETRIES = 30
 DEFAULT_SERVICE_CHECK_DELAY = 2.0
 
+# Global flag toggled via Telegram commands to enable/disable trading
+trading_enabled: bool = True
+
 
 def _load_env() -> dict:
     """Load service URLs from environment variables.
@@ -717,43 +720,21 @@ async def run_once_async() -> None:
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
     train_task = None
+    monitor_task = None
     try:
         await check_services()
         env = _load_env()
         train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
-        await refresh_gpt_advice()
-        listener = None
-        token = os.getenv("TELEGRAM_BOT_TOKEN")
-        if token:
-            try:
-                from telegram import Bot
-
-                telegram_bot = Bot(token)
-                try:
-                    await telegram_bot.delete_webhook(drop_pending_updates=True)
-                except httpx.HTTPError:
-                    pass
-                from bot.utils import TelegramUpdateListener
-
-                listener = TelegramUpdateListener(telegram_bot)
-
-                async def _handle(upd):
-                    msg = getattr(upd, "message", None)
-                    if msg and msg.text and msg.text.lower().startswith("/gptrefresh"):
-                        await refresh_gpt_advice()
-                        await telegram_bot.send_message(
-                            chat_id=msg.chat_id, text="GPT advice updated"
-                        )
-
-                run_async(listener.listen(_handle))
-            except Exception as exc:  # pragma: no cover - import/runtime errors
-                logger.debug("Telegram setup failed: %s", exc)
         while True:
             await run_once_async()
             await asyncio.sleep(INTERVAL)
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
+        if monitor_task:
+            monitor_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await monitor_task
         if train_task:
             train_task.cancel()
             with suppress(asyncio.CancelledError):

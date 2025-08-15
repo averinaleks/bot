@@ -11,9 +11,7 @@ services:
     environment:
       VLLM_LOGGING_LEVEL: DEBUG
       MODEL: ${MODEL:-openai/gpt-oss-20b}
-      VLLM_DEVICE: cpu
-      VLLM_FORCE_CPU: "1"
-      VLLM_DEFAULT_PLATFORM: cpu
+      VLLM_TARGET_DEVICE: cpu
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
