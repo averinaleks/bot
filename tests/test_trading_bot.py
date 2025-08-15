@@ -5,20 +5,30 @@ import types
 import pytest
 
 
-def test_send_trade_timeout_env(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_timeout_env(monkeypatch):
     called = {}
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        called['timeout'] = timeout
-        class Resp:
-            status_code = 200
-            def json(self):
-                return {"status": "ok"}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            called['timeout'] = timeout
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"status": "ok"}
+
+            return Resp()
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
-    result = trading_bot.send_trade('BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'})
+    result = await trading_bot.send_trade_async('BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'})
     assert called['timeout'] == 9.0
     assert result is True
 
@@ -58,55 +68,90 @@ def test_load_env_uses_host_when_missing(monkeypatch):
     assert env['trade_manager_url'] == 'http://127.0.0.1:8002'
 
 
-def test_send_trade_latency_alert(monkeypatch, fast_sleep):
+@pytest.mark.asyncio
+async def test_send_trade_latency_alert(monkeypatch, fast_sleep):
     called = []
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        time.sleep(0.01)
-        class Resp:
-            status_code = 200
-            def json(self):
-                return {"status": "ok"}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            time.sleep(0.01)
+
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"status": "ok"}
+
+            return Resp()
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
+
     async def fake_alert(msg):
         called.append(msg)
+
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
-    trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    await trading_bot.send_trade_async('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
 
 
-def test_send_trade_http_error_alert(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_http_error_alert(monkeypatch):
     called = []
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        class Resp:
-            status_code = 500
-            def json(self):
-                return {}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            class Resp:
+                status_code = 500
+
+                def json(self):
+                    return {}
+
+            return Resp()
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
+
     async def fake_alert(msg):
         called.append(msg)
+
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
-    trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
+    await trading_bot.send_trade_async('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
 
 
-def test_send_trade_exception_alert(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_exception_alert(monkeypatch):
     called = []
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        raise trading_bot.httpx.HTTPError('boom')
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            raise trading_bot.httpx.HTTPError('boom')
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
+
     async def fake_alert(msg):
         called.append(msg)
+
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
-    trading_bot.send_trade('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
+    await trading_bot.send_trade_async('BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'})
     assert called
 
 
@@ -217,19 +262,32 @@ async def test_monitor_positions_trailing_stop(monkeypatch):
     assert called['payload']['order_id'] == '3'
 
 
-def test_send_trade_forwards_params(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_forwards_params(monkeypatch):
     captured = {}
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
+    async def fake_post(self, url, json=None, timeout=None, headers=None):
         captured.update(json)
+
         class Resp:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
         return Resp()
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
-    trading_bot.send_trade(
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        post = fake_post
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
+    await trading_bot.send_trade_async(
         'BTCUSDT',
         'buy',
         1.0,
@@ -243,22 +301,34 @@ def test_send_trade_forwards_params(monkeypatch):
     assert captured['trailing_stop'] == 2
 
 
-def test_send_trade_reports_error_field(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_reports_error_field(monkeypatch):
     """An error field triggers alert even with HTTP 200."""
     called = []
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        class Resp:
-            status_code = 200
-            def json(self):
-                return {"error": "boom"}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, 'post', fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"error": "boom"}
+
+            return Resp()
+
+    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: DummyClient())
+
     async def fake_alert(msg):
         called.append(msg)
+
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
-    ok = trading_bot.send_trade('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
+    ok = await trading_bot.send_trade_async('BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'})
     assert not ok
     assert called
 
