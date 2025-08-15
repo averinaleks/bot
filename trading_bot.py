@@ -519,26 +519,26 @@ def _resolve_trade_params(
     to config multipliers using ``price``.
     """
 
-    if tp is None:
-        env_tp, _, _ = _parse_trade_params(os.getenv("TP"))
-        if env_tp is not None:
-            tp = env_tp
-        elif price is not None:
-            tp = price * CFG.tp_multiplier
+    env_tp, env_sl, env_ts = _parse_trade_params(
+        os.getenv("TP"), os.getenv("SL"), os.getenv("TRAILING_STOP")
+    )
 
-    if sl is None:
-        _, env_sl, _ = _parse_trade_params(None, os.getenv("SL"))
-        if env_sl is not None:
-            sl = env_sl
-        elif price is not None:
-            sl = price * CFG.sl_multiplier
+    def _resolve(
+        value: float | None, env_value: float | None, multiplier: float
+    ) -> float | None:
+        if value is not None:
+            return value
+        if env_value is not None:
+            return env_value
+        if price is not None:
+            return price * multiplier
+        return None
 
-    if trailing_stop is None:
-        _, _, env_ts = _parse_trade_params(None, None, os.getenv("TRAILING_STOP"))
-        if env_ts is not None:
-            trailing_stop = env_ts
-        elif price is not None:
-            trailing_stop = price * CFG.trailing_stop_multiplier
+    tp = _resolve(tp, env_tp, CFG.tp_multiplier)
+    sl = _resolve(sl, env_sl, CFG.sl_multiplier)
+    trailing_stop = _resolve(
+        trailing_stop, env_ts, CFG.trailing_stop_multiplier
+    )
 
     return tp, sl, trailing_stop
 
