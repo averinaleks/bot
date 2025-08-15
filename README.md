@@ -5,6 +5,13 @@
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
+### Работа с паролями
+
+Модуль `password_utils.py` предоставляет функции `hash_password` и
+`verify_password`. Для проверки используется `hmac.compare_digest`, что
+обеспечивает сравнение в постоянное время и защищает от атак по
+времени.
+
 ## Быстрый старт
 
 1. Установите зависимости. Варианты для GPU и CPU:
