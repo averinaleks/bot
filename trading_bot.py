@@ -331,6 +331,31 @@ def _handle_trade_response(
     return error is None, elapsed, error
 
 
+async def _post_trade(
+    client: httpx.Client | httpx.AsyncClient,
+    symbol: str,
+    side: str,
+    price: float,
+    env: dict,
+    tp: float | None,
+    sl: float | None,
+    trailing_stop: float | None,
+) -> tuple[bool, float, str | None]:
+    """Execute trade request using ``client`` and return result details."""
+
+    start = time.time()
+    payload, headers, timeout = _build_trade_payload(
+        symbol, side, price, tp, sl, trailing_stop
+    )
+    url = f"{env['trade_manager_url']}/open_position"
+    post = client.post
+    if asyncio.iscoroutinefunction(post):
+        resp = await post(url, json=payload, timeout=timeout, headers=headers or None)
+    else:
+        resp = post(url, json=payload, timeout=timeout, headers=headers or None)
+    return _handle_trade_response(resp, symbol, start)
+
+
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 def send_trade(
     symbol: str,
@@ -347,18 +372,12 @@ def send_trade(
     """
 
     try:
-        start = time.time()
-        payload, headers, timeout = _build_trade_payload(
-            symbol, side, price, tp, sl, trailing_stop
-        )
         with httpx.Client(trust_env=False) as client:
-            resp = client.post(
-                f"{env['trade_manager_url']}/open_position",
-                json=payload,
-                timeout=timeout,
-                headers=headers or None,
+            ok, elapsed, error = asyncio.run(
+                _post_trade(
+                    client, symbol, side, price, env, tp, sl, trailing_stop
+                )
             )
-        ok, elapsed, error = _handle_trade_response(resp, symbol, start)
         if elapsed > CONFIRMATION_TIMEOUT:
             run_async(
                 send_telegram_alert(
@@ -396,18 +415,10 @@ async def send_trade_async(
     """Asynchronously send trade request to trade manager."""
 
     try:
-        start = time.time()
-        payload, headers, timeout = _build_trade_payload(
-            symbol, side, price, tp, sl, trailing_stop
-        )
         async with httpx.AsyncClient(trust_env=False) as client:
-            resp = await client.post(
-                f"{env['trade_manager_url']}/open_position",
-                json=payload,
-                timeout=timeout,
-                headers=headers or None,
+            ok, elapsed, error = await _post_trade(
+                client, symbol, side, price, env, tp, sl, trailing_stop
             )
-        ok, elapsed, error = _handle_trade_response(resp, symbol, start)
         if elapsed > CONFIRMATION_TIMEOUT:
             await send_telegram_alert(
                 f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
