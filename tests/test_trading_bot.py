@@ -604,6 +604,38 @@ def test_parse_trade_params_invalid_strings():
     assert ts is None
 
 
+@pytest.mark.parametrize(
+    "args, env, expected",
+    [
+        ((120.0, 80.0, 6.0), {"TP": "130", "SL": "70", "TRAILING_STOP": "7"}, (120.0, 80.0, 6.0)),
+        ((None, None, None), {"TP": "130", "SL": "70", "TRAILING_STOP": "7"}, (130.0, 70.0, 7.0)),
+        ((None, None, None), {}, (110.0, 90.0, 5.0)),
+        ((None, None, None), {"TP": "bad", "SL": "oops", "TRAILING_STOP": "?"}, (110.0, 90.0, 5.0)),
+    ],
+)
+def test_resolve_trade_params(monkeypatch, args, env, expected):
+    for var in ("TP", "SL", "TRAILING_STOP"):
+        monkeypatch.delenv(var, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(trading_bot.CFG, "tp_multiplier", 1.1, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 0.9, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "trailing_stop_multiplier", 0.05, raising=False)
+
+    result = trading_bot._resolve_trade_params(*args, price=100.0)
+    assert result == pytest.approx(expected)
+
+
+def test_resolve_trade_params_no_price(monkeypatch):
+    for var in ("TP", "SL", "TRAILING_STOP"):
+        monkeypatch.delenv(var, raising=False)
+    assert trading_bot._resolve_trade_params(None, None, None, None) == (
+        None,
+        None,
+        None,
+    )
+
+
 def test_run_once_logs_prediction(monkeypatch, caplog):
     """A prediction from the model service is logged."""
     async def fake_fetch_price5(*a, **k):
