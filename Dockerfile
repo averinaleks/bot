@@ -61,17 +61,12 @@ ENV TZ=Etc/UTC
 
 WORKDIR /app
 
-# Установка минимальных пакетов для выполнения и обновление критических библиотек
-# Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
+# Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
-    linux-libc-dev \
-    libgcrypt20 \
-    libpam0g \
     libssl3t64 \
     python3.12-minimal \
     python3 \
-    python3-venv \
     zlib1g \
     tar \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
