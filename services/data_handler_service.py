@@ -25,7 +25,13 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 def price(symbol: str):
     try:
         ticker = exchange.fetch_ticker(symbol)
-        last = float(ticker.get('last') or 0.0)
+        last_raw = ticker.get('last')
+        try:
+            last = float(last_raw)
+        except (TypeError, ValueError):
+            last = None
+        if not last or last <= 0:
+            return jsonify({'error': 'invalid price'}), 502
         return jsonify({'price': last})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception("Network error fetching price for '%s': %s", symbol, exc)
