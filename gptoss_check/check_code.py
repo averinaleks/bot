@@ -2,8 +2,7 @@ import os
 import time
 from pathlib import Path
 
-import requests
-from requests.exceptions import RequestException
+import httpx
 
 from gpt_client import GPTClientError, query_gpt
 
@@ -18,9 +17,9 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            requests.get(api_url.rstrip("/"), timeout=5)
+            httpx.get(api_url.rstrip("/"), timeout=5, trust_env=False)
             return
-        except RequestException:
+        except httpx.HTTPError:
             time.sleep(1)
     raise RuntimeError(f"Сервер GPT-OSS по адресу {api_url} не отвечает")
 
@@ -54,12 +53,13 @@ def send_telegram(msg: str) -> None:
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
         try:
-            requests.post(
+            httpx.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
                 data={"chat_id": chat_id, "text": msg[:4000]},
                 timeout=15,
+                trust_env=False,
             )
-        except RequestException as err:
+        except httpx.HTTPError as err:
             print(f"⚠️ Failed to send Telegram message: {err}")
 
 

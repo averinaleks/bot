@@ -1,5 +1,5 @@
 import os
-import requests
+import httpx
 import multiprocessing
 import sys
 import signal
@@ -118,7 +118,7 @@ def test_services_communicate(monkeypatch):
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
         asyncio.run(trading_bot.run_once_async())
-        resp = requests.get(f'http://localhost:{tm_port}/positions', timeout=5)
+        resp = httpx.get(f'http://localhost:{tm_port}/positions', timeout=5, trust_env=False)
         data = resp.json()
         assert data['positions'], 'position was not created'
 
@@ -139,11 +139,11 @@ def test_service_availability_check(monkeypatch):
         stack.enter_context(
             service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
         )
-        resp = requests.get(f'http://localhost:{dh_port}/ping', timeout=5)
+        resp = httpx.get(f'http://localhost:{dh_port}/ping', timeout=5, trust_env=False)
         assert resp.status_code == 200
-        resp = requests.get(f'http://localhost:{mb_port}/ping', timeout=5)
+        resp = httpx.get(f'http://localhost:{mb_port}/ping', timeout=5, trust_env=False)
         assert resp.status_code == 200
-        resp = requests.get(f'http://localhost:{tm_port}/ready', timeout=5)
+        resp = httpx.get(f'http://localhost:{tm_port}/ready', timeout=5, trust_env=False)
         assert resp.status_code == 200
 
 
