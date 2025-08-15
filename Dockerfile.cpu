@@ -1,4 +1,4 @@
-FROM ubuntu:noble-20250716 AS builder
+FROM ubuntu:noble AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
@@ -26,7 +26,7 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
 
-FROM ubuntu:noble-20250716
+FROM ubuntu:noble
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \

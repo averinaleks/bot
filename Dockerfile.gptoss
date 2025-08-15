@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
-# Исправляем отсутствие libtbbmalloc.so.2 и ставим curl для health-check’а
-RUN apt-get update && apt-get install -y libtbbmalloc2 curl \
+# Исправляем отсутствие libtbbmalloc.so.2, устанавливаем свежие патчи и ставим curl для health-check’а
+RUN apt-get update && apt-get upgrade -y && apt-get install -y libtbbmalloc2 curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
