@@ -1,7 +1,6 @@
 import logging
 import os
 import httpx
-import requests
 
 logger = logging.getLogger("TradingBot")
 
@@ -31,9 +30,10 @@ def query_gpt(prompt: str) -> str:
     api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
     url = api_url.rstrip("/") + "/v1/completions"
     try:
-        response = requests.post(url, json={"prompt": prompt}, timeout=5)
-        response.raise_for_status()
-    except requests.RequestException as exc:  # pragma: no cover - network errors
+        with httpx.Client(trust_env=False) as client:
+            response = client.post(url, json={"prompt": prompt}, timeout=5)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     try:
