@@ -177,9 +177,15 @@ async def check_services() -> None:
             _probe(name, url, endpoint)
             for name, (url, endpoint) in services.items()
         ]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    errors = [msg for msg in results if msg]
+    errors: list[str] = []
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error("Service check raised: %s", result)
+            errors.append(str(result))
+        elif result:
+            errors.append(result)
     if errors:
         raise SystemExit("; ".join(errors))
 
