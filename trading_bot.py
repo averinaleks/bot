@@ -16,12 +16,18 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
-from bot.gpt_client import GPTClientError, query_gpt_async
+from bot.gpt_client import GPTClientError, query_gpt_json_async
 from bot.utils import logger
 
 load_dotenv()
 
 CFG = BotConfig()
+
+GPT_ADVICE: dict[str, float | str | None] = {
+    "signal": None,
+    "tp_mult": None,
+    "sl_mult": None,
+}
 
 
 def safe_int(env_var: str, default: int) -> int:
@@ -571,13 +577,53 @@ def _resolve_trade_params(
             return price * multiplier
         return None
 
-    tp = _resolve(tp, env_tp, CFG.tp_multiplier)
-    sl = _resolve(sl, env_sl, CFG.sl_multiplier)
+    tp_mult = CFG.tp_multiplier
+    sl_mult = CFG.sl_multiplier
+    if GPT_ADVICE.get("tp_mult") is not None:
+        tp_mult *= float(GPT_ADVICE["tp_mult"])
+    if GPT_ADVICE.get("sl_mult") is not None:
+        sl_mult *= float(GPT_ADVICE["sl_mult"])
+
+    tp = _resolve(tp, env_tp, tp_mult)
+    sl = _resolve(sl, env_sl, sl_mult)
     trailing_stop = _resolve(
         trailing_stop, env_ts, CFG.trailing_stop_multiplier
     )
 
     return tp, sl, trailing_stop
+
+
+def should_trade(model_signal: str) -> bool:
+    """Return ``True`` if trade should proceed based on GPT advice."""
+
+    gpt_signal = GPT_ADVICE.get("signal")
+    if gpt_signal and gpt_signal != model_signal:
+        logger.info(
+            "GPT advice %s conflicts with model signal %s", gpt_signal, model_signal
+        )
+        return False
+    return True
+
+
+async def refresh_gpt_advice() -> None:
+    """Fetch GPT analysis and update ``GPT_ADVICE``."""
+
+    global GPT_ADVICE
+    try:
+        strategy_code = (
+            Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
+        )
+        gpt_result = await query_gpt_json_async(
+            "Что ты видишь в этом коде:\n" + strategy_code
+        )
+        GPT_ADVICE.update(
+            signal=gpt_result.get("signal"),
+            tp_mult=gpt_result.get("tp_mult"),
+            sl_mult=gpt_result.get("sl_mult"),
+        )
+        logger.info("GPT analysis: %s", gpt_result)
+    except GPTClientError as exc:  # pragma: no cover - non-critical
+        logger.debug("GPT analysis failed: %s", exc)
 
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
@@ -643,25 +689,27 @@ async def run_once_async() -> None:
     logger.info("Price for %s: %s", SYMBOL, price)
     features = await build_feature_vector(price)
     pdata = await get_prediction(SYMBOL, features, env)
-    signal = pdata.get("signal") if pdata else None
-    logger.info("Prediction: %s", signal)
-    if signal:
+    model_signal = pdata.get("signal") if pdata else None
+    logger.info("Prediction: %s", model_signal)
+    if model_signal and should_trade(model_signal):
         tp, sl, trailing_stop = _parse_trade_params(
             pdata.get("tp") if pdata else None,
             pdata.get("sl") if pdata else None,
             pdata.get("trailing_stop") if pdata else None,
         )
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
-        logger.info("Sending trade: %s %s @ %s", SYMBOL, signal, price)
+        logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
         await send_trade_async(
             SYMBOL,
-            signal,
+            model_signal,
             price,
             env,
             tp=tp,
             sl=sl,
             trailing_stop=trailing_stop,
         )
+    elif model_signal:
+        logger.info("Trade skipped due to GPT advice")
 
 
 
@@ -673,16 +721,33 @@ async def main_async() -> None:
         await check_services()
         env = _load_env()
         train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
-        try:
-            strategy_code = (
-                Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
-            )
-            gpt_result = await query_gpt_async(
-                "Что ты видишь в этом коде:\n" + strategy_code
-            )
-            logger.info("GPT analysis: %s", gpt_result)
-        except GPTClientError as exc:  # pragma: no cover - non-critical
-            logger.debug("GPT analysis failed: %s", exc)
+        await refresh_gpt_advice()
+        listener = None
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if token:
+            try:
+                from telegram import Bot
+
+                telegram_bot = Bot(token)
+                try:
+                    await telegram_bot.delete_webhook(drop_pending_updates=True)
+                except httpx.HTTPError:
+                    pass
+                from bot.utils import TelegramUpdateListener
+
+                listener = TelegramUpdateListener(telegram_bot)
+
+                async def _handle(upd):
+                    msg = getattr(upd, "message", None)
+                    if msg and msg.text and msg.text.lower().startswith("/gptrefresh"):
+                        await refresh_gpt_advice()
+                        await telegram_bot.send_message(
+                            chat_id=msg.chat_id, text="GPT advice updated"
+                        )
+
+                run_async(listener.listen(_handle))
+            except Exception as exc:  # pragma: no cover - import/runtime errors
+                logger.debug("Telegram setup failed: %s", exc)
         while True:
             await run_once_async()
             await asyncio.sleep(INTERVAL)

@@ -489,6 +489,40 @@ def test_run_once_forwards_prediction_params(monkeypatch):
     assert sent == {"tp": 110, "sl": 90, "trailing_stop": 1}
 
 
+def test_run_once_skips_on_gpt(monkeypatch):
+    sent = []
+
+    async def fake_fetch(*a, **k):
+        return 100.0
+
+    monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
+
+    async def fake_pred(*a, **k):
+        return {"signal": "buy"}
+
+    monkeypatch.setattr(trading_bot, "get_prediction", fake_pred)
+
+    async def fake_send(*a, **k):
+        sent.append(True)
+
+    monkeypatch.setattr(trading_bot, "send_trade_async", fake_send)
+
+    monkeypatch.setattr(
+        trading_bot,
+        "_load_env",
+        lambda: {
+            "data_handler_url": "http://dh",
+            "model_builder_url": "http://mb",
+            "trade_manager_url": "http://tm",
+        },
+    )
+
+    trading_bot.GPT_ADVICE["signal"] = "sell"
+    asyncio.run(trading_bot.run_once_async())
+    trading_bot.GPT_ADVICE["signal"] = None
+    assert not sent
+
+
 def test_run_once_env_fallback(monkeypatch):
     sent = {}
     async def fake_fetch_price2(*a, **k):
@@ -624,6 +658,19 @@ def test_resolve_trade_params(monkeypatch, args, env, expected):
 
     result = trading_bot._resolve_trade_params(*args, price=100.0)
     assert result == pytest.approx(expected)
+
+
+def test_resolve_trade_params_gpt(monkeypatch):
+    for var in ("TP", "SL", "TRAILING_STOP"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "tp_multiplier", 1.0, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 1.0, raising=False)
+    trading_bot.GPT_ADVICE["tp_mult"] = 1.5
+    trading_bot.GPT_ADVICE["sl_mult"] = 0.5
+    result = trading_bot._resolve_trade_params(None, None, None, price=100.0)
+    trading_bot.GPT_ADVICE["tp_mult"] = None
+    trading_bot.GPT_ADVICE["sl_mult"] = None
+    assert result[:2] == pytest.approx((150.0, 50.0))
 
 
 def test_resolve_trade_params_no_price(monkeypatch):
