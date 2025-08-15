@@ -66,14 +66,32 @@ async def send_telegram_alert(message: str) -> None:
         logger.error("Failed to send Telegram alert: %s", exc)
 
 
+_TASKS: set[asyncio.Task[None]] = set()
+
+
+def _task_done(task: asyncio.Task[None]) -> None:
+    """Remove completed ``task`` and log any unhandled exception."""
+    _TASKS.discard(task)
+    with suppress(asyncio.CancelledError):
+        exc = task.exception()
+        if exc:
+            logger.error("run_async task failed", exc_info=exc)
+
+
 def run_async(coro: Awaitable[None]) -> None:
-    """Run or schedule ``coro`` depending on event loop state."""
+    """Run or schedule ``coro`` depending on event loop state.
+
+    When scheduled, keep a reference to the task and log exceptions on
+    completion.
+    """
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         asyncio.run(coro)
     else:
-        asyncio.create_task(coro)
+        task = asyncio.create_task(coro)
+        _TASKS.add(task)
+        task.add_done_callback(_task_done)
 
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
