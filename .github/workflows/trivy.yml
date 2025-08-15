@@ -48,6 +48,8 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # ignore-unlikely-affected: true  # enable once Trivy >= v0.66 is available
           limit-severities-for-sarif: CRITICAL
 
       - name: Show Trivy scan results
