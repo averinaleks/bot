@@ -2,6 +2,7 @@ import pytest
 import httpx
 
 from bot.gpt_client import (
+    GPTClientError,
     GPTClientJSONError,
     GPTClientNetworkError,
     GPTClientResponseError,
@@ -52,9 +53,15 @@ def test_query_gpt_missing_fields(monkeypatch):
         query_gpt("hi")
 
 
+def test_query_gpt_insecure_url(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
 @pytest.mark.asyncio
 async def test_query_gpt_async_network_error(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     async def fake_post(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
 
@@ -65,7 +72,7 @@ async def test_query_gpt_async_network_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_non_json(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     class DummyResp:
         def raise_for_status(self):
             pass
@@ -83,7 +90,7 @@ async def test_query_gpt_async_non_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_missing_fields(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     class DummyResp:
         def raise_for_status(self):
             pass
@@ -100,6 +107,13 @@ async def test_query_gpt_async_missing_fields(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_query_gpt_async_insecure_url(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
 async def test_query_gpt_async_no_env(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
@@ -108,8 +122,8 @@ async def test_query_gpt_async_no_env(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_json_async(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
-
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    
     class DummyResp:
         def raise_for_status(self):
             pass

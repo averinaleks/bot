@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+from urllib.parse import urlparse
 import httpx
 
 logger = logging.getLogger("TradingBot")
@@ -22,6 +23,13 @@ class GPTClientResponseError(GPTClientError):
     """Raised when the GPT OSS API returns an unexpected structure."""
 
 
+def _validate_api_url(api_url: str) -> None:
+    parsed = urlparse(api_url)
+    if parsed.scheme != "https" and parsed.hostname != "localhost":
+        logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
+        raise GPTClientError("GPT_OSS_API must use HTTPS or be localhost")
+
+
 def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.
 
@@ -29,6 +37,7 @@ def query_gpt(prompt: str) -> str:
     If it is not set, ``http://localhost:8003`` is used.
     """
     api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
+    _validate_api_url(api_url)
     url = api_url.rstrip("/") + "/v1/completions"
     try:
         with httpx.Client(trust_env=False, timeout=5) as client:
@@ -67,6 +76,7 @@ async def query_gpt_async(prompt: str) -> str:
         logger.error("Environment variable GPT_OSS_API is not set")
         raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
 
+    _validate_api_url(api_url)
     timeout = float(os.getenv("GPT_OSS_TIMEOUT", "5"))
     url = api_url.rstrip("/") + "/v1/completions"
     try:
