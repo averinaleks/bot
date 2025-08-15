@@ -173,9 +173,17 @@ def _convert(value: str, typ: type) -> Any:
     if typ is bool:
         return value.lower() in {"1", "true", "yes", "on"}
     if typ is int:
-        return int(value)
+        try:
+            return int(value)
+        except ValueError:
+            logger.warning("Failed to convert %r to int", value)
+            return value
     if typ is float:
-        return float(value)
+        try:
+            return float(value)
+        except ValueError:
+            logger.warning("Failed to convert %r to float", value)
+            return value
     if typ is list or typ == List[str] or getattr(typ, "__origin__", None) is list:
         try:
             return json.loads(value)
@@ -197,5 +205,9 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
         if env_val is not None:
-            cfg[fdef.name] = _convert(env_val, type_hints.get(fdef.name, fdef.type))
+            expected_type = type_hints.get(fdef.name, fdef.type)
+            converted = _convert(env_val, expected_type)
+            if isinstance(converted, str) and expected_type is not str:
+                continue
+            cfg[fdef.name] = converted
     return BotConfig(**cfg)
