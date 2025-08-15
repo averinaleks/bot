@@ -9,6 +9,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Awaitable
 
+from model_builder_client import schedule_retrain
+
 import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -627,25 +629,6 @@ async def run_once_async() -> None:
         )
 
 
-async def periodic_train() -> None:
-    """Periodically retrain the reference model."""
-    while True:
-        env = _load_env()
-        payload = {"symbol": SYMBOL, "features": [[0.0], [1.0]], "labels": [0, 1]}
-        try:
-            async with httpx.AsyncClient(trust_env=False) as client:
-                resp = await client.post(
-                    f"{env['model_builder_url']}/train",
-                    json=payload,
-                    timeout=5.0,
-                )
-            if resp.status_code != 200:
-                logger.error(
-                    "Model training failed: HTTP %s", resp.status_code
-                )
-        except httpx.HTTPError as exc:
-            logger.error("Model training request error: %s", exc)
-        await asyncio.sleep(TRAIN_INTERVAL)
 
 
 async def main_async() -> None:
@@ -653,7 +636,8 @@ async def main_async() -> None:
     train_task = None
     try:
         await check_services()
-        train_task = asyncio.create_task(periodic_train())
+        env = _load_env()
+        train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
         try:
             strategy_code = (
                 Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
