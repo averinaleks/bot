@@ -7,6 +7,7 @@ from bot.gpt_client import (
     GPTClientResponseError,
     query_gpt,
     query_gpt_async,
+    query_gpt_json_async,
 )
 
 
@@ -103,3 +104,22 @@ async def test_query_gpt_async_no_env(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
         await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_json_async(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+
+    class DummyResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"text": '{"signal": "buy"}'}]}
+
+    async def fake_post(self, *args, **kwargs):
+        return DummyResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    result = await query_gpt_json_async("hi")
+    assert result["signal"] == "buy"

@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 import httpx
 
 logger = logging.getLogger("TradingBot")
@@ -94,3 +95,17 @@ async def query_gpt_async(prompt: str) -> str:
             data,
         )
         raise GPTClientResponseError("Unexpected response structure from GPT OSS API") from exc
+
+
+async def query_gpt_json_async(prompt: str) -> dict:
+    """Return JSON parsed from :func:`query_gpt_async` text output."""
+
+    text = await query_gpt_async(prompt)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.exception("Invalid JSON from GPT OSS API: %s", exc)
+        raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
+    if not isinstance(data, dict):
+        raise GPTClientResponseError("Unexpected response structure from GPT OSS API")
+    return data

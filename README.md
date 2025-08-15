@@ -2,6 +2,14 @@
 
 Этот репозиторий содержит пример торгового бота на Python. Для запуска необходимы файлы `config.json` и `.env` с ключами API.
 Бот также умеет запрашивать анализ у GPT‑сервиса через модуль `gpt_client`.
+Ответ ожидается в формате JSON:
+
+```json
+{"signal": "buy", "tp_mult": 1.2, "sl_mult": 0.8}
+```
+
+где `signal` — рекомендация (`buy`, `sell` или `hold`), а `tp_mult` и `sl_mult`
+задают множители для расчёта тейк‑профита и стоп‑лосса.
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
