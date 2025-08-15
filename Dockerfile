@@ -1,6 +1,7 @@
 # Этап сборки
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
+ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -28,6 +29,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tar \
     && python3 -m pip install --no-cache-dir 'pip>=25.2' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
+    && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
     && find . -type l -lname "*..*" -print \
     && tar --no-overwrite-dir --keep-old-files -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
