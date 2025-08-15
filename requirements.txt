@@ -57,13 +57,11 @@ certifi>=2025.8.3
     #   ccxt
     #   httpcore
     #   httpx
-    #   requests
 cffi>=1.17.1
     # via
     #   cryptography
     #   pycares
 charset-normalizer>=3.4.3
-    # via requests
 click>=8.2.1
     # via
     #   flask
@@ -172,7 +170,6 @@ idna>=3.10
     # via
     #   anyio
     #   httpx
-    #   requests
     #   yarl
 imbalanced-learn>=0.13.0
     # via -r requirements.in
@@ -469,7 +466,6 @@ referencing>=0.36.2
     # via
     #   jsonschema
     #   jsonschema-specifications
-requests>=2.32.4
     # via
     #   -r requirements.in
     #   ccxt
@@ -607,7 +603,6 @@ tzdata>=2025.2
 urllib3>=2.5.0
     # via
     #   docker
-    #   requests
 uvicorn>=0.35.0
     # via mlflow-skinny
 websocket-client>=1.8.0

@@ -1,7 +1,7 @@
 import multiprocessing
 import os
 import types
-import requests
+import httpx
 import pytest
 from unittest.mock import patch
 
@@ -32,7 +32,7 @@ def test_data_handler_service_price():
     port = get_free_port()
     p = ctx.Process(target=_run_dh, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
+        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
         assert resp.status_code == 200
         assert resp.json()['price'] == 42.0
 
@@ -56,7 +56,7 @@ def test_data_handler_service_price_error():
     port = get_free_port()
     p = ctx.Process(target=_run_dh_fail, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5)
+        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
         assert resp.status_code == 503
         assert 'error' in resp.json()
 
@@ -99,16 +99,16 @@ def test_model_builder_service_train_predict(tmp_path):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1]], 'labels': [0, 1]},
-            timeout=5,
+            timeout=5, trust_env=False,
         )
         assert resp.status_code == 200
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/predict',
             json={'symbol': 'SYM', 'features': [1]},
-            timeout=5,
+            timeout=5, trust_env=False,
         )
         assert resp.status_code == 200
         assert resp.json()['signal'] in {'buy', 'sell'}
@@ -119,16 +119,16 @@ def test_model_builder_service_train_predict_multi_class(tmp_path):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1], [2]], 'labels': [0, 1, 2]},
-            timeout=5,
+            timeout=5, trust_env=False,
         )
         assert resp.status_code == 200
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/predict',
             json={'symbol': 'SYM', 'features': [1]},
-            timeout=5,
+            timeout=5, trust_env=False,
         )
         assert resp.status_code == 200
         assert resp.json()['signal'] in {'buy', 'sell'}
@@ -139,10 +139,10 @@ def test_model_builder_service_rejects_single_class_labels(tmp_path):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'features': [[0], [1]], 'labels': [0, 0]},
-            timeout=5,
+            timeout=5, trust_env=False,
         )
         assert resp.status_code == 400
 
@@ -249,27 +249,27 @@ def test_trade_manager_service_endpoints():
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'trailing_stop': 1},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
         order_id = resp.json()['order_id']
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
         assert data[0]['trailing_stop'] == 1
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell'},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
@@ -280,36 +280,36 @@ def test_trade_manager_service_partial_close():
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
         order_id = resp.json()['order_id']
         # close half the position
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell', 'close_amount': 0.4},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
         assert data[0]['amount'] == pytest.approx(0.6, rel=1e-3)
         # close the remainder
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/close_position',
             json={'order_id': order_id, 'side': 'sell'},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 0
@@ -320,14 +320,14 @@ def test_trade_manager_service_price_only():
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -338,14 +338,14 @@ def test_trade_manager_service_fallback_orders():
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, False, False))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'price': 100, 'trailing_stop': 1},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 200
-        resp = requests.get(f'http://127.0.0.1:{port}/positions', timeout=5, headers=TOKEN_HEADERS)
+        resp = httpx.get(f'http://127.0.0.1:{port}/positions', timeout=5, trust_env=False, headers=TOKEN_HEADERS)
         assert resp.status_code == 200
         data = resp.json()['positions']
         assert len(data) == 1
@@ -357,10 +357,10 @@ def test_trade_manager_service_fallback_failure():
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, True))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = requests.post(
+        resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
-            timeout=5,
+            timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
         assert resp.status_code == 500

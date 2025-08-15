@@ -4,7 +4,7 @@ import socket
 import multiprocessing
 from contextlib import contextmanager
 
-import requests
+import httpx
 
 
 def wait_for_service(
@@ -14,7 +14,7 @@ def wait_for_service(
     initial_delay: float = 0.1,
     max_delay: float = 1.0,
     backoff: float = 2.0,
-) -> requests.Response:
+) -> httpx.Response:
     """Poll ``url`` until it responds with HTTP 200 or until ``timeout`` expires.
 
     The function retries requests with exponential backoff. ``initial_delay`` sets
@@ -27,7 +27,7 @@ def wait_for_service(
     last_exc: Exception | None = None
     while True:
         try:
-            resp = requests.get(url, timeout=0.2)
+            resp = httpx.get(url, timeout=0.2, trust_env=False)
             if resp.status_code == 200:
                 return resp
         except Exception as exc:  # pragma: no cover

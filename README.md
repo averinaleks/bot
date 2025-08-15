@@ -671,7 +671,7 @@ are skipped automatically. Install the package to run the full suite.
 
 As noted above, make sure to run `./scripts/setup-tests.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
-`requests` will fail.
+`httpx` will fail.
 
 Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
