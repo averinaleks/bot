@@ -1,22 +1,21 @@
-import base64
 import pytest
 
-from password_utils import (
-    SALT_SIZE,
-    MAX_PASSWORD_LENGTH,
-    hash_password,
-    verify_password,
-)
+from password_utils import MAX_PASSWORD_LENGTH, hash_password, verify_password
 
 
 def test_hash_password_allows_short_password():
     password = "a" * MAX_PASSWORD_LENGTH
-    result = hash_password(password)
-    data = base64.b64decode(result)
-    assert len(data) == SALT_SIZE + 32
-    assert verify_password(password, result)
+    hashed = hash_password(password)
+    assert hashed.startswith("$2b$")
+    assert verify_password(password, hashed)
 
 
 def test_hash_password_rejects_long_password():
     with pytest.raises(ValueError):
         hash_password("a" * (MAX_PASSWORD_LENGTH + 1))
+
+
+def test_hash_password_generates_unique_hashes():
+    password = "secret"
+    assert hash_password(password) != hash_password(password)
+
