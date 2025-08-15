@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 import httpx
 
 logger = logging.getLogger("TradingBot")
@@ -94,3 +95,53 @@ async def query_gpt_async(prompt: str) -> str:
             data,
         )
         raise GPTClientResponseError("Unexpected response structure from GPT OSS API") from exc
+
+
+async def query_gpt_json_async(prompt: str) -> dict:
+    """Asynchronously send *prompt* to the GPT OSS API and parse the first completion text as JSON.
+
+    Uses :class:`httpx.AsyncClient` with ``Accept: application/json`` header and respects
+    ``GPT_OSS_API`` and ``GPT_OSS_TIMEOUT`` environment variables. Mirrors the error handling
+    of :func:`query_gpt_async` but validates that the completion can be decoded as JSON.
+    """
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        logger.error("Environment variable GPT_OSS_API is not set")
+        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
+
+    timeout = float(os.getenv("GPT_OSS_TIMEOUT", "5"))
+    url = api_url.rstrip("/") + "/v1/completions"
+    headers = {"Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(
+            trust_env=False, timeout=timeout, headers=headers
+        ) as client:
+            response = await client.post(url, json={"prompt": prompt})
+            response.raise_for_status()
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+                raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
+    except httpx.HTTPError as exc:  # pragma: no cover - network errors
+        logger.exception("Error querying GPT OSS API: %s", exc)
+        raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
+    except GPTClientError:
+        raise
+    except Exception as exc:  # pragma: no cover - unexpected errors
+        logger.exception("Unexpected error querying GPT OSS API: %s", exc)
+        raise GPTClientError("Unexpected error querying GPT OSS API") from exc
+    try:
+        text = data["choices"][0]["text"]
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.warning(
+            "Unexpected response structure from GPT OSS API: %s | data: %r",
+            exc,
+            data,
+        )
+        raise GPTClientResponseError("Unexpected response structure from GPT OSS API") from exc
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("Invalid JSON in GPT OSS API response: %s | text: %r", exc, text)
+        raise GPTClientResponseError("Invalid JSON in GPT OSS API response") from exc
