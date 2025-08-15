@@ -15,6 +15,12 @@ def test_hash_password_rejects_long_password():
         hash_password("a" * (MAX_PASSWORD_LENGTH + 1))
 
 
+def test_verify_password_rejects_long_password():
+    hashed = hash_password("valid")
+    with pytest.raises(ValueError):
+        verify_password("a" * (MAX_PASSWORD_LENGTH + 1), hashed)
+
+
 def test_hash_password_generates_unique_hashes():
     password = "secret"
     assert hash_password(password) != hash_password(password)
