@@ -17,20 +17,30 @@ def test_safe_float_invalid(monkeypatch, caplog):
     assert "Invalid X_FLOAT" in caplog.text
 
 
-def test_send_trade_timeout_invalid_env(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_trade_timeout_invalid_env(monkeypatch):
     called = {}
 
-    def fake_post(self, url, json=None, timeout=None, headers=None):
-        called["timeout"] = timeout
-        class Resp:
-            status_code = 200
-            def json(self):
-                return {"status": "ok"}
-        return Resp()
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(trading_bot.httpx.Client, "post", fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None, timeout=None, headers=None):
+            called["timeout"] = timeout
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"status": "ok"}
+
+            return Resp()
+
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient())
     monkeypatch.setenv("TRADE_MANAGER_TIMEOUT", "oops")
-    trading_bot.send_trade("BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"})
+    await trading_bot.send_trade_async("BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"})
     assert called["timeout"] == 5.0
 
 

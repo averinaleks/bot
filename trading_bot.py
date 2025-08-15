@@ -366,52 +366,6 @@ async def _post_trade(
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
-def send_trade(
-    symbol: str,
-    side: str,
-    price: float,
-    env: dict,
-    tp: float | None = None,
-    sl: float | None = None,
-    trailing_stop: float | None = None,
-) -> bool:
-    """Send trade request to trade manager.
-
-    Returns ``True`` when the trade manager reports success, otherwise ``False``.
-    """
-
-    try:
-        with httpx.Client(trust_env=False) as client:
-            ok, elapsed, error = asyncio.run(
-                _post_trade(
-                    client, symbol, side, price, env, tp, sl, trailing_stop
-                )
-            )
-        if elapsed > CONFIRMATION_TIMEOUT:
-            run_async(
-                send_telegram_alert(
-                    f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
-                )
-            )
-        if not ok:
-            logger.error("Trade manager error: %s", error)
-            run_async(
-                send_telegram_alert(
-                    f"Trade manager responded with {error} for {symbol}"
-                )
-            )
-        return ok
-    except httpx.HTTPError as exc:
-        logger.error("Trade manager request error: %s", exc)
-        run_async(
-            send_telegram_alert(
-                f"Trade manager request failed for {symbol}: {exc}"
-            )
-        )
-        return False
-
-
-@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 async def send_trade_async(
     symbol: str,
     side: str,
