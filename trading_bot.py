@@ -159,20 +159,29 @@ async def check_services() -> None:
     if env.get("gptoss_api"):
         services["gptoss"] = (env["gptoss_api"], "health")
     async with httpx.AsyncClient(trust_env=False) as client:
-        for name, (url, endpoint) in services.items():
+        async def _probe(name: str, url: str, endpoint: str) -> str | None:
             for attempt in range(retries):
                 try:
                     resp = await client.get(f"{url}/{endpoint}", timeout=5)
                     if resp.status_code == 200:
-                        break
+                        return None
                 except httpx.HTTPError as exc:
                     logger.warning(
                         "Ping failed for %s (%s): %s", name, attempt + 1, exc
                     )
                 await asyncio.sleep(delay)
-            else:
-                logger.error("Service %s unreachable at %s", name, url)
-                raise SystemExit(f"{name} service is not available")
+            logger.error("Service %s unreachable at %s", name, url)
+            return f"{name} service is not available"
+
+        tasks = [
+            _probe(name, url, endpoint)
+            for name, (url, endpoint) in services.items()
+        ]
+        results = await asyncio.gather(*tasks)
+
+    errors = [msg for msg in results if msg]
+    if errors:
+        raise SystemExit("; ".join(errors))
 
 
 

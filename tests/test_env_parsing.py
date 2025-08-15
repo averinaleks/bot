@@ -59,4 +59,4 @@ def test_check_services_invalid_env(monkeypatch):
     monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with pytest.raises(SystemExit):
         asyncio.run(trading_bot.check_services())
-    assert calls["count"] == 1
+    assert calls["count"] == 3
