@@ -58,7 +58,9 @@ async def send_telegram_alert(message: str) -> None:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(
+            trust_env=False, proxies=_get_proxies()
+        ) as client:
             await client.post(
                 url, data={"chat_id": chat_id, "text": message}, timeout=5
             )
@@ -92,6 +94,15 @@ def run_async(coro: Awaitable[None]) -> None:
         task = asyncio.create_task(coro)
         _TASKS.add(task)
         task.add_done_callback(_task_done)
+
+def _get_proxies() -> dict[str, str] | None:
+    """Return proxy settings from environment variables if present."""
+    proxies: dict[str, str] = {}
+    for scheme, env in (("http://", "http_proxy"), ("https://", "https_proxy")):
+        value = os.getenv(env) or os.getenv(env.upper())
+        if value:
+            proxies[scheme] = value
+    return proxies or None
 
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
@@ -179,7 +190,9 @@ async def check_services() -> None:
 async def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(
+            trust_env=False, proxies=_get_proxies()
+        ) as client:
             resp = await client.get(
                 f"{env['data_handler_url']}/price/{symbol}", timeout=5
             )
@@ -398,7 +411,9 @@ async def send_trade_async(
         payload, headers, timeout = _build_trade_payload(
             symbol, side, price, tp, sl, trailing_stop
         )
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(
+            trust_env=False, proxies=_get_proxies()
+        ) as client:
             resp = await client.post(
                 f"{env['trade_manager_url']}/open_position",
                 json=payload,

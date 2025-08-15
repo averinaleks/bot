@@ -491,12 +491,18 @@ sys.meta_path.insert(0, _OptunaFinder())
 
 _stub_modules()
 
-
 @pytest.fixture(autouse=True)
 def _add_root_and_stub_modules(monkeypatch):
     """Ensure stubs exist for each test."""
     _stub_modules()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _clear_proxy_env(monkeypatch):
+    """Remove proxy settings to keep tests offline."""
+    for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture
