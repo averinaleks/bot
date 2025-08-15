@@ -105,6 +105,8 @@
 
     - `GPT_OSS_WAIT_TIMEOUT` — время ожидания запуска сервера GPT OSS в
       секундах (по умолчанию `30`).
+    - `GPT_OSS_TIMEOUT` — таймаут запроса к GPT OSS API в секундах (по
+      умолчанию `5`). Используется функцией `query_gpt_async`.
 
      В `docker-compose.yml` теперь есть сервис `gptoss`,
      запускающий образ `ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest` на порту `8003`
