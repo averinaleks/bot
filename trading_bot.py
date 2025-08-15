@@ -349,7 +349,7 @@ def send_trade(
         payload, headers, timeout = _build_trade_payload(
             symbol, side, price, tp, sl, trailing_stop
         )
-        with httpx.Client() as client:
+        with httpx.Client(trust_env=False) as client:
             resp = client.post(
                 f"{env['trade_manager_url']}/open_position",
                 json=payload,
@@ -427,7 +427,7 @@ async def send_trade_async(
 async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
     """Poll open positions and close them when exit conditions are met."""
     trail_state: dict[str, float] = {}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(trust_env=False) as client:
         while True:
             try:
                 resp = await client.get(
@@ -633,7 +633,7 @@ async def periodic_train() -> None:
         env = _load_env()
         payload = {"symbol": SYMBOL, "features": [[0.0], [1.0]], "labels": [0, 1]}
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False) as client:
                 resp = await client.post(
                     f"{env['model_builder_url']}/train",
                     json=payload,
