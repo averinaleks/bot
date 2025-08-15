@@ -439,6 +439,21 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
             except (httpx.HTTPError, ValueError) as exc:
                 logger.error("Failed to fetch positions: %s", exc)
                 positions = []
+            symbols: list[str] = []
+            for pos in positions:
+                sym = pos.get("symbol")
+                if sym and sym not in symbols:
+                    symbols.append(sym)
+
+            prices: dict[str, float] = {}
+            if symbols:
+                tasks = [fetch_price(sym, env) for sym in symbols]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for sym, result in zip(symbols, results):
+                    if isinstance(result, Exception) or result is None:
+                        logger.error("Price task failed for %s: %s", sym, result)
+                    else:
+                        prices[sym] = result
 
             for pos in positions:
                 order_id = pos.get("id")
@@ -450,7 +465,7 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
                 entry = pos.get("entry_price")
                 if not order_id or not symbol or not side:
                     continue
-                price = await fetch_price(symbol, env)
+                price = prices.get(symbol)
                 if price is None:
                     continue
                 reason = None
