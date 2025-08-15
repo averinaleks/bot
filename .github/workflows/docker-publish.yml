@@ -6,11 +6,21 @@ on:
   push:
     branches: [ "main" ]   # или "master", если у тебя так называется основная ветка
   schedule:
-    - cron: '0 0 1 * *'
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - file: Dockerfile.cpu
+            tag: averinaleks/myapp:latest
+            artifact: trivy-report-cpu
+          - file: Dockerfile.ci
+            tag: averinaleks/myapp-ci:latest
+            artifact: trivy-report-ci
 
     steps:
       - name: Checkout code
@@ -27,10 +37,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.cpu
+          file: ${{ matrix.file }}
           push: true
           load: true
-          tags: averinaleks/myapp:latest
+          tags: ${{ matrix.tag }}
 
       - name: Set up Trivy
         uses: aquasecurity/setup-trivy@v0.2.3
@@ -41,15 +51,15 @@ jobs:
         uses: aquasecurity/trivy-action@0.32.0
         with:
           version: v0.65.0
-          image-ref: averinaleks/myapp:latest
+          image-ref: ${{ matrix.tag }}
           format: table
-          output: trivy-report.txt
+          output: ${{ matrix.artifact }}.txt
 
       - name: Show Trivy scan results
-        run: cat trivy-report.txt
+        run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-report
-          path: trivy-report.txt
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.txt
