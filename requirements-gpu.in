@@ -1,2 +1,2 @@
 cupy-cuda12x>=13.5.1
-vllm>=0.10.0
+vllm-cpu>=0.5.3
