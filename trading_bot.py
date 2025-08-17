@@ -67,9 +67,16 @@ async def send_telegram_alert(message: str) -> None:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
-            await client.post(
+            response = await client.post(
                 url, data={"chat_id": chat_id, "text": message}, timeout=5
             )
+            if response.status_code != 200:
+                logger.error(
+                    "Failed to send Telegram alert: HTTP %s - %s",
+                    response.status_code,
+                    response.text,
+                )
+                response.raise_for_status()
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.error("Failed to send Telegram alert: %s", exc)
 
