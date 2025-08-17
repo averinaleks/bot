@@ -24,16 +24,23 @@ try:
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
-    logging.getLogger("TradingBot").warning("Numba import failed: %s", exc)
+    logging.getLogger("TradingBot").error("Numba import failed: %s", exc)
+    _numba_exc = exc
+
+    def _numba_missing(*args, **kwargs):
+        raise ImportError("numba is required for JIT-accelerated functions") from _numba_exc
 
     def jit(*a, **k):
-        def wrapper(f):
-            return f
+        def wrapper(_f):
+            def inner(*args, **kwargs):
+                return _numba_missing()
+
+            return inner
 
         return wrapper
 
     def prange(*args):  # type: ignore
-        return range(*args)
+        raise ImportError("numba is required for prange") from _numba_exc
 
 
 import httpx
@@ -50,17 +57,13 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules.setdefault("pybit.unified_trading", ut_mod)
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
-except ImportError as exc:  # pragma: no cover - allow missing telegram package
-    logging.getLogger("TradingBot").warning("Telegram package not available: %s", exc)
+except Exception as exc:  # pragma: no cover - allow missing telegram package
+    logging.getLogger("TradingBot").error("Telegram package not available: %s", exc)
 
-    class RetryAfter(Exception):
+    class _TelegramError(Exception):
         pass
 
-    class BadRequest(Exception):
-        pass
-
-    class Forbidden(Exception):
-        pass
+    RetryAfter = BadRequest = Forbidden = _TelegramError
 
 
 from pybit.unified_trading import HTTP
@@ -744,7 +747,7 @@ def _calculate_volume_profile(prices, volumes, bins=50):
 def calculate_volume_profile(prices, volumes, bins=50):
     try:
         return _calculate_volume_profile(prices, volumes, bins)
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, ImportError) as exc:
         logger.error("Ошибка вычисления профиля объема: %s", exc)
         return np.zeros(bins)
 
