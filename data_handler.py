@@ -15,13 +15,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
 except ImportError as exc:  # allow missing pandas
-    logging.getLogger("TradingBot").warning("pandas import failed: %s", exc)
-    pd = types.ModuleType("pandas")
-    pd.DataFrame = dict
-    pd.Series = list
-    pd.Timestamp = lambda *a, **k: None
-    pd.Index = list
-    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
+    logging.getLogger("TradingBot").error("pandas import failed: %s", exc)
+    raise ImportError("pandas is required for data handling") from exc
 
 import httpx
 import numpy as np  # type: ignore
@@ -29,79 +24,41 @@ import numpy as np  # type: ignore
 try:  # optional dependency
     import polars as pl  # type: ignore
 except ImportError as exc:  # pragma: no cover - allow missing polars
-    logging.getLogger("TradingBot").warning("polars import failed: %s", exc)
+    logging.getLogger("TradingBot").error("polars import failed: %s", exc)
     pl = None
 
 try:  # pragma: no cover - optional dependency
     import websockets  # type: ignore
 except ImportError as exc:  # allow missing websockets
-    logging.getLogger("TradingBot").warning("websockets import failed: %s", exc)
-    websockets = types.ModuleType("websockets")
-
-    async def _dummy_connect(*args, **kwargs):  # type: ignore[override]
-        class _DummyWS:
-            async def send(self, *a, **k):
-                pass
-
-            async def recv(self):
-                return ""
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        return _DummyWS()
-
-    websockets.connect = _dummy_connect
+    logging.getLogger("TradingBot").error("websockets import failed: %s", exc)
+    raise ImportError("websockets is required for real-time data streaming") from exc
 from tenacity import retry, wait_exponential
 
 try:  # pragma: no cover - optional dependency
     import ta  # type: ignore
 except ImportError as exc:  # allow missing ta
-    logging.getLogger("TradingBot").warning("ta import failed: %s", exc)
-    ta = types.ModuleType("ta")
+    logging.getLogger("TradingBot").error("ta import failed: %s", exc)
+    raise ImportError("ta library is required for technical indicators") from exc
 
 
 try:  # pragma: no cover - optional dependency
     import psutil  # type: ignore
 except ImportError as exc:  # allow missing psutil
-    logging.getLogger("TradingBot").warning("psutil import failed: %s", exc)
+    logging.getLogger("TradingBot").error("psutil import failed: %s", exc)
+
+    def _missing_psutil(*args, **kwargs):
+        raise ImportError("psutil is required for system metrics") from exc
+
     psutil = types.SimpleNamespace(
-        cpu_percent=lambda interval=1: 0,
-        virtual_memory=lambda: type("mem", (), {"percent": 0}),
+        cpu_percent=_missing_psutil,
+        virtual_memory=_missing_psutil,
     )
 
 try:
     import ray
 except ImportError as exc:  # pragma: no cover - optional dependency missing
-    logging.getLogger("TradingBot").warning("ray import failed: %s", exc)
-    ray = types.ModuleType("ray")
-
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):
-            return self
-
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-
-            return wrapper
-        return _RayRemoteFunction(func)
-
-    ray.remote = _ray_remote
-    ray.get = lambda x: x
-    ray.init = lambda *a, **k: None
-    ray.is_initialized = lambda: False
+    logging.getLogger("TradingBot").error("ray import failed: %s", exc)
+    raise ImportError("ray is required for distributed computations") from exc
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
