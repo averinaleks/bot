@@ -424,10 +424,17 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
                 resp = await client.get(
                     f"{env['trade_manager_url']}/positions", timeout=5
                 )
+                if resp.status_code != 200:
+                    logger.error(
+                        "Failed to fetch positions: status code %s", resp.status_code
+                    )
+                    await asyncio.sleep(interval)
+                    continue
                 positions = resp.json().get("positions", [])
             except (httpx.HTTPError, ValueError) as exc:
                 logger.error("Failed to fetch positions: %s", exc)
-                positions = []
+                await asyncio.sleep(interval)
+                continue
             symbols: list[str] = []
             for pos in positions:
                 sym = pos.get("symbol")
