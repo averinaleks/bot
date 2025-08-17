@@ -10,7 +10,7 @@ Thank you for your interest in contributing to this project!
     ```bash
     ./scripts/install-test-deps.sh
     ```
-   (Use `--full` to include GPU packages.) This step is **required** before
+   (Use `--gpu` to include GPU packages.) This step is **required** before
    running the test suite—`pytest` expects these packages to be installed.
 2. Run `python -m flake8` and the test suites before submitting a pull request.
    The CI workflow runs `flake8` as a dedicated step and will fail if any style
@@ -30,12 +30,12 @@ These tests are also executed automatically by `pre-commit`.
 ### Updating dependencies
 
 The dependency lists are managed with [`pip-compile`](https://github.com/jazzband/pip-tools).
-Edit `requirements.in` or `requirements-cpu.in` to change top-level
+Edit `requirements-core.in` or `requirements-gpu.in` to change top-level
 dependencies and regenerate the pinned files:
 
 ```bash
-pip-compile requirements.in            # updates requirements.txt
-pip-compile requirements-cpu.in        # updates requirements-cpu.txt
+pip-compile requirements-core.in        # updates requirements-core.txt
+pip-compile requirements-gpu.in       # updates requirements-gpu.txt
 ```
 
 Commit both the `.in` and generated `.txt` files when updating.
