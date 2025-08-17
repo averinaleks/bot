@@ -185,13 +185,24 @@ def _convert(value: str, typ: type) -> Any:
             logger.warning("Failed to convert %r to float", value)
             return value
     if typ is list or typ == List[str] or getattr(typ, "__origin__", None) is list:
+        subtype = getattr(typ, "__args__", (str,))
+        subtype = subtype[0] if subtype else str
         try:
-            return json.loads(value)
+            items = json.loads(value)
         except json.JSONDecodeError:
             try:
-                return ast.literal_eval(value)
+                items = ast.literal_eval(value)
             except (ValueError, SyntaxError):
-                return [v.strip().strip("'\"") for v in value.split(",") if v.strip()]
+                items = [v.strip().strip("'\"") for v in value.split(",") if v.strip()]
+        if not isinstance(items, list):
+            items = [items]
+        converted = []
+        for item in items:
+            try:
+                converted.append(item if isinstance(item, subtype) else _convert(str(item), subtype))
+            except TypeError:
+                converted.append(item)
+        return converted
     return value
 
 
