@@ -30,6 +30,10 @@ GPT_ADVICE: dict[str, float | str | None] = {
 }
 
 
+class ServiceUnavailableError(Exception):
+    """Raised when required services are not reachable."""
+
+
 def safe_int(env_var: str, default: int) -> int:
     """Return int value of ``env_var`` or ``default`` on failure."""
     value = os.getenv(env_var)
@@ -196,7 +200,7 @@ async def check_services() -> None:
         elif result:
             errors.append(result)
     if errors:
-        raise SystemExit("; ".join(errors))
+        raise ServiceUnavailableError("; ".join(errors))
 
 
 
@@ -686,6 +690,8 @@ async def main_async() -> None:
         while True:
             await run_once_async()
             await asyncio.sleep(INTERVAL)
+    except ServiceUnavailableError as exc:
+        logger.error("Service availability check failed: %s", exc)
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
