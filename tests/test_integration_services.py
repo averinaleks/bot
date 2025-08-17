@@ -189,7 +189,7 @@ def test_check_services_failure(monkeypatch):
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
         monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
         monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
-        with pytest.raises(SystemExit):
+        with pytest.raises(trading_bot.ServiceUnavailableError):
             asyncio.run(trading_bot.check_services())
 
 
