@@ -4,6 +4,10 @@ This document lists all configuration parameters available for the trading bot.
 Each option corresponds to a field in `config.json` and the `BotConfig`
 dataclass.  Default values are shown for reference.
 
+List parameters supplied via environment variables must be provided either as
+JSON arrays (e.g. `["ws://a", "ws://b"]`) or as comma-separated values such as
+`ws://a,ws://b`.
+
 The GPT analysis service should return JSON with the following fields:
 `signal` ("buy"/"sell"/"hold"), `tp_mult` and `sl_mult` — multipliers applied
 to take‑profit and stop‑loss distances.
