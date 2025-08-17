@@ -16,6 +16,7 @@ from sklearn.linear_model import LogisticRegression
 load_dotenv()
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 BASE_DIR = Path.cwd().resolve()
 MODEL_FILE = Path(os.getenv('MODEL_FILE', 'model.pkl'))
@@ -113,6 +114,10 @@ def predict() -> tuple:
 def ping() -> tuple:
     return jsonify({'status': 'ok'})
 
+
+@app.errorhandler(413)
+def too_large(_):
+    return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8001'))

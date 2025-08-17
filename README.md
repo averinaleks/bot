@@ -346,6 +346,9 @@ These reference scripts expose the same HTTP routes as the full services but
 avoid heavy frameworks like TensorFlow and PyTorch, making them ideal for quick
 tests.
 
+Все Flask-сервисы ограничивают размер тела запроса 1 МБ. При превышении
+лимита клиент получает ответ 413 с JSON‑сообщением `{"error": "payload too large"}`.
+
 The model builder maintains separate models per trading pair.  POST JSON data
 of the form::
 

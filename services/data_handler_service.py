@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
 
@@ -60,6 +61,10 @@ def price(symbol: str):
 def ping():
     return jsonify({'status': 'ok'})
 
+
+@app.errorhandler(413)
+def too_large(_):
+    return jsonify({'error': 'payload too large'}), 413
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(exc: Exception) -> tuple:
