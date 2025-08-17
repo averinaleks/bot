@@ -652,7 +652,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             )
             tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
             await send_trade_async(
-                HTTP_CLIENT,
+                client,
                 symbol,
                 signal,
                 price,
