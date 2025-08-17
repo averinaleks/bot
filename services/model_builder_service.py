@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify
 import numpy as np
 import joblib
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 
@@ -16,16 +17,33 @@ load_dotenv()
 
 app = Flask(__name__)
 
-MODEL_FILE = os.getenv('MODEL_FILE', 'model.pkl')
+BASE_DIR = Path.cwd().resolve()
+MODEL_FILE = Path(os.getenv('MODEL_FILE', 'model.pkl'))
 _model = None
+
+
+def _validate_model_path(path: Path) -> Path:
+    """Ensure ``path`` stays inside ``BASE_DIR`` and resolve it."""
+    resolved = path.resolve(strict=False)
+    if not resolved.is_relative_to(BASE_DIR):
+        app.logger.error(
+            "Попытка доступа к файлу вне допустимого каталога: %s", resolved
+        )
+        raise ValueError("некорректный путь к модели")
+    return resolved
 
 
 def _load_model() -> None:
     """Load model from ``MODEL_FILE`` if it exists."""
     global _model
-    if os.path.exists(MODEL_FILE):
+    try:
+        model_path = _validate_model_path(MODEL_FILE)
+    except ValueError:
+        _model = None
+        return
+    if model_path.exists():
         try:
-            _model = joblib.load(MODEL_FILE)
+            _model = joblib.load(model_path)
         except Exception as exc:  # pragma: no cover - model may be corrupted
             app.logger.exception("Failed to load model: %s", exc)
             _model = None
@@ -51,7 +69,16 @@ def train() -> tuple:
         return jsonify({'error': 'labels must contain at least two classes'}), 400
     model = LogisticRegression(multi_class="auto")
     model.fit(features, labels)
-    joblib.dump(model, MODEL_FILE)
+    try:
+        model_path = _validate_model_path(MODEL_FILE)
+    except ValueError:
+        return jsonify({'error': 'invalid model path'}), 400
+    if not model_path.parent.exists():
+        app.logger.error(
+            "Каталог для файла модели не существует: %s", model_path.parent
+        )
+        return jsonify({'error': 'invalid model path'}), 400
+    joblib.dump(model, model_path)
     global _model
     _model = model
     return jsonify({'status': 'trained'})
