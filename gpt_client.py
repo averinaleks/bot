@@ -2,7 +2,14 @@ import logging
 import os
 import json
 from urllib.parse import urlparse
+
 import httpx
+from tenacity import (
+    AsyncRetrying,
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 logger = logging.getLogger("TradingBot")
 
@@ -30,11 +37,26 @@ def _validate_api_url(api_url: str) -> None:
         raise GPTClientError("GPT_OSS_API must use HTTPS or be localhost")
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=1, max=10),
+    reraise=True,
+)
+def _post_with_retry(url: str, prompt: str) -> httpx.Response:
+    """POST helper that retries on network failures."""
+    with httpx.Client(trust_env=False, timeout=5) as client:
+        response = client.post(url, json={"prompt": prompt})
+        response.raise_for_status()
+        return response
+
+
 def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.
 
     The API endpoint is read from the ``GPT_OSS_API`` environment variable. If
-    it is not set a :class:`GPTClientNetworkError` is raised.
+    it is not set a :class:`GPTClientNetworkError` is raised. Network errors are
+    retried up to three times with exponential backoff between one and ten
+    seconds before giving up.
     """
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
@@ -44,9 +66,7 @@ def query_gpt(prompt: str) -> str:
     _validate_api_url(api_url)
     url = api_url.rstrip("/") + "/v1/completions"
     try:
-        with httpx.Client(trust_env=False, timeout=5) as client:
-            response = client.post(url, json={"prompt": prompt})
-            response.raise_for_status()
+        response = _post_with_retry(url, prompt)
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -71,7 +91,9 @@ async def query_gpt_async(prompt: str) -> str:
 
     The API endpoint is taken from the ``GPT_OSS_API`` environment variable. If it
     is not set a :class:`GPTClientNetworkError` is raised. Request timeout is read
-    from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``).
+    from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are retried
+    up to three times with exponential backoff between one and ten seconds before
+    giving up.
 
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
@@ -92,14 +114,22 @@ async def query_gpt_async(prompt: str) -> str:
         timeout = 5.0
     url = api_url.rstrip("/") + "/v1/completions"
     try:
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
-            response = await client.post(url, json={"prompt": prompt})
-            response.raise_for_status()
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
-                raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(min=1, max=10),
+            reraise=True,
+        ):
+            with attempt:
+                async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+                    response = await client.post(url, json={"prompt": prompt})
+                    response.raise_for_status()
+                    try:
+                        data = response.json()
+                    except ValueError as exc:
+                        logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+                        raise GPTClientJSONError(
+                            "Invalid JSON response from GPT OSS API"
+                        ) from exc
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
