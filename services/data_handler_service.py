@@ -12,10 +12,28 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
-exchange = ccxt.bybit({
-    'apiKey': os.getenv('BYBIT_API_KEY', ''),
-    'secret': os.getenv('BYBIT_API_SECRET', ''),
-})
+exchange = None
+
+
+def init_exchange() -> None:
+    """Initialize the global ccxt Bybit exchange instance."""
+    global exchange
+    try:
+        exchange = ccxt.bybit(
+            {
+                'apiKey': os.getenv('BYBIT_API_KEY', ''),
+                'secret': os.getenv('BYBIT_API_SECRET', ''),
+            }
+        )
+    except Exception as exc:  # pragma: no cover - config errors
+        logging.exception("Failed to initialize Bybit client: %s", exc)
+        raise RuntimeError("Invalid Bybit configuration") from exc
+
+
+@app.before_first_request
+def _startup() -> None:
+    if exchange is None:
+        init_exchange()
 
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
@@ -23,6 +41,8 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 # Correct price endpoint without trailing whitespace
 @app.route('/price/<symbol>')
 def price(symbol: str):
+    if exchange is None:
+        return jsonify({'error': 'exchange not initialized'}), 503
     try:
         ticker = exchange.fetch_ticker(symbol)
         last_raw = ticker.get('last')
@@ -65,5 +85,6 @@ if __name__ == '__main__':
         )
     else:
         logging.info('HOST не установлен, используется %s', host)
+    init_exchange()
     logging.info('Запуск сервиса DataHandler на %s:%s', host, port)
     app.run(host=host, port=port)  # nosec B104  # хост проверен выше
