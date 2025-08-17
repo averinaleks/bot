@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from typing import List
 
 import torch
@@ -17,7 +18,6 @@ model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-@app.on_event("startup")
 def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
@@ -60,6 +60,17 @@ def load_model() -> None:
         logging.exception("Failed to load fallback model '%s'", fallback_model)
         tokenizer = None
         model = None
+
+
+async def load_model_async() -> None:
+    """Asynchronously load the model without blocking the event loop."""
+    await asyncio.to_thread(load_model)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Schedule the model loading on application startup."""
+    asyncio.create_task(load_model_async())
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
