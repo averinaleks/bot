@@ -82,7 +82,14 @@ async def query_gpt_async(prompt: str) -> str:
         raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
 
     _validate_api_url(api_url)
-    timeout = float(os.getenv("GPT_OSS_TIMEOUT", "5"))
+    timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
+    try:
+        timeout = float(timeout_env)
+    except ValueError:
+        logger.warning(
+            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
+        )
+        timeout = 5.0
     url = api_url.rstrip("/") + "/v1/completions"
     try:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
