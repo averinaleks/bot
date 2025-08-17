@@ -16,6 +16,7 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = ccxt.bybit({
     'apiKey': os.getenv('BYBIT_API_KEY', ''),
@@ -248,6 +249,10 @@ def ready():
     """Health check endpoint used by docker-compose."""
     return jsonify({'status': 'ok'})
 
+
+@app.errorhandler(413)
+def too_large(_):
+    return jsonify({'error': 'payload too large'}), 413
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(exc: Exception) -> tuple:
