@@ -27,7 +27,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libblas-dev \
     liblapack-dev \
     tar \
-    && python3 -m pip install --no-cache-dir 'pip>=25.2' \
+    && python3 -m pip install --no-cache-dir 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
     && find . -type l -lname "*..*" -print \
@@ -48,8 +48,8 @@ ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Устанавливаем зависимости (pip >=25.2 и устраняет CVE-2023-32681)
-RUN pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
+# Устанавливаем зависимости (pip >=24.0 и устраняет CVE-2023-32681)
+RUN pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
     pip install --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete
