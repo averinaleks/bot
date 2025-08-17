@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("transformers")
+
 import server
 from fastapi.testclient import TestClient
 
