@@ -1,5 +1,10 @@
+import sys
+
 import pytest
 import httpx
+
+sys.modules.pop("tenacity", None)
+import tenacity
 
 from bot.gpt_client import (
     GPTClientError,
@@ -68,6 +73,37 @@ def test_query_gpt_no_env(monkeypatch):
         query_gpt("hi")
 
 
+def test_query_gpt_retry_success(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    calls = {"count": 0}
+
+    def fake_post(self, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.HTTPError("boom")
+        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(tenacity.nap, "sleep", lambda *_: None)
+    assert query_gpt("hi") == "ok"
+    assert calls["count"] == 2
+
+
+def test_query_gpt_retry_failure(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    calls = {"count": 0}
+
+    def fake_post(self, *args, **kwargs):
+        calls["count"] += 1
+        raise httpx.HTTPError("boom")
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(tenacity.nap, "sleep", lambda *_: None)
+    with pytest.raises(GPTClientNetworkError):
+        query_gpt("hi")
+    assert calls["count"] == 3
+
+
 @pytest.mark.asyncio
 async def test_query_gpt_async_network_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
@@ -127,6 +163,54 @@ async def test_query_gpt_async_no_env(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
         await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_retry_success(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    calls = {"count": 0}
+
+    class DummyResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"text": "ok"}]}
+
+    async def fake_post(self, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.HTTPError("boom")
+        return DummyResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(tenacity.asyncio, "_portable_async_sleep", no_sleep)
+    assert await query_gpt_async("hi") == "ok"
+    assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_retry_failure(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    calls = {"count": 0}
+
+    async def fake_post(self, *args, **kwargs):
+        calls["count"] += 1
+        raise httpx.HTTPError("boom")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(tenacity.asyncio, "_portable_async_sleep", no_sleep)
+    with pytest.raises(GPTClientNetworkError):
+        await query_gpt_async("hi")
+    assert calls["count"] == 3
 
 
 @pytest.mark.asyncio
