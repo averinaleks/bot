@@ -27,6 +27,7 @@ class DummyResponse:
 
 
 def test_query_gpt_network_error(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     def fake_post(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
 
@@ -36,6 +37,7 @@ def test_query_gpt_network_error(monkeypatch):
 
 
 def test_query_gpt_non_json(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     def fake_post(self, *args, **kwargs):
         return DummyResponse(json_exc=ValueError("no json"))
 
@@ -45,6 +47,7 @@ def test_query_gpt_non_json(monkeypatch):
 
 
 def test_query_gpt_missing_fields(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     def fake_post(self, *args, **kwargs):
         return DummyResponse(json_data={"foo": "bar"})
 
@@ -56,6 +59,12 @@ def test_query_gpt_missing_fields(monkeypatch):
 def test_query_gpt_insecure_url(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
+def test_query_gpt_no_env(monkeypatch):
+    monkeypatch.delenv("GPT_OSS_API", raising=False)
+    with pytest.raises(GPTClientNetworkError):
         query_gpt("hi")
 
 

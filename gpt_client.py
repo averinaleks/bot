@@ -33,10 +33,14 @@ def _validate_api_url(api_url: str) -> None:
 def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.
 
-    The API endpoint is read from the ``GPT_OSS_API`` environment variable.
-    If it is not set, ``http://localhost:8003`` is used.
+    The API endpoint is read from the ``GPT_OSS_API`` environment variable. If
+    it is not set a :class:`GPTClientNetworkError` is raised.
     """
-    api_url = os.getenv("GPT_OSS_API", "http://localhost:8003")
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        logger.error("Environment variable GPT_OSS_API is not set")
+        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
+
     _validate_api_url(api_url)
     url = api_url.rstrip("/") + "/v1/completions"
     try:
@@ -65,8 +69,9 @@ def query_gpt(prompt: str) -> str:
 async def query_gpt_async(prompt: str) -> str:
     """Asynchronously send *prompt* to the GPT OSS API and return the first completion text.
 
-    The API endpoint is taken from the ``GPT_OSS_API`` environment variable. Request
-    timeout is read from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``).
+    The API endpoint is taken from the ``GPT_OSS_API`` environment variable. If it
+    is not set a :class:`GPTClientNetworkError` is raised. Request timeout is read
+    from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``).
 
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
