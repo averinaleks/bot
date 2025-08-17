@@ -6,10 +6,6 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 exchange = ccxt.bybit({
@@ -52,6 +48,7 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     return jsonify({'error': 'internal server error'}), 500
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     port = int(os.environ.get('PORT', '8000'))
     # По умолчанию слушаем только локальный интерфейс.
     host = os.environ.get('HOST', '127.0.0.1')
