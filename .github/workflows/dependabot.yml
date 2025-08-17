@@ -22,4 +22,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
           GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
-          GITHUB_REGISTRIES_PROXY: .github/registries-proxy.json
