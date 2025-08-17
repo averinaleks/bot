@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # -------- Builder stage --------
-# Используем LTS-образ из GitHub Container Registry для сборки зависимостей
-FROM ghcr.io/averinaleks/ubuntu:noble AS builder
+# Используем публичный LTS-образ Ubuntu для сборки зависимостей
+FROM ubuntu:noble AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
