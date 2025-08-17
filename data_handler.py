@@ -1749,10 +1749,13 @@ class DataHandler:
                             idx, result.df.columns
                         ].to_numpy()
                         self.ohlcv_2h = base_df_2h
+            callbacks: list[Awaitable[Any]] = []
             if self.feature_callback:
-                asyncio.create_task(self.feature_callback(symbol))
+                callbacks.append(self.feature_callback(symbol))
             if self.trade_callback:
-                asyncio.create_task(self.trade_callback(symbol))
+                callbacks.append(self.trade_callback(symbol))
+            if callbacks:
+                await asyncio.gather(*callbacks)
             self.cache.save_cached_data(f"{timeframe}_{symbol}", timeframe, df)
         except (KeyError, ValueError, TypeError, IndexError) as e:
             logger.error(
