@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import logging
 
 from typing import Optional
 
@@ -20,24 +21,28 @@ def _load_skip_flag(config_path: Path) -> bool:
     return True
 
 
+logger = logging.getLogger(__name__)
+
+
 def main(config_path: Optional[Path] = None) -> None:
+    logging.basicConfig(level=logging.INFO)
     if config_path is None:
         config_path = Path(__file__).resolve().parent.parent / "gptoss_check.config"
     skip = _load_skip_flag(config_path)
     if skip:
-        print("GPT-OSS check skipped via configuration")
+        logger.info("GPT-OSS check skipped via configuration")
         return
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
-        print("Переменная окружения GPT_OSS_API не установлена, проверка пропущена")
+        logger.warning("Переменная окружения GPT_OSS_API не установлена, проверка пропущена")
         return
     try:
         from . import check_code  # package execution
     except ImportError:  # script execution
         import check_code  # type: ignore
-    print("Running GPT-OSS check...")
+    logger.info("Running GPT-OSS check...")
     check_code.run()
-    print("GPT-OSS check completed")
+    logger.info("GPT-OSS check completed")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
