@@ -136,6 +136,14 @@ DEFAULT_SERVICE_CHECK_DELAY = 2.0
 # Global flag toggled via Telegram commands to enable/disable trading
 trading_enabled: bool = True
 
+# Shared HTTP client for outgoing requests
+HTTP_CLIENT = httpx.AsyncClient(trust_env=False)
+
+
+async def close_http_client() -> None:
+    """Close the module-level HTTP client."""
+    await HTTP_CLIENT.aclose()
+
 
 def _load_env() -> dict:
     """Load service URLs from environment variables.
@@ -367,7 +375,7 @@ def _handle_trade_response(
 
 
 async def _post_trade(
-    client: httpx.Client | httpx.AsyncClient,
+    client: httpx.AsyncClient,
     symbol: str,
     side: str,
     price: float,
@@ -383,16 +391,15 @@ async def _post_trade(
         symbol, side, price, tp, sl, trailing_stop
     )
     url = f"{env['trade_manager_url']}/open_position"
-    post = client.post
-    if asyncio.iscoroutinefunction(post):
-        resp = await post(url, json=payload, timeout=timeout, headers=headers or None)
-    else:
-        resp = post(url, json=payload, timeout=timeout, headers=headers or None)
+    resp = await client.post(
+        url, json=payload, timeout=timeout, headers=headers or None
+    )
     return _handle_trade_response(resp, symbol, start)
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 async def send_trade_async(
+    client: httpx.AsyncClient,
     symbol: str,
     side: str,
     price: float,
@@ -404,10 +411,9 @@ async def send_trade_async(
     """Asynchronously send trade request to trade manager."""
 
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
-            ok, elapsed, error = await _post_trade(
-                client, symbol, side, price, env, tp, sl, trailing_stop
-            )
+        ok, elapsed, error = await _post_trade(
+            client, symbol, side, price, env, tp, sl, trailing_stop
+        )
         if elapsed > CONFIRMATION_TIMEOUT:
             await send_telegram_alert(
                 f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
@@ -639,6 +645,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             )
             tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
             await send_trade_async(
+                HTTP_CLIENT,
                 symbol,
                 signal,
                 price,
@@ -672,6 +679,7 @@ async def run_once_async() -> None:
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
         await send_trade_async(
+            HTTP_CLIENT,
             SYMBOL,
             model_signal,
             price,
@@ -710,6 +718,7 @@ async def main_async() -> None:
             train_task.cancel()
             with suppress(asyncio.CancelledError):
                 await train_task
+        await close_http_client()
 
 
 def main() -> None:
