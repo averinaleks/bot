@@ -3,6 +3,7 @@
 import logging
 import os
 import json
+import re
 import pandas as pd
 import numpy as np
 import asyncio
@@ -694,7 +695,7 @@ async def check_dataframe_empty_async(df, context: str = "") -> bool:
 
 def sanitize_symbol(symbol: str) -> str:
     """Sanitize symbol string for safe filesystem usage."""
-    return symbol.replace("/", "_").replace(":", "_")
+    return re.sub(r'[^A-Za-z0-9._-]', '_', symbol)
 
 
 def filter_outliers_zscore(df, column="close", threshold=3.0):
