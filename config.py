@@ -230,6 +230,12 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
             expected_type = type_hints.get(fdef.name, fdef.type)
             converted = _convert(env_val, expected_type)
             if isinstance(converted, str) and expected_type is not str:
+                expected_name = getattr(expected_type, "__name__", str(expected_type))
+                logger.warning(
+                    "Ignoring %s: expected value of type %s",
+                    fdef.name.upper(),
+                    expected_name,
+                )
                 continue
             cfg[fdef.name] = converted
     return BotConfig(**cfg)
