@@ -1,10 +1,14 @@
 import os
 import time
+import logging
 from pathlib import Path
 
 import httpx
 
 from gpt_client import GPTClientError, query_gpt
+
+
+logger = logging.getLogger(__name__)
 
 
 def wait_for_api(api_url: str, timeout: int | None = None) -> None:
@@ -60,7 +64,7 @@ def send_telegram(msg: str) -> None:
                 trust_env=False,
             )
         except httpx.HTTPError as err:
-            print(f"⚠️ Failed to send Telegram message: {err}")
+            logger.warning("⚠️ Failed to send Telegram message: %s", err)
 
 
 def run() -> None:
@@ -69,14 +73,14 @@ def run() -> None:
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
         warning = "Переменная окружения GPT_OSS_API не установлена, проверка пропущена"
-        print(warning)
+        logger.warning(warning)
         send_telegram(warning)
         return
     try:
         wait_for_api(api_url)
     except RuntimeError as err:
         warning = f"{err}, проверка пропущена"
-        print(warning)
+        logger.warning(warning)
         send_telegram(warning)
         return
     repo_root = Path(__file__).resolve().parent.parent
@@ -84,7 +88,7 @@ def run() -> None:
         path = repo_root / filename
         if not path.exists():
             warning = f"⚠️ {filename} not found, skipping"
-            print(warning)
+            logger.warning(warning)
             send_telegram(warning)
             continue
 
@@ -98,11 +102,11 @@ def run() -> None:
         try:
             result = query(prompt)
         except RuntimeError as err:
-            print(f"\n📄 {filename}\n{err}\n")
+            logger.error("\n📄 %s\n%s\n", filename, err)
             send_telegram(f"📄 {filename}\n{err}")
             continue
 
-        print(f"\n📄 {filename}\n{result}\n")
+        logger.info("\n📄 %s\n%s\n", filename, result)
         send_telegram(f"📄 {filename}\n{result}")
 
 
