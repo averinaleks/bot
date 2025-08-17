@@ -6,7 +6,6 @@ This module defines the :class:`BotConfig` dataclass along with helpers to
 load configuration values from ``config.json`` and environment variables.
 """
 
-import ast
 import json
 import logging
 import os
@@ -190,10 +189,7 @@ def _convert(value: str, typ: type) -> Any:
         try:
             items = json.loads(value)
         except json.JSONDecodeError:
-            try:
-                items = ast.literal_eval(value)
-            except (ValueError, SyntaxError):
-                items = [v.strip().strip("'\"") for v in value.split(",") if v.strip()]
+            items = [v.strip().strip("'\"") for v in value.split(",") if v.strip()]
         if not isinstance(items, list):
             items = [items]
         converted = []
