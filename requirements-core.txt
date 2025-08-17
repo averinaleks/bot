@@ -556,6 +556,8 @@ tqdm==4.67.1
     #   optuna
     #   pytorch-lightning
     #   shap
+transformers==4.55.2
+    # via -r requirements-core.in
 triton==3.3.1
     # via torch
 typing-extensions==4.14.1

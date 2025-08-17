@@ -6,7 +6,13 @@ from typing import List
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+_TRANSFORMERS_IMPORT_ERROR = None
+try:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+except Exception as exc:  # pragma: no cover - used for optional dependency
+    AutoModelForCausalLM = AutoTokenizer = None
+    _TRANSFORMERS_IMPORT_ERROR = exc
 
 
 app = FastAPI()
@@ -21,6 +27,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def load_model() -> None:
     """Load the tokenizer and model into global variables."""
     global tokenizer, model
+    if AutoTokenizer is None or AutoModelForCausalLM is None:
+        raise RuntimeError(
+            "transformers is required to load the model. Install it with 'pip install transformers'."
+        ) from _TRANSFORMERS_IMPORT_ERROR
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
     fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
     try:
