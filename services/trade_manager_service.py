@@ -17,10 +17,28 @@ load_dotenv()
 
 app = Flask(__name__)
 
-exchange = ccxt.bybit({
-    'apiKey': os.getenv('BYBIT_API_KEY', ''),
-    'secret': os.getenv('BYBIT_API_SECRET', ''),
-})
+exchange = None
+
+
+def init_exchange() -> None:
+    """Initialize the global ccxt Bybit exchange instance."""
+    global exchange
+    try:
+        exchange = ccxt.bybit(
+            {
+                'apiKey': os.getenv('BYBIT_API_KEY', ''),
+                'secret': os.getenv('BYBIT_API_SECRET', ''),
+            }
+        )
+    except Exception as exc:  # pragma: no cover - config errors
+        logging.exception("Failed to initialize Bybit client: %s", exc)
+        raise RuntimeError("Invalid Bybit configuration") from exc
+
+
+@app.before_first_request
+def _startup() -> None:
+    if exchange is None:
+        init_exchange()
 
 # Expected API token for simple authentication
 API_TOKEN = os.getenv('TRADE_MANAGER_TOKEN')
@@ -89,6 +107,8 @@ def open_position() -> tuple:
         risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
         if risk_usd > 0 and price > 0:
             amount = risk_usd / price
+    if exchange is None:
+        return jsonify({'error': 'exchange not initialized'}), 503
     if not symbol or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     try:
@@ -190,6 +210,8 @@ def close_position() -> tuple:
     close_amount = data.get('close_amount')
     if close_amount is not None:
         close_amount = float(close_amount)
+    if exchange is None:
+        return jsonify({'error': 'exchange not initialized'}), 503
     if not order_id or not side:
         return jsonify({'error': 'invalid order'}), 400
 
@@ -270,5 +292,6 @@ if __name__ == '__main__':
         )
     else:
         app.logger.info('HOST не установлен, используется %s', host)
+    init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
     app.run(host=host, port=port)  # nosec B104  # host validated above
