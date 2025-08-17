@@ -570,8 +570,6 @@ def should_trade(model_signal: str) -> bool:
 
 async def refresh_gpt_advice() -> None:
     """Fetch GPT analysis and update ``GPT_ADVICE``."""
-
-    global GPT_ADVICE
     try:
         strategy_code = (
             Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")

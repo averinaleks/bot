@@ -45,9 +45,10 @@ try:  # pragma: no cover - optional dependency
     import psutil  # type: ignore
 except ImportError as exc:  # allow missing psutil
     logging.getLogger("TradingBot").error("psutil import failed: %s", exc)
+    missing_exc = exc
 
     def _missing_psutil(*args, **kwargs):
-        raise ImportError("psutil is required for system metrics") from exc
+        raise ImportError("psutil is required for system metrics") from missing_exc
 
     psutil = types.SimpleNamespace(
         cpu_percent=_missing_psutil,
