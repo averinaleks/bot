@@ -27,9 +27,9 @@
    python3 -m venv venv
    source venv/bin/activate
    # Вариант с GPU (по умолчанию)
-   python -m pip install -r requirements.txt
+   python -m pip install -r requirements-core.txt -r requirements-gpu.txt
    # Или CPU‑сборки без CUDA
-   python -m pip install -r requirements-cpu.txt
+   python -m pip install -r requirements-core.txt
    # Зависимости для тестов
    ./scripts/install-test-deps.sh
    ```
@@ -41,11 +41,11 @@
    pip install torch>=2.7.1 torchvision>=0.22.1 --extra-index-url https://download.pytorch.org/whl/cu124
    ```
    Эта команда ставит версии с поддержкой CUDA 12.4. Выполните её до
-   `python -m pip install -r requirements.txt` (или вместо него, если
+   `python -m pip install -r requirements-core.txt -r requirements-gpu.txt` (или вместо него, если
    остальные зависимости уже установлены).
    Эта утилита устанавливает пакеты, необходимые для запуска тестов. Выполните
    её перед `pytest`, чтобы все проверки прошли успешно.
-    Файл `requirements.txt` уже включает `cupy-cuda12x` для систем с CUDA 12.x.
+    Файл `requirements-gpu.txt` уже включает `cupy-cuda12x` для систем с CUDA 12.x.
     Для других версий CUDA установите подходящий пакет CuPy вручную, например:
 
     ```bash
@@ -54,7 +54,7 @@
     ```
 
     Подробности и таблицу соответствия версий смотрите в [документации CuPy](https://docs.cupy.dev/en/stable/install.html).
-    Если CuPy отсутствует, бот автоматически переключается на CPU‑режим. Список `requirements-cpu.txt`
+    Если CuPy отсутствует, бот автоматически переключается на CPU‑режим. Список `requirements-core.txt`
     содержит версии `torch` и `tensorflow` без поддержки GPU. Его можно
     использовать для установки зависимостей и запуска тестов на машинах без CUDA.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
@@ -622,17 +622,17 @@ MLFLOW_TRACKING_URI=mlruns python -m bot.trading_bot
 
 ## Running tests
 
-Running `pytest` requires the packages listed in `requirements-cpu.txt`.
+Running `pytest` requires the packages listed in `requirements-core.txt`.
 Install them using the helper script:
 
 ```bash
 ./scripts/setup-tests.sh        # CPU packages only
 ```
 
-To install the GPU-enabled packages from `requirements.txt` instead, run:
+To install the GPU-enabled packages from `requirements-gpu.txt` as well, run:
 
 ```bash
-./scripts/install-test-deps.sh --full
+./scripts/install-test-deps.sh --gpu
 ```
 
 If you skip this step and run `pytest` anyway, common imports like
@@ -655,7 +655,7 @@ Integration tests that require external services are marked with `integration` a
 pytest -m integration
 ```
 
-The `requirements-cpu.txt` file already bundles `pytest` and all other
+The `requirements-core.txt` file already bundles `pytest` and all other
 packages needed by the test suite.
 
 Unit tests automatically set the environment variable `TEST_MODE=1`.
@@ -683,7 +683,7 @@ As noted above, make sure to run `./scripts/setup-tests.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 `httpx` will fail.
 
-Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-cpu.txt`.
+Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-core.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
 
 Пример полного процесса:
@@ -699,7 +699,7 @@ executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 зависимостей командой `./scripts/install-test-deps.sh --full` и затем
   запустить те же тесты.
 
-The `requirements.txt` file already includes test-only packages such as
+The `requirements-core.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
 is required.
 
@@ -747,7 +747,7 @@ The project uses **flake8** for style checks. Install dependencies and enable
 the pre-commit hook so linting runs automatically:
 
 ```bash
-pip install -r requirements.txt  # or requirements-cpu.txt
+pip install -r requirements-core.txt -r requirements-gpu.txt  # or requirements-core.txt
 pip install pre-commit
 pre-commit install
 ```
@@ -781,7 +781,7 @@ Replay past market data using the built in trading logic:
 python scripts/run_simulation.py --start 2020-01-01 --end 2020-01-02 --speed 60
 ```
 
-If you do not have the full `requirements.txt` installed, set `TEST_MODE=1` so
+If you do not have the full GPU requirements installed, set `TEST_MODE=1` so
 the simulator stubs heavy dependencies. Example:
 
 ```bash

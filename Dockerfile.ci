@@ -31,7 +31,7 @@ WORKDIR /app
 
 
 # Copy files required for static analysis
-COPY .pre-commit-config.yaml .flake8 .pylintrc requirements.txt requirements-cpu.txt ./
+COPY .pre-commit-config.yaml .flake8 .pylintrc requirements-core.txt requirements-gpu.txt ./
 COPY *.py ./
 COPY scripts scripts
 COPY services services

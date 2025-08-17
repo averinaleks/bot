@@ -4,14 +4,12 @@ set -e
 # requirement files generated via `pip-compile`.
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Default to the lightweight CPU requirements. Pass --full to install the
-# complete list from requirements.txt (includes GPU packages).
-REQ_FILE="requirements-cpu.txt"
-if [ "$1" = "--full" ]; then
-    REQ_FILE="requirements.txt"
-elif [ -n "$1" ]; then
-    echo "Usage: $0 [--full]" >&2
+# Install core requirements by default. Pass --gpu to include GPU packages.
+if [ "$1" = "--gpu" ]; then
+    python -m pip install -r "$REPO_ROOT/requirements-core.txt" -r "$REPO_ROOT/requirements-gpu.txt"
+elif [ -z "$1" ]; then
+    python -m pip install -r "$REPO_ROOT/requirements-core.txt"
+else
+    echo "Usage: $0 [--gpu]" >&2
     exit 1
 fi
-
-python -m pip install -r "$REPO_ROOT/$REQ_FILE"

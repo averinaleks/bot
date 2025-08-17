@@ -40,8 +40,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 
 WORKDIR /app
 
-# Копируем requirements.txt
-COPY requirements.txt .
+# Copy requirements files
+COPY requirements-core.txt requirements-gpu.txt .
 
 # Создаем виртуальное окружение
 ENV VIRTUAL_ENV=/app/venv
@@ -50,7 +50,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Устанавливаем зависимости (pip >=25.2 и устраняет CVE-2023-32681)
 RUN pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete
 

@@ -15,13 +15,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 
 WORKDIR /app
 
-COPY requirements-cpu.txt .
+COPY requirements-core.txt .
 
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV && \
     # pip >=25.2 и устраняет CVE-2023-32681
     $VIRTUAL_ENV/bin/pip install --no-cache-dir pip==25.2 'setuptools<81' wheel && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-cpu.txt && \
+    $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
     $VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
