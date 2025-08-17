@@ -12,4 +12,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 EXPOSE 8000
 
-CMD ["python", "-m", "vllm.entrypoints.openai.api_server", "--host", "0.0.0.0", "--port", "8000", "--model", "Qwen/Qwen2.5-0.5B-Instruct", "--device", "cpu", "--max-num-seqs", "4", "--enforce-eager", "--disable-async-output-proc"]
+CMD ["python", "-m", "vllm.entrypoints.openai.api_server",
+     "--host", "0.0.0.0",
+     "--port", "8000",
+     "--model", "Qwen/Qwen2.5-0.5B-Instruct",
+     "--device", "cpu",
+     "--max-num-seqs", "4",
+     "--enforce-eager",
+     "--disable-async-output-proc"]
