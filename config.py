@@ -200,7 +200,18 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     cfg: Dict[str, Any] = {}
     if os.path.exists(path):
         with open(path, "r") as f:
-            cfg.update(json.load(f))
+            try:
+                cfg.update(json.load(f))
+            except json.JSONDecodeError as exc:
+                logger.warning("Failed to decode %s: %s", path, exc)
+                f.seek(0)
+                content = f.read()
+                end = content.rfind("}")
+                if end != -1:
+                    try:
+                        cfg.update(json.loads(content[: end + 1]))
+                    except json.JSONDecodeError:
+                        pass
     type_hints = get_type_hints(BotConfig)
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
