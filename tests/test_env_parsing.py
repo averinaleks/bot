@@ -22,14 +22,9 @@ async def test_send_trade_timeout_invalid_env(monkeypatch):
     called = {}
 
     class DummyClient:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
         async def post(self, url, json=None, timeout=None, headers=None):
             called["timeout"] = timeout
+
             class Resp:
                 status_code = 200
 
@@ -38,9 +33,12 @@ async def test_send_trade_timeout_invalid_env(monkeypatch):
 
             return Resp()
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient())
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
     monkeypatch.setenv("TRADE_MANAGER_TIMEOUT", "oops")
-    await trading_bot.send_trade_async("BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"})
+    await trading_bot.send_trade_async(
+        dummy, "BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"}
+    )
     assert called["timeout"] == 5.0
 
 
