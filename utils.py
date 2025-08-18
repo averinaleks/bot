@@ -1,6 +1,7 @@
 """Miscellaneous helper utilities for the trading bot."""
 
 import logging
+logger = logging.getLogger("TradingBot")
 import os
 import json
 import re
@@ -400,7 +401,6 @@ class BybitSDKAsync:
         return await asyncio.to_thread(_sync)
 
 
-logger = logging.getLogger("TradingBot")
 level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, level_name, logging.INFO))
 
