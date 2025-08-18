@@ -41,6 +41,7 @@ def test_data_handler_service_does_not_configure_logging_on_import(monkeypatch):
 
     flask.Flask = DummyFlask
     flask.jsonify = lambda obj: obj
+    flask.request = types.SimpleNamespace(endpoint='ping')
     monkeypatch.setitem(sys.modules, 'flask', flask)
 
     monkeypatch.delitem(sys.modules, 'bot.services.data_handler_service', raising=False)
