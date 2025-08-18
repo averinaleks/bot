@@ -2,16 +2,19 @@ import os
 import logging
 import asyncio
 from typing import List
+from contextlib import asynccontextmanager
+
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI()
-
 _TRANSFORMERS_IMPORT_ERROR = None
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    from transformers.utils.exceptions import TransformersError
+    try:  # pragma: no cover - optional dependency details
+        from transformers.utils.exceptions import TransformersError
+    except Exception:  # pragma: no cover - used if submodule missing
+        TransformersError = Exception
 except Exception as exc:  # pragma: no cover - used for optional dependency
     AutoModelForCausalLM = AutoTokenizer = None
     TransformersError = Exception
@@ -74,6 +77,7 @@ def load_model() -> str:
         return "fallback"
     except (OSError, ValueError, TransformersError):
         logging.exception("Failed to load fallback model '%s'", fallback_model)
+        raise RuntimeError("Failed to load both primary and fallback models")
 
 
 async def load_model_async() -> None:
@@ -85,9 +89,13 @@ async def load_model_async() -> None:
     await asyncio.to_thread(load_model)
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI):
     await load_model_async()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 
