@@ -19,7 +19,7 @@ def test_data_handler_service_does_not_configure_logging_on_import(monkeypatch):
 
     class DummyFlask:
         def __init__(self, name):
-            pass
+            self.config = {}
 
         def route(self, *args, **kwargs):
             def decorator(func):
