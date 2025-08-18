@@ -23,8 +23,6 @@ tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-app = FastAPI()
-
 
 def load_model() -> str:
     """Load the tokenizer and model into global variables.
