@@ -2,8 +2,6 @@ import os
 import logging
 import asyncio
 from typing import List
-from contextlib import asynccontextmanager
-
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -24,8 +22,8 @@ except Exception as exc:  # pragma: no cover - used for optional dependency
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
-# Task responsible for loading the model asynchronously.
-_load_model_task: asyncio.Task | None = None
+
+app = FastAPI()
 
 
 def load_model() -> str:
@@ -87,6 +85,11 @@ async def load_model_async() -> None:
         RuntimeError: If both primary and fallback models fail to load.
     """
     await asyncio.to_thread(load_model)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    await load_model_async()
 
 
 
