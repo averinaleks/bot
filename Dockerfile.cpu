@@ -2,7 +2,10 @@ FROM ubuntu:noble-20250716 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+# Обновляем систему перед установкой зависимостей
+RUN apt-get update && apt-get dist-upgrade -y
+
+RUN apt-get install -y --no-install-recommends \
     linux-libc-dev \
     libpam0g \
     libssl3t64 \
@@ -28,8 +31,11 @@ RUN python3 -m venv $VIRTUAL_ENV && \
 
 FROM ubuntu:noble-20250716
 
+# Обновляем систему перед установкой зависимостей выполнения
+RUN apt-get update && apt-get dist-upgrade -y
+
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get install -y --no-install-recommends \
     libssl3t64 \
     python3.12-minimal \
     curl \
