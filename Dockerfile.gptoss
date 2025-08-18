@@ -4,7 +4,7 @@ FROM python:3.12-slim
 # Дополнительно устанавливаем инструменты сборки и git для сборки vLLM
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git cmake ninja-build \
-    libtbbmalloc2=2022.1.0-1 curl=8.14.1-2 \
+    libtbbmalloc2 curl \
     libnuma-dev \
     && rm -rf /var/lib/apt/lists/*
 
