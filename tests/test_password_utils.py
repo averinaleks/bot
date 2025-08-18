@@ -1,6 +1,7 @@
 import pytest
 
 from password_utils import (
+    BCRYPT_ROUNDS,
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     hash_password,
@@ -11,7 +12,13 @@ from password_utils import (
 def test_hash_password_allows_short_password():
     password = "a" * MAX_PASSWORD_LENGTH
     hashed = hash_password(password)
-    assert hashed.startswith("$2b$")
+    assert hashed.startswith(f"$2b${BCRYPT_ROUNDS:02d}$")
+    assert verify_password(password, hashed)
+
+
+def test_verify_password_success():
+    password = "a" * MIN_PASSWORD_LENGTH
+    hashed = hash_password(password)
     assert verify_password(password, hashed)
 
 
