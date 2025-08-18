@@ -22,6 +22,8 @@ app = FastAPI()
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
+# Task responsible for loading the model asynchronously.
+_load_model_task: asyncio.Task | None = None
 
 
 def load_model() -> None:
@@ -80,7 +82,26 @@ async def load_model_async() -> None:
 @app.on_event("startup")
 async def startup_event() -> None:
     """Schedule the model loading on application startup."""
-    asyncio.create_task(load_model_async())
+    global _load_model_task
+    _load_model_task = asyncio.create_task(load_model_async())
+
+    def _log_task_result(task: asyncio.Task) -> None:
+        try:
+            task.result()
+        except Exception:
+            logging.exception("Model loading task failed")
+
+    _load_model_task.add_done_callback(_log_task_result)
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    """Ensure the model loading task completes and surface exceptions."""
+    if _load_model_task is not None:
+        try:
+            await _load_model_task
+        except Exception:
+            logging.exception("Model loading task failed during shutdown")
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
