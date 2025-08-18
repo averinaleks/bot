@@ -21,7 +21,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get dist-upgrade -y && apt-get i
     python3-venv \
     python3-pip \
     && python3 -m venv /venv \
-    && /venv/bin/pip install --no-cache-dir --upgrade --break-system-packages --ignore-installed 'pip>=24.0' \
+    && /venv/bin/python -m pip install --no-cache-dir --upgrade --break-system-packages pip==25.2 \
     && find / -xdev -type l -lname "*..*" -print \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
