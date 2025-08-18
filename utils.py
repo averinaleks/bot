@@ -5,17 +5,13 @@ logger = logging.getLogger("TradingBot")
 import os
 import json
 import re
-import pandas as pd
-import numpy as np
 import asyncio
 import time
 import inspect
 import threading
 import warnings
 from typing import Dict, List, Optional
-from scipy.stats import zscore
 import gzip
-import psutil
 import shutil
 from io import StringIO, BytesIO
 
@@ -658,6 +654,12 @@ class TelegramUpdateListener:
 
 def check_dataframe_empty(df, context: str = "") -> bool:
     try:
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "Для проверки DataFrame требуется установленный пакет 'pandas'"
+            ) from exc
         if df is None:
             logger.warning("DataFrame является None в контексте: %s", context)
             return True
@@ -700,6 +702,25 @@ def sanitize_symbol(symbol: str) -> str:
 
 def filter_outliers_zscore(df, column="close", threshold=3.0):
     try:
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "Для фильтрации аномалий требуется пакет 'pandas'"
+            ) from exc
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise ImportError(
+                "Для фильтрации аномалий требуется пакет 'numpy'"
+            ) from exc
+        try:
+            from scipy.stats import zscore
+        except ImportError as exc:
+            raise ImportError(
+                "Для фильтрации аномалий требуется пакет 'scipy'"
+            ) from exc
+
         series = df[column]
         if len(series.dropna()) < 3:
             logger.warning(
@@ -746,6 +767,13 @@ def _calculate_volume_profile(prices, volumes, bins=50):
 
 
 def calculate_volume_profile(prices, volumes, bins=50):
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise ImportError(
+            "Для расчета профиля объема требуется пакет 'numpy'"
+        ) from exc
+    globals()["np"] = np
     try:
         return _calculate_volume_profile(prices, volumes, bins)
     except (ValueError, TypeError, ImportError) as exc:
@@ -796,6 +824,12 @@ class HistoricalDataCache:
         return True
 
     def _check_memory(self, additional_size_mb):
+        try:
+            import psutil
+        except ImportError as exc:
+            raise ImportError(
+                "Для проверки памяти требуется пакет 'psutil'"
+            ) from exc
         memory = psutil.virtual_memory()
         available = getattr(memory, "available", None)
         used_percent = getattr(memory, "percent", 0)
@@ -855,6 +889,12 @@ class HistoricalDataCache:
             self._aggressive_clean()
 
     def save_cached_data(self, symbol, timeframe, data):
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "Для кэширования данных требуется пакет 'pandas'"
+            ) from exc
         safe_symbol = sanitize_symbol(symbol)
         if isinstance(data, pd.DataFrame) and data.empty:
             return
@@ -915,6 +955,12 @@ class HistoricalDataCache:
             logger.error("Ошибка сохранения кэша для %s_%s: %s", symbol, timeframe, e)
 
     def load_cached_data(self, symbol, timeframe):
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "Для загрузки кэша требуется пакет 'pandas'"
+            ) from exc
         try:
             safe_symbol = sanitize_symbol(symbol)
             filename = os.path.join(
