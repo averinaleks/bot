@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 from typing import List
+from contextlib import asynccontextmanager
 
 import torch
 from fastapi import FastAPI, HTTPException
@@ -13,9 +14,6 @@ try:
 except Exception as exc:  # pragma: no cover - used for optional dependency
     AutoModelForCausalLM = AutoTokenizer = None
     _TRANSFORMERS_IMPORT_ERROR = exc
-
-
-app = FastAPI()
 
 
 # Global variables for model and tokenizer. They will be loaded on app startup.
@@ -77,10 +75,19 @@ async def load_model_async() -> None:
     await asyncio.to_thread(load_model)
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Schedule the model loading on application startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown events."""
     asyncio.create_task(load_model_async())
+    try:
+        yield
+    finally:
+        global tokenizer, model
+        tokenizer = None
+        model = None
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
