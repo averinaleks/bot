@@ -36,13 +36,19 @@ def init_exchange() -> None:
         raise RuntimeError("Invalid Bybit configuration") from exc
 
 
-@app.before_first_request
-def _startup() -> None:
-    if exchange is None:
-        init_exchange()
-
 # Expected API token for simple authentication
 API_TOKEN = os.getenv('TRADE_MANAGER_TOKEN')
+
+_exchange_initialized = False
+
+
+@app.before_request
+def _ensure_exchange() -> None:
+    """Initialize the exchange on the first request."""
+    global _exchange_initialized
+    if not _exchange_initialized:
+        init_exchange()
+        _exchange_initialized = True
 
 
 @app.before_request
