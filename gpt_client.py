@@ -4,6 +4,14 @@ import json
 from urllib.parse import urlparse
 
 import httpx
+import sys
+
+if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
+    del sys.modules["tenacity"]
+try:  # pragma: no cover - support older tenacity versions
+    from tenacity._asyncio import AsyncRetrying
+except ModuleNotFoundError:  # pragma: no cover - tenacity<9
+    from tenacity.asyncio import AsyncRetrying
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("TradingBot")
