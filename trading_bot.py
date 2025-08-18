@@ -70,20 +70,30 @@ async def send_telegram_alert(message: str) -> None:
     if not token or not chat_id:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try:
-        async with httpx.AsyncClient(trust_env=False) as client:
-            response = await client.post(
-                url, data={"chat_id": chat_id, "text": message}, timeout=5
-            )
-            if response.status_code != 200:
-                logger.error(
-                    "Failed to send Telegram alert: HTTP %s - %s",
-                    response.status_code,
-                    response.text,
+    max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
+    delay = 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with httpx.AsyncClient(trust_env=False) as client:
+                response = await client.post(
+                    url, data={"chat_id": chat_id, "text": message}, timeout=5
                 )
                 response.raise_for_status()
-    except httpx.HTTPError as exc:  # pragma: no cover - network errors
-        logger.error("Failed to send Telegram alert: %s", exc)
+            return
+        except httpx.HTTPError as exc:  # pragma: no cover - network errors
+            logger.warning(
+                "Failed to send Telegram alert (attempt %s/%s): %s",
+                attempt,
+                max_attempts,
+                exc,
+            )
+            if attempt == max_attempts:
+                logger.error(
+                    "Failed to send Telegram alert after %s attempts", max_attempts
+                )
+                return
+            await asyncio.sleep(delay)
+            delay *= 2
 
 
 _TASKS: set[asyncio.Task[None]] = set()
