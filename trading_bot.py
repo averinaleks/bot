@@ -530,13 +530,26 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
 
                 if reason:
                     try:
-                        await client.post(
+                        response = await client.post(
                             f"{env['trade_manager_url']}/close_position",
                             json={"order_id": order_id, "side": close_side},
                             timeout=5,
                         )
+                        if response.status_code != 200:
+                            logger.error(
+                                "Failed to close position %s: HTTP %s - %s",
+                                order_id,
+                                response.status_code,
+                                response.text,
+                            )
+                            await send_telegram_alert(
+                                f"Failed to close position {order_id}: HTTP {response.status_code} - {response.text}"
+                            )
                     except httpx.HTTPError as exc:
                         logger.error("Failed to close position %s: %s", order_id, exc)
+                        await send_telegram_alert(
+                            f"Failed to close position {order_id}: {exc}"
+                        )
                     trail_state.pop(order_id, None)
             await asyncio.sleep(interval)
 
