@@ -3,6 +3,7 @@ import asyncio
 import time
 import types
 import pytest
+import logging
 
 
 @pytest.mark.asyncio
@@ -689,11 +690,14 @@ def test_run_once_ignores_invalid_env(monkeypatch):
     }
 
 
-def test_parse_trade_params_invalid_strings():
-    tp, sl, ts = trading_bot._parse_trade_params("bad", "5", "x")
+def test_parse_trade_params_invalid_strings(caplog):
+    with caplog.at_level(logging.WARNING):
+        tp, sl, ts = trading_bot._parse_trade_params("bad", "5", "x")
     assert tp is None
     assert sl == 5.0
     assert ts is None
+    assert "bad" in caplog.text
+    assert "x" in caplog.text
 
 
 @pytest.mark.parametrize(
