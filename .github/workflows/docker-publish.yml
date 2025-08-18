@@ -85,20 +85,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.txt
 
-      - name: Download Trivy report
-        shell: bash
-        run: |
-          for i in {1..5}; do
-            npx github:actions/download-artifact@v4 \
-              --name "${{ matrix.artifact }}" \
-              --path .
-            if [ $? -eq 0 ]; then
-              break
-            fi
-            echo "Attempt $i failed, retrying in 10 seconds..."
-            sleep 10
-            if [ $i -eq 5 ]; then
-              echo "Unable to download artifact after 5 attempts"
-              exit 1
-            fi
-          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: trivy-report-ci
+          path: .
