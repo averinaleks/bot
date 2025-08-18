@@ -20,6 +20,8 @@ except Exception as exc:  # pragma: no cover - used for optional dependency
 tokenizer = None
 model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
+# Task responsible for loading the model asynchronously.
+_load_model_task: asyncio.Task | None = None
 
 
 def load_model() -> None:
@@ -75,19 +77,6 @@ async def load_model_async() -> None:
     await asyncio.to_thread(load_model)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Handle application startup and shutdown events."""
-    asyncio.create_task(load_model_async())
-    try:
-        yield
-    finally:
-        global tokenizer, model
-        tokenizer = None
-        model = None
-
-
-app = FastAPI(lifespan=lifespan)
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
