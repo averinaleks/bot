@@ -40,6 +40,10 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
     def prange(*args):  # type: ignore
         raise ImportError("numba is required for prange") from _numba_exc
 
+try:
+    import numpy as np  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    np = None  # type: ignore[assignment]
 
 import httpx
 
