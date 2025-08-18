@@ -41,9 +41,9 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
         raise ImportError("numba is required for prange") from _numba_exc
 
 try:
-    import numpy as np  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    np = None  # type: ignore[assignment]
+    import numpy as np
+except ImportError:
+    np = None
 
 import httpx
 
@@ -753,6 +753,8 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
 
 @jit(nopython=True, parallel=True)
 def _calculate_volume_profile(prices, volumes, bins=50):
+    if np is None:
+        raise RuntimeError("NumPy требуется для расчёта профиля объёма")
     if len(prices) != len(volumes) or len(prices) < 2:
         return np.zeros(bins)
     min_price = np.min(prices)
