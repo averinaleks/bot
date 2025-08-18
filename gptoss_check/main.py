@@ -10,7 +10,8 @@ from typing import Optional
 def _load_skip_flag(config_path: Path) -> bool:
     """Return True if the check should be skipped based on the config."""
     if not config_path.exists():
-        return True
+        logger.warning("Файл конфигурации %s не найден, проверка запущена", config_path)
+        return False
     for line in config_path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
