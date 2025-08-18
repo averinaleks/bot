@@ -31,6 +31,11 @@ def test_data_handler_service_does_not_configure_logging_on_import(monkeypatch):
                 return func
             return decorator
 
+        def before_request(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+
         def before_first_request(self, *args, **kwargs):
             def decorator(func):
                 return func
