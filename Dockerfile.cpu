@@ -25,6 +25,9 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     # pip >=24.0 и устраняет CVE-2023-32681
     $VIRTUAL_ENV/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
+    RAY_JARS_DIR=$($VIRTUAL_ENV/bin/python -c "import os, ray; print(os.path.join(os.path.dirname(ray.__file__), 'jars'))") && \
+    rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
+    curl -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
     $VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y && \
     find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
