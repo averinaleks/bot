@@ -9,7 +9,7 @@ load configuration values from ``config.json`` and environment variables.
 import json
 import logging
 import os
-from dataclasses import dataclass, field, fields, asdict
+from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, get_type_hints, Optional
 
 
@@ -168,7 +168,7 @@ class BotConfig:
         return asdict(self)
 
 
-def _convert(value: str, typ: type) -> Any:
+def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
     if typ is bool:
         return value.lower() in {"1", "true", "yes", "on"}
     if typ is int:
@@ -176,13 +176,17 @@ def _convert(value: str, typ: type) -> Any:
             return int(value)
         except ValueError:
             logger.warning("Failed to convert %r to int", value)
-            return value
+            if fallback is not None:
+                return fallback
+            raise
     if typ is float:
         try:
             return float(value)
         except ValueError:
             logger.warning("Failed to convert %r to float", value)
-            return value
+            if fallback is not None:
+                return fallback
+            raise
     if typ is list or typ == List[str] or getattr(typ, "__origin__", None) is list:
         subtype = getattr(typ, "__args__", (str,))
         subtype = subtype[0] if subtype else str
@@ -199,6 +203,8 @@ def _convert(value: str, typ: type) -> Any:
             except TypeError:
                 converted.append(item)
         return converted
+    if fallback is not None:
+        return fallback
     return value
 
 
@@ -224,14 +230,19 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
         env_val = os.getenv(fdef.name.upper())
         if env_val is not None:
             expected_type = type_hints.get(fdef.name, fdef.type)
-            converted = _convert(env_val, expected_type)
-            if isinstance(converted, str) and expected_type is not str:
+            if fdef.default is not MISSING:
+                fallback = fdef.default
+            elif fdef.default_factory is not MISSING:
+                fallback = fdef.default_factory()
+            else:
+                fallback = None
+            try:
+                cfg[fdef.name] = _convert(env_val, expected_type, fallback)
+            except ValueError:
                 expected_name = getattr(expected_type, "__name__", str(expected_type))
                 logger.warning(
                     "Ignoring %s: expected value of type %s",
                     fdef.name.upper(),
                     expected_name,
                 )
-                continue
-            cfg[fdef.name] = converted
     return BotConfig(**cfg)
