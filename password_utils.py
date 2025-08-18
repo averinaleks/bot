@@ -2,6 +2,7 @@ import bcrypt
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
+BCRYPT_ROUNDS = 12
 
 
 def hash_password(password: str) -> str:
@@ -10,7 +11,9 @@ def hash_password(password: str) -> str:
         raise ValueError("Password too short")
     if len(password) > MAX_PASSWORD_LENGTH:
         raise ValueError("Password exceeds maximum length")
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(
+        password.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    ).decode()
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
