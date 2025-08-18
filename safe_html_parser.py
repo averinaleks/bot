@@ -35,6 +35,10 @@ class SafeHTMLParser(HTMLParser):
         self._max_feed_size = max_feed_size
         self._fed = 0
 
+    @property
+    def fed_bytes(self) -> int:
+        return self._fed
+
     def feed(self, data: str) -> None:  # type: ignore[override]
         """Feed data to the parser, enforcing ``max_feed_size``.
 
