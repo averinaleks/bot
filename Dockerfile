@@ -2,8 +2,6 @@
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
 ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
-ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
-ARG PYTHON_META=3.12.3-0ubuntu2
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -29,7 +27,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libffi-dev \
     libblas-dev \
     liblapack-dev \
-    tar \
+    tar=${TAR_VERSION} \
     && python3 -m pip install --no-cache-dir 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
@@ -76,7 +74,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     python3.12=${PYTHON_VERSION} \
     python3=${PYTHON_META} \
     zlib1g \
-    tar \
+    tar=${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version
