@@ -13,8 +13,7 @@ ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir --upgrade pip && \
     git clone --depth=1 https://github.com/vllm-project/vllm.git /tmp/vllm && \
     cd /tmp/vllm && \
-    pip install --no-cache-dir -r requirements-cpu.txt && \
-    VLLM_TARGET_DEVICE=cpu python setup.py install && \
+    VLLM_TARGET_DEVICE=cpu pip install --no-cache-dir . && \
     rm -rf /tmp/vllm
 
 EXPOSE 8000
