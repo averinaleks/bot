@@ -19,10 +19,10 @@ def test_model_builder_requires_gymnasium(monkeypatch):
         torch_stub.nn = nn_stub
         torch_stub.utils = utils_stub
         utils_stub.data = data_stub
-        sys.modules['torch'] = torch_stub
-        sys.modules['torch.nn'] = nn_stub
-        sys.modules['torch.utils'] = utils_stub
-        sys.modules['torch.utils.data'] = data_stub
+        monkeypatch.setitem(sys.modules, 'torch', torch_stub)
+        monkeypatch.setitem(sys.modules, 'torch.nn', nn_stub)
+        monkeypatch.setitem(sys.modules, 'torch.utils', utils_stub)
+        monkeypatch.setitem(sys.modules, 'torch.utils.data', data_stub)
     monkeypatch.setitem(sys.modules, 'gymnasium', None)
     with pytest.raises(ImportError, match='gymnasium package is required'):
         importlib.import_module('model_builder')
@@ -42,10 +42,10 @@ def test_model_builder_imports_without_mlflow(monkeypatch):
         torch_stub.nn = nn_stub
         torch_stub.utils = utils_stub
         utils_stub.data = data_stub
-        sys.modules['torch'] = torch_stub
-        sys.modules['torch.nn'] = nn_stub
-        sys.modules['torch.utils'] = utils_stub
-        sys.modules['torch.utils.data'] = data_stub
+        monkeypatch.setitem(sys.modules, 'torch', torch_stub)
+        monkeypatch.setitem(sys.modules, 'torch.nn', nn_stub)
+        monkeypatch.setitem(sys.modules, 'torch.utils', utils_stub)
+        monkeypatch.setitem(sys.modules, 'torch.utils.data', data_stub)
     gym_stub = types.ModuleType('gymnasium')
     gym_stub.Env = object
     gym_stub.spaces = types.ModuleType('spaces')
