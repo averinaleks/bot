@@ -71,22 +71,3 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     """Log unexpected errors and return a 500 response."""
     logging.exception("Unhandled error: %s", exc)
     return jsonify({'error': 'internal server error'}), 500
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    port = int(os.environ.get('PORT', '8000'))
-    # По умолчанию слушаем только локальный интерфейс.
-    host = os.environ.get('HOST', '127.0.0.1')
-    # Prevent binding to all interfaces.
-    if host.strip() == '0.0.0.0':  # nosec B104
-        raise ValueError('HOST=0.0.0.0 запрещён из соображений безопасности')
-    if host != '127.0.0.1':
-        logging.warning(
-            'Используется не локальный хост %s; убедитесь, что это намеренно',
-            host,
-        )
-    else:
-        logging.info('HOST не установлен, используется %s', host)
-    init_exchange()
-    logging.info('Запуск сервиса DataHandler на %s:%s', host, port)
-    app.run(host=host, port=port)  # nosec B104  # хост проверен выше

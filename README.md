@@ -310,9 +310,15 @@ testing.
 Run each script directly from the project root:
 
 ```bash
-python services/data_handler_service.py
+gunicorn services.data_handler_service:app
 python services/model_builder_service.py
 python services/trade_manager_service.py
+```
+
+Для альтернативы без зависимостей можно запустить сервис через Waitress:
+
+```bash
+waitress-serve services.data_handler_service:app
 ```
 
 `data_handler_service.py` fetches prices from Bybit using `ccxt` and exposes
@@ -364,7 +370,7 @@ with the scripts from the `services` directory:
 
 ```yaml
 data_handler:
-  command: python services/data_handler_service.py
+  command: gunicorn services.data_handler_service:app
 model_builder:
   command: python services/model_builder_service.py
 trade_manager:
