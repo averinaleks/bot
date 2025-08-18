@@ -15,9 +15,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libgcrypt20 \
     libpam0g \
     libssl3t64 \
-    python3.12-minimal=${PYTHON_VERSION} \
-    python3.12=${PYTHON_VERSION} \
-    python3=${PYTHON_META} \
     build-essential \
     curl \
     python3-dev \
@@ -37,7 +34,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
-    && python3 --version
+    && python3 --version \
+    && openssl version
 
 WORKDIR /app
 
@@ -70,14 +68,12 @@ WORKDIR /app
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
     libssl3t64 \
-    python3.12-minimal=${PYTHON_VERSION} \
-    python3.12=${PYTHON_VERSION} \
-    python3=${PYTHON_META} \
     zlib1g \
     tar=${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
-    && python3 --version
+    && python3 --version \
+    && openssl version
 
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
