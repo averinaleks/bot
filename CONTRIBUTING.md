@@ -34,9 +34,11 @@ Edit `requirements-core.in` or `requirements-gpu.in` to change top-level
 dependencies and regenerate the pinned files:
 
 ```bash
-pip-compile requirements-core.in        # updates requirements-core.txt
-pip-compile requirements-gpu.in       # updates requirements-gpu.txt
+pip-compile --strip-extras requirements-core.in        # updates requirements-core.txt
+pip-compile --strip-extras requirements-gpu.in       # updates requirements-gpu.txt
 ```
+
+We pass `--strip-extras` explicitly so that updating `pip-tools` doesn't change whether extras appear in the generated files.
 
 Commit both the `.in` and generated `.txt` files when updating.
 
