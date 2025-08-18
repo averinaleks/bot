@@ -1,4 +1,5 @@
 import sys
+import asyncio
 
 import pytest
 import httpx
@@ -96,7 +97,7 @@ def test_query_gpt_retry_success(monkeypatch):
         return DummyResponse(json_data={"choices": [{"text": "ok"}]})
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
-    monkeypatch.setattr(tenacity.nap, "sleep", lambda *_: None)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
     assert query_gpt("hi") == "ok"
     assert calls["count"] == 2
 
@@ -110,7 +111,7 @@ def test_query_gpt_retry_failure(monkeypatch):
         raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
-    monkeypatch.setattr(tenacity.nap, "sleep", lambda *_: None)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
     with pytest.raises(GPTClientNetworkError):
         query_gpt("hi")
     assert calls["count"] == 3
@@ -211,10 +212,10 @@ async def test_query_gpt_async_retry_success(monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
-    async def no_sleep(_):
+    async def no_sleep(*args, **kwargs):
         pass
 
-    monkeypatch.setattr(tenacity.asyncio, "_portable_async_sleep", no_sleep)
+    monkeypatch.setattr("asyncio.sleep", no_sleep)
     assert await query_gpt_async("hi") == "ok"
     assert calls["count"] == 2
 
@@ -230,10 +231,10 @@ async def test_query_gpt_async_retry_failure(monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
-    async def no_sleep(_):
+    async def no_sleep(*args, **kwargs):
         pass
 
-    monkeypatch.setattr(tenacity.asyncio, "_portable_async_sleep", no_sleep)
+    monkeypatch.setattr("asyncio.sleep", no_sleep)
     with pytest.raises(GPTClientNetworkError):
         await query_gpt_async("hi")
     assert calls["count"] == 3
