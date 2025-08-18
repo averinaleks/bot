@@ -4,12 +4,7 @@ import json
 from urllib.parse import urlparse
 
 import httpx
-from tenacity import (
-    AsyncRetrying,
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("TradingBot")
 
@@ -115,23 +110,26 @@ async def query_gpt_async(prompt: str) -> str:
         )
         timeout = 5.0
     url = api_url.rstrip("/") + "/v1/completions"
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        reraise=True,
+    )
+    async def _post() -> dict:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+            response = await client.post(url, json={"prompt": prompt})
+            response.raise_for_status()
+            try:
+                return response.json()
+            except ValueError as exc:
+                logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+                raise GPTClientJSONError(
+                    "Invalid JSON response from GPT OSS API"
+                ) from exc
+
     try:
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(min=1, max=10),
-            reraise=True,
-        ):
-            with attempt:
-                async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
-                    response = await client.post(url, json={"prompt": prompt})
-                    response.raise_for_status()
-                    try:
-                        data = response.json()
-                    except ValueError as exc:
-                        logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
-                        raise GPTClientJSONError(
-                            "Invalid JSON response from GPT OSS API"
-                        ) from exc
+        data = await _post()
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
