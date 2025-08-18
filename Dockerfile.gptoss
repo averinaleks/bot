@@ -11,10 +11,7 @@ ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_TARGET_DEVICE=cpu
 ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir --upgrade pip && \
-    git clone --depth=1 https://github.com/vllm-project/vllm.git /tmp/vllm && \
-    cd /tmp/vllm && \
-    VLLM_TARGET_DEVICE=cpu pip install --no-cache-dir . && \
-    rm -rf /tmp/vllm
+    pip install --no-cache-dir "git+https://github.com/vllm-project/vllm.git"
 
 EXPOSE 8000
 
