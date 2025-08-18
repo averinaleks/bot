@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-bot"
+version = "0.1.0"
+description = "Пример торгового бота на Python."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Project Authors" }]
+
+[tool.setuptools]
+packages = ["services"]
+py-modules = [
+  "config",
+  "data_handler",
+  "gpt_client",
+  "model_builder",
+  "model_builder_client",
+  "optimizer",
+  "password_utils",
+  "portfolio_backtest",
+  "position_manager",
+  "safe_html_parser",
+  "server",
+  "simulation",
+  "strategy_optimizer",
+  "trade_manager",
+  "trading_bot",
+  "utils"
+]
