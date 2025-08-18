@@ -8,6 +8,7 @@ from collections import deque
 from contextlib import suppress
 from pathlib import Path
 from typing import Awaitable
+import atexit
 
 from model_builder_client import schedule_retrain
 
@@ -137,12 +138,24 @@ DEFAULT_SERVICE_CHECK_DELAY = 2.0
 trading_enabled: bool = True
 
 # Shared HTTP client for outgoing requests
-HTTP_CLIENT = httpx.AsyncClient(trust_env=False)
+HTTP_CLIENT: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    """Return a shared HTTP client instance."""
+    global HTTP_CLIENT
+    if HTTP_CLIENT is None:
+        HTTP_CLIENT = httpx.AsyncClient(trust_env=False)
+    return HTTP_CLIENT
 
 
 async def close_http_client() -> None:
-    """Close the module-level HTTP client."""
-    await HTTP_CLIENT.aclose()
+    """Close the module-level HTTP client if it exists."""
+    if HTTP_CLIENT is not None:
+        await HTTP_CLIENT.aclose()
+
+
+atexit.register(lambda: asyncio.run(close_http_client()))
 
 
 def _load_env() -> dict:
@@ -686,7 +699,7 @@ async def run_once_async() -> None:
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
         await send_trade_async(
-            HTTP_CLIENT,
+            get_http_client(),
             SYMBOL,
             model_signal,
             price,
@@ -725,7 +738,6 @@ async def main_async() -> None:
             train_task.cancel()
             with suppress(asyncio.CancelledError):
                 await train_task
-        await close_http_client()
 
 
 def main() -> None:
