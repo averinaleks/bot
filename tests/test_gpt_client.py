@@ -67,6 +67,18 @@ def test_query_gpt_insecure_url(monkeypatch):
         query_gpt("hi")
 
 
+def test_query_gpt_invalid_url(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "bad-url")
+    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
+        query_gpt("hi")
+
+
+def test_query_gpt_invalid_url_no_host(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://")
+    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
+        query_gpt("hi")
+
+
 def test_query_gpt_no_env(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
@@ -155,6 +167,20 @@ async def test_query_gpt_async_missing_fields(monkeypatch):
 async def test_query_gpt_async_insecure_url(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_invalid_url(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "bad-url")
+    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_invalid_url_no_host(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://")
+    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
         await query_gpt_async("hi")
 
 

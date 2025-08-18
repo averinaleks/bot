@@ -32,6 +32,8 @@ class GPTClientResponseError(GPTClientError):
 
 def _validate_api_url(api_url: str) -> None:
     parsed = urlparse(api_url)
+    if not parsed.scheme or not parsed.hostname:
+        raise GPTClientError("Invalid GPT_OSS_API URL")
     if parsed.scheme != "https" and parsed.hostname != "localhost":
         logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
         raise GPTClientError("GPT_OSS_API must use HTTPS or be localhost")
