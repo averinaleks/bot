@@ -11,6 +11,24 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 1024
+          temp-reserve-mb: 100
+          swap-size-mb: 4096
+          build-mount-path: /mnt
+          pv-loop-path: /mnt/pv.img
+          tmp-pv-loop-path: /mnt/tmp-pv.img
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

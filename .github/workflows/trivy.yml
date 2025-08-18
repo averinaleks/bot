@@ -30,7 +30,24 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
           persist-credentials: false
-
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 1024
+          temp-reserve-mb: 100
+          swap-size-mb: 4096
+          build-mount-path: /mnt
+          pv-loop-path: /mnt/pv.img
+          tmp-pv-loop-path: /mnt/tmp-pv.img
       - name: Build an image from Dockerfile.ci
         run: |
           docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
