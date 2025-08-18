@@ -224,7 +224,7 @@ nvidia-nvjitlink-cu12==12.6.85
     #   torch
 nvidia-nvtx-cu12==12.6.77
     # via torch
-openai==1.90.0
+openai==1.98.0
     # via vllm
 opencv-python-headless==4.12.0.88
     # via
