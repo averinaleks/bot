@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Освободить место на диске
         uses: jlumbroso/free-disk-space@main
         with:
