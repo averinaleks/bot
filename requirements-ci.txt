@@ -1,3 +1,4 @@
 # Minimal CPU-only requirements for CI workflows
 build==1.2.1
 twine==5.1.1
+pyproject-hooks>=1.0
