@@ -8,6 +8,8 @@ import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+app = FastAPI()
+
 _TRANSFORMERS_IMPORT_ERROR = None
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -68,12 +70,15 @@ def load_model() -> None:
         logging.info("Loaded fallback model '%s'", fallback_model)
     except Exception:
         logging.exception("Failed to load fallback model '%s'", fallback_model)
-        tokenizer = None
-        model = None
+        raise RuntimeError("Failed to load both primary and fallback models")
 
 
 async def load_model_async() -> None:
-    """Asynchronously load the model without blocking the event loop."""
+    """Asynchronously load the model without blocking the event loop.
+
+    Raises:
+        RuntimeError: If both primary and fallback models fail to load.
+    """
     await asyncio.to_thread(load_model)
 
 
