@@ -2,13 +2,13 @@
 
 # -------- Builder stage --------
 # Используем публичный LTS-образ Ubuntu для сборки зависимостей
-FROM ubuntu:noble AS builder
+FROM ubuntu:noble-20250716 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     linux-libc-dev \
     libgcrypt20 \
     libpam0g \
@@ -38,13 +38,13 @@ COPY services services
 COPY tests tests
 
 # -------- Runtime stage --------
-FROM ubuntu:noble AS runtime
+FROM ubuntu:noble-20250716 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Устанавливаем только необходимые пакеты выполнения
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     libssl3t64 \
     python3.12-minimal \
     python3 \
