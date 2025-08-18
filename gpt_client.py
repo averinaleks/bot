@@ -2,6 +2,7 @@ import logging
 import os
 import json
 from urllib.parse import urlparse
+from ipaddress import ip_address
 
 import httpx
 import sys
@@ -37,9 +38,19 @@ def _validate_api_url(api_url: str) -> None:
     parsed = urlparse(api_url)
     if not parsed.scheme or not parsed.hostname:
         raise GPTClientError("Invalid GPT_OSS_API URL")
-    if parsed.scheme != "https" and parsed.hostname != "localhost":
+
+    def _is_allowed(host: str) -> bool:
+        if host == "localhost":
+            return True
+        try:
+            ip = ip_address(host)
+        except ValueError:
+            return False
+        return ip.is_loopback or ip.is_private
+
+    if parsed.scheme != "https" and not _is_allowed(parsed.hostname):
         logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
-        raise GPTClientError("GPT_OSS_API must use HTTPS or be localhost")
+        raise GPTClientError("GPT_OSS_API must use HTTPS or be a private address")
 
 
 @retry(

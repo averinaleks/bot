@@ -68,6 +68,28 @@ def test_query_gpt_insecure_url(monkeypatch):
         query_gpt("hi")
 
 
+@pytest.mark.parametrize("ip", [
+    "127.0.0.1",
+    "10.0.0.1",
+    "172.16.0.1",
+    "192.168.1.1",
+])
+def test_query_gpt_private_ip_allowed(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://{ip}")
+
+    def fake_post(self, *args, **kwargs):
+        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    assert query_gpt("hi") == "ok"
+
+
+def test_query_gpt_public_ip_blocked(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://8.8.8.8")
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
 def test_query_gpt_invalid_url(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "bad-url")
     with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
@@ -167,6 +189,37 @@ async def test_query_gpt_async_missing_fields(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_async_insecure_url(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ip", [
+    "127.0.0.1",
+    "10.0.0.1",
+    "172.16.0.1",
+    "192.168.1.1",
+])
+async def test_query_gpt_async_private_ip_allowed(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://{ip}")
+
+    class DummyResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"text": "ok"}]}
+
+    async def fake_post(self, *args, **kwargs):
+        return DummyResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    assert await query_gpt_async("hi") == "ok"
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_public_ip_blocked(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://8.8.8.8")
     with pytest.raises(GPTClientError):
         await query_gpt_async("hi")
 
