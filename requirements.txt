@@ -367,7 +367,6 @@ numpy==2.2.6
     #   tensorboardx
     #   tensorflow
     #   torchmetrics
-    #   torchvision
     #   transformers
     #   vllm
     #   xformers
@@ -471,7 +470,6 @@ pillow==11.3.0
     #   matplotlib
     #   mistral-common
     #   tensorboard
-    #   torchvision
     #   vllm
 polars==1.32.3
     # via -r requirements-core.in
@@ -717,20 +715,12 @@ torch==2.7.1
     #   compressed-tensors
     #   pytorch-lightning
     #   stable-baselines3
-    #   torchaudio
     #   torchmetrics
-    #   torchvision
     #   vllm
     #   xformers
     #   xgrammar
-torchaudio==2.7.1
-    # via vllm
 torchmetrics==1.8.1
     # via pytorch-lightning
-torchvision==0.22.1
-    # via
-    #   -r requirements-core.in
-    #   vllm
 tqdm==4.67.1
     # via
     #   catalyst
@@ -747,10 +737,6 @@ transformers==4.55.2
     #   -r requirements-core.in
     #   compressed-tensors
     #   vllm
-    #   xgrammar
-triton==3.3.1
-    # via
-    #   torch
     #   xgrammar
 typer==0.16.0
     # via

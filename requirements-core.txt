@@ -292,7 +292,6 @@ numpy==2.2.6
     #   tensorboardx
     #   tensorflow
     #   torchmetrics
-    #   torchvision
     #   transformers
 nvidia-cublas-cu12==12.6.4.1
     # via
@@ -384,7 +383,6 @@ pillow==11.3.0
     # via
     #   matplotlib
     #   tensorboard
-    #   torchvision
 plotly==6.3.0
     # via -r requirements-core.in
 pluggy==1.6.0
@@ -567,11 +565,8 @@ torch==2.7.1
     #   pytorch-lightning
     #   stable-baselines3
     #   torchmetrics
-    #   torchvision
 torchmetrics==1.8.1
     # via pytorch-lightning
-torchvision==0.22.1
-    # via -r requirements-core.in
 tqdm==4.67.1
     # via
     #   catalyst
@@ -582,7 +577,6 @@ tqdm==4.67.1
     #   transformers
 transformers==4.55.2
     # via -r requirements-core.in
-triton==3.3.1
     # via torch
 typing-extensions==4.14.1
     # via

@@ -183,7 +183,6 @@ numpy==2.2.6
     #   scipy
     #   soundfile
     #   soxr
-    #   torchvision
     #   transformers
     #   vllm
     #   xformers
@@ -243,7 +242,6 @@ partial-json-parser==0.2.1.1.post6
 pillow==11.3.0
     # via
     #   mistral-common
-    #   torchvision
     #   vllm
 prometheus-client==0.22.1
     # via
@@ -375,15 +373,9 @@ tokenizers==0.21.4
 torch==2.7.1
     # via
     #   compressed-tensors
-    #   torchaudio
-    #   torchvision
     #   vllm
     #   xformers
     #   xgrammar
-torchaudio==2.7.1
-    # via vllm
-torchvision==0.22.1
-    # via vllm
 tqdm==4.67.1
     # via
     #   gguf
@@ -395,10 +387,6 @@ transformers==4.55.2
     # via
     #   compressed-tensors
     #   vllm
-    #   xgrammar
-triton==3.3.1
-    # via
-    #   torch
     #   xgrammar
 typer==0.16.0
     # via
