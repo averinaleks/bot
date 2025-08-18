@@ -113,6 +113,13 @@ def run_async(coro: Awaitable[None]) -> None:
         _TASKS.add(task)
         task.add_done_callback(_task_done)
 
+
+async def shutdown_async_tasks() -> None:
+    """Wait for all scheduled tasks to complete."""
+    if _TASKS:
+        await asyncio.gather(*_TASKS, return_exceptions=True)
+        _TASKS.clear()
+
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 
@@ -151,6 +158,7 @@ def get_http_client() -> httpx.AsyncClient:
 
 async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
+    await shutdown_async_tasks()
     if HTTP_CLIENT is not None:
         await HTTP_CLIENT.aclose()
 
