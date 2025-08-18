@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 from typing import List
+from contextlib import asynccontextmanager
 
 import torch
 from fastapi import FastAPI, HTTPException
@@ -13,9 +14,6 @@ try:
 except Exception as exc:  # pragma: no cover - used for optional dependency
     AutoModelForCausalLM = AutoTokenizer = None
     _TRANSFORMERS_IMPORT_ERROR = exc
-
-
-app = FastAPI()
 
 
 # Global variables for model and tokenizer. They will be loaded on app startup.
@@ -79,29 +77,6 @@ async def load_model_async() -> None:
     await asyncio.to_thread(load_model)
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Schedule the model loading on application startup."""
-    global _load_model_task
-    _load_model_task = asyncio.create_task(load_model_async())
-
-    def _log_task_result(task: asyncio.Task) -> None:
-        try:
-            task.result()
-        except Exception:
-            logging.exception("Model loading task failed")
-
-    _load_model_task.add_done_callback(_log_task_result)
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Ensure the model loading task completes and surface exceptions."""
-    if _load_model_task is not None:
-        try:
-            await _load_model_task
-        except Exception:
-            logging.exception("Model loading task failed during shutdown")
 
 
 def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
