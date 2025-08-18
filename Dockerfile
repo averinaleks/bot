@@ -15,11 +15,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libgcrypt20 \
     libpam0g \
     libssl3t64 \
-    openssl \
-    python3.12-minimal \
     build-essential \
     curl \
-    python3 \
     python3-dev \
     python3-venv \
     python3-pip \
@@ -27,7 +24,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libffi-dev \
     libblas-dev \
     liblapack-dev \
-    tar \
+    tar=${TAR_VERSION} \
     && python3 -m pip install --no-cache-dir 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
@@ -58,6 +55,8 @@ RUN pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
 
 # Этап выполнения (минимальный образ)
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
+ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
+ARG PYTHON_META=3.12.3-0ubuntu2
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -69,11 +68,8 @@ WORKDIR /app
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
     libssl3t64 \
-    openssl \
-    python3.12-minimal \
-    python3 \
     zlib1g \
-    tar \
+    tar=${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version \
