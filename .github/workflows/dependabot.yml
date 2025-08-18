@@ -13,17 +13,17 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
           persist-credentials: false
-        - name: Run Dependabot
-          run: scripts/run_dependabot.sh
-          env:
-            GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        - name: Load registry proxy config
-          run: echo "GITHUB_REGISTRIES_PROXY=$(cat .github/registries-proxy.json)" >> $GITHUB_ENV
-        - name: Dependabot Action
-          if: github.actor == 'dependabot[bot]'
-          uses: github/dependabot-action@8a8ecd4a2ccff00ad1680d32caef59634c31d3c0 # v2.28.0
-          env:
-            GITHUB_TOKEN: ${{ secrets.TOKEN }}
-            GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
-            GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
-            GITHUB_REGISTRIES_PROXY: ${{ env.GITHUB_REGISTRIES_PROXY }}
+      - name: Run Dependabot
+        run: scripts/run_dependabot.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      - name: Load registry proxy config
+        run: echo "GITHUB_REGISTRIES_PROXY=$(cat .github/registries-proxy.json)" >> $GITHUB_ENV
+      - name: Dependabot Action
+        if: github.actor == 'dependabot[bot]'
+        uses: github/dependabot-action@8a8ecd4a2ccff00ad1680d32caef59634c31d3c0 # v2.28.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_DEPENDABOT_JOB_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
+          GITHUB_DEPENDABOT_CRED_TOKEN: ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
+          GITHUB_REGISTRIES_PROXY: ${{ env.GITHUB_REGISTRIES_PROXY }}
