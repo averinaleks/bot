@@ -13,7 +13,7 @@ def test_small_input_parses():
     parser = SafeHTMLParser()
     parser.feed("<div>ok</div>")
     # No exception should be raised and parser should have consumed input.
-    assert parser._fed == len("<div>ok</div>")
+    assert parser.fed_bytes == len("<div>ok</div>")
 
 
 def test_large_input_raises():
@@ -38,7 +38,7 @@ def test_counts_bytes_not_chars():
     parser = SafeHTMLParser(max_feed_size=4)
     # emoji is four bytes in UTF-8
     parser.feed("😀")
-    assert parser._fed == len("😀".encode("utf-8"))
+    assert parser.fed_bytes == len("😀".encode("utf-8"))
     with pytest.raises(ValueError):
         parser.feed("😀")
 
@@ -47,7 +47,7 @@ def test_multilingual_input_counts_bytes():
     parser = SafeHTMLParser(max_feed_size=10)
     multilingual = "ä漢字"  # mix of 2-byte and 3-byte characters
     parser.feed(multilingual)
-    assert parser._fed == len(multilingual.encode("utf-8"))
+    assert parser.fed_bytes == len(multilingual.encode("utf-8"))
     with pytest.raises(ValueError):
         parser.feed("😀")
 
@@ -58,4 +58,4 @@ def test_close_resets_counter():
     parser.close()
     # After closing, parser should be reusable without raising.
     parser.feed("abcde")
-    assert parser._fed == 5
+    assert parser.fed_bytes == 5
