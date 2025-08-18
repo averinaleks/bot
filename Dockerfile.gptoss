@@ -1,7 +1,6 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
-# Исправляем отсутствие libtbbmalloc.so.2, устанавливаем свежие патчи и ставим curl для health-check’а
-# Дополнительно устанавливаем инструменты сборки и git для сборки vLLM
+# Устанавливаем зависимости для сборки и выполнения
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git cmake ninja-build \
     libtbbmalloc2 curl \
@@ -10,10 +9,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_TARGET_DEVICE=cpu
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir openai==1.99.1 && \
-    pip install --no-cache-dir vllm==0.10.0
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu vllm==0.10.0
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libtbbmalloc2 curl \
+    libnuma-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
+ENV VLLM_TARGET_DEVICE=cpu
+ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+COPY --from=builder /usr/local /usr/local
 
 EXPOSE 8000
 
