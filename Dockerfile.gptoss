@@ -13,7 +13,7 @@ ENV VLLM_TARGET_DEVICE=cpu
 ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir openai==1.99.1 && \
-    pip install --no-cache-dir "git+https://github.com/vllm-project/vllm.git"
+    pip install --no-cache-dir vllm==0.10.0
 
 EXPOSE 8000
 
