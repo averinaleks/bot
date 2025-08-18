@@ -2,3 +2,4 @@
 build==1.2.1
 twine==5.1.1
 pyproject-hooks>=1.0
+pytest==8.4.1
