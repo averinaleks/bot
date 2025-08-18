@@ -551,7 +551,8 @@ def _parse_trade_params(
     def _parse(value: float | str | None) -> float | None:
         try:
             return float(value) if value is not None else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
+            logger.warning("Invalid trade parameter %r: %s", value, exc)
             return None
 
     return _parse(tp), _parse(sl), _parse(trailing_stop)
