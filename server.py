@@ -11,8 +11,10 @@ from pydantic import BaseModel, Field
 _TRANSFORMERS_IMPORT_ERROR = None
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.utils.exceptions import TransformersError
 except Exception as exc:  # pragma: no cover - used for optional dependency
     AutoModelForCausalLM = AutoTokenizer = None
+    TransformersError = Exception
     _TRANSFORMERS_IMPORT_ERROR = exc
 
 
@@ -24,8 +26,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 _load_model_task: asyncio.Task | None = None
 
 
-def load_model() -> None:
-    """Load the tokenizer and model into global variables."""
+def load_model() -> str:
+    """Load the tokenizer and model into global variables.
+
+    Returns "primary" if the main model is loaded, "fallback" if the
+    fallback model is loaded instead.
+    """
+
     global tokenizer, model
     if AutoTokenizer is None or AutoModelForCausalLM is None:
         raise RuntimeError(
@@ -47,8 +54,8 @@ def load_model() -> None:
             )
             .to(device)
         )
-        return
-    except Exception:
+        return "primary"
+    except (OSError, ValueError, TransformersError):
         logging.exception("Failed to load model '%s'", model_name)
 
     try:
@@ -66,10 +73,12 @@ def load_model() -> None:
             .to(device)
         )
         logging.info("Loaded fallback model '%s'", fallback_model)
-    except Exception:
+        return "fallback"
+    except (OSError, ValueError, TransformersError):
         logging.exception("Failed to load fallback model '%s'", fallback_model)
         tokenizer = None
         model = None
+        raise
 
 
 async def load_model_async() -> None:
