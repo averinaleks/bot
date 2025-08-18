@@ -18,6 +18,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt --no-deps
+      - name: Check dependencies
+        run: |
+          set +e
+          pip-compile --dry-run -o requirements.out requirements.txt
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "Dependency check passed."
+          else
+            echo "Dependency check failed."
+          fi
+          exit $status
       - name: Build package
         run: python -m build
       - name: Publish to PyPI
