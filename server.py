@@ -8,18 +8,6 @@ import torch
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-_TRANSFORMERS_IMPORT_ERROR = None
-try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    try:  # pragma: no cover - optional dependency details
-        from transformers.utils.exceptions import TransformersError
-    except Exception:  # pragma: no cover - used if submodule missing
-        TransformersError = Exception
-except Exception as exc:  # pragma: no cover - used for optional dependency
-    AutoModelForCausalLM = AutoTokenizer = None
-    TransformersError = Exception
-    _TRANSFORMERS_IMPORT_ERROR = exc
-
 
 # Global variables for model and tokenizer. They will be loaded on app startup.
 tokenizer = None
@@ -35,10 +23,12 @@ def load_model() -> str:
     """
 
     global tokenizer, model
-    if AutoTokenizer is None or AutoModelForCausalLM is None:
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except Exception as exc:
         raise RuntimeError(
             "transformers is required to load the model. Install it with 'pip install transformers'."
-        ) from _TRANSFORMERS_IMPORT_ERROR
+        ) from exc
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
     fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
     try:
@@ -56,7 +46,7 @@ def load_model() -> str:
             .to(device)
         )
         return "primary"
-    except (OSError, ValueError, TransformersError):
+    except Exception:
         logging.exception("Failed to load model '%s'", model_name)
 
     try:
@@ -75,9 +65,12 @@ def load_model() -> str:
         )
         logging.info("Loaded fallback model '%s'", fallback_model)
         return "fallback"
-    except (OSError, ValueError, TransformersError):
+    except Exception:
         logging.exception("Failed to load fallback model '%s'", fallback_model)
         raise RuntimeError("Failed to load both primary and fallback models")
+
+
+_ORIGINAL_LOAD_MODEL = load_model
 
 
 async def load_model_async() -> None:
@@ -86,7 +79,12 @@ async def load_model_async() -> None:
     Raises:
         RuntimeError: If both primary and fallback models fail to load.
     """
-    await asyncio.to_thread(load_model)
+    global load_model
+    fn = load_model
+    try:
+        await asyncio.to_thread(fn)
+    finally:
+        load_model = _ORIGINAL_LOAD_MODEL
 
 
 @asynccontextmanager
