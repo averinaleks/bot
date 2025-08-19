@@ -19,7 +19,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
       - name: Load registry proxy config
-        run: echo "GITHUB_REGISTRIES_PROXY=$(jq -c . .github/registries-proxy.json)" >> "$GITHUB_ENV"
+        run: |
+          cat <<'EOF' >> "$GITHUB_ENV"
+          GITHUB_REGISTRIES_PROXY=$(jq -c . .github/registries-proxy.json)
+          EOF
       - name: Dependabot Action
         if: github.actor == 'dependabot[bot]'
         uses: github/dependabot-action@8a8ecd4a2ccff00ad1680d32caef59634c31d3c0
