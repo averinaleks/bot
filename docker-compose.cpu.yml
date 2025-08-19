@@ -1,6 +1,6 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:latest-cpu
     ports:
       - "8003:8000"
     volumes:
