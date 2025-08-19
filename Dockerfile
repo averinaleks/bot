@@ -1,5 +1,9 @@
 # Этап сборки
+ARG COREUTILS_VERSION=9.4-3ubuntu6
+ARG LIBPAM0G_VERSION=1.5.3-5ubuntu5.4
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
+ARG COREUTILS_VERSION
+ARG LIBPAM0G_VERSION
 ARG ZLIB_VERSION=1.3.1
 ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ENV OMP_NUM_THREADS=1
@@ -11,9 +15,10 @@ ENV TZ=Etc/UTC
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
+    coreutils=${COREUTILS_VERSION} \
     linux-libc-dev \
     libgcrypt20 \
-    libpam0g \
+    libpam0g=${LIBPAM0G_VERSION} \
     libssl3t64 \
     build-essential \
     curl \
@@ -58,6 +63,8 @@ RUN pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
 
 # Этап выполнения (минимальный образ)
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
+ARG COREUTILS_VERSION
+ARG LIBPAM0G_VERSION
 ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
 ARG PYTHON_META=3.12.3-0ubuntu2
 ENV OMP_NUM_THREADS=1
@@ -70,6 +77,8 @@ WORKDIR /app
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
+    coreutils=${COREUTILS_VERSION} \
+    libpam0g=${LIBPAM0G_VERSION} \
     libssl3t64 \
     zlib1g \
     tar=${TAR_VERSION} \

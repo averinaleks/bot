@@ -2,16 +2,21 @@
 
 # -------- Builder stage --------
 # Используем публичный LTS-образ Ubuntu для сборки зависимостей
+ARG COREUTILS_VERSION=9.4-3ubuntu6
+ARG LIBPAM0G_VERSION=1.5.3-5ubuntu5.4
 FROM ubuntu:noble-20250716 AS builder
 
+ARG COREUTILS_VERSION
+ARG LIBPAM0G_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 RUN apt-get update && apt-get upgrade -y && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+    coreutils=${COREUTILS_VERSION} \
     linux-libc-dev \
     libgcrypt20 \
-    libpam0g \
+    libpam0g=${LIBPAM0G_VERSION} \
     libssl3t64 \
     python3.12-minimal \
     zlib1g-dev \
@@ -40,11 +45,15 @@ COPY tests tests
 # -------- Runtime stage --------
 FROM ubuntu:noble-20250716 AS runtime
 
+ARG COREUTILS_VERSION
+ARG LIBPAM0G_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Устанавливаем только необходимые пакеты выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+    coreutils=${COREUTILS_VERSION} \
+    libpam0g=${LIBPAM0G_VERSION} \
     libssl3t64 \
     python3.12-minimal \
     python3 \

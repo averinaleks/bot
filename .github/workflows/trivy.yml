@@ -70,6 +70,7 @@ jobs:
           ignore-unfixed: true
           # ignore-unlikely-affected: true  # enable once Trivy >= v0.66 is available
           limit-severities-for-sarif: CRITICAL
+          exit-code: 1
 
       - name: Show Trivy scan results
         run: cat trivy-results.sarif
