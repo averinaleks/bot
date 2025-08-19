@@ -5,6 +5,15 @@ services:
       - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
+    command:
+      - --model
+      - openai/gpt-oss-20b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --device
+      - cpu
     environment:
       VLLM_LOGGING_LEVEL: DEBUG
       MODEL: ${MODEL:-openai/gpt-oss-20b}
