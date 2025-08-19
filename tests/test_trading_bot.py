@@ -7,6 +7,40 @@ import logging
 
 
 @pytest.mark.asyncio
+async def test_send_telegram_alert_reuses_client(monkeypatch):
+    calls = []
+
+    class DummyClient:
+        async def post(self, url, data=None, timeout=None):
+            calls.append((url, data, timeout))
+
+            class Resp:
+                status_code = 200
+
+                def raise_for_status(self):
+                    pass
+
+            return Resp()
+
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
+    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+    monkeypatch.setattr(
+        trading_bot.httpx,
+        "AsyncClient",
+        lambda *a, **k: pytest.fail("AsyncClient should not be created"),
+        raising=False,
+    )
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+
+    await trading_bot.send_telegram_alert("hi")
+
+    assert len(calls) == 1
+    assert calls[0][1] == {"chat_id": "chat", "text": "hi"}
+
+
+@pytest.mark.asyncio
 async def test_send_trade_timeout_env(monkeypatch):
     called = {}
 
