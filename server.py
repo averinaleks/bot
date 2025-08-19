@@ -5,7 +5,7 @@ from typing import List
 from contextlib import asynccontextmanager
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 _TRANSFORMERS_IMPORT_ERROR = None
@@ -96,6 +96,19 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
+
+
+@app.middleware("http")
+async def check_api_key(request: Request, call_next):
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        return Response(status_code=401)
+    token = auth[7:]
+    if token not in API_KEYS:
+        return Response(status_code=401)
+    return await call_next(request)
 
 
 
