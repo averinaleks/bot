@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
           persist-credentials: false
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
       - name: Cleanup git submodules
         run: >
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
@@ -68,6 +70,8 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
           persist-credentials: false
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
       - name: Cleanup git submodules
         run: >
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
