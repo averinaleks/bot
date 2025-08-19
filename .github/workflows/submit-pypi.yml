@@ -31,7 +31,7 @@ jobs:
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
-          pv-loop-path: /mnt/pv.img
+          pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
       - uses: actions/setup-python@v5
         with:

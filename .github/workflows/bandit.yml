@@ -48,7 +48,7 @@ jobs:
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
-          pv-loop-path: /mnt/pv.img
+          pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
       - name: Bandit Scan
         uses: shundor/python-bandit-scan@ab1d87dfccc5a0ffab88be3aaac6ffe35c10d6cd
