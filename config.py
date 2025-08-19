@@ -9,6 +9,7 @@ load configuration values from ``config.json`` and environment variables.
 import json
 import logging
 import os
+from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, get_args, get_origin, get_type_hints
 
@@ -212,12 +213,16 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
 def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
     cfg: Dict[str, Any] = {}
-    if os.path.exists(path):
-        with open(path, "r") as f:
+    resolved_path = Path(path).resolve()
+    allowed_dir = Path(CONFIG_PATH).resolve().parent
+    if not resolved_path.is_relative_to(allowed_dir):
+        raise ValueError(f"Path {resolved_path} is outside of {allowed_dir}")
+    if resolved_path.exists():
+        with open(resolved_path, "r") as f:
             try:
                 cfg.update(json.load(f))
             except json.JSONDecodeError as exc:
-                logger.warning("Failed to decode %s: %s", path, exc)
+                logger.warning("Failed to decode %s: %s", resolved_path, exc)
                 f.seek(0)
                 content = f.read()
                 end = content.rfind("}")
