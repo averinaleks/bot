@@ -70,15 +70,15 @@ async def send_telegram_alert(message: str) -> None:
     if not token or not chat_id:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    client = get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = 1
     for attempt in range(1, max_attempts + 1):
         try:
-            async with httpx.AsyncClient(trust_env=False) as client:
-                response = await client.post(
-                    url, data={"chat_id": chat_id, "text": message}, timeout=5
-                )
-                response.raise_for_status()
+            response = await client.post(
+                url, data={"chat_id": chat_id, "text": message}, timeout=5
+            )
+            response.raise_for_status()
             return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             logger.warning(
