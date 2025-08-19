@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from dataclasses import MISSING, dataclass, field, fields, asdict
-from typing import Any, Dict, List, get_type_hints, Optional
+from typing import Any, Dict, List, Optional, get_args, get_origin, get_type_hints
 
 
 logger = logging.getLogger(__name__)
@@ -187,9 +187,10 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
             if fallback is not None:
                 return fallback
             raise
-    if typ is list or typ == List[str] or getattr(typ, "__origin__", None) is list:
-        subtype = getattr(typ, "__args__", (str,))
-        subtype = subtype[0] if subtype else str
+    origin = get_origin(typ)
+    if typ is list or origin is list:
+        subtypes = get_args(typ)
+        subtype = subtypes[0] if subtypes else str
         try:
             items = json.loads(value)
         except json.JSONDecodeError:
