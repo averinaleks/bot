@@ -10,6 +10,7 @@ import time
 import inspect
 import threading
 import warnings
+from functools import wraps
 from typing import Dict, List, Optional
 import gzip
 import shutil
@@ -30,8 +31,9 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
 
     def jit(*a, **k):
         def wrapper(_f):
+            @wraps(_f)
             def inner(*args, **kwargs):
-                return _numba_missing()
+                return _numba_missing(*args, **kwargs)
 
             return inner
 

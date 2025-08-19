@@ -92,3 +92,19 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
     utils_mod.logger.info("second")
     captured = capsys.readouterr()
     assert captured.err.count("second") == 1
+
+
+def test_jit_stub_preserves_metadata(monkeypatch):
+    if not hasattr(utils, "_numba_missing"):
+        pytest.skip("numba is installed")
+
+    @utils.jit(nopython=True)
+    def sample_func(x):
+        """example docstring"""
+        return x
+
+    assert sample_func.__name__ == "sample_func"
+    assert sample_func.__doc__ == "example docstring"
+
+    with pytest.raises(ImportError):
+        sample_func(1)
