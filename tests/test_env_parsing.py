@@ -10,6 +10,13 @@ def test_safe_int_invalid(monkeypatch, caplog):
     assert "Invalid X_INT" in caplog.text
 
 
+def test_safe_int_non_positive(monkeypatch, caplog):
+    monkeypatch.setenv("X_INT", "-1")
+    with caplog.at_level("WARNING"):
+        assert trading_bot.safe_int("X_INT", 7) == 7
+    assert "Non-positive X_INT" in caplog.text
+
+
 def test_safe_float_invalid(monkeypatch, caplog):
     monkeypatch.setenv("X_FLOAT", "bad")
     with caplog.at_level("WARNING"):

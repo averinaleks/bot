@@ -41,7 +41,13 @@ def safe_int(env_var: str, default: int) -> int:
     if value is None:
         return default
     try:
-        return int(value)
+        result = int(value)
+        if result <= 0:
+            logger.warning(
+                "Non-positive %s value '%s', using default %s", env_var, value, default
+            )
+            return default
+        return result
     except ValueError:
         logger.warning(
             "Invalid %s value '%s', using default %s", env_var, value, default
