@@ -173,7 +173,26 @@ async def close_http_client() -> None:
         await HTTP_CLIENT.aclose()
 
 
-atexit.register(lambda: asyncio.run(close_http_client()))
+
+def _cleanup_http_client() -> None:
+    """Synchronously close the shared HTTP client.
+
+    If an event loop is already running (e.g. in environments like Jupyter),
+    ``asyncio.run`` will raise ``RuntimeError``. In that case schedule the
+    cleanup on the existing loop and return immediately.
+    """
+
+    coro = close_http_client()
+    try:
+        asyncio.run(coro)
+    except RuntimeError:
+        coro.close()
+        with suppress(RuntimeError):
+            loop = asyncio.get_running_loop()
+            loop.create_task(close_http_client())
+
+
+atexit.register(_cleanup_http_client)
 
 
 def _load_env() -> dict:
