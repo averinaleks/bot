@@ -4,6 +4,7 @@ import asyncio
 import os
 import statistics
 import time
+import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
@@ -56,6 +57,11 @@ def safe_float(env_var: str, default: float) -> float:
         return default
     try:
         result = float(value)
+        if not math.isfinite(result):
+            logger.warning(
+                "Invalid %s value '%s', using default %s", env_var, value, default
+            )
+            return default
         if result <= 0:
             logger.warning(
                 "Non-positive %s value '%s', using default %s", env_var, value, default
