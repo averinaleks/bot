@@ -1,19 +1,15 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:v0.10.1
+    image: vllm/vllm-openai:latest
     ports:
       - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
-    command:
-      - --model
-      - openai/gpt-oss-20b
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8000"
-      - --device
-      - cpu
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model ${MODEL}
+      --device cpu
+      --host 0.0.0.0 --port 8000
     environment:
       VLLM_TARGET_DEVICE: cpu
       VLLM_LOGGING_LEVEL: DEBUG
