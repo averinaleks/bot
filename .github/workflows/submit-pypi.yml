@@ -9,6 +9,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-22.04
+    # Explicit permissions for OIDC-based publishing
     permissions:
       id-token: write
       contents: read
