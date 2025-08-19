@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir openai==1.99.1 && \
-    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu vllm==0.10.0
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu torch \
+ && pip install --no-cache-dir openai==1.99.1 vllm==0.10.1
 
 FROM python:3.12-slim
 
