@@ -11,6 +11,7 @@ import threading
 import time
 import types
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List
+from pathlib import Path
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -935,8 +936,10 @@ class DataHandler:
         self.disk_buffer: asyncio.Queue[str] = asyncio.Queue(
             maxsize=config.get("disk_buffer_size", 10000)
         )
-        self.buffer_dir = os.path.join(config["cache_dir"], "ws_buffer")
-        os.makedirs(self.buffer_dir, exist_ok=True)
+        self.buffer_dir = (
+            Path(config["cache_dir"]) / "ws_buffer"
+        ).resolve(strict=False)
+        self.buffer_dir.mkdir(parents=True, exist_ok=True)
         self.processed_timestamps = {}
         self.processed_timestamps_2h = {}
         self.symbol_priority = {}
@@ -1893,22 +1896,26 @@ class DataHandler:
 
     async def save_to_disk_buffer(self, priority, item):
         try:
-            filename = os.path.join(self.buffer_dir, f"buffer_{time.time()}.json")
+            filename = (
+                self.buffer_dir / f"buffer_{time.time()}.json"
+            ).resolve(strict=False)
+            if not filename.is_relative_to(self.buffer_dir):
+                raise ValueError("Attempt to write outside buffer directory")
 
-            def _json_dump(obj, path):
-                with open(path, "w", encoding="utf-8") as f:
+            def _json_dump(obj, path: Path):
+                with path.open("w", encoding="utf-8") as f:
                     json.dump(obj, f)
 
             await asyncio.to_thread(
                 _json_dump, {"priority": priority, "item": item}, filename
             )
             try:
-                self.disk_buffer.put_nowait(filename)
+                self.disk_buffer.put_nowait(str(filename))
             except asyncio.QueueFull:
                 logger.warning(
                     "Очередь дискового буфера переполнена, сообщение пропущено"
                 )
-                await asyncio.to_thread(os.remove, filename)
+                await asyncio.to_thread(filename.unlink)
                 return
             logger.info("Сообщение сохранено в дисковый буфер: %s", filename)
         except (OSError, ValueError, TypeError) as e:
@@ -1917,20 +1924,21 @@ class DataHandler:
     async def load_from_disk_buffer(self):
         while not self.disk_buffer.empty():
             try:
-                filename = self.disk_buffer.get_nowait()
+                filename = Path(self.disk_buffer.get_nowait()).resolve(strict=False)
+                if not filename.is_relative_to(self.buffer_dir):
+                    raise ValueError("Attempt to read outside buffer directory")
             except asyncio.QueueEmpty:
                 break
             try:
-
-                def _json_load(path):
-                    with open(path, "r", encoding="utf-8") as f:
+                def _json_load(path: Path):
+                    with path.open("r", encoding="utf-8") as f:
                         return json.load(f)
 
                 data = await asyncio.to_thread(_json_load, filename)
                 priority = data.get("priority")
                 item = tuple(data.get("item", []))
                 await self.ws_queue.put((priority, item))
-                await asyncio.to_thread(os.remove, filename)
+                await asyncio.to_thread(filename.unlink)
                 logger.info("Сообщение загружено из дискового буфера: %s", filename)
             except (
                 OSError,
