@@ -50,12 +50,18 @@ def safe_int(env_var: str, default: int) -> int:
 
 
 def safe_float(env_var: str, default: float) -> float:
-    """Return float value of ``env_var`` or ``default`` on failure."""
+    """Return float value of ``env_var`` or ``default`` on failure or non-positive value."""
     value = os.getenv(env_var)
     if value is None:
         return default
     try:
-        return float(value)
+        result = float(value)
+        if result <= 0:
+            logger.warning(
+                "Non-positive %s value '%s', using default %s", env_var, value, default
+            )
+            return default
+        return result
     except ValueError:
         logger.warning(
             "Invalid %s value '%s', using default %s", env_var, value, default

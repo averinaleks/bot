@@ -17,6 +17,13 @@ def test_safe_float_invalid(monkeypatch, caplog):
     assert "Invalid X_FLOAT" in caplog.text
 
 
+def test_safe_float_non_positive(monkeypatch, caplog):
+    monkeypatch.setenv("X_FLOAT", "0")
+    with caplog.at_level("WARNING"):
+        assert trading_bot.safe_float("X_FLOAT", 3.5) == 3.5
+    assert "Non-positive X_FLOAT" in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_send_trade_timeout_invalid_env(monkeypatch):
     called = {}
