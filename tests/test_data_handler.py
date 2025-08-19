@@ -204,6 +204,19 @@ async def test_load_from_disk_buffer_loop(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_disk_buffer_path_escape(tmp_path):
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
+
+    outside = tmp_path.parent / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    dh.disk_buffer.put_nowait(str(outside))
+
+    with pytest.raises(ValueError):
+        await dh.load_from_disk_buffer()
+
+
+@pytest.mark.asyncio
 async def test_cleanup_old_data_recovery(monkeypatch, cfg_factory):
     cfg = cfg_factory(data_cleanup_interval=0)
     dh = DataHandler(cfg, None, None, exchange=DummyExchange({'BTCUSDT': 1.0}))
