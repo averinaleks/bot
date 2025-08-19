@@ -12,6 +12,8 @@ from bot.gpt_client import (
     GPTClientJSONError,
     GPTClientNetworkError,
     GPTClientResponseError,
+    MAX_PROMPT_LEN,
+    MAX_RESPONSE_LEN,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -19,9 +21,10 @@ from bot.gpt_client import (
 
 
 class DummyResponse:
-    def __init__(self, json_data=None, json_exc=None):
+    def __init__(self, json_data=None, json_exc=None, content=b"content"):
         self._json_data = json_data
         self._json_exc = json_exc
+        self.content = content
 
     def raise_for_status(self):
         pass
@@ -76,6 +79,25 @@ def test_query_gpt_uppercase_scheme(monkeypatch):
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     assert query_gpt("hi") == "ok"
+
+
+def test_query_gpt_prompt_too_long():
+    with pytest.raises(GPTClientError):
+        query_gpt("x" * (MAX_PROMPT_LEN + 1))
+
+
+def test_query_gpt_response_too_long(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_post(self, *args, **kwargs):
+        return DummyResponse(
+            json_data={"choices": [{"text": "ok"}]},
+            content=b"x" * (MAX_RESPONSE_LEN + 1),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
 
 
 @pytest.mark.parametrize("ip", [
@@ -164,6 +186,7 @@ async def test_query_gpt_async_network_error(monkeypatch):
 async def test_query_gpt_async_non_json(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     class DummyResp:
+        content = b"content"
         def raise_for_status(self):
             pass
 
@@ -182,6 +205,7 @@ async def test_query_gpt_async_non_json(monkeypatch):
 async def test_query_gpt_async_missing_fields(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     class DummyResp:
+        content = b"content"
         def raise_for_status(self):
             pass
 
@@ -214,6 +238,7 @@ async def test_query_gpt_async_private_ip_allowed(monkeypatch, ip):
     monkeypatch.setenv("GPT_OSS_API", f"http://{ip}")
 
     class DummyResp:
+        content = b"content"
         def raise_for_status(self):
             pass
 
@@ -261,6 +286,7 @@ async def test_query_gpt_async_retry_success(monkeypatch):
     calls = {"count": 0}
 
     class DummyResp:
+        content = b"content"
         def raise_for_status(self):
             pass
 
@@ -304,10 +330,37 @@ async def test_query_gpt_async_retry_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_query_gpt_async_prompt_too_long():
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("x" * (MAX_PROMPT_LEN + 1))
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_response_too_long(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    class DummyResp:
+        content = b"x" * (MAX_RESPONSE_LEN + 1)
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"text": "ok"}]}
+
+    async def fake_post(self, *args, **kwargs):
+        return DummyResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
 async def test_query_gpt_json_async(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    
+
     class DummyResp:
+        content = b"content"
         def raise_for_status(self):
             pass
 

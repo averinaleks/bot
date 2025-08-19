@@ -13,6 +13,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("TradingBot")
 
+MAX_PROMPT_LEN = 10000
+MAX_RESPONSE_LEN = 10000
+
 
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
@@ -72,6 +75,9 @@ def query_gpt(prompt: str) -> str:
     retried up to three times with exponential backoff between one and ten
     seconds before giving up.
     """
+    if len(prompt) > MAX_PROMPT_LEN:
+        raise GPTClientError("Prompt exceeds maximum length")
+
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
         logger.error("Environment variable GPT_OSS_API is not set")
@@ -89,6 +95,8 @@ def query_gpt(prompt: str) -> str:
     url = api_url.rstrip("/") + "/v1/completions"
     try:
         response = _post_with_retry(url, prompt, timeout)
+        if len(response.content) > MAX_RESPONSE_LEN:
+            raise GPTClientError("Response exceeds maximum length")
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -120,6 +128,9 @@ async def query_gpt_async(prompt: str) -> str:
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
     """
+    if len(prompt) > MAX_PROMPT_LEN:
+        raise GPTClientError("Prompt exceeds maximum length")
+
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
         logger.error("Environment variable GPT_OSS_API is not set")
@@ -141,20 +152,23 @@ async def query_gpt_async(prompt: str) -> str:
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
-    async def _post() -> dict:
+    async def _post() -> httpx.Response:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             response = await client.post(url, json={"prompt": prompt})
             response.raise_for_status()
-            try:
-                return response.json()
-            except ValueError as exc:
-                logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
-                raise GPTClientJSONError(
-                    "Invalid JSON response from GPT OSS API"
-                ) from exc
+            return response
 
     try:
-        data = await _post()
+        response = await _post()
+        if len(response.content) > MAX_RESPONSE_LEN:
+            raise GPTClientError("Response exceeds maximum length")
+        try:
+            data = response.json()
+        except ValueError as exc:
+            logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+            raise GPTClientJSONError(
+                "Invalid JSON response from GPT OSS API"
+            ) from exc
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
