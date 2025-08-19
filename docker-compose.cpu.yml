@@ -15,10 +15,10 @@ services:
       - --device
       - cpu
     environment:
+      VLLM_TARGET_DEVICE: cpu
       VLLM_LOGGING_LEVEL: DEBUG
       MODEL: ${MODEL:-openai/gpt-oss-20b}
       CUDA_VISIBLE_DEVICES: ""
-      VLLM_TARGET_DEVICE: cpu
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
