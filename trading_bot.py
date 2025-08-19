@@ -87,11 +87,13 @@ async def send_telegram_alert(message: str) -> None:
             response.raise_for_status()
             return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
+            redacted_url = str(exc.request.url).replace(token, "***")
             logger.warning(
-                "Failed to send Telegram alert (attempt %s/%s): %s",
+                "Failed to send Telegram alert (attempt %s/%s): %s (%s)",
                 attempt,
                 max_attempts,
-                exc,
+                redacted_url,
+                exc.__class__.__name__,
             )
             if attempt == max_attempts:
                 logger.error(

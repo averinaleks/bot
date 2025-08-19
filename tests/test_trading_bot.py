@@ -4,6 +4,7 @@ import time
 import types
 import pytest
 import logging
+import httpx
 
 
 @pytest.mark.asyncio
@@ -38,6 +39,26 @@ async def test_send_telegram_alert_reuses_client(monkeypatch):
 
     assert len(calls) == 1
     assert calls[0][1] == {"chat_id": "chat", "text": "hi"}
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_alert_hides_token(monkeypatch, caplog):
+    class DummyClient:
+        async def post(self, url, data=None, timeout=None):
+            request = httpx.Request("POST", url)
+            raise httpx.RequestError("boom", request=request)
+
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    monkeypatch.setenv("TELEGRAM_ALERT_RETRIES", "1")
+
+    with caplog.at_level(logging.WARNING):
+        await trading_bot.send_telegram_alert("hi")
+
+    assert "***" in caplog.text
+    assert "secret-token" not in caplog.text
 
 
 @pytest.mark.asyncio
