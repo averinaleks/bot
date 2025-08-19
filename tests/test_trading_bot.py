@@ -66,6 +66,14 @@ async def test_send_trade_timeout_env(monkeypatch):
     assert result is True
 
 
+@pytest.mark.parametrize("side", ["hold", "BUY", ""])
+def test_build_trade_payload_invalid_side(side):
+    with pytest.raises(ValueError, match="'buy' or 'sell'"):
+        trading_bot._build_trade_payload(
+            "BTCUSDT", side, 1.0, None, None, None
+        )
+
+
 def test_load_env_uses_host(monkeypatch):
     monkeypatch.delenv('DATA_HANDLER_URL', raising=False)
     monkeypatch.delenv('MODEL_BUILDER_URL', raising=False)
