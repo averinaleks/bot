@@ -383,6 +383,9 @@ def _build_trade_payload(
 ) -> tuple[dict, dict, float]:
     """Return payload, headers and timeout for trade requests."""
 
+    if side not in {"buy", "sell"}:
+        raise ValueError("side must be 'buy' or 'sell'")
+
     payload = {"symbol": symbol, "side": side, "price": price}
     if tp is not None:
         payload["tp"] = tp
