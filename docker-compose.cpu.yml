@@ -19,6 +19,10 @@ services:
     networks:
       - gptoss_net
 
+  gptoss_check:
+    environment:
+      VLLM_TARGET_DEVICE: cpu
+
 networks:
   gptoss_net:
     name: gptoss_net
