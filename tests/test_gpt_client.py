@@ -68,6 +68,16 @@ def test_query_gpt_insecure_url(monkeypatch):
         query_gpt("hi")
 
 
+def test_query_gpt_uppercase_scheme(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "HTTPS://example.com")
+
+    def fake_post(self, *args, **kwargs):
+        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    assert query_gpt("hi") == "ok"
+
+
 @pytest.mark.parametrize("ip", [
     "127.0.0.1",
     "10.0.0.1",

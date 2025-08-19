@@ -44,7 +44,8 @@ def _validate_api_url(api_url: str) -> None:
             return False
         return ip.is_loopback or ip.is_private
 
-    if parsed.scheme != "https" and not _is_allowed(parsed.hostname):
+    scheme = parsed.scheme.lower()
+    if scheme != "https" and not _is_allowed(parsed.hostname):
         logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
         raise GPTClientError("GPT_OSS_API must use HTTPS or be a private address")
 
