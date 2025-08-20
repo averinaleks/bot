@@ -1,7 +1,5 @@
-# Minimal CPU-only requirements for CI workflows
-build==1.2.1
-twine==5.1.1
-pyproject-hooks>=1.0
+# Minimal requirements for running tests in CI
+flake8==7.3.0
 pytest==8.4.1
 pytest-asyncio>=1.1
 
