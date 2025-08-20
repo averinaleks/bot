@@ -52,6 +52,7 @@ jobs:
       - name: Cache pip
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-
             ${{ runner.os }}-pip-
@@ -107,6 +108,7 @@ jobs:
       - name: Cache pip
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-
             ${{ runner.os }}-pip-
