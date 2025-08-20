@@ -15,8 +15,9 @@
 
 ## Зависимости
 
-Основные пакеты устанавливаются из файлов `requirements*.txt` и включают, например,
+Основные пакеты устанавливаются из `requirements.txt` и включают, например,
 `pandas`, `numpy`, `httpx`, `psutil` и `scipy`.
+GPU-зависимости вынесены в отдельный файл `requirements-gpu.txt` и устанавливаются при необходимости.
 Дополнительные библиотеки используются только для расширенного функционала и
 устанавливаются при необходимости:
 
@@ -39,16 +40,17 @@
 
 ## Быстрый старт
 
-1. Установите зависимости. Варианты для GPU и CPU:
+1. Установите зависимости:
    ```bash
    python3 -m venv venv
    source venv/bin/activate
-   # Вариант с GPU (по умолчанию)
-   python -m pip install -r requirements-core.txt -r requirements-gpu.txt
-   # Или CPU‑сборки без CUDA
-   python -m pip install -r requirements-core.txt
+   python -m pip install -r requirements.txt
+   # Дополнительно для GPU
+   python -m pip install -r requirements-gpu.txt
    # Зависимости для тестов
    ./scripts/install-test-deps.sh
+   # С GPU-зависимостями
+   INSTALL_GPU_DEPS=1 ./scripts/install-test-deps.sh
    ```
    В CI применяются только стандартные колёса PyTorch без поддержки CUDA.
    Если вам нужна GPU‑сборка с CUDA 12.4, установите PyTorch
@@ -58,22 +60,12 @@
    pip install torch>=2.7.1 --extra-index-url https://download.pytorch.org/whl/cu124
    ```
    Эта команда ставит версии с поддержкой CUDA 12.4. Выполните её до
-   `python -m pip install -r requirements-core.txt -r requirements-gpu.txt` (или вместо него, если
+   `python -m pip install -r requirements.txt -r requirements-gpu.txt` (или вместо него, если
    остальные зависимости уже установлены).
    Эта утилита устанавливает пакеты, необходимые для запуска тестов. Выполните
    её перед `pytest`, чтобы все проверки прошли успешно.
-    Файл `requirements-gpu.txt` уже включает `cupy-cuda12x` для систем с CUDA 12.x.
-    Для других версий CUDA установите подходящий пакет CuPy вручную, например:
+    Файл `requirements-gpu.txt` уже включает `cupy-cuda12x` для систем с CUDA 12.x. Системы без GPU могут пропустить этот шаг и использовать только `requirements.txt`
 
-    ```bash
-    pip install cupy-cuda11x  # для CUDA 11.x
-    pip install cupy          # CPU-режим без CUDA
-    ```
-
-    Подробности и таблицу соответствия версий смотрите в [документации CuPy](https://docs.cupy.dev/en/stable/install.html).
-    Если CuPy отсутствует, бот автоматически переключается на CPU‑режим. Список `requirements-core.txt`
-    содержит версии `torch` и `tensorflow` без поддержки GPU. Его можно
-    использовать для установки зависимостей и запуска тестов на машинах без CUDA.
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
 - Библиотека `catalyst` закреплена на версии `21.4`, так как новые версии не устанавливаются с `pip>=24.1`. Если требуется `catalyst>=22.2`, понизьте `pip` ниже 24.1.
 2. Отредактируйте файл `.env`, указав в нём свои значения. При запуске основные
@@ -654,7 +646,7 @@ MLFLOW_TRACKING_URI=mlruns python -m bot.trading_bot
 
 ## Running tests
 
-Running `pytest` requires the packages listed in `requirements-core.txt`.
+Running `pytest` requires the packages listed in `requirements.txt`.
 Install them using the helper script:
 
 ```bash
@@ -687,7 +679,7 @@ Integration tests that require external services are marked with `integration` a
 pytest -m integration
 ```
 
-The `requirements-core.txt` file already bundles `pytest` and all other
+The `requirements.txt` file already bundles `pytest` and all other
 packages needed by the test suite.
 
 Unit tests automatically set the environment variable `TEST_MODE=1`.
@@ -715,7 +707,7 @@ As noted above, make sure to run `./scripts/setup-tests.sh` before
 executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 `httpx` will fail.
 
-Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements-core.txt`.
+Чтобы выполнить тесты на машине без GPU, создайте виртуальное окружение и установите зависимости из `requirements.txt`.
 Пакет включает CPU‑сборки `torch` и `tensorflow`, поэтому тесты не подтягивают CUDA‑библиотеки.
 
 Пример полного процесса:
@@ -731,7 +723,7 @@ executing `pytest`; otherwise imports such as `numpy`, `pandas`, `scipy` and
 зависимостей командой `./scripts/install-test-deps.sh --full` и затем
   запустить те же тесты.
 
-The `requirements-core.txt` file already includes test-only packages such as
+The `requirements.txt` file already includes test-only packages such as
 `pytest`, `optuna` and `tenacity`, so no separate `requirements-dev.txt`
 is required.
 
@@ -778,7 +770,7 @@ The project uses **flake8** for style checks. Install dependencies and enable
 the pre-commit hook so linting runs automatically:
 
 ```bash
-pip install -r requirements-core.txt -r requirements-gpu.txt  # or requirements-core.txt
+pip install -r requirements.txt -r requirements-gpu.txt  # or requirements.txt
 pip install pre-commit
 pre-commit install
 ```
