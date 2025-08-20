@@ -1,6 +1,5 @@
 numpy>=1.26.4  # core numeric library
 pandas>=2.2.2
-torch==2.7.1
 ccxt>=4.3.85
 ccxtpro>=0.9.0
 python-telegram-bot>=20.7
@@ -24,7 +23,6 @@ stable-baselines3>=2.3.2
 gymnasium>=0.29.1
 mlflow>=3.2.0
 pytorch-lightning>=2.5.2
-tensorflow>=2.20.0
 transformers==4.55.2
 catalyst==21.5
 flask>=3.0.2
