@@ -57,6 +57,9 @@ jobs:
         with:
           version: v0.65.0
 
+      - name: Clean Trivy cache
+        run: rm -rf /tmp/trivy-cache || true
+
       - name: Run Trivy vulnerability scanner
         env:
           TRIVY_CACHE_DIR: /tmp/trivy-cache
