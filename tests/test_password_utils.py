@@ -1,4 +1,5 @@
 import pytest
+import bcrypt
 
 from password_utils import (
     BCRYPT_ROUNDS,
@@ -68,8 +69,7 @@ def test_hash_password_rejects_weak_passwords(weak_password):
 
 
 @pytest.mark.parametrize("weak_password", WEAK_PASSWORDS)
-def test_verify_password_rejects_weak_passwords(weak_password):
-    hashed = hash_password(VALID_PASSWORD)
-    with pytest.raises(ValueError):
-        verify_password(weak_password, hashed)
+def test_verify_password_accepts_existing_weak_hashes(weak_password):
+    stored_hash = bcrypt.hashpw(weak_password.encode(), bcrypt.gensalt()).decode()
+    assert verify_password(weak_password, stored_hash)
 
