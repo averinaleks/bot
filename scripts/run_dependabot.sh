@@ -4,6 +4,11 @@ set -euo pipefail
 repo="${GITHUB_REPOSITORY}"
 token="${GITHUB_TOKEN}"
 
+if [[ -z "${token}" ]]; then
+  echo "GITHUB_TOKEN is required" >&2
+  exit 1
+fi
+
 for ecosystem in pip github-actions; do
   if ! curl -f -S -s -X POST \
     -H "Authorization: Bearer ${token}" \

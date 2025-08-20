@@ -21,7 +21,7 @@ jobs:
       - name: Run Dependabot
         run: scripts/run_dependabot.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.PAT || github.token }}
           # PAT must include repo and security_events scopes
       - name: Load registry proxy config
         run: |
@@ -33,7 +33,7 @@ jobs:
         uses: github/dependabot-action@8a8ecd4a2ccff00ad1680d32caef59634c31d3c0
         # v2.28.0
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.PAT || github.token }}
           # PAT must include repo and security_events scopes
           GITHUB_DEPENDABOT_JOB_TOKEN: >-
             ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
