@@ -8,8 +8,7 @@ permissions:
 # include the correlation ID from the run's raw logs.
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 env:
   PYTHONPYCACHEPREFIX: /mnt/pycache
