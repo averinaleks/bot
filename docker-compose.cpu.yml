@@ -1,6 +1,6 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.10.1
     ports:
       - "8003:8000"
     volumes:
@@ -11,6 +11,7 @@ services:
       --device cpu
     environment:
       VLLM_TARGET_DEVICE: cpu
+      VLLM_DEVICE: cpu
       VLLM_LOGGING_LEVEL: DEBUG
       CUDA_VISIBLE_DEVICES: ""
     healthcheck:
