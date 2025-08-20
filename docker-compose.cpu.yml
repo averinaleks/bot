@@ -1,18 +1,18 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.4.0
     ports:
       - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
-    command: >
-      --host 0.0.0.0 --port 8000
-      --model ${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
-      --device cpu
+    command: |
+      python -m vllm.entrypoints.openai.api_server \
+        --host 0.0.0.0 --port 8000 \
+        --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} \
+        --device cpu --dtype float32
     environment:
-      VLLM_TARGET_DEVICE: cpu
-      VLLM_LOGGING_LEVEL: DEBUG
-      CUDA_VISIBLE_DEVICES: ""
+      - VLLM_DEVICE=cpu
+      - VLLM_LOGGING_LEVEL=DEBUG
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
