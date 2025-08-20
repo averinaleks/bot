@@ -36,17 +36,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Prepare pip dirs
-        run: |
-          rm -rf /mnt/pip-cache /mnt/pip-tmp
-          mkdir -p /mnt/pip-cache /mnt/pip-tmp
-      - name: Install dependencies
-        env:
-          PIP_CACHE_DIR: /mnt/pip-cache
-          TMPDIR: /mnt/pip-tmp
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-ci.txt --no-deps
+          pip install build twine
       - name: Install pip-tools
         run: pip install pip-tools
       - name: Check dependencies
