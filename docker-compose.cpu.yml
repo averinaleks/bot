@@ -5,7 +5,7 @@ services:
     volumes:
       - gptoss_workspace:/workspace
     command: >
-      python -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --port 8000 --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} --device cpu --dtype float32
+      python -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --port 8000 --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} --device cpu --dtype float32 --disable_async_output_proc
     environment:
       - VLLM_DEVICE=cpu
       - VLLM_LOGGING_LEVEL=DEBUG
