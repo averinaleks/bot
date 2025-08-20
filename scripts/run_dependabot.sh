@@ -3,11 +3,11 @@ set -euo pipefail
 
 repo="${GITHUB_REPOSITORY}"
 
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-    echo "GITHUB_TOKEN is not set; cannot trigger Dependabot" >&2
+if [[ -z "${TOKEN:-}" ]]; then
+    echo "TOKEN is not set; cannot trigger Dependabot" >&2
     exit 1
 fi
-token="${GITHUB_TOKEN}"
+token="${TOKEN}"
 
 for ecosystem in pip github-actions; do
   if ! curl --fail-with-body -S -s -X POST \
