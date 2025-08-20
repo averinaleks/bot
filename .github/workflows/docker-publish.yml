@@ -22,6 +22,9 @@ jobs:
           - file: Dockerfile.ci
             image: myapp-ci
             artifact: trivy-report-ci
+          - file: Dockerfile.gptoss
+            tag: ghcr.io/averinaleks/myapp:latest
+            artifact: trivy-report-gptoss
 
     steps:
       - name: Checkout code
@@ -75,8 +78,6 @@ jobs:
           push: true
           load: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
