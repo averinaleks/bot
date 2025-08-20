@@ -42,7 +42,10 @@ jobs:
           pip install -r requirements-ci.txt --no-deps
       - name: Install pip-tools
         run: pip install pip-tools
+      - name: Copy project to /mnt
+        run: rsync -a . /mnt/project
       - name: Check dependencies
+        working-directory: /mnt/project
         run: |
           set +e
           pip-compile --dry-run -o requirements.out requirements.txt
@@ -53,6 +56,12 @@ jobs:
             echo "Dependency check failed."
           fi
           exit $status
+      - name: Return generated files
+        if: always()
+        run: |
+          if [ -f /mnt/project/requirements.out ]; then
+            rsync -a /mnt/project/requirements.out requirements.out
+          fi
       - name: Build package
         run: python -m build
       - name: Publish to PyPI
