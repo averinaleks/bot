@@ -2,6 +2,11 @@
 set -euo pipefail
 
 repo="${GITHUB_REPOSITORY}"
+
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    echo "GITHUB_TOKEN is not set; cannot trigger Dependabot" >&2
+    exit 1
+fi
 token="${GITHUB_TOKEN}"
 
 for ecosystem in pip github-actions; do

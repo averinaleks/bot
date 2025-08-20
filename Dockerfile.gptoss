@@ -1,29 +1,16 @@
-FROM python:3.12-slim AS builder
+FROM python:3.11-slim
 
-# Устанавливаем зависимости для сборки и выполнения
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git cmake ninja-build \
-    libtbbmalloc2 curl \
-    libnuma-dev \
+    libtbbmalloc2 libnuma1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
+ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 \
-    && pip install --no-cache-dir vllm==0.6.2.post1 \
+    && pip install --no-cache-dir vllm==0.6.6 \
     && pip install --no-cache-dir openai==1.99.1
-
-FROM python:3.12-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libtbbmalloc2 curl \
-    libnuma-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
-
-COPY --from=builder /usr/local /usr/local
 
 EXPOSE 8000
 
@@ -35,3 +22,4 @@ CMD python -m vllm.entrypoints.openai.api_server \
     --max-num-seqs 4 \
     --enforce-eager \
     --disable-async-output-proc
+

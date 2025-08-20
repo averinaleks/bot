@@ -17,10 +17,10 @@ jobs:
       matrix:
         include:
           - file: Dockerfile.cpu
-            tag: ghcr.io/averinaleks/myapp:latest
+            image: myapp
             artifact: trivy-report-cpu
           - file: Dockerfile.ci
-            tag: ghcr.io/averinaleks/myapp-ci:latest
+            image: myapp-ci
             artifact: trivy-report-ci
           - file: Dockerfile.gptoss
             tag: ghcr.io/averinaleks/myapp:latest
@@ -78,14 +78,12 @@ jobs:
           push: true
           load: true
           tags: |
-            ghcr.io/averinaleks/myapp:latest
-            ghcr.io/averinaleks/myapp:${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Apply security upgrades in built image
         run: |
-          docker run --rm ${{ matrix.tag }} bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
+          docker run --rm ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
 
       - name: Move Docker layer cache
         run: |
@@ -101,7 +99,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.32.0
         with:
           version: v0.65.0
-          image-ref: ${{ matrix.tag }}
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
           format: table
           output: ${{ matrix.artifact }}.txt
 

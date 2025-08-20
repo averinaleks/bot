@@ -4,12 +4,11 @@ services:
       - "8003:8000"
     volumes:
       - gptoss_workspace:/workspace
-    command: |
-      python -m vllm.entrypoints.openai.api_server \
-        --host 0.0.0.0 --port 8000 \
-        --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} \
-        --device cpu --dtype float32
+    command: >
+      python -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --port 8000 --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} --device cpu --dtype float32
     environment:
+      - VLLM_DEVICE=cpu
+      - VLLM_LOGGING_LEVEL=DEBUG
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
