@@ -1,6 +1,5 @@
 services:
   gptoss:
-    image: vllm/vllm-openai:v0.4.0
     ports:
       - "8003:8000"
     volumes:
@@ -11,8 +10,6 @@ services:
         --model ${MODEL_ID:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} \
         --device cpu --dtype float32
     environment:
-      - VLLM_DEVICE=cpu
-      - VLLM_LOGGING_LEVEL=DEBUG
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 5s
