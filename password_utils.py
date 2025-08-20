@@ -37,6 +37,5 @@ def verify_password(password: str, stored_hash: str) -> bool:
         raise ValueError("Password too short")
     if len(password) > MAX_PASSWORD_LENGTH:
         raise ValueError("Password exceeds maximum length")
-    validate_password_complexity(password)
     return bcrypt.checkpw(password.encode(), stored_hash.encode())
 
