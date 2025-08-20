@@ -56,7 +56,9 @@ jobs:
         with:
           python-version-file: .python-version
       - name: Install Semgrep
-        run: pip install semgrep
+        run: |
+          export PIP_CACHE_DIR=/mnt/pip-cache
+          pip install --no-cache-dir --target /mnt/pip semgrep
       - name: Run Semgrep
         run: semgrep --config=p/ci --sarif --output=semgrep.sarif
       - name: Upload SARIF file
