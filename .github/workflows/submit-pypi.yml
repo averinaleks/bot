@@ -33,10 +33,11 @@ jobs:
           build-mount-path: /mnt
           pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Upgrade pip and install build tools
+      - name: Install build tools
         run: |
           python -m pip install --upgrade pip
           pip install build twine
