@@ -11,6 +11,9 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONPYCACHEPREFIX: /mnt/pycache
+
 jobs:
   unit:
     name: Unit tests
@@ -47,17 +50,20 @@ jobs:
       - name: Cache pip
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-${{ github.job }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir --upgrade pip
           ./scripts/install-test-deps.sh
       - name: Run flake8
         run: flake8 .
+      - name: Remove test caches
+        run: |
+          rm -rf .pytest_cache .cache
+          find . -type d -name '__pycache__' -exec rm -rf {} +
+          find . -name '*.pyc' -delete
       - name: Run unit tests
         run: pytest -m "not integration"
 
@@ -97,14 +103,17 @@ jobs:
       - name: Cache pip
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-${{ github.job }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt') }}-
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir --upgrade pip
           ./scripts/install-test-deps.sh
+      - name: Remove test caches
+        run: |
+          rm -rf .pytest_cache .cache
+          find . -type d -name '__pycache__' -exec rm -rf {} +
+          find . -name '*.pyc' -delete
       - name: Run integration tests
         run: pytest -m integration
