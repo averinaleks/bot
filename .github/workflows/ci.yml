@@ -56,7 +56,6 @@ jobs:
           python -m venv /mnt/venv
           echo "/mnt/venv/bin" >> $GITHUB_PATH
           source /mnt/venv/bin/activate
-          pip install --no-cache-dir -r requirements.txt
           pip install --no-cache-dir -r requirements-ci.txt
       - name: Run flake8
         run: flake8 .
@@ -111,7 +110,6 @@ jobs:
           python -m venv /mnt/venv
           echo "/mnt/venv/bin" >> $GITHUB_PATH
           source /mnt/venv/bin/activate
-          pip install --no-cache-dir -r requirements.txt
           pip install --no-cache-dir -r requirements-ci.txt
       - name: Remove test caches
         run: |
