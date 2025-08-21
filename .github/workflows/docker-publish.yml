@@ -13,6 +13,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      DOCKERHUB_USERNAME: ${{ env.AVERINALEKS }}
+      DOCKERHUB_TOKEN: ${{ env.BOT }}
     strategy:
       matrix:
         include:
@@ -62,8 +65,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: docker.io
-          username: ${{ secrets.AVERINALEKS }}
-          password: ${{ secrets.BOT }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Cache Docker layers
         uses: actions/cache@v4
@@ -90,13 +93,13 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           load: true
-          tags: ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest
+          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Apply security upgrades in built image
         run: |
-          docker run --rm ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
+          docker run --rm ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
 
       - name: Move Docker layer cache
         run: |
@@ -115,7 +118,7 @@ jobs:
           TRIVY_CACHE_DIR: /mnt/trivy-cache
         with:
           version: v0.65.0
-          image-ref: ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest
+          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           format: table
           output: ${{ matrix.artifact }}.txt
 
