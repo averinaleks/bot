@@ -10,6 +10,8 @@ import pytest
 
 from tests.helpers import get_free_port, service_process
 
+pytestmark = pytest.mark.integration
+
 if sys.platform == "win32":
     multiprocessing.set_start_method("spawn", force=True)
 ctx = multiprocessing.get_context("spawn")
