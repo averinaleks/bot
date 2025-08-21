@@ -1429,7 +1429,18 @@ class ModelBuilder:
             torch_mods = _get_torch_modules()
             torch = torch_mods["torch"]
             safe_symbol = symbol.replace("/", "_").replace(":", "_")
-            cache_file = os.path.join(self.cache.cache_dir, f"shap_{safe_symbol}.pkl")
+            cache_dir = getattr(self.cache, "cache_dir", None)
+            if not cache_dir or not os.path.isdir(cache_dir):
+                try:
+                    os.makedirs(cache_dir or "", exist_ok=True)
+                except OSError as e:
+                    logger.error(
+                        "Не удалось создать директорию кэша SHAP %s: %s",
+                        cache_dir,
+                        e,
+                    )
+                    return
+            cache_file = os.path.join(cache_dir, f"shap_{safe_symbol}.pkl")
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
@@ -1452,7 +1463,11 @@ class ModelBuilder:
             if not was_training:
                 model_cpu.eval()
             model.to(current_device)
-            joblib.dump(values, cache_file)
+            try:
+                joblib.dump(values, cache_file)
+            except OSError as e:
+                logger.error("Ошибка записи SHAP в %s: %s", cache_file, e)
+                return
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
                 "close",
