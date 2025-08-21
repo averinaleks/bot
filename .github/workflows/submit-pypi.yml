@@ -46,8 +46,13 @@ jobs:
       - name: Copy project to /mnt
         run: rsync -a . /mnt/project
       - name: Check dependencies
+        working-directory: /mnt/project
+        env:
+          PIP_CACHE_DIR: /mnt/pip-cache
+          TMPDIR: /mnt/tmp
         run: |
           set +e
+          mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
           pip-compile --dry-run -o requirements.out requirements.txt
           status=$?
           if [ $status -eq 0 ]; then
