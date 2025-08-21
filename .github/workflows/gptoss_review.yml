@@ -22,12 +22,13 @@ jobs:
           persist-credentials: false
       - name: Освободить место на диске
         uses: jlumbroso/free-disk-space@main
+        continue-on-error: true
         with:
           tool-cache: true
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           swap-storage: true
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
