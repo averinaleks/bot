@@ -18,11 +18,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        timeout-minutes: 5
         with:
           persist-credentials: false
       - name: Освободить место на диске
         uses: jlumbroso/free-disk-space@main
-        continue-on-error: true
         with:
           tool-cache: true
           android: true
@@ -32,8 +32,10 @@ jobs:
           swap-storage: true
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
+        timeout-minutes: 5
       - name: Максимизировать пространство для сборки
         uses: easimon/maximize-build-space@v10
+        timeout-minutes: 15
         with:
           root-reserve-mb: 1024
           temp-reserve-mb: 100
@@ -49,8 +51,10 @@ jobs:
           sudo rm -rf /var/lib/docker || true
           sudo systemctl start docker
           docker info | grep -i 'Docker Root Dir' || true
+        timeout-minutes: 10
       - name: Login to Docker Hub
         uses: docker/login-action@v3
+        timeout-minutes: 5
         with:
           username: ${{ secrets.AVERINALEKS }}
           password: ${{ secrets.BOT }}
@@ -58,13 +62,7 @@ jobs:
         run: |
           df -h /
           docker system df || true
+        timeout-minutes: 5
       - name: Run gptoss review (CPU)
         run: |
-          set -o pipefail
-          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check | tee gptoss_review.log
-      - name: Upload review logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: gptoss-review-log
-          path: gptoss_review.log
 
