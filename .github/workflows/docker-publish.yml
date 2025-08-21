@@ -108,8 +108,11 @@ jobs:
         with:
           version: v0.65.0
 
+      - run: rm -rf /mnt/trivy-cache || true
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.32.0
+        env:
+          TRIVY_CACHE_DIR: /mnt/trivy-cache
         with:
           version: v0.65.0
           image-ref: ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest
