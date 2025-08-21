@@ -56,9 +56,15 @@ jobs:
           password: ${{ secrets.BOT }}
       - name: Показать свободное место
         run: |
-          df -h
+          df -h /
           docker system df || true
       - name: Run gptoss review (CPU)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check
+          set -o pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check | tee gptoss_review.log
+      - name: Upload review logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gptoss-review-log
+          path: gptoss_review.log
 
