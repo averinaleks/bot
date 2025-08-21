@@ -6,7 +6,10 @@ import pytest
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker is not installed")
-@pytest.mark.skipif(not os.getenv("AVERINALEKS") or not os.getenv("BOT"), reason="Docker Hub credentials are not configured")
+@pytest.mark.skipif(
+    not os.getenv("AVERINALEKS") or not os.getenv("BOT"),
+    reason="Environment variables AVERINALEKS and BOT must be set for Docker Hub",
+)
 def test_build_and_push(tmp_path):
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text("FROM alpine:3.18\nRUN echo test > /test.txt\n")
