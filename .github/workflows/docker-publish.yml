@@ -40,6 +40,8 @@ jobs:
           haskell: true
           large-packages: true
           swap-storage: true
+      - name: Clean Docker dir
+        run: sudo rm -rf /var/lib/docker/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
