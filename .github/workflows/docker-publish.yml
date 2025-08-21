@@ -132,6 +132,7 @@ jobs:
           path: ${{ matrix.artifact }}.txt
 
       - uses: actions/download-artifact@v5
+        if: matrix.artifact == 'trivy-report-ci'
         with:
           name: trivy-report-ci
           path: .
