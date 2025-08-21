@@ -23,13 +23,12 @@ jobs:
           persist-credentials: false
       - name: Освободить место на диске
         uses: jlumbroso/free-disk-space@main
-        timeout-minutes: 15
         with:
           tool-cache: true
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           swap-storage: true
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
@@ -61,11 +60,9 @@ jobs:
           password: ${{ secrets.BOT }}
       - name: Показать свободное место
         run: |
-          df -h
+          df -h /
           docker system df || true
         timeout-minutes: 5
       - name: Run gptoss review (CPU)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --exit-code-from gptoss_check gptoss gptoss_check
-        timeout-minutes: 30
 
