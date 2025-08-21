@@ -7,3 +7,4 @@ pandas>=2.0.0,<3.0.0
 pytest==8.4.1
 pytest-asyncio>=1.1
 tenacity>=8.5,<10
+fastapi==0.116.1
