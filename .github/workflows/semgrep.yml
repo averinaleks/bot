@@ -60,6 +60,7 @@ jobs:
           export PIP_CACHE_DIR=/mnt/pip-cache
           pip install --no-cache-dir --target /mnt/pip semgrep
           export PATH="/mnt/pip/bin:$PATH"
+          export PYTHONPATH="/mnt/pip:$PYTHONPATH"
           echo "/mnt/pip/bin" >> "$GITHUB_PATH"
       - name: Run Semgrep
         run: |
