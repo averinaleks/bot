@@ -13,9 +13,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
-      DOCKERHUB_TOKEN: ${{ secrets.BOT }}
     strategy:
       matrix:
         include:
@@ -28,6 +25,9 @@ jobs:
           - file: Dockerfile.gptoss
             image: myapp
             artifact: trivy-report-gptoss
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
+      DOCKERHUB_TOKEN: ${{ secrets.BOT }}
 
     steps:
       - name: Checkout code
