@@ -57,13 +57,16 @@ jobs:
           version: v0.65.0
 
       - name: Clean Trivy cache
-        run: rm -rf /tmp/trivy-cache || true
+        run: rm -rf /mnt/trivy-cache || true
+
+      - run: mkdir -p /mnt/trivy-cache
 
       - name: Run Trivy vulnerability scanner
         env:
-          TRIVY_CACHE_DIR: /tmp/trivy-cache
+          TRIVY_CACHE_DIR: /mnt/trivy-cache
         uses: aquasecurity/trivy-action@0.32.0
         with:
+          cache-dir: /mnt/trivy-cache
           version: v0.65.0
           image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
           format: sarif
