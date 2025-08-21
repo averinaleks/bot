@@ -10,6 +10,8 @@ import os
 import time
 import asyncio
 import sys
+import re
+from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
 
@@ -1428,20 +1430,12 @@ class ModelBuilder:
                 return
             torch_mods = _get_torch_modules()
             torch = torch_mods["torch"]
-            safe_symbol = symbol.replace("/", "_").replace(":", "_")
+            safe_symbol = re.sub(r"[^A-Za-z0-9_-]", "_", symbol)
             cache_dir = getattr(self.cache, "cache_dir", None)
-            if not cache_dir or not os.path.isdir(cache_dir):
-                try:
-                    os.makedirs(cache_dir or "", exist_ok=True)
-                except OSError as e:
-                    logger.error(
-                        "Не удалось создать директорию кэша SHAP %s: %s",
-                        cache_dir,
-                        e,
-                    )
-                    return
-            cache_file = os.path.join(cache_dir, f"shap_{safe_symbol}.pkl")
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            if not cache_dir:
+                logger.error("Не задана директория кэша SHAP")
+                return
+            cache_file = Path(cache_dir) / f"shap_{safe_symbol}.pkl"
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
                 return
@@ -1464,6 +1458,7 @@ class ModelBuilder:
                 model_cpu.eval()
             model.to(current_device)
             try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
                 joblib.dump(values, cache_file)
             except OSError as e:
                 logger.error("Ошибка записи SHAP в %s: %s", cache_file, e)
