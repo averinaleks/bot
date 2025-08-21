@@ -34,7 +34,8 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          # avoid removing large packages such as google-cloud-cli
+          large-packages: false
           swap-storage: true
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -89,7 +90,8 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          # avoid removing large packages such as google-cloud-cli
+          large-packages: false
           swap-storage: true
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
