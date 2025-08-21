@@ -14,8 +14,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     env:
-      DOCKERHUB_USERNAME: ${{ env.AVERINALEKS }}
-      DOCKERHUB_TOKEN: ${{ env.BOT }}
+      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
+      DOCKERHUB_TOKEN: ${{ secrets.BOT }}
     strategy:
       matrix:
         include:
