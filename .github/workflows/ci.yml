@@ -27,7 +27,7 @@ jobs:
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-        timeout-minutes: 5
+        timeout-minutes: 10
         continue-on-error: true
         with:
           tool-cache: true
@@ -85,7 +85,7 @@ jobs:
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-        timeout-minutes: 5
+        timeout-minutes: 10
         continue-on-error: true
         with:
           tool-cache: true
