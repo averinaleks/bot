@@ -51,7 +51,7 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 1024
+          root-reserve-mb: 20000
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
@@ -82,6 +82,15 @@ jobs:
         run: |
           mount | grep '/mnt'
           df -h /mnt
+
+      - name: Create virtual environment
+        run: |
+          python -m venv /mnt/venv
+
+      - name: Install dependencies
+        run: |
+          . /mnt/venv/bin/activate
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
