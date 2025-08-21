@@ -23,11 +23,6 @@ jobs:
         env:
           TOKEN: ${{ secrets.TOKEN }}
           # TOKEN must have repo and security_events scopes
-      - name: Load registry proxy config
-        run: |
-          cat <<'EOF' >> "$GITHUB_ENV"
-          GITHUB_REGISTRIES_PROXY=$(jq -c . .github/registries-proxy.json)
-          EOF
       - name: Dependabot Action
         if: github.actor == 'dependabot[bot]'
         uses: github/dependabot-action@8a8ecd4a2ccff00ad1680d32caef59634c31d3c0
@@ -39,4 +34,4 @@ jobs:
             ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
           GITHUB_DEPENDABOT_CRED_TOKEN: >-
             ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
-          GITHUB_REGISTRIES_PROXY: ${{ env.GITHUB_REGISTRIES_PROXY }}
+          DEPENDABOT_ENABLE_CONNECTIVITY_CHECK: 1
