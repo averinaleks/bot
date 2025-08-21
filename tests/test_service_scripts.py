@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from tests.helpers import get_free_port, service_process
 
+pytestmark = pytest.mark.integration
+
 TOKEN_HEADERS = {"Authorization": "Bearer test-token"}
 
 ctx = multiprocessing.get_context("spawn")
