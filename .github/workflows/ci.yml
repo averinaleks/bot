@@ -37,6 +37,8 @@ jobs:
           # avoid removing large packages such as google-cloud-cli
           large-packages: false
           swap-storage: true
+      - name: Clean Docker dir
+        run: sudo rm -rf /var/lib/docker/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
@@ -93,6 +95,8 @@ jobs:
           # avoid removing large packages such as google-cloud-cli
           large-packages: false
           swap-storage: true
+      - name: Clean Docker dir
+        run: sudo rm -rf /var/lib/docker/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
