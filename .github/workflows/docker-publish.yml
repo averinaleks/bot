@@ -50,12 +50,12 @@ jobs:
           pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /var/lib/docker/tmp-pv.img
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: docker.io
           username: ${{ secrets.AVERINALEKS }}
-          password: ${{ secrets.TOKEN }}
+          password: ${{ secrets.BOT }}
 
       - name: Cache Docker layers
         uses: actions/cache@v4
@@ -82,13 +82,13 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           load: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          tags: ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Apply security upgrades in built image
         run: |
-          docker run --rm ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
+          docker run --rm ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
 
       - name: Move Docker layer cache
         run: |
@@ -104,7 +104,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.32.0
         with:
           version: v0.65.0
-          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          image-ref: ${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest
           format: table
           output: ${{ matrix.artifact }}.txt
 
