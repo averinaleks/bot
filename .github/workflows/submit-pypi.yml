@@ -53,16 +53,9 @@ jobs:
           PIP_CACHE_DIR: /mnt/pip-cache
           TMPDIR: /mnt/tmp
         run: |
-          set +e
           mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
-          pip-compile --dry-run -o requirements.out requirements.txt
-          status=$?
-          if [ $status -eq 0 ]; then
-            echo "Dependency check passed."
-          else
-            echo "Dependency check failed."
-          fi
-          exit $status
+          pip install -r requirements.txt
+          pip check
       - name: Return generated files
         if: always()
         run: |
