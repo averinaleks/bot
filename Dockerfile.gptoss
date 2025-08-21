@@ -9,7 +9,7 @@ ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 \
-    && pip install --no-cache-dir vllm==0.6.6 \
+    && pip install --no-cache-dir 'vllm>=0.10.0' \
     && pip install --no-cache-dir openai==1.99.1
 
 EXPOSE 8000
@@ -17,7 +17,7 @@ EXPOSE 8000
 CMD python -m vllm.entrypoints.openai.api_server \
     --host 0.0.0.0 \
     --port 8000 \
-    --model ${MODEL:-openai/gpt-oss-20b} \
+    --model ${MODEL:-TinyLlama/TinyLlama-1.1B-Chat-v1.0} \
     --device cpu \
     --max-num-seqs 4 \
     --enforce-eager \
