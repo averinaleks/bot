@@ -54,12 +54,19 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 1024
+          root-reserve-mb: 4096
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
           pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
+
+      - name: Relocate Docker storage to /mnt
+        run: |
+          sudo systemctl stop docker
+          sudo mv /var/lib/docker /mnt/docker
+          sudo ln -s /mnt/docker /var/lib/docker
+          sudo systemctl start docker
 
       - name: Copy repository to /mnt
         run: sudo rsync -a $GITHUB_WORKSPACE /mnt/
