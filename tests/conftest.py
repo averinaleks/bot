@@ -188,10 +188,13 @@ def _stub_modules():
     sys.modules.setdefault("tenacity", tenacity_mod)
 
 
-    joblib_mod = types.ModuleType("joblib")
-    joblib_mod.dump = lambda *a, **k: None
-    joblib_mod.load = lambda *a, **k: {}
-    sys.modules.setdefault("joblib", joblib_mod)
+    try:  # use real joblib when available
+        import joblib  # noqa: F401
+    except Exception:  # pragma: no cover - optional dependency
+        joblib_mod = types.ModuleType("joblib")
+        joblib_mod.dump = lambda *a, **k: None
+        joblib_mod.load = lambda *a, **k: {}
+        sys.modules.setdefault("joblib", joblib_mod)
 
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *a, **k: None
