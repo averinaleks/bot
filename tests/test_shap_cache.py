@@ -89,4 +89,4 @@ async def test_shap_cache_file_safe_symbol(tmp_path, monkeypatch):
     shap_stub = types.SimpleNamespace(GradientExplainer=DummyExplainer)
     monkeypatch.setattr(model_builder, "shap", shap_stub)
     await mb.compute_shap_values("BTC/USDT:PERP", model, X)
-    assert (tmp_path / "shap_BTC_USDT_PERP.pkl").exists()
+    assert (tmp_path / "shap" / "shap_BTC_USDT_PERP.pkl").exists()
