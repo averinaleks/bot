@@ -1435,7 +1435,7 @@ class ModelBuilder:
             if not cache_dir:
                 logger.error("Не задана директория кэша SHAP")
                 return
-            cache_file = Path(cache_dir) / f"shap_{safe_symbol}.pkl"
+            cache_file = Path(cache_dir) / "shap" / f"shap_{safe_symbol}.pkl"
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
                 return
@@ -1460,9 +1460,16 @@ class ModelBuilder:
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
                 joblib.dump(values, cache_file)
-            except OSError as e:
+                if not cache_file.exists():
+                    raise RuntimeError(
+                        f"Файл {cache_file} не создан после сохранения SHAP"
+                    )
+                logger.info("SHAP значения сохранены в %s", cache_file)
+            except Exception as e:
                 logger.error("Ошибка записи SHAP в %s: %s", cache_file, e)
-                return
+                raise RuntimeError(
+                    f"Ошибка записи SHAP в {cache_file}"
+                ) from e
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
                 "close",
