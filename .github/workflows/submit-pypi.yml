@@ -54,7 +54,9 @@ jobs:
           TMPDIR: /mnt/tmp
         run: |
           mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
-          pip install -r requirements.txt
+          # Install only the minimal set of dependencies required for
+          # building and verifying the package to keep the workflow light.
+          pip install --no-cache-dir -r requirements-ci.txt
           pip check
       - name: Return generated files
         if: always()
