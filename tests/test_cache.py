@@ -16,7 +16,7 @@ def _mock_virtual_memory():
 
 def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
-    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     df = pd.DataFrame({"close": [1, 2, 3]})
     cache.save_cached_data("BTC/USDT", "1m", df)
     file_path = tmp_path / "BTC_USDT_1m.parquet"
@@ -28,7 +28,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
 @pytest.mark.parametrize("suffix", [".pkl", ".pkl.gz"])
 def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
-    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     df = pd.DataFrame({"close": [1, 2, 3]})
     old_file = tmp_path / f"BTCUSDT_1m{suffix}"
     if suffix.endswith(".gz"):
@@ -45,7 +45,7 @@ def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
 
 def test_save_skips_empty_dataframe(tmp_path, monkeypatch):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
-    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     empty_df = pd.DataFrame()
     cache.save_cached_data("BTC/USDT", "1m", empty_df)
     assert not (tmp_path / "BTC_USDT_1m.parquet").exists()
@@ -53,7 +53,7 @@ def test_save_skips_empty_dataframe(tmp_path, monkeypatch):
 
 def test_cache_size_updates_without_walk(tmp_path, monkeypatch):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
-    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     # fail if _calculate_cache_size is used after init
     def fail(*a, **k):
         raise AssertionError("walk not called")
@@ -84,5 +84,5 @@ def test_calculate_cache_size_skips_deleted_files(tmp_path, monkeypatch):
         return orig_getsize(path)
 
     monkeypatch.setattr(os.path, "getsize", fake_getsize)
-    cache = HistoricalDataCache(cache_dir=str(tmp_path))
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     assert cache.current_cache_size_mb == 0

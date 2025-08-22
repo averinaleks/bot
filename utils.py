@@ -792,8 +792,9 @@ def calculate_volume_profile(prices, volumes, bins=50):
 class HistoricalDataCache:
     """Manage on-disk storage for historical OHLCV data."""
 
-    def __init__(self, cache_dir="/app/cache"):
+    def __init__(self, cache_dir="/app/cache", min_free_disk_gb=0.1):
         self.cache_dir = cache_dir
+        self.min_free_disk_gb = min_free_disk_gb
         os.makedirs(self.cache_dir, exist_ok=True)
         if not os.access(self.cache_dir, os.W_OK):
             raise PermissionError(
@@ -822,7 +823,7 @@ class HistoricalDataCache:
 
     def _check_disk_space(self):
         disk_usage = shutil.disk_usage(self.cache_dir)
-        if disk_usage.free / (1024**3) < 0.5:
+        if disk_usage.free / (1024**3) < self.min_free_disk_gb:
             logger.warning(
                 "Недостаточно свободного места на диске: %.2f ГБ",
                 disk_usage.free / (1024**3),
