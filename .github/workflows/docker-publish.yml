@@ -125,7 +125,6 @@ jobs:
 
       - name: Cleanup before Trivy scan
         run: |
-          docker system prune -af || true
           sudo rm -rf /tmp/* || true
           sudo rm -rf /mnt/trivy-cache || true
           rm -rf ~/.cache/trivy || true
@@ -157,5 +156,7 @@ jobs:
         with:
           name: trivy-report-ci
           path: bot
-      - name: Cleanup buildx
-        run: docker buildx prune -af || true
+      - name: Cleanup Docker
+        run: |
+          docker buildx prune -af || true
+          docker system prune -af || true
