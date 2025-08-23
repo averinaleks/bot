@@ -67,8 +67,12 @@ jobs:
       - name: Build package
         run: python -m build
       - name: Publish to PyPI
+        if: secrets.PYPI_API_TOKEN != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           attestations: false
+      - name: Skip PyPI publish (missing token)
+        if: secrets.PYPI_API_TOKEN == ''
+        run: echo "PYPI_API_TOKEN not set; skipping publish."
