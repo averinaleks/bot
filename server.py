@@ -9,6 +9,9 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 
+logging.basicConfig(level=logging.INFO)
+
+
 # Global variables for model and tokenizer. They will be loaded on app startup.
 tokenizer = None
 model = None
@@ -116,12 +119,14 @@ API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()
 async def check_api_key(request: Request, call_next):
     auth = request.headers.get("Authorization")
     if not auth or not auth.startswith("Bearer "):
+        logging.warning("Unauthorized access from %s", request.client.host)
         return Response(status_code=401)
     token = auth[7:]
     for key in API_KEYS:
         if hmac.compare_digest(token, key):
             break
     else:
+        logging.warning("Unauthorized access from %s", request.client.host)
         return Response(status_code=401)
     return await call_next(request)
 
