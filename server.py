@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import hmac
 from typing import List
 from contextlib import asynccontextmanager
 
@@ -104,7 +105,10 @@ async def check_api_key(request: Request, call_next):
     if not auth or not auth.startswith("Bearer "):
         return Response(status_code=401)
     token = auth[7:]
-    if token not in API_KEYS:
+    for key in API_KEYS:
+        if hmac.compare_digest(token, key):
+            break
+    else:
         return Response(status_code=401)
     return await call_next(request)
 
