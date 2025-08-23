@@ -120,11 +120,12 @@ def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int 
     if tokenizer is None or model is None:
         raise RuntimeError("Model is not loaded")
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    outputs = model.generate(
-        **inputs,
-        temperature=temperature,
-        max_new_tokens=max_new_tokens,
-    )
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            temperature=temperature,
+            max_new_tokens=max_new_tokens,
+        )
     text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     if text.startswith(prompt):
         text = text[len(prompt) :]
