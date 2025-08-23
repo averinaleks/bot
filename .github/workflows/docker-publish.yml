@@ -124,7 +124,13 @@ jobs:
         with:
           version: v0.65.0
 
-      - run: rm -rf /mnt/trivy-cache || true
+      - name: Cleanup before Trivy scan
+        run: |
+          docker system prune -af || true
+          sudo rm -rf /tmp/* || true
+          sudo rm -rf /mnt/trivy-cache || true
+          rm -rf ~/.cache/trivy || true
+          mkdir -p /mnt/trivy-cache
         working-directory: /mnt/bot
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.32.0
@@ -135,6 +141,7 @@ jobs:
           image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           format: table
           output: /mnt/bot/${{ matrix.artifact }}.txt
+          scanners: vuln
 
       - name: Show Trivy scan results
         run: cat ${{ matrix.artifact }}.txt
