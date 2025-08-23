@@ -5,6 +5,7 @@ from password_utils import (
     BCRYPT_ROUNDS,
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
+    validate_password_length,
     hash_password,
     verify_password,
 )
@@ -18,6 +19,18 @@ WEAK_PASSWORDS = [
     "AAAAaaa1",  # no special
     "AAAA!aaa",  # no digit
 ]
+
+
+def test_validate_password_length_accepts_valid_length():
+    validate_password_length("a" * MIN_PASSWORD_LENGTH)
+
+
+@pytest.mark.parametrize(
+    "password", ["a" * (MIN_PASSWORD_LENGTH - 1), "a" * (MAX_PASSWORD_LENGTH + 1)]
+)
+def test_validate_password_length_rejects_invalid_length(password):
+    with pytest.raises(ValueError):
+        validate_password_length(password)
 
 
 def test_hash_password_allows_short_password():
