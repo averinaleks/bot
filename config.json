@@ -28,7 +28,7 @@
     "risk_vol_max": 2.0,
     "max_positions": 5,
     "top_signals": 5,
-    "check_interval": 60,
+    "check_interval": 60.0,
     "data_cleanup_interval": 3600,
     "base_probability_threshold": 0.6,
     "trailing_stop_percentage": 1.0,

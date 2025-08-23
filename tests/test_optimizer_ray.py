@@ -219,7 +219,7 @@ async def test_optimize_zero_vol_threshold(_stub_modules):
         timeframe='1m',
         optuna_trials=1,
         optimization_interval=1,
-        volatility_threshold=0,
+            volatility_threshold=0.0,
         ema30_period=30,
         ema100_period=100,
         ema200_period=200,

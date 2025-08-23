@@ -172,12 +172,12 @@ def make_config():
         leverage=10,
         min_risk_per_trade=0.01,
         max_risk_per_trade=0.05,
-        check_interval=1,
+        check_interval=1.0,
         performance_window=60,
         sl_multiplier=1.0,
         tp_multiplier=2.0,
         order_retry_attempts=3,
-        order_retry_delay=0,
+        order_retry_delay=0.0,
         reversal_margin=0.05,
     )
 

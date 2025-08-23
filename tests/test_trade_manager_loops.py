@@ -105,9 +105,9 @@ class DummyModelBuilder:
 def make_config():
     return BotConfig(
         cache_dir=tempfile.mkdtemp(),
-        check_interval=1,
+        check_interval=1.0,
         performance_window=1,
-        order_retry_delay=0,
+        order_retry_delay=0.0,
         reversal_margin=0.05,
     )
 

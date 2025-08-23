@@ -68,7 +68,7 @@ class BotConfig:
     risk_vol_max: float = _get_default("risk_vol_max", 2.0)
     max_positions: int = _get_default("max_positions", 5)
     top_signals: int = _get_default("top_signals", DEFAULTS.get("max_positions", 5))
-    check_interval: int = _get_default("check_interval", 60)
+    check_interval: float = _get_default("check_interval", 60.0)
     data_cleanup_interval: int = _get_default("data_cleanup_interval", 3600)
     base_probability_threshold: float = _get_default("base_probability_threshold", 0.6)
     trailing_stop_percentage: float = _get_default("trailing_stop_percentage", 1.0)

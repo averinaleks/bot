@@ -87,7 +87,7 @@ def test_get_opt_interval(vol, expected):
 
 
 def test_get_opt_interval_zero_threshold():
-    cfg = BotConfig(optimization_interval=7200, volatility_threshold=0)
+    cfg = BotConfig(optimization_interval=7200, volatility_threshold=0.0)
     opt_zero = ParameterOptimizer(cfg, data_handler)
     interval = opt_zero.get_opt_interval("BTCUSDT", 0.01)
     assert interval >= 1800
