@@ -73,7 +73,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
-          password: ${{ secrets.TOKENPYPI }}
+          password: ${{ env.TOKENPYPI }}
           attestations: false
       - name: Skip PyPI publish (missing token)
         if: env.TOKENPYPI == ''
