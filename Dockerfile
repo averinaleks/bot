@@ -72,17 +72,18 @@ ENV TZ=Etc/UTC
 
 WORKDIR /app
 
+# Копируем виртуальное окружение из этапа сборки
+COPY --from=builder /app/venv /app/venv
+
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    python3-minimal \
     libssl3t64 \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
-    && python3 --version \
+    && /app/venv/bin/python --version \
     && openssl version
-
-# Копируем виртуальное окружение из этапа сборки
-COPY --from=builder /app/venv /app/venv
 
 # Копируем исходный код в /app/bot
 COPY . /app/bot
