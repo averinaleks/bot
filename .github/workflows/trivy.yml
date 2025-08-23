@@ -99,3 +99,5 @@ jobs:
 
       - name: Free disk space
         run: docker system prune -af
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true

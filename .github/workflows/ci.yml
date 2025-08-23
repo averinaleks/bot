@@ -66,6 +66,8 @@ jobs:
           find . -name '*.pyc' -delete
       - name: Run unit tests
         run: pytest -m "not integration"
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true
 
   integration:
     name: Integration tests
@@ -118,3 +120,5 @@ jobs:
           find . -name '*.pyc' -delete
       - name: Run integration tests
         run: pytest -m integration
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true

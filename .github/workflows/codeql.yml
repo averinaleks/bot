@@ -23,3 +23,5 @@ jobs:
           build-mode: none
           config-file: .github/codeql.yml
       - uses: github/codeql-action/analyze@v3
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true

@@ -151,3 +151,5 @@ jobs:
         with:
           name: trivy-report-ci
           path: /mnt/bot
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true
