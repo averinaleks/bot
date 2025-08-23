@@ -37,11 +37,11 @@ jobs:
         uses: easimon/maximize-build-space@v10
         timeout-minutes: 15
         with:
-          root-reserve-mb: 1024
+          root-reserve-mb: 8192
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
-          pv-loop-path: /root-pv.img
+          pv-loop-path: /mnt/root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
       - name: Move Docker data-root to /mnt
         run: |
