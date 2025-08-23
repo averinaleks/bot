@@ -76,6 +76,7 @@ WORKDIR /app
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libssl3t64 \
     zlib1g \
+    python3-minimal \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version \
