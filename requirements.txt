@@ -200,7 +200,7 @@ h5py==3.14.0
     # via
     #   keras
     #   tensorflow
-hf-xet==1.1.7
+hf-xet==1.1.8
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
