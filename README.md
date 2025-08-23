@@ -189,7 +189,7 @@ GPU-зависимости вынесены в отдельный файл `requ
   - `use_strategy_optimizer` включает поиск общих параметров на уровне портфеля с помощью `StrategyOptimizer`.
   - `max_symbols` задаёт количество наиболее ликвидных торговых пар, которые бот выберет из доступных.
   - `secondary_timeframe` определяет дополнительный интервал (по умолчанию `2h`). Свечи этого таймфрейма бот запрашивает напрямую у биржи и не агрегирует из основного. См. `DataHandler.load_initial` и `_send_subscriptions`.
-  - `max_subscriptions_per_connection` (или `ws_subscription_batch_size`) определяет, сколько символов подписывается через одно WebSocket‑соединение. По умолчанию 15.
+  - `max_subscriptions_per_connection` (или `ws_subscription_batch_size`) определяет, сколько символов подписывается через одно WebSocket‑соединение. Если `ws_subscription_batch_size` не указан, он приравнивается к `max_subscriptions_per_connection` (по умолчанию 15).
   - `backup_ws_urls` задаёт список альтернативных WebSocket‑адресов. При переподключении `DataHandler` перебирает их по очереди, что позволяет использовать другие дата‑центры.
   - `ws_inactivity_timeout` определяет, сколько секунд ждать сообщений после отправки ping. Если данных нет дольше этого времени, соединение закрывается и открывается заново.
   - `history_batch_size` задаёт число одновременных запросов истории. При нехватке памяти значение автоматически снижается.
@@ -513,7 +513,7 @@ preventing duplicated updates.
 
 ## Лимиты WebSocket-подписок
 
-Количество подписок через одно соединение ограничивается параметром `max_subscriptions_per_connection` (он же `ws_subscription_batch_size`). Если список пар превышает это значение, бот откроет дополнительные WebSocket‑соединения.
+Количество подписок через одно соединение ограничивается параметром `max_subscriptions_per_connection` (он же `ws_subscription_batch_size`). Если `ws_subscription_batch_size` не указан, используется `max_subscriptions_per_connection`. Если список пар превышает это значение, бот откроет дополнительные WebSocket‑соединения.
 
 Подписки отправляются пакетами. Размер пакета определяется этим же параметром. При необходимости бот делает паузу между отправками, чтобы не превышать ограничения биржи на частоту запросов.
 
@@ -522,7 +522,6 @@ preventing duplicated updates.
 ```json
 {
     "max_subscriptions_per_connection": 15,
-    "ws_subscription_batch_size": 15,
     "history_batch_size": 10,
     "history_retention": 200
 }
