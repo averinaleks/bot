@@ -9,6 +9,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    env:
+      TOKENPYPI: ${{ secrets.TOKENPYPI }}
     # Explicit permissions for OIDC-based publishing
     permissions:
       id-token: write
@@ -67,14 +69,14 @@ jobs:
       - name: Build package
         run: python -m build
       - name: Publish to PyPI
-        if: secrets.TOKENPYPI != ''
+        if: env.TOKENPYPI != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.TOKENPYPI }}
           attestations: false
       - name: Skip PyPI publish (missing token)
-        if: secrets.TOKENPYPI == ''
+        if: env.TOKENPYPI == ''
         run: echo "TOKENPYPI not set; skipping publish."
       - name: Cleanup buildx
         run: docker buildx prune -af || true
