@@ -9,8 +9,6 @@ __pycache__
 *.log.*
 trading_bot.log
 logs/
-tests/
-scripts/
 .github/
 .git
 .gitignore
