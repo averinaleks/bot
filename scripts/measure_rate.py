@@ -43,4 +43,7 @@ async def measure(n=1000, seconds=1.0):
         print('rate', rate)
 
 if __name__ == '__main__':
+    from bot.utils import configure_logging
+
+    configure_logging()
     asyncio.run(measure())

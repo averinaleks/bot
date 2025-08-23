@@ -15,8 +15,6 @@ from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
 
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-
 if os.getenv("TEST_MODE") == "1":
     import types
     import sys
@@ -1968,6 +1966,9 @@ def ping():
 
 
 if __name__ == "__main__":
+    from bot.utils import configure_logging
+
+    configure_logging()
     load_dotenv()
     _load_model()
     port = int(os.environ.get("PORT", "8001"))

@@ -16,8 +16,13 @@ import gzip
 import shutil
 from io import StringIO, BytesIO
 
-# Hide verbose TensorFlow logs and Numba performance warnings
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+def configure_logging() -> None:
+    """Настроить переменные окружения, связанные с логированием."""
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+
+# Hide Numba performance warnings
 try:
     from numba import jit, prange, NumbaPerformanceWarning  # type: ignore
 
