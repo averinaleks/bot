@@ -98,8 +98,6 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: bot
-          file: ${{ matrix.file }}
           push: true
           load: true
           tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest

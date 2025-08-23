@@ -27,7 +27,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libblas-dev \
     liblapack-dev \
     tar=${TAR_VERSION} \
-    && python3 -m pip install --no-cache-dir 'pip>=24.0' \
+    && python3 -m pip install --no-compile --no-cache-dir 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
     && find . -type l -lname "*..*" -print \
@@ -50,8 +50,8 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Устанавливаем зависимости (pip >=24.0 и устраняет CVE-2023-32681)
-RUN pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
-    pip install --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
+RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
+    pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     RAY_JARS_DIR=$($VIRTUAL_ENV/bin/python -c "import os, ray; print(os.path.join(os.path.dirname(ray.__file__), 'jars'))") && \
     rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
     curl -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
@@ -74,10 +74,8 @@ WORKDIR /app
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    tzdata \
     libssl3t64 \
     zlib1g \
-    tar=${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version \
