@@ -120,6 +120,9 @@ def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':
+    from bot.utils import configure_logging
+
+    configure_logging()
     port = int(os.environ.get('PORT', '8001'))
     # По умолчанию слушаем только локальный интерфейс.
     host = os.environ.get('HOST', '127.0.0.1')

@@ -290,6 +290,9 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 
 if __name__ == '__main__':
+    from bot.utils import configure_logging
+
+    configure_logging()
     port = int(os.environ.get('PORT', '8002'))
     # По умолчанию слушаем только локальный интерфейс.
     host = os.environ.get('HOST', '127.0.0.1')

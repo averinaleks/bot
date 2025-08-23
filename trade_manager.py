@@ -1995,6 +1995,9 @@ def ready() -> tuple:
 
 
 if __name__ == "__main__":
+    from bot.utils import configure_logging
+
+    configure_logging()
     setup_multiprocessing()
     load_dotenv()
     port = int(os.environ.get("PORT", "8002"))

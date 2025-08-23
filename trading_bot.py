@@ -819,4 +819,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    from bot.utils import configure_logging
+
+    configure_logging()
     main()

@@ -43,4 +43,7 @@ async def main() -> None:
     await sim.run(start_ts, end_ts, args.speed)
 
 if __name__ == "__main__":
+    from bot.utils import configure_logging
+
+    configure_logging()
     asyncio.run(main())

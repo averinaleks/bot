@@ -2917,6 +2917,9 @@ def ping():
 
 
 if __name__ == "__main__":
+    from bot.utils import configure_logging
+
+    configure_logging()
     load_dotenv()
     port = int(os.environ.get("PORT", "8000"))
     # По умолчанию слушаем только локальный интерфейс.
