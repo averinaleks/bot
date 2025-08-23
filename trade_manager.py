@@ -232,7 +232,7 @@ class TradeManager:
         self.leverage = config.get("leverage", 10)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
-        self.check_interval = config.get("check_interval", 60)
+        self.check_interval = config.get("check_interval", 60.0)
         self.performance_window = config.get("performance_window", 86400)
         self.state_file = os.path.join(config["cache_dir"], "trade_manager_state.parquet")
         self.returns_file = os.path.join(

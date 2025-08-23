@@ -40,7 +40,7 @@ to take‑profit and stop‑loss distances.
 | risk_vol_max | 2.0 | Upper bound for volatility based risk scaling. |
 | max_positions | 5 | Maximum simultaneous open positions. |
 | top_signals | 5 | Number of top ranked signals to trade. |
-| check_interval | 60 | Seconds between trade evaluation cycles. |
+| check_interval | 60.0 | Seconds between trade evaluation cycles. |
 | data_cleanup_interval | 3600 | Interval for removing old cached data. |
 | base_probability_threshold | 0.6 | Starting probability threshold for trades. |
 | trailing_stop_percentage | 1.0 | Percent drop from peak price to trigger trailing stop. |
