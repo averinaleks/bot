@@ -38,9 +38,15 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, stored_hash: str) -> bool:
     """Проверяет пароль по сохранённому bcrypt-хэшу."""
+
     try:
         validate_password_length(password)
+        return bcrypt.checkpw(password.encode(), stored_hash.encode())
     except ValueError:
+        # ``bcrypt.checkpw`` raises ``ValueError`` when ``stored_hash`` is not a
+        # valid bcrypt hash. Historically this bubbled up to callers, but for a
+        # verification helper it's more convenient to treat such cases as a
+        # failed password check.  We also treat length violations the same way
+        # by reusing the existing ``ValueError`` from ``validate_password_length``.
         return False
-    return bcrypt.checkpw(password.encode(), stored_hash.encode())
 
