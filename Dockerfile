@@ -27,7 +27,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libblas-dev \
     liblapack-dev \
     tar=${TAR_VERSION} \
-    && python3 -m pip install --no-compile --no-cache-dir 'pip>=24.0' \
+    && python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
     && find . -type l -lname "*..*" -print \
