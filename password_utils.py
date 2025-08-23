@@ -1,10 +1,12 @@
+import os
 import bcrypt
 import re
 import string
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
-BCRYPT_ROUNDS = 12
+_bcrypt_rounds_env = os.getenv("BCRYPT_ROUNDS")
+BCRYPT_ROUNDS = int(_bcrypt_rounds_env) if _bcrypt_rounds_env else 12
 
 
 def validate_password_complexity(password: str) -> None:
@@ -31,8 +33,9 @@ def hash_password(password: str) -> str:
     """Хэширует пароль, используя bcrypt."""
     validate_password_length(password)
     validate_password_complexity(password)
+    rounds = BCRYPT_ROUNDS
     return bcrypt.hashpw(
-        password.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+        password.encode(), bcrypt.gensalt(rounds=rounds)
     ).decode()
 
 
