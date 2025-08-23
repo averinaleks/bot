@@ -159,6 +159,8 @@ class BotConfig:
     @staticmethod
     def _isinstance(value: Any, typ: Any) -> bool:
         origin = get_origin(typ)
+        if typ is float:
+            return isinstance(value, (int, float))
         if origin is None:
             return isinstance(value, typ)
         if origin is Union:
