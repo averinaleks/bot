@@ -56,7 +56,9 @@ RUN pip install --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel && \
     rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
     curl -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
-    find /app/venv -type f -name '*.pyc' -delete
+    find /app/venv -type f -name '*.pyc' -delete && \
+    pip uninstall -y pip setuptools wheel && \
+    find /app/venv -name "*.so" -exec strip --strip-unneeded {} +
 
 # Этап выполнения (минимальный образ)
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
