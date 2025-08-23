@@ -1459,7 +1459,7 @@ class ModelBuilder:
             model.to(current_device)
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
-                joblib.dump(values, cache_file)
+                joblib.dump(values, str(cache_file))
                 if not cache_file.exists():
                     raise RuntimeError(
                         f"Файл {cache_file} не создан после сохранения SHAP"
