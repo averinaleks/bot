@@ -54,7 +54,11 @@ jobs:
           pip install --no-cache-dir semgrep
       - name: Prepare build volume
         run: |
-          sudo wipefs -a /dev/buildvg/buildlv || true
+          if [ -e /dev/buildvg/buildlv ]; then
+            sudo wipefs -a /dev/buildvg/buildlv || true
+          else
+            echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
+          fi
           sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10

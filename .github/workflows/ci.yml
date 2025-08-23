@@ -45,6 +45,8 @@ jobs:
         run: |
           if [ -e /dev/buildvg/buildlv ]; then
             sudo wipefs -a /dev/buildvg/buildlv
+          else
+            echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
           sudo rm -rf /mnt/*
       - name: Maximize build space
@@ -117,6 +119,8 @@ jobs:
         run: |
           if [ -e /dev/buildvg/buildlv ]; then
             sudo wipefs -a /dev/buildvg/buildlv
+          else
+            echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
           sudo rm -rf /mnt/*
       - name: Maximize build space
