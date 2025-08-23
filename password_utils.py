@@ -38,6 +38,9 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, stored_hash: str) -> bool:
     """Проверяет пароль по сохранённому bcrypt-хэшу."""
-    validate_password_length(password)
+    try:
+        validate_password_length(password)
+    except ValueError:
+        return False
     return bcrypt.checkpw(password.encode(), stored_hash.encode())
 

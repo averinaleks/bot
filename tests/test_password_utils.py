@@ -54,8 +54,7 @@ def test_hash_password_rejects_long_password():
 def test_verify_password_rejects_long_password():
     hashed = hash_password(VALID_PASSWORD)
     long_password = "Aa1!" + "a" * (MAX_PASSWORD_LENGTH - 3)
-    with pytest.raises(ValueError):
-        verify_password(long_password, hashed)
+    assert not verify_password(long_password, hashed)
 
 
 @pytest.mark.parametrize("password", ["", "a" * (MIN_PASSWORD_LENGTH - 1)])
@@ -67,8 +66,7 @@ def test_hash_password_rejects_short_password(password):
 @pytest.mark.parametrize("password", ["", "a" * (MIN_PASSWORD_LENGTH - 1)])
 def test_verify_password_rejects_short_password(password):
     hashed = hash_password(VALID_PASSWORD)
-    with pytest.raises(ValueError):
-        verify_password(password, hashed)
+    assert not verify_password(password, hashed)
 
 
 def test_hash_password_generates_unique_hashes():

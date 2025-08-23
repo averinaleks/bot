@@ -21,7 +21,7 @@ CONFIG_PATH = os.getenv(
     "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
 )
 try:
-    with open(CONFIG_PATH, "r") as f:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         DEFAULTS = json.load(f)
 except (OSError, json.JSONDecodeError) as exc:
     logger.warning("Failed to load %s: %s", CONFIG_PATH, exc)
@@ -246,7 +246,7 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     if not resolved_path.is_relative_to(allowed_dir):
         raise ValueError(f"Path {resolved_path} is outside of {allowed_dir}")
     if resolved_path.exists():
-        with open(resolved_path, "r") as f:
+        with open(resolved_path, "r", encoding="utf-8") as f:
             try:
                 cfg.update(json.load(f))
             except json.JSONDecodeError as exc:
