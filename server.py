@@ -5,7 +5,6 @@ import hmac
 from typing import List
 from contextlib import asynccontextmanager
 
-import torch
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
@@ -13,7 +12,7 @@ from pydantic import BaseModel, Field
 # Global variables for model and tokenizer. They will be loaded on app startup.
 tokenizer = None
 model = None
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = None
 
 
 def load_model() -> str:
@@ -23,52 +22,74 @@ def load_model() -> str:
     fallback model is loaded instead.
     """
 
-    global tokenizer, model
+    global tokenizer, model, device, torch
+
+    try:
+        import torch as torch_module
+    except ImportError as exc:
+        raise RuntimeError(
+            "torch is required to load the model. Install it with 'pip install torch'."
+        ) from exc
+
+    device_local = "cuda" if torch_module.cuda.is_available() else "cpu"
+
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer
-    except Exception as exc:
+    except ImportError as exc:
         raise RuntimeError(
             "transformers is required to load the model. Install it with 'pip install transformers'."
         ) from exc
+
     model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
     fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
+
     try:
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_local = AutoTokenizer.from_pretrained(
             model_name,
             revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
             trust_remote_code=False,
         )
-        model = (
+        model_local = (
             AutoModelForCausalLM.from_pretrained(
                 model_name,
                 revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
                 trust_remote_code=False,
             )
-            .to(device)
+            .to(device_local)
         )
-        return "primary"
     except Exception:
         logging.exception("Failed to load model '%s'", model_name)
+    else:
+        tokenizer = tokenizer_local
+        model = model_local
+        device = device_local
+        torch = torch_module
+        return "primary"
 
     try:
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_local = AutoTokenizer.from_pretrained(
             fallback_model,
             revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
             trust_remote_code=False,
         )
-        model = (
+        model_local = (
             AutoModelForCausalLM.from_pretrained(
                 fallback_model,
                 revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
                 trust_remote_code=False,
             )
-            .to(device)
+            .to(device_local)
         )
-        logging.info("Loaded fallback model '%s'", fallback_model)
-        return "fallback"
     except Exception:
         logging.exception("Failed to load fallback model '%s'", fallback_model)
         raise RuntimeError("Failed to load both primary and fallback models")
+    else:
+        tokenizer = tokenizer_local
+        model = model_local
+        device = device_local
+        torch = torch_module
+        logging.info("Loaded fallback model '%s'", fallback_model)
+        return "fallback"
 
 
 _ORIGINAL_LOAD_MODEL = load_model
