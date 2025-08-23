@@ -19,12 +19,17 @@ def validate_password_complexity(password: str) -> None:
         raise ValueError("Password must contain a special character")
 
 
-def hash_password(password: str) -> str:
-    """Хэширует пароль, используя bcrypt."""
+def validate_password_length(password: str) -> None:
+    """Проверяет, что длина пароля находится в допустимых пределах."""
     if len(password) < MIN_PASSWORD_LENGTH:
         raise ValueError("Password too short")
     if len(password) > MAX_PASSWORD_LENGTH:
         raise ValueError("Password exceeds maximum length")
+
+
+def hash_password(password: str) -> str:
+    """Хэширует пароль, используя bcrypt."""
+    validate_password_length(password)
     validate_password_complexity(password)
     return bcrypt.hashpw(
         password.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
@@ -33,9 +38,6 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, stored_hash: str) -> bool:
     """Проверяет пароль по сохранённому bcrypt-хэшу."""
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError("Password too short")
-    if len(password) > MAX_PASSWORD_LENGTH:
-        raise ValueError("Password exceeds maximum length")
+    validate_password_length(password)
     return bcrypt.checkpw(password.encode(), stored_hash.encode())
 
