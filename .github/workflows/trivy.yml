@@ -59,11 +59,15 @@ jobs:
       - name: Clean Trivy cache
         run: rm -rf /mnt/trivy-cache || true
 
-      - run: mkdir -p /mnt/trivy-cache
+      - name: Create Trivy directories
+        run: |
+          mkdir -p /mnt/trivy-cache
+          mkdir -p /mnt/trivy-temp
 
       - name: Run Trivy vulnerability scanner
         env:
           TRIVY_CACHE_DIR: /mnt/trivy-cache
+          TRIVY_TEMP_DIR: /mnt/trivy-temp
         uses: aquasecurity/trivy-action@0.32.0
         with:
           cache-dir: /mnt/trivy-cache
@@ -89,6 +93,9 @@ jobs:
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Clean Trivy temp
+        run: rm -rf /mnt/trivy-temp || true
 
       - name: Free disk space
         run: docker system prune -af
