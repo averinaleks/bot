@@ -54,7 +54,9 @@ jobs:
           docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
 
       - name: Login to GHCR
-        run: docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+        run: echo "$CR_PAT" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Set up Trivy
         uses: aquasecurity/setup-trivy@v0.2.3
