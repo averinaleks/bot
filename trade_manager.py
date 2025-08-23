@@ -352,7 +352,7 @@ class TradeManager:
                 )
                 return
             self.positions.to_parquet(self.state_file)
-            with open(self.returns_file, "w") as f:
+            with open(self.returns_file, "w", encoding="utf-8") as f:
                 json.dump(self.returns_by_symbol, f)
             self.last_save_time = time.time()
             self.positions_changed = False
@@ -372,7 +372,7 @@ class TradeManager:
                     self.positions = self.positions.tz_localize("UTC", level="timestamp")
                 self._sort_positions()
             if os.path.exists(self.returns_file):
-                with open(self.returns_file, "r") as f:
+                with open(self.returns_file, "r", encoding="utf-8") as f:
                     self.returns_by_symbol = json.load(f)
                 logger.info("TradeManager state loaded")
         except (OSError, ValueError, json.JSONDecodeError) as e:
