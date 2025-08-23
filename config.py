@@ -11,7 +11,7 @@ import logging
 import os
 from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
-from typing import Any, Dict, List, Optional, get_args, get_origin, get_type_hints
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,8 @@ class BotConfig:
     max_subscriptions_per_connection: int = _get_default(
         "max_subscriptions_per_connection", 15
     )
-    ws_subscription_batch_size: int = _get_default(
-        "ws_subscription_batch_size",
-        DEFAULTS.get("max_subscriptions_per_connection", 15),
+    ws_subscription_batch_size: Optional[int] = _get_default(
+        "ws_subscription_batch_size", None
     )
     ws_rate_limit: int = _get_default("ws_rate_limit", 20)
     ws_reconnect_interval: int = _get_default("ws_reconnect_interval", 5)
@@ -152,6 +151,10 @@ class BotConfig:
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
     balance_key: Optional[str] = _get_default("balance_key", None)
 
+    def __post_init__(self) -> None:
+        if self.ws_subscription_batch_size is None:
+            self.ws_subscription_batch_size = self.max_subscriptions_per_connection
+
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
@@ -236,6 +239,12 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
         env_val = os.getenv(fdef.name.upper())
         if env_val is not None:
             expected_type = type_hints.get(fdef.name, fdef.type)
+            origin = get_origin(expected_type)
+            if origin is Union and type(None) in get_args(expected_type):
+                expected_type = next(
+                    (t for t in get_args(expected_type) if t is not type(None)),
+                    Any,
+                )
             if fdef.default is not MISSING:
                 fallback = fdef.default
             elif fdef.default_factory is not MISSING:

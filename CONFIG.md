@@ -24,7 +24,7 @@ to take‑profit and stop‑loss distances.
 | history_batch_size | 10 | Number of candles fetched per history request. |
 | max_symbols | 50 | Maximum symbols to track. |
 | max_subscriptions_per_connection | 15 | WebSocket subscriptions allowed per connection. |
-| ws_subscription_batch_size | 15 | Symbols subscribed per batch when connecting. |
+| ws_subscription_batch_size | – | Symbols subscribed per batch when connecting; defaults to `max_subscriptions_per_connection`. |
 | ws_rate_limit | 20 | WebSocket message rate limit. |
 | ws_reconnect_interval | 5 | Seconds to wait before reconnecting. |
 | max_reconnect_attempts | 10 | Maximum WebSocket reconnect attempts. |
