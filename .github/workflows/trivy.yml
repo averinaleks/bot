@@ -56,11 +56,6 @@ jobs:
       - name: Login to GHCR
         run: docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@v0.2.3
-        with:
-          version: v0.65.0
-
       - name: Cleanup before Trivy scan
         run: |
           sudo rm -rf /tmp/* || true
@@ -79,7 +74,6 @@ jobs:
         uses: aquasecurity/trivy-action@0.32.0
         with:
           cache-dir: /mnt/trivy-cache
-          version: v0.65.0
           image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
@@ -88,6 +82,7 @@ jobs:
           # ignore-unlikely-affected: true  # enable once Trivy >= v0.66 is available
           limit-severities-for-sarif: CRITICAL
           scanners: vuln
+          skip-setup-trivy: true
 
       - name: Show Trivy scan results
         run: cat trivy-results.sarif
