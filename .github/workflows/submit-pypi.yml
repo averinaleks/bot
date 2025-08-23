@@ -41,6 +41,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
+      - name: Create virtual environment
+        run: |
+          python -m venv /mnt/venv && source /mnt/venv/bin/activate
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
@@ -55,6 +58,7 @@ jobs:
           PIP_CACHE_DIR: /mnt/pip-cache
           TMPDIR: /mnt/tmp
         run: |
+          source /mnt/venv/bin/activate
           mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
           # Install only the minimal set of dependencies required for
           # building and verifying the package to keep the workflow light.
