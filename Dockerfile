@@ -31,7 +31,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
     && (find /usr -type l -lname "*..*" -print 2>/dev/null || true) \
-    && tar --no-overwrite-dir --keep-old-files -xf zlib.tar.gz \
+    && tar --no-overwrite-dir -xf zlib.tar.gz \
     && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
     && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
