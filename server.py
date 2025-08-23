@@ -71,21 +71,13 @@ def load_model() -> str:
         raise RuntimeError("Failed to load both primary and fallback models")
 
 
-_ORIGINAL_LOAD_MODEL = load_model
-
-
 async def load_model_async() -> None:
     """Asynchronously load the model without blocking the event loop.
 
     Raises:
         RuntimeError: If both primary and fallback models fail to load.
     """
-    global load_model
-    fn = load_model
-    try:
-        await asyncio.to_thread(fn)
-    finally:
-        load_model = _ORIGINAL_LOAD_MODEL
+    await asyncio.to_thread(load_model)
 
 
 @asynccontextmanager

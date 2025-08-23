@@ -9,22 +9,22 @@ import server
 from fastapi.testclient import TestClient
 
 
-def make_client():
+def make_client(monkeypatch):
     def dummy_load_model():
         server.tokenizer = object()
         server.model = object()
-    server.load_model = dummy_load_model
+    monkeypatch.setattr(server, "load_model", dummy_load_model)
     return TestClient(server.app)
 
 
-def test_completions_requires_key():
-    with make_client() as client:
+def test_completions_requires_key(monkeypatch):
+    with make_client(monkeypatch) as client:
         resp = client.post("/v1/completions", json={"prompt": "hi"})
         assert resp.status_code == 401
 
 
-def test_chat_completions_requires_key():
-    with make_client() as client:
+def test_chat_completions_requires_key(monkeypatch):
+    with make_client(monkeypatch) as client:
         resp = client.post(
             "/v1/chat/completions",
             json={"messages": [{"role": "user", "content": "hi"}]},
