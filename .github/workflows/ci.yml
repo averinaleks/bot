@@ -43,7 +43,9 @@ jobs:
         run: sudo rm -rf /var/lib/docker/*
       - name: Prepare build volume
         run: |
-          sudo wipefs -a /dev/buildvg/buildlv || true
+          if [ -e /dev/buildvg/buildlv ]; then
+            sudo wipefs -a /dev/buildvg/buildlv
+          fi
           sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -113,7 +115,9 @@ jobs:
         run: sudo rm -rf /var/lib/docker/*
       - name: Prepare build volume
         run: |
-          sudo wipefs -a /dev/buildvg/buildlv || true
+          if [ -e /dev/buildvg/buildlv ]; then
+            sudo wipefs -a /dev/buildvg/buildlv
+          fi
           sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
