@@ -9,6 +9,7 @@ description = "Пример торгового бота на Python."
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Project Authors" }]
+dependencies = ["flask>=3.0.2"]
 
 [tool.setuptools]
 packages = ["services"]
