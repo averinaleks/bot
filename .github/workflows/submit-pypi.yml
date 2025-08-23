@@ -76,3 +76,5 @@ jobs:
       - name: Skip PyPI publish (missing token)
         if: secrets.PYPI_API_TOKEN == ''
         run: echo "PYPI_API_TOKEN not set; skipping publish."
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true

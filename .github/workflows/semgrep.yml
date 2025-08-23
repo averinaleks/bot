@@ -73,3 +73,5 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: semgrep ci --config p/ci
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true
