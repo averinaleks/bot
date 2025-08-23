@@ -14,9 +14,9 @@ HEADERS = {"Authorization": "Bearer testkey"}
 
 def make_client(monkeypatch):
     def dummy_load_model():
-        server.tokenizer = object()
-        server.model = object()
-    monkeypatch.setattr(server, "load_model", dummy_load_model)
+        server.model_manager.tokenizer = object()
+        server.model_manager.model = object()
+    monkeypatch.setattr(server.model_manager, "load_model", dummy_load_model)
     return TestClient(server.app)
 
 
