@@ -1,5 +1,6 @@
 import sys
 import asyncio
+import socket
 
 import pytest
 import httpx
@@ -118,6 +119,34 @@ def test_query_gpt_private_ip_allowed(monkeypatch, ip):
 
 def test_query_gpt_public_ip_blocked(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://8.8.8.8")
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
+def test_query_gpt_private_fqdn_allowed(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
+
+    def fake_gethostbyname(host):
+        assert host == "foo.local"
+        return "10.0.0.1"
+
+    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+
+    def fake_post(self, *args, **kwargs):
+        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    assert query_gpt("hi") == "ok"
+
+
+def test_query_gpt_dns_error(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
+
+    def fake_gethostbyname(host):
+        raise socket.gaierror("boom")
+
+    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+
     with pytest.raises(GPTClientError):
         query_gpt("hi")
 
