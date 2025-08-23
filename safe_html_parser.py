@@ -21,8 +21,8 @@ class SafeHTMLParser(HTMLParser):
     ----------
     max_feed_size: int, optional
         Maximum total size in **bytes** of data that can be fed to the parser
-        before a :class:`ValueError` is raised. Defaults to
-        ``DEFAULT_MAX_FEED``.
+        before a :class:`ValueError` is raised. Must be a positive integer and
+        defaults to ``DEFAULT_MAX_FEED``.
 
     Notes
     -----
@@ -31,6 +31,8 @@ class SafeHTMLParser(HTMLParser):
     """
 
     def __init__(self, *args, max_feed_size: int = DEFAULT_MAX_FEED, **kwargs):
+        if max_feed_size <= 0:
+            raise ValueError("max_feed_size must be positive")
         super().__init__(*args, **kwargs)
         self._max_feed_size = max_feed_size
         self._fed = 0
