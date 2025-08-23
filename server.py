@@ -9,101 +9,104 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 
-# Global variables for model and tokenizer. They will be loaded on app startup.
-tokenizer = None
-model = None
-device = None
+class ModelManager:
+    """Manage loading and inference model state."""
 
+    def __init__(self) -> None:
+        self.tokenizer = None
+        self.model = None
+        self.device = None
+        self.torch = None
 
-def load_model() -> str:
-    """Load the tokenizer and model into global variables.
+    def load_model(self) -> str:
+        """Load the tokenizer and model into instance attributes.
 
-    Returns "primary" if the main model is loaded, "fallback" if the
-    fallback model is loaded instead.
-    """
+        Returns "primary" if the main model is loaded, "fallback" if the
+        fallback model is loaded instead.
+        """
 
-    global tokenizer, model, device, torch
+        try:
+            import torch as torch_module
+        except ImportError as exc:
+            raise RuntimeError(
+                "torch is required to load the model. Install it with 'pip install torch'."
+            ) from exc
 
-    try:
-        import torch as torch_module
-    except ImportError as exc:
-        raise RuntimeError(
-            "torch is required to load the model. Install it with 'pip install torch'."
-        ) from exc
+        device_local = "cuda" if torch_module.cuda.is_available() else "cpu"
 
-    device_local = "cuda" if torch_module.cuda.is_available() else "cpu"
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError as exc:
+            raise RuntimeError(
+                "transformers is required to load the model. Install it with 'pip install transformers'."
+            ) from exc
 
-    try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-    except ImportError as exc:
-        raise RuntimeError(
-            "transformers is required to load the model. Install it with 'pip install transformers'."
-        ) from exc
+        model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
+        fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
 
-    model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
-    fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
-
-    try:
-        tokenizer_local = AutoTokenizer.from_pretrained(
-            model_name,
-            revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
-            trust_remote_code=False,
-        )
-        model_local = (
-            AutoModelForCausalLM.from_pretrained(
+        try:
+            tokenizer_local = AutoTokenizer.from_pretrained(
                 model_name,
                 revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
                 trust_remote_code=False,
             )
-            .to(device_local)
-        )
-    except Exception:
-        logging.exception("Failed to load model '%s'", model_name)
-    else:
-        tokenizer = tokenizer_local
-        model = model_local
-        device = device_local
-        torch = torch_module
-        return "primary"
+            model_local = (
+                AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+                    trust_remote_code=False,
+                )
+                .to(device_local)
+            )
+        except Exception:
+            logging.exception("Failed to load model '%s'", model_name)
+        else:
+            self.tokenizer = tokenizer_local
+            self.model = model_local
+            self.device = device_local
+            self.torch = torch_module
+            return "primary"
 
-    try:
-        tokenizer_local = AutoTokenizer.from_pretrained(
-            fallback_model,
-            revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
-            trust_remote_code=False,
-        )
-        model_local = (
-            AutoModelForCausalLM.from_pretrained(
+        try:
+            tokenizer_local = AutoTokenizer.from_pretrained(
                 fallback_model,
                 revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
                 trust_remote_code=False,
             )
-            .to(device_local)
-        )
-    except Exception:
-        logging.exception("Failed to load fallback model '%s'", fallback_model)
-        raise RuntimeError("Failed to load both primary and fallback models")
-    else:
-        tokenizer = tokenizer_local
-        model = model_local
-        device = device_local
-        torch = torch_module
-        logging.info("Loaded fallback model '%s'", fallback_model)
-        return "fallback"
+            model_local = (
+                AutoModelForCausalLM.from_pretrained(
+                    fallback_model,
+                    revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+                    trust_remote_code=False,
+                )
+                .to(device_local)
+            )
+        except Exception:
+            logging.exception("Failed to load fallback model '%s'", fallback_model)
+            raise RuntimeError("Failed to load both primary and fallback models")
+        else:
+            self.tokenizer = tokenizer_local
+            self.model = model_local
+            self.device = device_local
+            self.torch = torch_module
+            logging.info("Loaded fallback model '%s'", fallback_model)
+            return "fallback"
+
+    async def load_model_async(self) -> None:
+        """Asynchronously load the model without blocking the event loop.
+
+        Raises:
+            RuntimeError: If both primary and fallback models fail to load.
+        """
+        await asyncio.to_thread(self.load_model)
 
 
-async def load_model_async() -> None:
-    """Asynchronously load the model without blocking the event loop.
-
-    Raises:
-        RuntimeError: If both primary and fallback models fail to load.
-    """
-    await asyncio.to_thread(load_model)
+model_manager = ModelManager()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await load_model_async()
+    await model_manager.load_model_async()
     yield
 
 
@@ -128,18 +131,24 @@ async def check_api_key(request: Request, call_next):
 
 
 
-def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int = 16) -> str:
+def generate_text(
+    manager: ModelManager,
+    prompt: str,
+    *,
+    temperature: float = 0.7,
+    max_new_tokens: int = 16,
+) -> str:
     """Generate text from *prompt* using the loaded model."""
-    if tokenizer is None or model is None:
+    if manager.tokenizer is None or manager.model is None:
         raise RuntimeError("Model is not loaded")
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = model.generate(
+    inputs = manager.tokenizer(prompt, return_tensors="pt").to(manager.device)
+    with manager.torch.no_grad():
+        outputs = manager.model.generate(
             **inputs,
             temperature=temperature,
             max_new_tokens=max_new_tokens,
         )
-    text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    text = manager.tokenizer.decode(outputs[0], skip_special_tokens=True)
     if text.startswith(prompt):
         text = text[len(prompt) :]
     return text
@@ -164,16 +173,26 @@ class CompletionRequest(BaseModel):
 
 @app.post("/v1/chat/completions")
 async def chat_completions(req: ChatRequest):
-    if tokenizer is None or model is None:
+    if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
-    text = generate_text(prompt, temperature=req.temperature, max_new_tokens=req.max_tokens)
+    text = generate_text(
+        model_manager,
+        prompt,
+        temperature=req.temperature,
+        max_new_tokens=req.max_tokens,
+    )
     return {"choices": [{"message": {"role": "assistant", "content": text}}]}
 
 
 @app.post("/v1/completions")
 async def completions(req: CompletionRequest):
-    if tokenizer is None or model is None:
+    if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
-    text = generate_text(req.prompt, temperature=req.temperature, max_new_tokens=req.max_tokens)
+    text = generate_text(
+        model_manager,
+        req.prompt,
+        temperature=req.temperature,
+        max_new_tokens=req.max_tokens,
+    )
     return {"choices": [{"text": text}]}

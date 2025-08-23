@@ -21,7 +21,7 @@ def test_load_model_async_raises_runtime_error(monkeypatch):
         import server
 
         with pytest.raises(RuntimeError, match="Failed to load both primary and fallback models"):
-            asyncio.run(server.load_model_async())
+            asyncio.run(server.model_manager.load_model_async())
 
     try:
         importlib.reload(server)
