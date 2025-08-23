@@ -80,6 +80,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     python3-minimal \
     libssl3t64 \
     zlib1g \
+    python3-minimal \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && /app/venv/bin/python --version \
