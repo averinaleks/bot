@@ -154,6 +154,29 @@ class BotConfig:
     def __post_init__(self) -> None:
         if self.ws_subscription_batch_size is None:
             self.ws_subscription_batch_size = self.max_subscriptions_per_connection
+        self._validate_types()
+
+    @staticmethod
+    def _isinstance(value: Any, typ: Any) -> bool:
+        origin = get_origin(typ)
+        if origin is None:
+            return isinstance(value, typ)
+        if origin is Union:
+            return any(BotConfig._isinstance(value, t) for t in get_args(typ))
+        if origin is list:
+            if not isinstance(value, list):
+                return False
+            subtype = get_args(typ)[0] if get_args(typ) else Any
+            return all(BotConfig._isinstance(v, subtype) for v in value)
+        return isinstance(value, origin)
+
+    def _validate_types(self) -> None:
+        type_hints = get_type_hints(BotConfig)
+        for fdef in fields(self):
+            val = getattr(self, fdef.name)
+            expected = type_hints.get(fdef.name, fdef.type)
+            if not self._isinstance(val, expected):
+                raise ValueError(f"Invalid type for {fdef.name}")
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
