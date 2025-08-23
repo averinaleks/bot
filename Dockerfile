@@ -74,10 +74,8 @@ WORKDIR /app
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    tzdata \
     libssl3t64 \
     zlib1g \
-    tar=${TAR_VERSION} \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version \
