@@ -34,6 +34,12 @@ def test_massive_default_input_raises():
         parser.feed(massive)
 
 
+@pytest.mark.parametrize("invalid_size", [0, -1])
+def test_non_positive_max_feed_size_raises(invalid_size):
+    with pytest.raises(ValueError):
+        SafeHTMLParser(max_feed_size=invalid_size)
+
+
 def test_counts_bytes_not_chars():
     parser = SafeHTMLParser(max_feed_size=4)
     # emoji is four bytes in UTF-8
