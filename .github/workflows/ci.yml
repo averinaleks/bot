@@ -17,9 +17,13 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: /mnt/bot
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
+          path: /mnt/bot
           persist-credentials: false
           fetch-depth: 0
       - name: Cleanup git submodules
@@ -56,14 +60,14 @@ jobs:
           python -m venv /mnt/venv
           echo "/mnt/venv/bin" >> $GITHUB_PATH
           source /mnt/venv/bin/activate
-          pip install --no-cache-dir -r requirements-ci.txt
+          pip install --no-cache-dir -r /mnt/bot/requirements-ci.txt
       - name: Run flake8
-        run: flake8 .
+        run: flake8 /mnt/bot
       - name: Remove test caches
         run: |
-          rm -rf .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+          rm -rf /mnt/bot/.pytest_cache /mnt/bot/.cache
+          find /mnt/bot -type d -name '__pycache__' -exec rm -rf {} +
+          find /mnt/bot -name '*.pyc' -delete
       - name: Run unit tests
         run: pytest -m "not integration"
       - name: Cleanup buildx
@@ -73,9 +77,13 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-24.04
     needs: unit
+    defaults:
+      run:
+        working-directory: /mnt/bot
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
+          path: /mnt/bot
           persist-credentials: false
           fetch-depth: 0
       - name: Cleanup git submodules
@@ -112,12 +120,12 @@ jobs:
           python -m venv /mnt/venv
           echo "/mnt/venv/bin" >> $GITHUB_PATH
           source /mnt/venv/bin/activate
-          pip install --no-cache-dir -r requirements-ci.txt
+          pip install --no-cache-dir -r /mnt/bot/requirements-ci.txt
       - name: Remove test caches
         run: |
-          rm -rf .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+          rm -rf /mnt/bot/.pytest_cache /mnt/bot/.cache
+          find /mnt/bot -type d -name '__pycache__' -exec rm -rf {} +
+          find /mnt/bot -name '*.pyc' -delete
       - name: Run integration tests
         run: pytest -m integration
       - name: Cleanup buildx
