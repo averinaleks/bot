@@ -287,7 +287,7 @@ check unless explicitly enabled. Set `ENABLE_TF=1` as a build argument when
 you require TensorFlow features:
 
 ```bash
-docker build --build-arg ENABLE_TF=1 -t trading-bot .
+docker build --build-arg ENABLE_TF=1 -t trading-bot-x .
 ```
 
 Omit the argument to skip the import and avoid the associated warnings.
