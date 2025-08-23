@@ -33,6 +33,10 @@ jobs:
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
         timeout-minutes: 5
+      - name: Prepare build volume
+        run: |
+          sudo wipefs -a /dev/buildvg/buildlv || true
+          sudo rm -rf /mnt/*
       - name: Максимизировать пространство для сборки
         uses: easimon/maximize-build-space@v10
         timeout-minutes: 15

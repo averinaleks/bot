@@ -49,6 +49,7 @@ jobs:
       - name: Prepare build mount dir
         run: |
           sudo mkdir -p /mnt
+          sudo wipefs -a /dev/buildvg/buildlv || true
           sudo rm -rf /mnt/*
       - name: Install LVM
         run: sudo apt-get update && sudo apt-get install -y lvm2

@@ -41,6 +41,10 @@ jobs:
           swap-storage: true
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
+      - name: Prepare build volume
+        run: |
+          sudo wipefs -a /dev/buildvg/buildlv || true
+          sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
@@ -107,6 +111,10 @@ jobs:
           swap-storage: true
       - name: Clean Docker dir
         run: sudo rm -rf /var/lib/docker/*
+      - name: Prepare build volume
+        run: |
+          sudo wipefs -a /dev/buildvg/buildlv || true
+          sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
