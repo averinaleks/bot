@@ -130,6 +130,17 @@ def test_load_env_uses_host_when_missing(monkeypatch):
     assert env['trade_manager_url'] == 'http://127.0.0.1:8002'
 
 
+def test_load_env_service_scheme_https(monkeypatch):
+    for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv('HOST', 'localhost')
+    monkeypatch.setenv('SERVICE_SCHEME', 'https')
+    env = trading_bot._load_env()
+    assert env['data_handler_url'] == 'https://localhost:8000'
+    assert env['model_builder_url'] == 'https://localhost:8001'
+    assert env['trade_manager_url'] == 'https://localhost:8002'
+
+
 @pytest.mark.asyncio
 async def test_send_trade_latency_alert(monkeypatch, fast_sleep):
     called = []

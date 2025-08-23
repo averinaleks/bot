@@ -224,17 +224,24 @@ def _load_env() -> dict:
     """
 
     host = os.getenv("HOST")
+    scheme = os.getenv("SERVICE_SCHEME", "http")
     data_handler = os.getenv("DATA_HANDLER_URL")
     model_builder = os.getenv("MODEL_BUILDER_URL")
     trade_manager = os.getenv("TRADE_MANAGER_URL")
     gptoss_api = os.getenv("GPT_OSS_API")
 
     if data_handler is None:
-        data_handler = f"http://{host}:8000" if host else "http://data_handler:8000"
+        data_handler = (
+            f"{scheme}://{host}:8000" if host else f"{scheme}://data_handler:8000"
+        )
     if model_builder is None:
-        model_builder = f"http://{host}:8001" if host else "http://model_builder:8001"
+        model_builder = (
+            f"{scheme}://{host}:8001" if host else f"{scheme}://model_builder:8001"
+        )
     if trade_manager is None:
-        trade_manager = f"http://{host}:8002" if host else "http://trade_manager:8002"
+        trade_manager = (
+            f"{scheme}://{host}:8002" if host else f"{scheme}://trade_manager:8002"
+        )
 
     return {
         "data_handler_url": data_handler,
