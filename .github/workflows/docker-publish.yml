@@ -96,9 +96,10 @@ jobs:
         working-directory: bot
 
       - name: Build and push Docker image
+        working-directory: bot
         uses: docker/build-push-action@v6
         with:
-          context: bot
+          context: .
           file: ${{ matrix.file }}
           push: true
           load: true
