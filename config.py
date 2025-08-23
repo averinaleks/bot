@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = os.getenv(
     "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
 )
+DEFAULTS: Dict[str, Any] = {}
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         DEFAULTS = json.load(f)
 except (OSError, json.JSONDecodeError) as exc:
-    logger.warning("Failed to load %s: %s", CONFIG_PATH, exc)
-    DEFAULTS = {}
+    logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
+    raise SystemExit from exc
 
 
 def _get_default(key: str, fallback: Any) -> Any:
