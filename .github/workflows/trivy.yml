@@ -105,7 +105,3 @@ jobs:
 
       - name: Clean Trivy temp
         run: rm -rf /mnt/trivy-temp || true
-      - name: Cleanup Docker
-        run: |
-          docker buildx prune -af || true
-          docker system prune -af || true

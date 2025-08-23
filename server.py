@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import hmac
 from typing import List
 from contextlib import asynccontextmanager
 
@@ -104,7 +105,10 @@ async def check_api_key(request: Request, call_next):
     if not auth or not auth.startswith("Bearer "):
         return Response(status_code=401)
     token = auth[7:]
-    if token not in API_KEYS:
+    for key in API_KEYS:
+        if hmac.compare_digest(token, key):
+            break
+    else:
         return Response(status_code=401)
     return await call_next(request)
 
@@ -116,11 +120,12 @@ def generate_text(prompt: str, *, temperature: float = 0.7, max_new_tokens: int 
     if tokenizer is None or model is None:
         raise RuntimeError("Model is not loaded")
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    outputs = model.generate(
-        **inputs,
-        temperature=temperature,
-        max_new_tokens=max_new_tokens,
-    )
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            temperature=temperature,
+            max_new_tokens=max_new_tokens,
+        )
     text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     if text.startswith(prompt):
         text = text[len(prompt) :]

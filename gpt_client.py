@@ -67,6 +67,27 @@ def _post_with_retry(url: str, prompt: str, timeout: float) -> httpx.Response:
         return response
 
 
+def _get_api_url_timeout() -> tuple[str, float]:
+    api_url = os.getenv("GPT_OSS_API")
+    if not api_url:
+        logger.error("Environment variable GPT_OSS_API is not set")
+        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
+
+    _validate_api_url(api_url)
+
+    timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
+    try:
+        timeout = float(timeout_env)
+    except ValueError:
+        logger.warning(
+            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
+        )
+        timeout = 5.0
+
+    url = api_url.rstrip("/") + "/v1/completions"
+    return url, timeout
+
+
 def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.
 
@@ -79,21 +100,7 @@ def query_gpt(prompt: str) -> str:
     if len(prompt) > MAX_PROMPT_LEN:
         raise GPTClientError("Prompt exceeds maximum length")
 
-    api_url = os.getenv("GPT_OSS_API")
-    if not api_url:
-        logger.error("Environment variable GPT_OSS_API is not set")
-        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
-
-    _validate_api_url(api_url)
-    timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
-    try:
-        timeout = float(timeout_env)
-    except ValueError:
-        logger.warning(
-            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
-        )
-        timeout = 5.0
-    url = api_url.rstrip("/") + "/v1/completions"
+    url, timeout = _get_api_url_timeout()
     try:
         response = _post_with_retry(url, prompt, timeout)
         if len(response.content) > MAX_RESPONSE_LEN:
@@ -132,21 +139,7 @@ async def query_gpt_async(prompt: str) -> str:
     if len(prompt) > MAX_PROMPT_LEN:
         raise GPTClientError("Prompt exceeds maximum length")
 
-    api_url = os.getenv("GPT_OSS_API")
-    if not api_url:
-        logger.error("Environment variable GPT_OSS_API is not set")
-        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
-
-    _validate_api_url(api_url)
-    timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
-    try:
-        timeout = float(timeout_env)
-    except ValueError:
-        logger.warning(
-            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
-        )
-        timeout = 5.0
-    url = api_url.rstrip("/") + "/v1/completions"
+    url, timeout = _get_api_url_timeout()
 
     @retry(
         stop=stop_after_attempt(3),
