@@ -13,6 +13,7 @@ import types
 import json
 import logging
 import aiohttp
+import ipaddress
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -2000,7 +2001,14 @@ if __name__ == "__main__":
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8002"))
+    if os.getenv("ALLOW_UNSAFE_HOST") != "1":
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip is not None and ip.is_unspecified:
+            raise ValueError(f"Unsafe host '{host}' is not allowed")
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
-    api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
+    api_app.run(host=host, port=port)
