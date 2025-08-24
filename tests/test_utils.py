@@ -108,3 +108,25 @@ def test_jit_stub_preserves_metadata(monkeypatch):
 
     with pytest.raises(ImportError):
         sample_func(1)
+
+
+def test_validate_host_default(monkeypatch, caplog):
+    monkeypatch.delenv('HOST', raising=False)
+    with caplog.at_level('INFO'):
+        host = utils.validate_host()
+    assert host == '127.0.0.1'
+    assert 'HOST не установлен' in caplog.text
+
+
+def test_validate_host_rejects_all_interfaces(monkeypatch):
+    monkeypatch.setenv('HOST', '0.0.0.0')
+    with pytest.raises(ValueError):
+        utils.validate_host()
+
+
+def test_validate_host_custom(monkeypatch, caplog):
+    monkeypatch.setenv('HOST', 'localhost')
+    with caplog.at_level('WARNING'):
+        host = utils.validate_host()
+    assert host == 'localhost'
+    assert 'не локальный хост' in caplog.text
