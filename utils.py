@@ -5,6 +5,7 @@ logger = logging.getLogger("TradingBot")
 import os
 import json
 import re
+import ipaddress
 import asyncio
 import time
 import inspect
@@ -95,6 +96,29 @@ _BYBIT_INTERVALS = {
     "1w": "W",
     "1M": "M",
 }
+
+
+def validate_host() -> str:
+    """Проверить допустимость значения переменной окружения ``HOST``."""
+    host = os.getenv("HOST")
+    if not host:
+        logger.info("HOST не установлен, используется 127.0.0.1")
+        return "127.0.0.1"
+
+    if host == "0.0.0.0":
+        raise ValueError("HOST '0.0.0.0' запрещен")
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
+            raise ValueError(f"Некорректный IP: {host}")
+        logger.warning("HOST '%s' не локальный хост", host)
+        return host
+
+    if host != "127.0.0.1":
+        logger.warning("HOST '%s' не локальный хост", host)
+    return host
 
 
 def is_cuda_available() -> bool:
