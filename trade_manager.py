@@ -12,6 +12,7 @@ import sys
 import types
 import json
 import logging
+import ipaddress
 import aiohttp
 
 try:  # pragma: no cover - optional dependency
@@ -2015,8 +2016,13 @@ def _resolve_host() -> str:
             "HOST не установлен, используется 127.0.0.1. Укажите HOST для внешнего доступа",
         )
         return "127.0.0.1"
-    if host_env in {"0.0.0.0", "::"}:
-        logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
+    try:
+        ip = ipaddress.ip_address(host_env)
+        if ip.is_unspecified:
+            logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
+            raise SystemExit(1)
+    except ValueError:
+        logger.error("Некорректное значение HOST %s", host_env)
         raise SystemExit(1)
     return host_env
 
