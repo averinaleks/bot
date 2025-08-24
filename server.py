@@ -60,8 +60,8 @@ class ModelManager:
                 )
                 .to(device_local)
             )
-        except Exception:
-            logging.exception("Failed to load model '%s'", model_name)
+        except (OSError, ValueError) as exc:
+            logging.exception("Failed to load model '%s': %s", model_name, exc)
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
@@ -83,9 +83,11 @@ class ModelManager:
                 )
                 .to(device_local)
             )
-        except Exception:
-            logging.exception("Failed to load fallback model '%s'", fallback_model)
-            raise RuntimeError("Failed to load both primary and fallback models")
+        except (OSError, ValueError) as exc:
+            logging.exception(
+                "Failed to load fallback model '%s': %s", fallback_model, exc
+            )
+            raise RuntimeError("Failed to load both primary and fallback models") from exc
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
