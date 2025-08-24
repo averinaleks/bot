@@ -1,4 +1,6 @@
-import sys, types, asyncio, pytest, importlib
+import sys, types, asyncio, pytest, importlib, os
+
+os.environ["API_KEYS"] = "testkey"
 
 
 class _FailingLoader:

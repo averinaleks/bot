@@ -118,6 +118,12 @@ app = FastAPI(lifespan=lifespan)
 
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
+if not API_KEYS:
+    logging.error(
+        "No API keys provided; set the API_KEYS environment variable with at least one key."
+    )
+    raise RuntimeError("API_KEYS environment variable is required")
+
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
