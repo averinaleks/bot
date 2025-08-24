@@ -158,6 +158,23 @@ def validate_host() -> str:
     return host
 
 
+def safe_int(value: str | int | None, default: int = 0) -> int:
+    """Safely convert ``value`` to a positive integer.
+
+    Any ``None`` value, non-integer string, or non-positive number results in
+    ``default`` being returned.  This helper is used by the service scripts to
+    parse port numbers from environment variables without raising exceptions.
+    """
+
+    try:
+        if value is None:
+            return default
+        result = int(value)
+        return result if result > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
 def is_cuda_available() -> bool:
     """Safely check whether CUDA is available via PyTorch."""
 
