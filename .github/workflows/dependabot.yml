@@ -1,0 +1,22 @@
+name: Dependabot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read registries proxy
+        id: read_proxy
+        run: |
+          echo "json=$(jq -c '.' github_registries_proxy.json)" >> $GITHUB_OUTPUT
+
+      - name: Run Dependabot
+        uses: github/dependabot-action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REGISTRIES_PROXY: "${{ steps.read_proxy.outputs.json }}"

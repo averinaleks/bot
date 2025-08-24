@@ -44,7 +44,13 @@ if os.getenv("TEST_MODE") == "1":
     ray.is_initialized = lambda: False
 else:
     import ray
-from bot.utils import logger, check_dataframe_empty, HistoricalDataCache, is_cuda_available
+from bot.utils import (
+    HistoricalDataCache,
+    check_dataframe_empty,
+    configure_logging,
+    is_cuda_available,
+    logger,
+)
 from dotenv import load_dotenv
 
 try:  # prefer gymnasium if available
@@ -1966,9 +1972,10 @@ def ping():
 
 
 if __name__ == "__main__":
-
     configure_logging()
     load_dotenv()
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("MODEL_BUILDER_PORT", "8001"))
     _load_model()
     logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше

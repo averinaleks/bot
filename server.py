@@ -116,9 +116,19 @@ app = FastAPI(lifespan=lifespan)
 
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
+host = os.getenv("HOST", "0.0.0.0")
+port_str = os.getenv("PORT", "8000")
+try:
+    port = int(port_str)
+except ValueError:
+    logging.warning("Invalid PORT value '%s'; defaulting to 8000", port_str)
+    port = 8000
+
 if not API_KEYS:
     logging.error(
-        "No API keys provided; set the API_KEYS environment variable with at least one key."
+        "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
+        host,
+        port,
     )
     raise RuntimeError("API_KEYS environment variable is required")
 
@@ -138,6 +148,7 @@ async def check_api_key(request: Request, call_next):
             "Unauthorized request: method=%s url=%s headers=%s",
             request.method,
             request.url,
+            _loggable_headers(request.headers),
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -149,6 +160,7 @@ async def check_api_key(request: Request, call_next):
             "Invalid API key: method=%s url=%s headers=%s",
             request.method,
             request.url,
+            _loggable_headers(request.headers),
         )
         return Response(status_code=401)
     return await call_next(request)
@@ -228,7 +240,4 @@ async def completions(req: CompletionRequest):
 if __name__ == "__main__":
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     import uvicorn
-
-    port = int(os.getenv("PORT", "8000"))
-    host = os.getenv("HOST", "127.0.0.1")
     uvicorn.run("server:app", host=host, port=port)

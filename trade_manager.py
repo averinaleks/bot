@@ -75,6 +75,7 @@ from bot.utils import (
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
     safe_api_call,
+    configure_logging,
 )
 from bot.config import BotConfig, load_config
 import contextlib
@@ -1999,5 +2000,7 @@ if __name__ == "__main__":
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
