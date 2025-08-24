@@ -23,7 +23,7 @@ stable-baselines3>=2.3.2
 gymnasium>=0.29.1
 mlflow>=3.2.0
 pytorch-lightning>=2.5.2
-transformers==4.55.2
+transformers==4.55.3
 catalyst==21.5
 flask>=3.0.2
 pybit>=5.11.0
