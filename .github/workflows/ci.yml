@@ -75,10 +75,14 @@ jobs:
           if [ ! -d /mnt/venv ]; then
             python -m venv /mnt/venv
             source /mnt/venv/bin/activate
+            mkdir -p /mnt/tmp /mnt/pip-cache
+            export TMPDIR=/mnt/tmp
+            export PIP_CACHE_DIR=/mnt/pip-cache
             pip install --no-cache-dir -r requirements-ci.txt
             if [ "${{ matrix.device }}" = "gpu" ]; then
               pip install --no-cache-dir -r requirements-gpu.txt
             else
+              pip install --no-cache-dir torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
               pip install --no-cache-dir -r requirements-cpu.txt
             fi
           fi
@@ -157,10 +161,14 @@ jobs:
           if [ ! -d /mnt/venv ]; then
             python -m venv /mnt/venv
             source /mnt/venv/bin/activate
+            mkdir -p /mnt/tmp /mnt/pip-cache
+            export TMPDIR=/mnt/tmp
+            export PIP_CACHE_DIR=/mnt/pip-cache
             pip install --no-cache-dir -r requirements-ci.txt
             if [ "${{ matrix.device }}" = "gpu" ]; then
               pip install --no-cache-dir -r requirements-gpu.txt
             else
+              pip install --no-cache-dir torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
               pip install --no-cache-dir -r requirements-cpu.txt
             fi
           fi
