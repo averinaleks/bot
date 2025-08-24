@@ -200,7 +200,15 @@ class BotConfig:
 
 def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
     if typ is bool:
-        return value.lower() in {"1", "true", "yes", "on"}
+        lowered = value.lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+        logger.warning("Unknown boolean value %r", value)
+        if fallback is not None:
+            return fallback
+        raise ValueError(f"Invalid boolean value: {value}")
     if typ is int:
         try:
             return int(value)
