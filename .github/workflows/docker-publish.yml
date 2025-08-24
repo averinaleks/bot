@@ -84,7 +84,7 @@ jobs:
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
-          path: /tmp/.buildx-cache
+          path: /mnt/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
@@ -106,8 +106,8 @@ jobs:
           push: true
           load: true
           tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-from: type=local,src=/mnt/.buildx-cache
+          cache-to: type=local,dest=/mnt/.buildx-cache-new,mode=max
 
       - name: Apply security upgrades in built image
         run: |
@@ -116,8 +116,8 @@ jobs:
 
       - name: Move Docker layer cache
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          rm -rf /mnt/.buildx-cache
+          mv /mnt/.buildx-cache-new /mnt/.buildx-cache
         working-directory: bot
 
       - name: Set up Trivy
@@ -162,3 +162,4 @@ jobs:
         run: |
           docker buildx prune -af || true
           docker system prune -af || true
+          rm -rf /mnt/.buildx-cache* || true
