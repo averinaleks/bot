@@ -17,6 +17,9 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        device: [cpu, gpu]
     steps:
       - name: Initial cleanup
         run: docker system prune -af && sudo rm -rf /tmp/*
@@ -66,13 +69,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/venv
-          key: ${{ runner.os }}-venv-${{ hashFiles('requirements-ci.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt', 'requirements-gpu.txt') }}
       - name: Set up virtual environment
         run: |
           if [ ! -d /mnt/venv ]; then
             python -m venv /mnt/venv
             source /mnt/venv/bin/activate
             pip install --no-cache-dir -r requirements-ci.txt
+            if [ "${{ matrix.device }}" = "gpu" ]; then
+              pip install --no-cache-dir -r requirements-gpu.txt
+            else
+              pip install --no-cache-dir -r requirements-cpu.txt
+            fi
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Run flake8
@@ -91,6 +99,9 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-24.04
     needs: unit
+    strategy:
+      matrix:
+        device: [cpu, gpu]
     steps:
       - name: Initial cleanup
         run: docker system prune -af && sudo rm -rf /tmp/*
@@ -140,13 +151,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/venv
-          key: ${{ runner.os }}-venv-${{ hashFiles('requirements-ci.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt', 'requirements-gpu.txt') }}
       - name: Set up virtual environment
         run: |
           if [ ! -d /mnt/venv ]; then
             python -m venv /mnt/venv
             source /mnt/venv/bin/activate
             pip install --no-cache-dir -r requirements-ci.txt
+            if [ "${{ matrix.device }}" = "gpu" ]; then
+              pip install --no-cache-dir -r requirements-gpu.txt
+            else
+              pip install --no-cache-dir -r requirements-cpu.txt
+            fi
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Remove test caches
