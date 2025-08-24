@@ -60,8 +60,8 @@ class ModelManager:
                 )
                 .to(device_local)
             )
-        except Exception:
-            logging.exception("Failed to load model '%s'", model_name)
+        except (OSError, ValueError) as exc:
+            logging.exception("Failed to load model '%s': %s", model_name, exc)
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
@@ -83,9 +83,11 @@ class ModelManager:
                 )
                 .to(device_local)
             )
-        except Exception:
-            logging.exception("Failed to load fallback model '%s'", fallback_model)
-            raise RuntimeError("Failed to load both primary and fallback models")
+        except (OSError, ValueError) as exc:
+            logging.exception(
+                "Failed to load fallback model '%s': %s", fallback_model, exc
+            )
+            raise RuntimeError("Failed to load both primary and fallback models") from exc
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
@@ -120,12 +122,14 @@ API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
     auth = request.headers.get("Authorization")
+    headers = dict(request.headers)
+    headers.pop("authorization", None)
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
             "Unauthorized request: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            dict(request.headers),
+            headers,
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -137,7 +141,7 @@ async def check_api_key(request: Request, call_next):
             "Invalid API key: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            dict(request.headers),
+            headers,
         )
         return Response(status_code=401)
     return await call_next(request)

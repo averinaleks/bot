@@ -1966,12 +1966,9 @@ def ping():
 
 
 if __name__ == "__main__":
-    from bot.utils import configure_logging, validate_host
 
     configure_logging()
     load_dotenv()
     _load_model()
-    port = int(os.environ.get("PORT", "8001"))
-    host = validate_host(logger)
     logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше

@@ -120,11 +120,6 @@ def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':
-    from bot.utils import configure_logging, validate_host
-
-    configure_logging()
-    port = int(os.environ.get('PORT', '8001'))
-    host = validate_host(app.logger)
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)
     _load_model()
     app.run(host=host, port=port)  # nosec B104  # host validated above

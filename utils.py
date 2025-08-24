@@ -22,37 +22,6 @@ def configure_logging() -> None:
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 
-def validate_host(logger: logging.Logger | None = None) -> str:
-    """Validate and return the host for running services.
-
-    The function reads the ``HOST`` environment variable (defaulting to
-    ``"127.0.0.1"``), ensures that binding to all interfaces is disallowed, and
-    emits informative log messages.
-
-    Parameters
-    ----------
-    logger:
-        Optional logger instance. If omitted, the module-level logger is used.
-
-    Returns
-    -------
-    str
-        The validated host string.
-    """
-
-    log = logger or globals().get("logger") or logging.getLogger("TradingBot")
-    host = os.environ.get("HOST", "127.0.0.1")
-    # Prevent binding to all interfaces.
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
-    if host != "127.0.0.1":
-        log.warning(
-            "Используется не локальный хост %s; убедитесь, что это намеренно",
-            host,
-        )
-    else:
-        log.info("HOST не установлен, используется %s", host)
-    return host
 
 
 # Hide Numba performance warnings

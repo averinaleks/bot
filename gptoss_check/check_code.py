@@ -21,7 +21,9 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            httpx.get(api_url.rstrip("/"), timeout=5, trust_env=False)
+            with httpx.Client(timeout=5, trust_env=False) as client:
+                response = client.get(api_url.rstrip("/"))
+                response.close()
             return
         except httpx.HTTPError:
             time.sleep(1)

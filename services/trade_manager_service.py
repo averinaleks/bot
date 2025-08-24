@@ -290,11 +290,6 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 
 if __name__ == '__main__':
-    from bot.utils import configure_logging, validate_host
-
-    configure_logging()
-    port = int(os.environ.get('PORT', '8002'))
-    host = validate_host(app.logger)
     init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
     app.run(host=host, port=port)  # nosec B104  # host validated above

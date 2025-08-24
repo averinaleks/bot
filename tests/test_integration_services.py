@@ -9,7 +9,6 @@ import asyncio
 import pytest
 
 from tests.helpers import get_free_port, service_process
-from bot.utils import validate_host
 
 pytestmark = pytest.mark.integration
 
@@ -79,19 +78,16 @@ def _shutdown(*_):
 
 def _run_dh(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = validate_host()
     dh_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_mb(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = validate_host()
     mb_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_tm(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = validate_host()
     tm_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
