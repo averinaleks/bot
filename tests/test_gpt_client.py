@@ -17,6 +17,7 @@ from bot.gpt_client import (
     MAX_PROMPT_BYTES,
     MAX_RESPONSE_BYTES,
     _get_api_url_timeout,
+    _validate_api_url,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -125,12 +126,46 @@ def test_query_gpt_public_ip_blocked(monkeypatch):
         query_gpt("hi")
 
 
+@pytest.mark.parametrize("ip", [
+    "::1",
+    "fc00::1",
+])
+def test_query_gpt_private_ipv6_allowed(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
+
+    def fake_post(self, *args, **kwargs):
+        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    assert query_gpt("hi") == "ok"
+
+
+@pytest.mark.parametrize(
+    "ip",
+    [
+        "2001:4860:4860::8888",
+        "2606:4700:4700::1111",
+    ],
+)
+def test_query_gpt_public_ipv6_blocked(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
+@pytest.mark.parametrize("url", [
+    "http://::1",
+    "http://[::1%eth0]",
+])
+def test_query_gpt_invalid_ipv6(monkeypatch, url):
+    monkeypatch.setenv("GPT_OSS_API", url)
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_getaddrinfo(host, *args, **kwargs):
-        assert host == "foo.local"
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('10.0.0.1', 0))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
@@ -144,13 +179,23 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
 def test_query_gpt_dns_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_getaddrinfo(host, *args, **kwargs):
-        raise socket.gaierror("boom")
+
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
+def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+        ]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
     with pytest.raises(GPTClientError):
-        query_gpt("hi")
+        _validate_api_url("http://foo.local")
 
 
 def test_query_gpt_invalid_url(monkeypatch):
@@ -178,6 +223,15 @@ def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
         _, timeout = _get_api_url_timeout()
     assert timeout == 5.0
     assert "Non-positive GPT_OSS_TIMEOUT value" in caplog.text
+
+
+def test_get_api_url_timeout_invalid(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_TIMEOUT", "abc")
+    with caplog.at_level(logging.WARNING):
+        _, timeout = _get_api_url_timeout()
+    assert timeout == 5.0
+    assert "Invalid GPT_OSS_TIMEOUT value 'abc'; defaulting to 5.0" in caplog.text
 
 
 def test_query_gpt_retry_success(monkeypatch):
@@ -295,6 +349,55 @@ async def test_query_gpt_async_private_ip_allowed(monkeypatch, ip):
 @pytest.mark.asyncio
 async def test_query_gpt_async_public_ip_blocked(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://8.8.8.8")
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ip", [
+    "::1",
+    "fc00::1",
+])
+async def test_query_gpt_async_private_ipv6_allowed(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
+
+    class DummyResp:
+        content = b"content"
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"text": "ok"}]}
+
+    async def fake_post(self, *args, **kwargs):
+        return DummyResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    assert await query_gpt_async("hi") == "ok"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ip",
+    [
+        "2001:4860:4860::8888",
+        "2606:4700:4700::1111",
+    ],
+)
+async def test_query_gpt_async_public_ipv6_blocked(monkeypatch, ip):
+    monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
+    with pytest.raises(GPTClientError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", [
+    "http://::1",
+    "http://[::1%eth0]",
+])
+async def test_query_gpt_async_invalid_ipv6(monkeypatch, url):
+    monkeypatch.setenv("GPT_OSS_API", url)
     with pytest.raises(GPTClientError):
         await query_gpt_async("hi")
 

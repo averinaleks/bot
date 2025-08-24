@@ -493,8 +493,12 @@ class TelegramLogger(logging.Handler):
             if chat_id is None:
                 queue.task_done()
                 return
-            await self._send(text, chat_id, urgent)
-            queue.task_done()
+            try:
+                await self._send(text, chat_id, urgent)
+            except Exception:
+                logger.exception("Ошибка отправки сообщения в Telegram")
+            finally:
+                queue.task_done()
             await asyncio.sleep(1)
 
     async def _send(self, message: str, chat_id: int | str, urgent: bool):

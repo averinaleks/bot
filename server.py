@@ -6,7 +6,20 @@ import hmac
 from typing import List, Mapping
 from contextlib import asynccontextmanager
 
+import types
+
+try:
+    import dotenv  # type: ignore
+except Exception:  # pragma: no cover - fallback if python-dotenv is missing
+    dotenv = None
+
+if not getattr(dotenv, "dotenv_values", None):  # pragma: no cover - stub for tests
+    dotenv = types.ModuleType("dotenv")
+    dotenv.dotenv_values = lambda *args, **kwargs: {}
+    sys.modules["dotenv"] = dotenv
+
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel, Field
 
 
@@ -115,8 +128,21 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
+class CsrfSettings(BaseModel):
+    secret_key: str = os.getenv("CSRF_SECRET", "change_me")
+
+
+@CsrfProtect.load_config
+def get_csrf_config() -> CsrfSettings:
+    return CsrfSettings()
+
+
+csrf_protect = CsrfProtect()
+
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
+ALLOWED_HOSTS = {"127.0.0.1", "::1"}
 host = os.getenv(
     "HOST", "127.0.0.1"
 )  # Bind to localhost to avoid exposing the service externally
@@ -150,6 +176,22 @@ def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
         "x-xsrf-token",
     }
     return {k: "***" if k.lower() in sensitive else v for k, v in headers.items()}
+
+
+@app.middleware("http")
+async def enforce_csrf(request: Request, call_next):
+    if request.method == "POST":
+        try:
+            await csrf_protect.validate_csrf(request)
+        except Exception:
+            logging.warning(
+                "CSRF validation failed: method=%s url=%s headers=%s",
+                request.method,
+                request.url,
+                _loggable_headers(request.headers),
+            )
+            raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -259,4 +301,8 @@ async def completions(req: CompletionRequest, request: Request):
 if __name__ == "__main__":
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     import uvicorn
-    uvicorn.run("server:app", host=host, port=port)
+    if host in ALLOWED_HOSTS:
+        uvicorn.run("server:app", host=host, port=port)
+    else:
+        logging.error("Invalid HOST '%s'; allowed values are %s", host, ALLOWED_HOSTS)
+        sys.exit(1)

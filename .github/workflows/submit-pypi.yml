@@ -52,34 +52,33 @@ jobs:
       - name: Create virtual environment
         run: |
           python -m venv /mnt/venv && source /mnt/venv/bin/activate
+      - name: Add venv to PATH
+        run: echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Install build tools
         run: |
+          source /mnt/venv/bin/activate
           python -m pip install --upgrade pip
           pip install build twine
       - name: Install pip-tools
         run: pip install pip-tools==7.5.0
+      - name: Generate dependency lock
+        run: |
+          source /mnt/venv/bin/activate
+          pip-compile --strip-extras -o requirements.out requirements.txt
       - name: Copy project to /mnt
         run: rsync -a . /mnt/project
       - name: Check dependencies
         working-directory: /mnt/project
-        env:
-          PIP_CACHE_DIR: /mnt/pip-cache
-          TMPDIR: /mnt/tmp
         run: |
           source /mnt/venv/bin/activate
-          mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
-          # Install only the minimal set of dependencies required for
-          # building and verifying the package to keep the workflow light.
-          pip install --no-cache-dir -r requirements-ci.txt
-          pip check
+          pip-compile --dry-run -o requirements.out requirements.txt
       - name: Return generated files
         if: always()
-        run: |
-          if [ -f /mnt/project/requirements.out ]; then
-            rsync -a /mnt/project/requirements.out requirements.out
-          fi
+        run: rsync -a /mnt/project/requirements.out requirements.out || true
       - name: Build package
-        run: python -m build
+        run: |
+          source /mnt/venv/bin/activate
+          python -m build
       - name: Publish to PyPI
         if: env.TOKENPYPI != ''
         uses: pypa/gh-action-pypi-publish@release/v1
