@@ -10,6 +10,7 @@ import ccxt
 import os
 from dotenv import load_dotenv
 import logging
+import argparse
 
 logging.basicConfig(level=logging.INFO)
 
@@ -290,6 +291,14 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run TradeManager service')
+    parser.add_argument('--host', default=os.getenv('TRADE_MANAGER_HOST', '0.0.0.0'))
+    parser.add_argument('--port', type=int, default=int(os.getenv('TRADE_MANAGER_PORT', '8000')))
+    args = parser.parse_args()
+
+    host = args.host
+    port = args.port
+
     init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
     app.run(host=host, port=port)  # nosec B104  # host validated above
