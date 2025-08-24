@@ -15,9 +15,13 @@ from typing import Dict, List, Optional
 import shutil
 
 
+def suppress_tf_logs() -> None:
+    """Установить ``TF_CPP_MIN_LOG_LEVEL=3`` для подавления логов TensorFlow."""
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+
 def configure_logging() -> None:
     """Настроить переменные окружения и handlers для логирования."""
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     logger.setLevel(getattr(logging, level_name, logging.INFO))
