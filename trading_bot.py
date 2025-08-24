@@ -179,10 +179,15 @@ HTTP_CLIENT: httpx.AsyncClient | None = None
 
 
 def get_http_client() -> httpx.AsyncClient:
-    """Return a shared HTTP client instance."""
+    """Return a shared HTTP client instance.
+
+    Timeout for requests can be configured via the ``HTTP_CLIENT_TIMEOUT``
+    environment variable (default 5 seconds).
+    """
     global HTTP_CLIENT
     if HTTP_CLIENT is None:
-        HTTP_CLIENT = httpx.AsyncClient(trust_env=False)
+        timeout = safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
+        HTTP_CLIENT = httpx.AsyncClient(trust_env=False, timeout=timeout)
     return HTTP_CLIENT
 
 

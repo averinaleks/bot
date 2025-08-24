@@ -8,6 +8,21 @@ import httpx
 
 
 @pytest.mark.asyncio
+async def test_get_http_client_timeout_env(monkeypatch):
+    monkeypatch.delenv("HTTP_CLIENT_TIMEOUT", raising=False)
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", None)
+    monkeypatch.setenv("HTTP_CLIENT_TIMEOUT", "7")
+
+    client = trading_bot.get_http_client()
+    try:
+        assert client.timeout.connect == 7.0
+        assert client.timeout.read == 7.0
+    finally:
+        await client.aclose()
+        trading_bot.HTTP_CLIENT = None
+
+
+@pytest.mark.asyncio
 async def test_send_telegram_alert_reuses_client(monkeypatch):
     calls = []
 

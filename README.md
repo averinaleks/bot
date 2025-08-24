@@ -468,6 +468,9 @@ use these steps to diagnose the problem:
 7. Use an async-capable worker for `gunicorn` (e.g. `--worker-class
    uvicorn.workers.UvicornWorker`) so async views like the trade
    manager's `/open_position` route can schedule tasks properly.
+8. To change the timeout for outgoing HTTP requests, set
+   `HTTP_CLIENT_TIMEOUT` in your environment (defaults to `5`
+   seconds).
 
 ## Telegram notifications
 
