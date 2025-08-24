@@ -220,9 +220,13 @@ class TradeManager:
             logger.warning(
                 "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
             )
+            async def _noop(*_, **__):
+                pass
+
             self.telegram_logger = types.SimpleNamespace(
                 info=lambda *a, **k: None,
                 warning=lambda *a, **k: None,
+                send_telegram_message=_noop,
             )
         else:
             self.telegram_logger = TelegramLogger(
