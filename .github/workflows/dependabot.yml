@@ -31,9 +31,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           # PAT must include repo and security_events scopes
           GITHUB_DEPENDABOT_JOB_TOKEN: >-
-            ${{ secrets.GITHUB_DEPENDABOT_JOB_TOKEN }}
+            ${{ secrets.TOKEN }}
           GITHUB_DEPENDABOT_CRED_TOKEN: >-
-            ${{ secrets.GITHUB_DEPENDABOT_CRED_TOKEN }}
+            ${{ secrets.TOKEN }}
           DEPENDABOT_ENABLE_CONNECTIVITY_CHECK: 1
       - name: Cleanup buildx
         run: docker buildx prune -af || true
