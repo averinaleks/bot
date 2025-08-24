@@ -1966,17 +1966,12 @@ def ping():
 
 
 if __name__ == "__main__":
-    from bot.utils import configure_logging
+    from bot.utils import configure_logging, validate_host_port
 
     configure_logging()
     load_dotenv()
     _load_model()
-    port = int(os.environ.get("PORT", "8001"))
-    # По умолчанию слушаем только локальный интерфейс.
-    host = os.environ.get("HOST", "127.0.0.1")
-    # Prevent binding to all interfaces.
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
+    host, port = validate_host_port("HOST", "PORT", 8001)
     if host != "127.0.0.1":
         logger.warning(
             "Используется не локальный хост %s; убедитесь, что это намеренно",
