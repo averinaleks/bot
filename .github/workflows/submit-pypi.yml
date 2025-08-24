@@ -62,22 +62,12 @@ jobs:
         run: rsync -a . /mnt/project
       - name: Check dependencies
         working-directory: /mnt/project
-        env:
-          PIP_CACHE_DIR: /mnt/pip-cache
-          TMPDIR: /mnt/tmp
         run: |
           source /mnt/venv/bin/activate
-          mkdir -p "$PIP_CACHE_DIR" "$TMPDIR"
-          # Install only the minimal set of dependencies required for
-          # building and verifying the package to keep the workflow light.
-          pip install --no-cache-dir -r requirements-ci.txt
-          pip check
+          pip-compile --dry-run -o requirements.out requirements.txt
       - name: Return generated files
         if: always()
-        run: |
-          if [ -f /mnt/project/requirements.out ]; then
-            rsync -a /mnt/project/requirements.out requirements.out
-          fi
+        run: rsync -a /mnt/project/requirements.out requirements.out || true
       - name: Build package
         run: python -m build
       - name: Publish to PyPI
