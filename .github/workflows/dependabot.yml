@@ -1,5 +1,9 @@
 name: Dependabot
 
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -19,5 +23,5 @@ jobs:
       - name: Run Dependabot
         uses: github/dependabot-action@main
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REGISTRIES_PROXY: "${{ secrets.AVERINALEKS }}"
