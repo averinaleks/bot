@@ -14,19 +14,21 @@ fi
 token="${TOKEN}"
 
 for ecosystem in pip github-actions; do
-  if ! curl --fail-with-body -S -s -o /dev/null -X POST \
+  if ! response=$(curl --fail-with-body -S -s -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
     -H "Content-Type: application/json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    https://api.github.com/repos/${repo}/dependabot/updates \
-    -d "{\"package-ecosystem\":\"${ecosystem}\",\"directory\":\"/\"}"; then
-    code=${PIPESTATUS[0]}
+    "https://api.github.com/repos/${repo}/dependabot/updates" \
+    -d "{\"package-ecosystem\":\"${ecosystem}\",\"directory\":\"/\"}"); then
+    code=$?
     if [[ $code -eq 22 ]]; then
       echo "Dependabot endpoint returned 404 for ${ecosystem}" >&2
+      echo "${response}" >&2
       continue
     fi
     echo "Failed to trigger Dependabot for ${ecosystem}" >&2
+    echo "${response}" >&2
     exit 1
   fi
 done
