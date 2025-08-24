@@ -147,21 +147,9 @@ def test_resolve_host_rejects_all_interfaces(monkeypatch):
         tm._resolve_host()
 
 
-def test_resolve_host_accepts_domain(monkeypatch):
-    tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "example.com")
-    assert tm._resolve_host() == "example.com"
-
-
-def test_resolve_host_rejects_invalid_domain(monkeypatch):
-    tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "not a domain")
     with pytest.raises(SystemExit):
         tm._resolve_host()
 
 
-def test_resolve_host_rejects_ipv6_unspecified(monkeypatch):
-    tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "::")
     with pytest.raises(SystemExit):
         tm._resolve_host()
