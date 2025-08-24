@@ -35,5 +35,6 @@ jobs:
           GITHUB_DEPENDABOT_CRED_TOKEN: >-
             ${{ secrets.TOKEN }}
           DEPENDABOT_ENABLE_CONNECTIVITY_CHECK: 1
+          # GITHUB_REGISTRIES_PROXY intentionally not set
       - name: Cleanup buildx
         run: docker buildx prune -af || true
