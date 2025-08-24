@@ -117,6 +117,7 @@ app = FastAPI(lifespan=lifespan)
 
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
+ALLOWED_HOSTS = {"127.0.0.1", "::1"}
 host = os.getenv(
     "HOST", "127.0.0.1"
 )  # Bind to localhost to avoid exposing the service externally
@@ -259,4 +260,8 @@ async def completions(req: CompletionRequest, request: Request):
 if __name__ == "__main__":
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     import uvicorn
-    uvicorn.run("server:app", host=host, port=port)
+    if host in ALLOWED_HOSTS:
+        uvicorn.run("server:app", host=host, port=port)
+    else:
+        logging.error("Invalid HOST '%s'; allowed values are %s", host, ALLOWED_HOSTS)
+        sys.exit(1)
