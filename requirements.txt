@@ -553,7 +553,7 @@ regex==2025.7.34
     #   tiktoken
     #   transformers
     #   vllm
-requests==2.32.4
+requests==2.32.5
     # via
     #   ccxt
     #   databricks-sdk
