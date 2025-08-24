@@ -16,22 +16,16 @@ except Exception:  # pragma: no cover - fallback if python-dotenv is missing
 if not getattr(dotenv, "dotenv_values", None):  # pragma: no cover - stub for tests
     dotenv = types.ModuleType("dotenv")
     dotenv.dotenv_values = lambda *args, **kwargs: {}
+    dotenv.load_dotenv = lambda *args, **kwargs: None
     sys.modules["dotenv"] = dotenv
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
     from fastapi_csrf_protect import CsrfProtect
-except Exception:  # pragma: no cover - allow missing dependency
-    class CsrfProtect:  # type: ignore[empty-body]
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        @classmethod
-        def load_config(cls, func):
-            return func
-
-        async def validate_csrf(self, request) -> None:  # pragma: no cover - no-op
-            return None
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
+    ) from exc
 
 from pydantic import BaseModel, Field
 
