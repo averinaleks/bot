@@ -4,7 +4,7 @@ import pickle  # nosec B403
 import pandas as pd
 import pytest
 import psutil
-from bot.utils import HistoricalDataCache
+from bot.cache import HistoricalDataCache
 
 
 def _mock_virtual_memory():
