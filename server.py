@@ -137,21 +137,29 @@ if not API_KEYS:
 
 
 def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    sensitive = {"authorization"}
+    sensitive = {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "proxy-authorization",
+        "x-auth-token",
+        "x-csrf-token",
+        "x-xsrf-token",
+    }
     return {k: "***" if k.lower() in sensitive else v for k, v in headers.items()}
 
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
     auth = request.headers.get("Authorization")
-    headers = dict(request.headers)
-    headers.pop("authorization", None)
+    redacted_headers = _loggable_headers(request.headers)
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
             "Unauthorized request: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            _loggable_headers(request.headers),
+            redacted_headers,
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -163,7 +171,7 @@ async def check_api_key(request: Request, call_next):
             "Invalid API key: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            _loggable_headers(request.headers),
+            redacted_headers,
         )
         return Response(status_code=401)
     return await call_next(request)
