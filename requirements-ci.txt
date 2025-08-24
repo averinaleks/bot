@@ -9,6 +9,7 @@ pytest==8.4.1
 pytest-asyncio>=1.1
 tenacity>=8.5,<10
 fastapi==0.116.1
+fastapi-csrf-protect==1.0.6
 flask>=3.1.1,<4
 pyarrow>=16.1.0
 python-dotenv==1.1.1
