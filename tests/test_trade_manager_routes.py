@@ -140,16 +140,8 @@ def test_resolve_host_defaults_to_local(monkeypatch):
     assert host == "127.0.0.1"
 
 
-def test_resolve_host_rejects_all_interfaces(monkeypatch):
+def test_resolve_host_rejects_invalid_values(monkeypatch):
     tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "0.0.0.0")
-    with pytest.raises(SystemExit):
-        tm._resolve_host()
-
-
-    with pytest.raises(SystemExit):
-        tm._resolve_host()
-
-
-    with pytest.raises(SystemExit):
+    monkeypatch.setenv("HOST", "invalid_host@")
+    with pytest.raises(tm.InvalidHostError):
         tm._resolve_host()

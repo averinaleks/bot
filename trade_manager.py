@@ -111,6 +111,12 @@ def setup_multiprocessing() -> None:
 
 device_type = "cuda" if is_cuda_available() else "cpu"
 
+_HOSTNAME_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$")
+
+
+class InvalidHostError(ValueError):
+    pass
+
 
 def _predict_model(model, tensor) -> np.ndarray:
     """Run model forward pass."""
@@ -2019,11 +2025,11 @@ def _resolve_host() -> str:
         )
         return "127.0.0.1"
     try:
-        ip = ipaddress.ip_address(host_env)
+        ipaddress.ip_address(host_env)
     except ValueError:
-        if _HOSTNAME_RE.fullmatch(host_env):
-            return host_env
-        logger.error("Некорректное значение HOST %s", host_env)
+        if not _HOSTNAME_RE.fullmatch(host_env):
+            raise InvalidHostError(f"Некорректное значение HOST {host_env}")
+    return host_env
 
 
 if __name__ == "__main__":
