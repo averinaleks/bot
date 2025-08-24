@@ -106,3 +106,28 @@ async def test_send_after_shutdown_warning(monkeypatch, caplog):
     await tl.send_telegram_message("test")
 
     assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_worker_propagates_unexpected_exception(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+
+    class Bot:
+        async def send_message(self, chat_id, text):
+            return types.SimpleNamespace(message_id=1)
+
+    tl = TelegramLogger(Bot(), chat_id=1)
+
+    class CustomError(Exception):
+        pass
+
+    async def failing_send(self, text, chat_id, urgent):
+        raise CustomError
+
+    tl._send = types.MethodType(failing_send, tl)
+    TelegramLogger._queue.put_nowait((1, "boom", False))
+
+    with pytest.raises(CustomError):
+        await tl._worker()
+
+    await TelegramLogger.shutdown()
