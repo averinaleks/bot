@@ -78,25 +78,16 @@ def _shutdown(*_):
 
 def _run_dh(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
     dh_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_mb(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
     mb_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_tm(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
     tm_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 

@@ -19,7 +19,8 @@ def _load_skip_flag(config_path: Path) -> bool:
         key, _, value = line.partition("=")
         if key.strip() == "skip_gptoss_check":
             return value.strip().lower() in {"1", "true", "yes"}
-    return True
+    # By default run the check when the flag is absent
+    return False
 
 
 logger = logging.getLogger(__name__)

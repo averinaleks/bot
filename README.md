@@ -91,6 +91,20 @@ GPU-зависимости вынесены в отдельный файл `requ
 
     Непрерывный вывод смотрите в файлах внутри `./logs/`.
 
+    Отдельный FastAPI‑сервер `server.py` настраивает логирование только при
+    запуске. При деплое задайте уровень через переменную `LOG_LEVEL` или
+    используйте собственный конфиг. Пример запуска:
+
+    ```bash
+    LOG_LEVEL=INFO uvicorn server:app --host 0.0.0.0 --port 8000
+    ```
+
+    При прямом запуске можно указать уровень так же:
+
+    ```bash
+    LOG_LEVEL=INFO python server.py
+    ```
+
     Дополнительные переменные для вспомогательных сервисов:
 
     - `STREAM_SYMBOLS` — список пар через запятую, которые `data_handler_service`
@@ -468,6 +482,9 @@ use these steps to diagnose the problem:
 7. Use an async-capable worker for `gunicorn` (e.g. `--worker-class
    uvicorn.workers.UvicornWorker`) so async views like the trade
    manager's `/open_position` route can schedule tasks properly.
+8. To change the timeout for outgoing HTTP requests, set
+   `HTTP_CLIENT_TIMEOUT` in your environment (defaults to `5`
+   seconds).
 
 ## Telegram notifications
 

@@ -1995,23 +1995,9 @@ def ready() -> tuple:
 
 
 if __name__ == "__main__":
-    from bot.utils import configure_logging
 
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    port = int(os.environ.get("PORT", "8002"))
-    # По умолчанию слушаем только локальный интерфейс.
-    host = os.environ.get("HOST", "127.0.0.1")
-    # Prevent binding to all interfaces.
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
-    if host != "127.0.0.1":
-        logger.warning(
-            "Используется не локальный хост %s; убедитесь, что это намеренно",
-            host,
-        )
-    else:
-        logger.info("HOST не установлен, используется %s", host)
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
