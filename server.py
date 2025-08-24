@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import asyncio
 import hmac
@@ -116,13 +117,15 @@ app = FastAPI(lifespan=lifespan)
 
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
-host = os.getenv("HOST", "0.0.0.0")
+host = os.getenv(
+    "HOST", "127.0.0.1"
+)  # Bind to localhost to avoid exposing the service externally
 port_str = os.getenv("PORT", "8000")
 try:
     port = int(port_str)
 except ValueError:
-    logging.warning("Invalid PORT value '%s'; defaulting to 8000", port_str)
-    port = 8000
+    logging.error("Invalid PORT value '%s'; must be an integer", port_str)
+    sys.exit(1)
 
 if not API_KEYS:
     logging.error(

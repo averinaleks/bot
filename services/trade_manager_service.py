@@ -292,8 +292,15 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run TradeManager service')
-    parser.add_argument('--host', default=os.getenv('TRADE_MANAGER_HOST', '0.0.0.0'))
-    parser.add_argument('--port', type=int, default=int(os.getenv('TRADE_MANAGER_PORT', '8000')))
+    parser.add_argument(
+        '--host',
+        default=os.getenv('TRADE_MANAGER_HOST', '127.0.0.1'),
+    )  # Use localhost by default for safety
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=int(os.getenv('TRADE_MANAGER_PORT', '8000')),
+    )
     args = parser.parse_args()
 
     host = args.host
