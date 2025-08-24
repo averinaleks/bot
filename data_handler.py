@@ -77,10 +77,7 @@ from bot.utils import (
     safe_api_call,
 )
 
-# Network configuration
-port = int(os.getenv("PORT", "8000"))
-host = os.getenv("HOST", "127.0.0.1")
-
+# Profiling configuration
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
 
 
@@ -2921,5 +2918,8 @@ def ping():
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
     logger.info("Запуск сервиса DataHandler на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше

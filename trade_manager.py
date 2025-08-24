@@ -1921,8 +1921,7 @@ def _initialize_trade_manager() -> None:
         raise
 
 
-# Load environment variables when the module is imported
-load_dotenv()
+# Set ready event immediately in test mode
 if os.getenv("TEST_MODE") == "1":
     _ready_event.set()
 
