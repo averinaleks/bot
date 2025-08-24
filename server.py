@@ -143,12 +143,15 @@ app = FastAPI(lifespan=lifespan)
 
 
 class CsrfSettings(BaseModel):
-    secret_key: str = os.getenv("CSRF_SECRET", "change_me")
+    secret_key: str
 
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings()
+    secret_key = os.getenv("CSRF_SECRET")
+    if not secret_key:
+        raise RuntimeError("CSRF_SECRET environment variable is not set")
+    return CsrfSettings(secret_key=secret_key)
 
 
 csrf_protect = CsrfProtect()
