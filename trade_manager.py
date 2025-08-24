@@ -13,6 +13,7 @@ import types
 import json
 import logging
 import ipaddress
+import re
 import aiohttp
 
 try:  # pragma: no cover - optional dependency
@@ -2001,8 +2002,6 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
-class InvalidHostError(ValueError):
-    """Raised when ``HOST`` contains an unsafe or invalid value."""
 
 
 def _resolve_host() -> str:
@@ -2021,13 +2020,10 @@ def _resolve_host() -> str:
         return "127.0.0.1"
     try:
         ip = ipaddress.ip_address(host_env)
-        if ip.is_unspecified:
-            logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
-            raise InvalidHostError(host_env)
     except ValueError:
+        if _HOSTNAME_RE.fullmatch(host_env):
+            return host_env
         logger.error("Некорректное значение HOST %s", host_env)
-        raise InvalidHostError(host_env)
-    return host_env
 
 
 if __name__ == "__main__":
