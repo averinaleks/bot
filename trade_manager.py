@@ -1922,8 +1922,7 @@ def _initialize_trade_manager() -> None:
         raise
 
 
-# Load environment variables when the module is imported
-load_dotenv()
+# Set ready event immediately in test mode
 if os.getenv("TEST_MODE") == "1":
     _ready_event.set()
 
@@ -2003,9 +2002,6 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
-_HOSTNAME_RE = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)" r"(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
-)
 
 
 def _resolve_host() -> str:
@@ -2028,12 +2024,6 @@ def _resolve_host() -> str:
         if _HOSTNAME_RE.fullmatch(host_env):
             return host_env
         logger.error("Некорректное значение HOST %s", host_env)
-        raise SystemExit(1)
-    else:
-        if ip.is_unspecified:
-            logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
-            raise SystemExit(1)
-        return host_env
 
 
 if __name__ == "__main__":
@@ -2041,7 +2031,11 @@ if __name__ == "__main__":
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    host = _resolve_host()
+    try:
+        host = _resolve_host()
+    except InvalidHostError as exc:
+        logger.error("Ошибка конфигурации HOST: %s", exc)
+        sys.exit(1)
     port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)

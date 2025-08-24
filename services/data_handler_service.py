@@ -4,8 +4,6 @@ import logging
 import ccxt
 import os
 from dotenv import load_dotenv
-
-load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -74,3 +72,11 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     """Log unexpected errors and return a 500 response."""
     logging.exception("Unhandled error: %s", exc)
     return jsonify({'error': 'internal server error'}), 500
+
+
+if __name__ == "__main__":
+    load_dotenv()
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    app.logger.info('Запуск сервиса DataHandlerService на %s:%s', host, port)
+    app.run(host=host, port=port)
