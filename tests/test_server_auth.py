@@ -33,11 +33,16 @@ def test_chat_completions_requires_key(monkeypatch):
         assert resp.status_code == 401
 
 
-def test_check_api_key_masks_authorization(monkeypatch, caplog):
+def test_check_api_key_masks_sensitive_headers(monkeypatch, caplog):
     with make_client(monkeypatch) as client:
-        headers = {"Authorization": "Bearer secret-token"}
+        headers = {
+            "Authorization": "Bearer secret-token",
+            "Cookie": "session=abc",
+            "X-API-Key": "top-secret",
+        }
         with caplog.at_level(logging.WARNING):
             resp = client.post("/v1/completions", json={"prompt": "hi"}, headers=headers)
     assert resp.status_code == 401
-    assert "secret-token" not in caplog.text
-    assert "***" in caplog.text
+    for secret in ("secret-token", "session=abc", "top-secret"):
+        assert secret not in caplog.text
+    assert caplog.text.count("***") >= 3
