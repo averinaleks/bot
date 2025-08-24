@@ -4,6 +4,7 @@ import pytest
 os.environ["API_KEYS"] = "testkey"
 
 pytest.importorskip("transformers")
+pytest.importorskip("fastapi_csrf_protect")
 
 import server
 from fastapi.testclient import TestClient
