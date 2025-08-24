@@ -18,5 +18,5 @@ jobs:
       - name: Run Dependabot
         uses: github/dependabot-action@main
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
           GITHUB_REGISTRIES_PROXY: "${{ steps.read_proxy.outputs.json }}"
