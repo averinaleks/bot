@@ -142,11 +142,10 @@ def validate_host() -> str:
         logger.info("HOST не установлен, используется 127.0.0.1")
         return "127.0.0.1"
 
-    if host == "0.0.0.0":
-        raise ValueError("HOST '0.0.0.0' запрещен")
-
     try:
-        ipaddress.ip_address(host)
+        ip = ipaddress.ip_address(host)
+        if ip.is_unspecified:
+            raise ValueError(f"HOST '{ip}' запрещен")
     except ValueError:
         if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
             raise ValueError(f"Некорректный IP: {host}")
