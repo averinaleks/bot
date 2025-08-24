@@ -74,9 +74,19 @@ jobs:
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-temp || true
           rm -rf ~/.cache/trivy || true
 
+      - name: Prepare Trivy cache directory
+        run: mkdir -p /mnt/trivy-cache
+
+      - name: Cache Trivy vulnerability database
+        uses: actions/cache@v4
+        with:
+          path: /mnt/trivy-cache
+          key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-cache-
+
       - name: Create Trivy directories
         run: |
-          mkdir -p /mnt/trivy-cache
           mkdir -p /mnt/trivy-temp
 
       - name: Run Trivy vulnerability scanner
