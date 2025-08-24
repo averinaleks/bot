@@ -25,6 +25,7 @@ mlflow>=3.2.0
 pytorch-lightning>=2.5.2
 transformers==4.55.3
 catalyst==21.5
+fastapi-csrf-protect>=1.0.6
 flask>=3.0.2
 pybit>=5.11.0
 gunicorn>=23.0.0
