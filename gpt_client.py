@@ -40,7 +40,10 @@ def _validate_api_url(api_url: str) -> None:
         raise GPTClientError("Invalid GPT_OSS_API URL")
 
     try:
-        resolved_ip = socket.gethostbyname(parsed.hostname)
+        addr_info = socket.getaddrinfo(
+            parsed.hostname, None, family=socket.AF_UNSPEC
+        )
+        resolved_ip = addr_info[0][4][0]
     except socket.gaierror as exc:
         logger.error(
             "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
