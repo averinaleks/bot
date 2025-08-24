@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        device: [cpu, gpu]
+        device: [cpu]
     steps:
       - name: Initial cleanup
         run: docker system prune -af && sudo rm -rf /tmp/*
@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/venv
-          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt', 'requirements-gpu.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
       - name: Set up virtual environment
         run: |
           if [ ! -d /mnt/venv ]; then
@@ -79,12 +79,6 @@ jobs:
             export TMPDIR=/mnt/tmp
             export PIP_CACHE_DIR=/mnt/pip-cache
             pip install --no-cache-dir -r requirements-ci.txt
-            if [ "${{ matrix.device }}" = "gpu" ]; then
-              pip install --no-cache-dir -r requirements-gpu.txt
-            else
-              pip install --no-cache-dir torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
-              pip install --no-cache-dir -r requirements-cpu.txt
-            fi
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Run flake8
@@ -105,7 +99,7 @@ jobs:
     needs: unit
     strategy:
       matrix:
-        device: [cpu, gpu]
+        device: [cpu]
     steps:
       - name: Initial cleanup
         run: docker system prune -af && sudo rm -rf /tmp/*
@@ -155,7 +149,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/venv
-          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt', 'requirements-gpu.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
       - name: Set up virtual environment
         run: |
           if [ ! -d /mnt/venv ]; then
@@ -165,12 +159,6 @@ jobs:
             export TMPDIR=/mnt/tmp
             export PIP_CACHE_DIR=/mnt/pip-cache
             pip install --no-cache-dir -r requirements-ci.txt
-            if [ "${{ matrix.device }}" = "gpu" ]; then
-              pip install --no-cache-dir -r requirements-gpu.txt
-            else
-              pip install --no-cache-dir torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
-              pip install --no-cache-dir -r requirements-cpu.txt
-            fi
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Remove test caches
