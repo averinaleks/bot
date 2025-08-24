@@ -110,5 +110,6 @@ jobs:
           path: trivy-results.sarif
       - name: Cleanup after Trivy scan
         run: |
+          docker system prune -af || true
           rm -rf /mnt/trivy-cache /mnt/trivy-temp ~/.cache/trivy || true
           sudo rm -rf /tmp/* || true
