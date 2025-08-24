@@ -19,5 +19,15 @@ def dotenv_values(*args, **kwargs) -> Mapping[str, str]:
     return {}
 
 
-__all__ = ["dotenv_values"]
+def load_dotenv(*args, **kwargs) -> bool:
+    """No-op stand-in for :func:`python_dotenv.load_dotenv`.
+
+    Returns ``True`` to mirror the real function which indicates whether a
+    dotenv file was loaded. In this stub, no files are read.
+    """
+
+    return True
+
+
+__all__ = ["dotenv_values", "load_dotenv"]
 
