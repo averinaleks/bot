@@ -78,6 +78,12 @@ def _get_api_url_timeout() -> tuple[str, float]:
     timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
     try:
         timeout = float(timeout_env)
+        if timeout <= 0:
+            logger.warning(
+                "Non-positive GPT_OSS_TIMEOUT value %r; defaulting to 5.0",
+                timeout_env,
+            )
+            timeout = 5.0
     except ValueError:
         logger.warning(
             "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
