@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 
 load_dotenv()
+from utils import validate_host, safe_int
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
@@ -118,6 +119,9 @@ def ping() -> tuple:
 @app.errorhandler(413)
 def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
+
+host = validate_host()
+port = safe_int(os.getenv("PORT", "8000"))
 
 if __name__ == '__main__':
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)
