@@ -67,7 +67,8 @@ from flask import Flask, jsonify
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
-from bot.utils import BybitSDKAsync, HistoricalDataCache, TelegramLogger, bybit_interval
+from bot.cache import HistoricalDataCache
+from bot.utils import BybitSDKAsync, TelegramLogger, bybit_interval
 from bot.utils import calculate_volume_profile as utils_volume_profile
 from bot.utils import (
     check_dataframe_empty,

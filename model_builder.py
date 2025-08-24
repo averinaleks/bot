@@ -44,8 +44,8 @@ if os.getenv("TEST_MODE") == "1":
     ray.is_initialized = lambda: False
 else:
     import ray
+from bot.cache import HistoricalDataCache
 from bot.utils import (
-    HistoricalDataCache,
     check_dataframe_empty,
     configure_logging,
     is_cuda_available,
