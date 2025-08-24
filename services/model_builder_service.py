@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
-
-load_dotenv()
 from utils import validate_host, safe_int
 
 app = Flask(__name__)
@@ -120,10 +118,10 @@ def ping() -> tuple:
 def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
 
-host = validate_host()
-port = safe_int(os.getenv("PORT", "8000"))
-
 if __name__ == '__main__':
+    load_dotenv()
+    host = validate_host()
+    port = safe_int(os.getenv("PORT", "8000"))
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)
     _load_model()
     app.run(host=host, port=port)  # nosec B104  # host validated above
