@@ -16,6 +16,9 @@ if sys.platform == "win32":
     multiprocessing.set_start_method("spawn", force=True)
 ctx = multiprocessing.get_context("spawn")
 
+# Default host for test services
+host = "127.0.0.1"
+
 
 
 
