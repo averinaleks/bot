@@ -77,6 +77,10 @@ from bot.utils import (
     safe_api_call,
 )
 
+# Network configuration
+host = os.getenv("HOST", "0.0.0.0")
+port = int(os.getenv("PORT", "8000"))
+
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
 
 
