@@ -77,10 +77,10 @@ COPY --from=builder /app/venv /app/venv
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    python3-minimal \
+    python3 \
+    libpython3.12-stdlib \
     libssl3t64 \
     zlib1g \
-    python3-minimal \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && /app/venv/bin/python --version \
