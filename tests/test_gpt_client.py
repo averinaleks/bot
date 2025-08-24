@@ -1,6 +1,7 @@
 import sys
 import asyncio
 import socket
+import logging
 
 import pytest
 import httpx
@@ -15,6 +16,7 @@ from bot.gpt_client import (
     GPTClientResponseError,
     MAX_PROMPT_LEN,
     MAX_RESPONSE_LEN,
+    _get_api_url_timeout,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -167,6 +169,15 @@ def test_query_gpt_no_env(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
         query_gpt("hi")
+
+
+def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_TIMEOUT", "0")
+    with caplog.at_level(logging.WARNING):
+        _, timeout = _get_api_url_timeout()
+    assert timeout == 5.0
+    assert "Non-positive GPT_OSS_TIMEOUT value" in caplog.text
 
 
 def test_query_gpt_retry_success(monkeypatch):
