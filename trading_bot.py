@@ -270,6 +270,13 @@ async def check_services() -> None:
                     resp = await client.get(f"{url}/{endpoint}", timeout=5)
                     if resp.status_code == 200:
                         return None
+                    if resp.status_code != 200:
+                        logger.warning(
+                            "Ping failed for %s (%s): HTTP %s",
+                            name,
+                            attempt + 1,
+                            resp.status_code,
+                        )
                 except httpx.HTTPError as exc:
                     logger.warning(
                         "Ping failed for %s (%s): %s", name, attempt + 1, exc
