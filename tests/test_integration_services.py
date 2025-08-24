@@ -9,6 +9,7 @@ import asyncio
 import pytest
 
 from tests.helpers import get_free_port, service_process
+from bot.utils import validate_host_port
 
 pytestmark = pytest.mark.integration
 
@@ -78,25 +79,19 @@ def _shutdown(*_):
 
 def _run_dh(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
+    host, _ = validate_host_port("HOST", "PORT", port)
     dh_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_mb(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
+    host, _ = validate_host_port("HOST", "PORT", port)
     mb_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
 def _run_tm(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    if host.strip() == "0.0.0.0":  # nosec B104
-        raise ValueError("HOST=0.0.0.0 запрещён из соображений безопасности")
+    host, _ = validate_host_port("HOST", "PORT", port)
     tm_app.run(host=host, port=port)  # nosec B104  # host validated above
 
 
