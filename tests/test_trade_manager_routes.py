@@ -5,6 +5,7 @@ import inspect
 import asyncio
 import concurrent.futures
 import logging
+import pytest
 
 
 class DummyLoop:
@@ -130,3 +131,17 @@ def test_open_position_route_concurrent(monkeypatch):
     assert len(loop.calls) == 5
     for _, call_args in loop.calls:
         call_args[0].close()
+
+
+def test_resolve_host_defaults_to_local(monkeypatch):
+    tm, _, _ = _setup_module(monkeypatch)
+    monkeypatch.delenv("HOST", raising=False)
+    host = tm._resolve_host()
+    assert host == "127.0.0.1"
+
+
+def test_resolve_host_rejects_all_interfaces(monkeypatch):
+    tm, _, _ = _setup_module(monkeypatch)
+    monkeypatch.setenv("HOST", "0.0.0.0")
+    with pytest.raises(SystemExit):
+        tm._resolve_host()
