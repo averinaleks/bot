@@ -53,11 +53,12 @@ class SafeHTMLParser(HTMLParser):
         data: str
             Chunk of HTML data to process.
         """
-        byte_length = len(data.encode("utf-8"))
+        encoded = data.encode("utf-8")
+        byte_length = len(encoded)
         self._fed += byte_length
         if self._fed > self._max_feed_size:
             raise ValueError("HTML input exceeds maximum allowed size")
-        super().feed(data)
+        super().feed(encoded.decode("utf-8"))
 
     def close(self) -> None:  # type: ignore[override]
         """Finalize parsing and reset internal byte counter.
