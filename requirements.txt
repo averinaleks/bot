@@ -4,7 +4,8 @@
 #
 #    pip-compile --output-file=requirements.txt --strip-extras requirements-core.in
 #
-torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+# CPU- and GPU-specific dependencies like torch are provided via
+# requirements-cpu.txt and requirements-gpu.txt.
 a2wsgi==1.10.10
     # via -r requirements-core.in
 absl-py==2.3.1
