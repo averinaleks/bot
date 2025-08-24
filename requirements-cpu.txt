@@ -1,2 +1,3 @@
 # CPU-specific dependencies
-torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+# Install torch separately with CPU wheels
+torch==2.5.1+cpu
