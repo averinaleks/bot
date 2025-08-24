@@ -176,7 +176,8 @@ async def chat_completions(req: ChatRequest):
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
-    text = generate_text(
+    text = await asyncio.to_thread(
+        generate_text,
         model_manager,
         prompt,
         temperature=req.temperature,
@@ -189,7 +190,8 @@ async def chat_completions(req: ChatRequest):
 async def completions(req: CompletionRequest):
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
-    text = generate_text(
+    text = await asyncio.to_thread(
+        generate_text,
         model_manager,
         req.prompt,
         temperature=req.temperature,
