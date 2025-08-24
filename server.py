@@ -16,24 +16,18 @@ except Exception:  # pragma: no cover - fallback if python-dotenv is missing
 if not getattr(dotenv, "dotenv_values", None):  # pragma: no cover - stub for tests
     dotenv = types.ModuleType("dotenv")
     dotenv.dotenv_values = lambda *args, **kwargs: {}
+    dotenv.load_dotenv = lambda *args, **kwargs: None
     sys.modules["dotenv"] = dotenv
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
     from fastapi_csrf_protect import CsrfProtect
-except Exception:  # pragma: no cover - allow missing dependency
-    class CsrfProtect:  # type: ignore[empty-body]
-        def __init__(self, *args, **kwargs) -> None:
-            pass
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
+    ) from exc
 
-        @classmethod
-        def load_config(cls, func):
-            return func
-
-        async def validate_csrf(self, request) -> None:  # pragma: no cover - no-op
-            return None
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 
 class ModelManager:
@@ -143,12 +137,15 @@ app = FastAPI(lifespan=lifespan)
 
 
 class CsrfSettings(BaseModel):
-    secret_key: str = os.getenv("CSRF_SECRET", "change_me")
+    secret_key: str
 
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings()
+    secret_key = os.getenv("CSRF_SECRET")
+    if not secret_key:
+        raise RuntimeError("CSRF_SECRET environment variable is not set")
+    return CsrfSettings(secret_key=secret_key)
 
 
 csrf_protect = CsrfProtect()
@@ -277,10 +274,16 @@ class CompletionRequest(BaseModel):
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatRequest, request: Request):
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BYTES:
-        raise HTTPException(status_code=413, detail="Request body too large")
+async def chat_completions(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        req = ChatRequest.model_validate_json(bytes(body))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
@@ -295,10 +298,16 @@ async def chat_completions(req: ChatRequest, request: Request):
 
 
 @app.post("/v1/completions")
-async def completions(req: CompletionRequest, request: Request):
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BYTES:
-        raise HTTPException(status_code=413, detail="Request body too large")
+async def completions(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        req = CompletionRequest.model_validate_json(bytes(body))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     text = await asyncio.to_thread(

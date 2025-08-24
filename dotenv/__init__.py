@@ -19,9 +19,6 @@ def dotenv_values(*args, **kwargs) -> Mapping[str, str]:
     return {}
 
 
-def load_dotenv(*args, **kwargs) -> None:
-    """A no-op replacement for :func:`python_dotenv.load_dotenv`."""
-    return None
 
 __all__ = ["dotenv_values", "load_dotenv"]
 

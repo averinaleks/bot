@@ -1,5 +1,7 @@
 from typing import List
 
+import pytest
+
 import config
 
 
@@ -28,3 +30,8 @@ def test_convert_list_float():
 def test_convert_list_bool():
     assert config._convert("[true, false, true]", List[bool]) == [True, False, True]
     assert config._convert("true,false", List[bool]) == [True, False]
+
+
+def test_convert_invalid_bool():
+    with pytest.raises(ValueError):
+        config._convert("maybe", bool)

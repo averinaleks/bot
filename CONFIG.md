@@ -8,6 +8,9 @@ List parameters supplied via environment variables must be provided either as
 JSON arrays (e.g. `["ws://a", "ws://b"]`) or as comma-separated values such as
 `ws://a,ws://b`.
 
+Boolean parameters are case-insensitive and accept `1`/`true`/`yes`/`on` for
+enabled and `0`/`false`/`no`/`off` for disabled values.
+
 The GPT analysis service should return JSON with the following fields:
 `signal` ("buy"/"sell"/"hold"), `tp_mult` and `sl_mult` — multipliers applied
 to take‑profit and stop‑loss distances.
