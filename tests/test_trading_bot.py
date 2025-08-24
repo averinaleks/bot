@@ -23,6 +23,23 @@ async def test_get_http_client_timeout_env(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_close_http_client_resets_global(monkeypatch):
+    class DummyClient:
+        def __init__(self):
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    dummy = DummyClient()
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
+    monkeypatch.setattr(trading_bot, "_TASKS", set())
+    await trading_bot.close_http_client()
+    assert dummy.closed
+    assert trading_bot.HTTP_CLIENT is None
+
+
+@pytest.mark.asyncio
 async def test_send_telegram_alert_reuses_client(monkeypatch):
     calls = []
 

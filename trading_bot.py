@@ -193,9 +193,11 @@ def get_http_client() -> httpx.AsyncClient:
 
 async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
+    global HTTP_CLIENT
     await shutdown_async_tasks()
     if HTTP_CLIENT is not None:
         await HTTP_CLIENT.aclose()
+        HTTP_CLIENT = None
 
 
 
