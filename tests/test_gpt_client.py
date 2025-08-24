@@ -14,8 +14,8 @@ from bot.gpt_client import (
     GPTClientJSONError,
     GPTClientNetworkError,
     GPTClientResponseError,
-    MAX_PROMPT_LEN,
-    MAX_RESPONSE_LEN,
+    MAX_PROMPT_BYTES,
+    MAX_RESPONSE_BYTES,
     _get_api_url_timeout,
     query_gpt,
     query_gpt_async,
@@ -86,7 +86,7 @@ def test_query_gpt_uppercase_scheme(monkeypatch):
 
 def test_query_gpt_prompt_too_long():
     with pytest.raises(GPTClientError):
-        query_gpt("x" * (MAX_PROMPT_LEN + 1))
+        query_gpt("я" * (MAX_PROMPT_BYTES // 2 + 1))
 
 
 def test_query_gpt_response_too_long(monkeypatch):
@@ -95,7 +95,7 @@ def test_query_gpt_response_too_long(monkeypatch):
     def fake_post(self, *args, **kwargs):
         return DummyResponse(
             json_data={"choices": [{"text": "ok"}]},
-            content=b"x" * (MAX_RESPONSE_LEN + 1),
+            content=b"x" * (MAX_RESPONSE_BYTES + 1),
         )
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
@@ -128,11 +128,11 @@ def test_query_gpt_public_ip_blocked(monkeypatch):
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_gethostbyname(host):
+    def fake_getaddrinfo(host, *args, **kwargs):
         assert host == "foo.local"
-        return "10.0.0.1"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('10.0.0.1', 0))]
 
-    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
     def fake_post(self, *args, **kwargs):
         return DummyResponse(json_data={"choices": [{"text": "ok"}]})
@@ -144,10 +144,10 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
 def test_query_gpt_dns_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_gethostbyname(host):
+    def fake_getaddrinfo(host, *args, **kwargs):
         raise socket.gaierror("boom")
 
-    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
     with pytest.raises(GPTClientError):
         query_gpt("hi")
@@ -372,7 +372,7 @@ async def test_query_gpt_async_retry_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_async_prompt_too_long():
     with pytest.raises(GPTClientError):
-        await query_gpt_async("x" * (MAX_PROMPT_LEN + 1))
+        await query_gpt_async("я" * (MAX_PROMPT_BYTES // 2 + 1))
 
 
 @pytest.mark.asyncio
@@ -380,7 +380,7 @@ async def test_query_gpt_async_response_too_long(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
 
     class DummyResp:
-        content = b"x" * (MAX_RESPONSE_LEN + 1)
+        content = b"x" * (MAX_RESPONSE_BYTES + 1)
         def raise_for_status(self):
             pass
 

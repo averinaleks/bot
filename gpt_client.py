@@ -14,8 +14,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("TradingBot")
 
-MAX_PROMPT_LEN = 10000
-MAX_RESPONSE_LEN = 10000
+# Maximum allowed prompt size in bytes
+MAX_PROMPT_BYTES = 10000
+# Maximum allowed response size in bytes
+MAX_RESPONSE_BYTES = 10000
 
 
 class GPTClientError(Exception):
@@ -106,13 +108,13 @@ def query_gpt(prompt: str) -> str:
     retried up to three times with exponential backoff between one and ten
     seconds before giving up.
     """
-    if len(prompt) > MAX_PROMPT_LEN:
+    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
 
     url, timeout = _get_api_url_timeout()
     try:
         response = _post_with_retry(url, prompt, timeout)
-        if len(response.content) > MAX_RESPONSE_LEN:
+        if len(response.content) > MAX_RESPONSE_BYTES:
             raise GPTClientError("Response exceeds maximum length")
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
@@ -145,7 +147,7 @@ async def query_gpt_async(prompt: str) -> str:
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
     """
-    if len(prompt) > MAX_PROMPT_LEN:
+    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
 
     url, timeout = _get_api_url_timeout()
@@ -163,7 +165,7 @@ async def query_gpt_async(prompt: str) -> str:
 
     try:
         response = await _post()
-        if len(response.content) > MAX_RESPONSE_LEN:
+        if len(response.content) > MAX_RESPONSE_BYTES:
             raise GPTClientError("Response exceeds maximum length")
         try:
             data = response.json()
