@@ -17,6 +17,7 @@ from bot.gpt_client import (
     MAX_PROMPT_LEN,
     MAX_RESPONSE_LEN,
     _get_api_url_timeout,
+    _validate_api_url,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -167,6 +168,20 @@ def test_query_gpt_multiple_dns_results_public_blocked(monkeypatch):
 
     with pytest.raises(GPTClientError):
         query_gpt("hi")
+
+
+def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(GPTClientError):
+        _validate_api_url("http://foo.local")
 
 
 def test_query_gpt_invalid_url(monkeypatch):
