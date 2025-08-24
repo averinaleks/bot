@@ -5,8 +5,6 @@ import hmac
 from typing import List
 from contextlib import asynccontextmanager
 
-logging.basicConfig(level=logging.INFO)
-
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
@@ -222,3 +220,12 @@ async def completions(req: CompletionRequest):
         max_new_tokens=req.max_tokens,
     )
     return {"choices": [{"text": text}]}
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run("server:app", host=host, port=port)
