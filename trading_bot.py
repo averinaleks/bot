@@ -322,7 +322,10 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
             logger.error("Failed to fetch price: %s", err)
             return None
         price = data.get("price")
-        if price is None or price <= 0:
+        if not isinstance(price, (int, float)):
+            logger.error("Invalid price type for %s: %r", symbol, price)
+            return None
+        if price <= 0:
             logger.error("Invalid price for %s: %s", symbol, price)
             return None
         return price
