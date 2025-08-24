@@ -128,11 +128,11 @@ def test_query_gpt_public_ip_blocked(monkeypatch):
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_gethostbyname(host):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         assert host == "foo.local"
-        return "10.0.0.1"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
 
-    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
     def fake_post(self, *args, **kwargs):
         return DummyResponse(json_data={"choices": [{"text": "ok"}]})
@@ -144,10 +144,26 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
 def test_query_gpt_dns_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
-    def fake_gethostbyname(host):
+    def fake_getaddrinfo(*args, **kwargs):
         raise socket.gaierror("boom")
 
-    monkeypatch.setattr(socket, "gethostbyname", fake_gethostbyname)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(GPTClientError):
+        query_gpt("hi")
+
+
+def test_query_gpt_multiple_dns_results_public_blocked(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
+
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
     with pytest.raises(GPTClientError):
         query_gpt("hi")

@@ -43,18 +43,20 @@ def _validate_api_url(api_url: str) -> None:
         addr_info = socket.getaddrinfo(
             parsed.hostname, None, family=socket.AF_UNSPEC
         )
-        resolved_ip = addr_info[0][4][0]
     except socket.gaierror as exc:
         logger.error(
             "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
         )
         raise GPTClientError("Invalid GPT_OSS_API host") from exc
-
-    ip = ip_address(resolved_ip)
     scheme = parsed.scheme.lower()
-    if scheme != "https" and not (ip.is_loopback or ip.is_private):
-        logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
-        raise GPTClientError("GPT_OSS_API must use HTTPS or be a private address")
+    for info in addr_info:
+        resolved_ip = info[4][0]
+        ip = ip_address(resolved_ip)
+        if scheme != "https" and not (ip.is_loopback or ip.is_private):
+            logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
+            raise GPTClientError(
+                "GPT_OSS_API must use HTTPS or be a private address"
+            )
 
 
 @retry(
