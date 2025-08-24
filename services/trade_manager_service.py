@@ -291,8 +291,6 @@ def handle_unexpected_error(exc: Exception) -> tuple:
 
 
 if __name__ == '__main__':
-    host = validate_host(os.getenv("TRADE_MANAGER_HOST"))
-    port = safe_int(os.getenv("TRADE_MANAGER_PORT", "8000"))
 
     init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
