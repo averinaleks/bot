@@ -523,7 +523,7 @@ class TelegramLogger(logging.Handler):
                 return
             try:
                 await self._send(text, chat_id, urgent)
-            except Exception:
+            except (RetryAfter, Forbidden, BadRequest, httpx.HTTPError):
                 logger.exception("Ошибка отправки сообщения в Telegram")
             finally:
                 queue.task_done()
