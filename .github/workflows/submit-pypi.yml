@@ -52,8 +52,11 @@ jobs:
       - name: Create virtual environment
         run: |
           python -m venv /mnt/venv && source /mnt/venv/bin/activate
+      - name: Add venv to PATH
+        run: echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Install build tools
         run: |
+          source /mnt/venv/bin/activate
           python -m pip install --upgrade pip
           pip install build twine
       - name: Install pip-tools
@@ -79,7 +82,9 @@ jobs:
             rsync -a /mnt/project/requirements.out requirements.out
           fi
       - name: Build package
-        run: python -m build
+        run: |
+          source /mnt/venv/bin/activate
+          python -m build
       - name: Publish to PyPI
         if: env.TOKENPYPI != ''
         uses: pypa/gh-action-pypi-publish@release/v1
