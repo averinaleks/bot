@@ -127,6 +127,8 @@ except ValueError:
     logging.error("Invalid PORT value '%s'; must be an integer", port_str)
     sys.exit(1)
 
+MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
+
 if not API_KEYS:
     logging.error(
         "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
@@ -212,7 +214,10 @@ class CompletionRequest(BaseModel):
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatRequest):
+async def chat_completions(req: ChatRequest, request: Request):
+    body = await request.body()
+    if len(body) > MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
@@ -227,7 +232,10 @@ async def chat_completions(req: ChatRequest):
 
 
 @app.post("/v1/completions")
-async def completions(req: CompletionRequest):
+async def completions(req: CompletionRequest, request: Request):
+    body = await request.body()
+    if len(body) > MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     text = await asyncio.to_thread(
