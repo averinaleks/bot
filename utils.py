@@ -16,10 +16,46 @@ import shutil
 
 
 def configure_logging() -> None:
-    """Настроить переменные окружения, связанные с логированием."""
+    """Настроить переменные окружения и handlers для логирования."""
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    logger.setLevel(getattr(logging, level_name, logging.INFO))
 
+    log_dir = os.getenv("LOG_DIR", "/app/logs")
+    fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        if not os.access(log_dir, os.W_OK):
+            raise PermissionError
+    except (OSError, PermissionError):
+        log_dir = fallback_dir
+        os.makedirs(log_dir, exist_ok=True)
+
+    if logger.handlers:
+        return
+
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
+    file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    logger.info(
+        "Logging initialized at %s; writing logs to %s",
+        logging.getLevelName(logger.level),
+        log_dir,
+    )
+
+
+# Инициализировать логирование при импорте модуля
+configure_logging()
 
 
 # Hide Numba performance warnings
@@ -429,39 +465,6 @@ class BybitSDKAsync:
             return res.get("result", {})
 
         return await asyncio.to_thread(_sync)
-
-
-level_name = os.getenv("LOG_LEVEL", "INFO").upper()
-logger.setLevel(getattr(logging, level_name, logging.INFO))
-
-log_dir = os.getenv("LOG_DIR", "/app/logs")
-fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
-try:
-    os.makedirs(log_dir, exist_ok=True)
-    if not os.access(log_dir, os.W_OK):
-        raise PermissionError
-except (OSError, PermissionError):
-    log_dir = fallback_dir
-    os.makedirs(log_dir, exist_ok=True)
-
-if not logger.handlers:
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    logger.info(
-        "Logging initialized at %s; writing logs to %s",
-        logging.getLevelName(logger.level),
-        log_dir,
-    )
 
 
 class TelegramLogger(logging.Handler):
