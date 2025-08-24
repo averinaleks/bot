@@ -290,6 +290,9 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     return jsonify({'error': 'internal server error'}), 500
 
 
+host = validate_host()
+port = safe_int(os.getenv("PORT", "8002"))
+
 if __name__ == '__main__':
 
     init_exchange()
