@@ -166,6 +166,12 @@ def test_query_gpt_invalid_ipv6(monkeypatch, url):
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
 
+    called = {"value": False}
+
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        called["value"] = True
+        assert host == "foo.local"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
@@ -174,6 +180,7 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     assert query_gpt("hi") == "ok"
+    assert called["value"]
 
 
 def test_query_gpt_dns_error(monkeypatch):
