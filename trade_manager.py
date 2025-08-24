@@ -2002,6 +2002,10 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
+class InvalidHostError(ValueError):
+    """Raised when ``HOST`` contains an unsafe or invalid value."""
+
+
 def _resolve_host() -> str:
     """Получить безопасный адрес привязки сервиса.
 
@@ -2020,10 +2024,10 @@ def _resolve_host() -> str:
         ip = ipaddress.ip_address(host_env)
         if ip.is_unspecified:
             logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
-            raise SystemExit(1)
+            raise InvalidHostError(host_env)
     except ValueError:
         logger.error("Некорректное значение HOST %s", host_env)
-        raise SystemExit(1)
+        raise InvalidHostError(host_env)
     return host_env
 
 
@@ -2032,7 +2036,11 @@ if __name__ == "__main__":
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    host = _resolve_host()
+    try:
+        host = _resolve_host()
+    except InvalidHostError as exc:
+        logger.error("Ошибка конфигурации HOST: %s", exc)
+        sys.exit(1)
     port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)
