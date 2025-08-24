@@ -16,6 +16,12 @@ import ipaddress
 import re
 import aiohttp
 
+try:  # pragma: no cover - fallback for tests
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - stub
+    def load_dotenv(*args, **kwargs):
+        return None
+
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
 except ImportError as exc:  # noqa: W0703 - allow missing pandas
@@ -71,14 +77,22 @@ else:
 import httpx
 from tenacity import retry, wait_exponential, stop_after_attempt
 import inspect
+# Базовые утилиты импортируются всегда
 from bot.utils import (
     logger,
     TelegramLogger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
     safe_api_call,
-    configure_logging,
 )
+
+# ``configure_logging`` может отсутствовать в тестовых заглушках
+try:  # pragma: no cover - fallback для тестов
+    from bot.utils import configure_logging
+except ImportError:  # pragma: no cover - заглушка
+    def configure_logging() -> None:  # type: ignore
+        """Stubbed logging configurator."""
+        pass
 from bot.config import BotConfig, load_config
 import contextlib
 
@@ -95,7 +109,6 @@ except ImportError as exc:  # noqa: W0703 - optional dependency may not be insta
 import time
 from typing import Dict, Optional, Tuple
 import shutil
-from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 if os.getenv("TEST_MODE") == "1" and not hasattr(Flask, "asgi_app"):
     Flask.asgi_app = property(lambda self: self.wsgi_app)
