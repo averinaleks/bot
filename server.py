@@ -33,7 +33,7 @@ except Exception:  # pragma: no cover - allow missing dependency
         async def validate_csrf(self, request) -> None:  # pragma: no cover - no-op
             return None
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 
 class ModelManager:
@@ -277,10 +277,16 @@ class CompletionRequest(BaseModel):
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatRequest, request: Request):
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BYTES:
-        raise HTTPException(status_code=413, detail="Request body too large")
+async def chat_completions(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        req = ChatRequest.model_validate_json(bytes(body))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
@@ -295,10 +301,16 @@ async def chat_completions(req: ChatRequest, request: Request):
 
 
 @app.post("/v1/completions")
-async def completions(req: CompletionRequest, request: Request):
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BYTES:
-        raise HTTPException(status_code=413, detail="Request body too large")
+async def completions(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        req = CompletionRequest.model_validate_json(bytes(body))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     text = await asyncio.to_thread(
