@@ -199,11 +199,16 @@ class TradeManager:
             logger.warning(
                 "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
             )
-        self.telegram_logger = TelegramLogger(
-            telegram_bot,
-            chat_id,
-            max_queue_size=config.get("telegram_queue_size"),
-        )
+            self.telegram_logger = types.SimpleNamespace(
+                info=lambda *a, **k: None,
+                warning=lambda *a, **k: None,
+            )
+        else:
+            self.telegram_logger = TelegramLogger(
+                telegram_bot,
+                chat_id,
+                max_queue_size=config.get("telegram_queue_size"),
+            )
         self.positions = pd.DataFrame(
             columns=[
                 "symbol",
