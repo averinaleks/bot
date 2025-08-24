@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import hmac
-from typing import List
+from typing import List, Mapping
 from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO)
@@ -119,6 +119,11 @@ app = FastAPI(lifespan=lifespan)
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
 
 
+def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    sensitive = {"authorization"}
+    return {k: "***" if k.lower() in sensitive else v for k, v in headers.items()}
+
+
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
     auth = request.headers.get("Authorization")
@@ -127,7 +132,7 @@ async def check_api_key(request: Request, call_next):
             "Unauthorized request: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            dict(request.headers),
+            _loggable_headers(request.headers),
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -139,7 +144,7 @@ async def check_api_key(request: Request, call_next):
             "Invalid API key: method=%s url=%s headers=%s",
             request.method,
             request.url,
-            dict(request.headers),
+            _loggable_headers(request.headers),
         )
         return Response(status_code=401)
     return await call_next(request)

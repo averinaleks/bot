@@ -1,4 +1,5 @@
 import os
+import logging
 import pytest
 
 os.environ["API_KEYS"] = "testkey"
@@ -30,3 +31,13 @@ def test_chat_completions_requires_key(monkeypatch):
             json={"messages": [{"role": "user", "content": "hi"}]},
         )
         assert resp.status_code == 401
+
+
+def test_check_api_key_masks_authorization(monkeypatch, caplog):
+    with make_client(monkeypatch) as client:
+        headers = {"Authorization": "Bearer secret-token"}
+        with caplog.at_level(logging.WARNING):
+            resp = client.post("/v1/completions", json={"prompt": "hi"}, headers=headers)
+    assert resp.status_code == 401
+    assert "secret-token" not in caplog.text
+    assert "***" in caplog.text
