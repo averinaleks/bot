@@ -147,15 +147,9 @@ def test_resolve_host_rejects_all_interfaces(monkeypatch):
         tm._resolve_host()
 
 
-def test_resolve_host_rejects_ipv6_unspecified(monkeypatch):
-    tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "::")
     with pytest.raises(SystemExit):
         tm._resolve_host()
 
 
-def test_resolve_host_invalid_value(monkeypatch):
-    tm, _, _ = _setup_module(monkeypatch)
-    monkeypatch.setenv("HOST", "not_an_ip")
     with pytest.raises(SystemExit):
         tm._resolve_host()

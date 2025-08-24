@@ -14,8 +14,6 @@ from utils import validate_host, safe_int
 
 logging.basicConfig(level=logging.INFO)
 
-load_dotenv()
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -290,11 +288,11 @@ def handle_unexpected_error(exc: Exception) -> tuple:
     return jsonify({'error': 'internal server error'}), 500
 
 
-host = validate_host()
-port = safe_int(os.getenv("PORT", "8002"))
-
 if __name__ == '__main__':
 
+    load_dotenv()
+    host = validate_host()
+    port = safe_int(os.getenv("PORT", "8002"))
     init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
     app.run(host=host, port=port)  # nosec B104  # host validated above

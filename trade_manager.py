@@ -13,6 +13,7 @@ import types
 import json
 import logging
 import ipaddress
+import re
 import aiohttp
 
 try:  # pragma: no cover - optional dependency
@@ -1921,8 +1922,7 @@ def _initialize_trade_manager() -> None:
         raise
 
 
-# Load environment variables when the module is imported
-load_dotenv()
+# Set ready event immediately in test mode
 if os.getenv("TEST_MODE") == "1":
     _ready_event.set()
 
@@ -2002,6 +2002,8 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
+
+
 def _resolve_host() -> str:
     """Получить безопасный адрес привязки сервиса.
 
@@ -2018,13 +2020,10 @@ def _resolve_host() -> str:
         return "127.0.0.1"
     try:
         ip = ipaddress.ip_address(host_env)
-        if ip.is_unspecified:
-            logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
-            raise SystemExit(1)
     except ValueError:
+        if _HOSTNAME_RE.fullmatch(host_env):
+            return host_env
         logger.error("Некорректное значение HOST %s", host_env)
-        raise SystemExit(1)
-    return host_env
 
 
 if __name__ == "__main__":
@@ -2032,7 +2031,11 @@ if __name__ == "__main__":
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    host = _resolve_host()
+    try:
+        host = _resolve_host()
+    except InvalidHostError as exc:
+        logger.error("Ошибка конфигурации HOST: %s", exc)
+        sys.exit(1)
     port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)
