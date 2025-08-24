@@ -1,3 +1,6 @@
+import importlib
+import logging
+
 import pytest
 import bcrypt
 
@@ -83,4 +86,16 @@ def test_hash_password_rejects_weak_passwords(weak_password):
 def test_verify_password_accepts_existing_weak_hashes(weak_password):
     stored_hash = bcrypt.hashpw(weak_password.encode(), bcrypt.gensalt()).decode()
     assert verify_password(weak_password, stored_hash)
+
+
+def test_invalid_bcrypt_rounds_env_uses_default(monkeypatch, caplog):
+    import password_utils as pu
+
+    monkeypatch.setenv("BCRYPT_ROUNDS", "32")
+    with caplog.at_level(logging.WARNING):
+        importlib.reload(pu)
+        assert pu.BCRYPT_ROUNDS == pu.DEFAULT_BCRYPT_ROUNDS
+        assert "BCRYPT_ROUNDS" in caplog.text
+    monkeypatch.delenv("BCRYPT_ROUNDS", raising=False)
+    importlib.reload(pu)
 
