@@ -345,6 +345,7 @@ class TradeManager:
         ):
             return
         try:
+            os.makedirs(self.config["cache_dir"], exist_ok=True)
             disk_usage = shutil.disk_usage(self.config["cache_dir"])
             if disk_usage.free / (1024**3) < 0.5:
                 logger.warning(
