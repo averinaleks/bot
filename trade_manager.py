@@ -13,6 +13,7 @@ import types
 import json
 import logging
 import ipaddress
+import re
 import aiohttp
 
 try:  # pragma: no cover - optional dependency
@@ -2002,6 +2003,11 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
+_HOSTNAME_RE = re.compile(
+    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)" r"(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
+)
+
+
 def _resolve_host() -> str:
     """Получить безопасный адрес привязки сервиса.
 
@@ -2018,13 +2024,16 @@ def _resolve_host() -> str:
         return "127.0.0.1"
     try:
         ip = ipaddress.ip_address(host_env)
+    except ValueError:
+        if _HOSTNAME_RE.fullmatch(host_env):
+            return host_env
+        logger.error("Некорректное значение HOST %s", host_env)
+        raise SystemExit(1)
+    else:
         if ip.is_unspecified:
             logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
             raise SystemExit(1)
-    except ValueError:
-        logger.error("Некорректное значение HOST %s", host_env)
-        raise SystemExit(1)
-    return host_env
+        return host_env
 
 
 if __name__ == "__main__":
