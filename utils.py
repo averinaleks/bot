@@ -22,40 +22,6 @@ def configure_logging() -> None:
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 
-def validate_host_port(host_env: str, port_env: str, default_port: int) -> tuple[str, int]:
-    """Получить и проверить значения хоста и порта из окружения.
-
-    Параметры
-    ---------
-    host_env: str
-        Имя переменной окружения с адресом хоста.
-    port_env: str
-        Имя переменной окружения с портом.
-    default_port: int
-        Значение порта по умолчанию, используемое при ошибке парсинга.
-
-    Возвращает
-    ---------
-    tuple[str, int]
-        Кортеж из проверенного хоста и порта.
-    """
-
-    host = os.environ.get(host_env, "127.0.0.1").strip()
-    if host == "0.0.0.0":  # nosec B104
-        raise ValueError(f"{host_env}=0.0.0.0 запрещён из соображений безопасности")
-
-    port_str = os.environ.get(port_env, str(default_port))
-    try:
-        port = int(port_str)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Некорректное значение %s=%r, используется порт по умолчанию %s",
-            port_env,
-            port_str,
-            default_port,
-        )
-        port = default_port
-    return host, port
 
 
 # Hide Numba performance warnings

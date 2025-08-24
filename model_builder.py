@@ -1966,18 +1966,9 @@ def ping():
 
 
 if __name__ == "__main__":
-    from bot.utils import configure_logging, validate_host_port
 
     configure_logging()
     load_dotenv()
     _load_model()
-    host, port = validate_host_port("HOST", "PORT", 8001)
-    if host != "127.0.0.1":
-        logger.warning(
-            "Используется не локальный хост %s; убедитесь, что это намеренно",
-            host,
-        )
-    else:
-        logger.info("HOST не установлен, используется %s", host)
     logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
     api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
