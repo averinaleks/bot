@@ -128,13 +128,17 @@ jobs:
       - name: Cleanup before Trivy scan
         run: |
           sudo rm -rf /tmp/* || true
-          sudo rm -rf /mnt/trivy-cache || true
+          sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
           mkdir -p /mnt/trivy-cache
+        working-directory: bot
+      - name: Prepare Trivy temp
+        run: mkdir -p /mnt/trivy-tmp
         working-directory: bot
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.32.0
         env:
+          TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
         with:
           version: v0.65.0

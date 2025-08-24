@@ -71,7 +71,7 @@ jobs:
       - name: Cleanup before Trivy scan
         run: |
           sudo rm -rf /tmp/* || true
-          sudo rm -rf /mnt/trivy-cache /mnt/trivy-temp || true
+          sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
 
       - name: Prepare Trivy cache directory
@@ -85,14 +85,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-trivy-cache-
 
-      - name: Create Trivy directories
-        run: |
-          mkdir -p /mnt/trivy-temp
+      - name: Prepare Trivy temp
+        run: mkdir -p /mnt/trivy-tmp
 
       - name: Run Trivy vulnerability scanner
         env:
+          TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
-          TRIVY_TEMP_DIR: /mnt/trivy-temp
         uses: aquasecurity/trivy-action@0.32.0
         with:
           cache-dir: /mnt/trivy-cache
