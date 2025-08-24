@@ -25,5 +25,5 @@ jobs:
         run: scripts/run_dependabot.sh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+          TOKEN: ${{ secrets.TOKEN }}
           GITHUB_REGISTRIES_PROXY: "${{ steps.read_proxy.outputs.json }}"
