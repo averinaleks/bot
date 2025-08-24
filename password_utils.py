@@ -1,12 +1,35 @@
 import os
 import bcrypt
+import logging
 import re
 import string
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
+DEFAULT_BCRYPT_ROUNDS = 12
+logger = logging.getLogger(__name__)
+
+
 _bcrypt_rounds_env = os.getenv("BCRYPT_ROUNDS")
-BCRYPT_ROUNDS = int(_bcrypt_rounds_env) if _bcrypt_rounds_env else 12
+if _bcrypt_rounds_env is not None:
+    try:
+        _rounds = int(_bcrypt_rounds_env)
+        if 4 <= _rounds <= 31:
+            BCRYPT_ROUNDS = _rounds
+        else:
+            logger.warning(
+                "BCRYPT_ROUNDS must be between 4 and 31; using default %d",
+                DEFAULT_BCRYPT_ROUNDS,
+            )
+            BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
+    except ValueError:
+        logger.warning(
+            "BCRYPT_ROUNDS is not an integer; using default %d",
+            DEFAULT_BCRYPT_ROUNDS,
+        )
+        BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
+else:
+    BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
 
 
 def validate_password_complexity(password: str) -> None:
