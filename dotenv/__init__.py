@@ -40,5 +40,4 @@ def find_dotenv(*args, **kwargs) -> str:
     return ""
 
 
-__all__ = ["dotenv_values", "load_dotenv", "find_dotenv"]
 
