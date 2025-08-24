@@ -1995,14 +1995,32 @@ def ready() -> tuple:
     return jsonify({"status": "initializing"}), 503
 
 
+def _resolve_host() -> str:
+    """Получить безопасный адрес привязки сервиса.
+
+    Если переменная окружения ``HOST`` не задана, используется ``127.0.0.1`` и
+    выводится предупреждение. Запуск на всех интерфейсах (``0.0.0.0`` или ``::``)
+    запрещён без явной конфигурации.
+    """
+
+    host_env = os.getenv("HOST")
+    if host_env is None:
+        logger.warning(
+            "HOST не установлен, используется 127.0.0.1. Укажите HOST для внешнего доступа",
+        )
+        return "127.0.0.1"
+    if host_env in {"0.0.0.0", "::"}:
+        logger.error("Небезопасный HOST %s без явной конфигурации", host_env)
+        raise SystemExit(1)
+    return host_env
+
+
 if __name__ == "__main__":
 
     configure_logging()
     setup_multiprocessing()
     load_dotenv()
-    host = os.getenv(
-        "HOST", "127.0.0.1"
-    )  # Bind to localhost to avoid exposing the service
+    host = _resolve_host()
     port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
-    api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
+    api_app.run(host=host, port=port)
