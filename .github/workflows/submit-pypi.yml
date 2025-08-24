@@ -61,6 +61,10 @@ jobs:
           pip install build twine
       - name: Install pip-tools
         run: pip install pip-tools==7.5.0
+      - name: Generate dependency lock
+        run: |
+          source /mnt/venv/bin/activate
+          pip-compile --strip-extras -o requirements.out requirements.txt
       - name: Copy project to /mnt
         run: rsync -a . /mnt/project
       - name: Check dependencies
