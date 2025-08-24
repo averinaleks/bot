@@ -4,7 +4,7 @@ import sys, types, asyncio, pytest, importlib
 class _FailingLoader:
     @staticmethod
     def from_pretrained(*args, **kwargs):
-        raise RuntimeError("fail")
+        raise OSError("fail")
 
 
 def test_load_model_async_raises_runtime_error(monkeypatch):
