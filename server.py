@@ -226,6 +226,15 @@ model_manager = ModelManager()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    API_KEYS.clear()
+    API_KEYS.update({k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()})
+    if not API_KEYS:
+        logging.error(
+            "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
+            host,
+            port,
+        )
+        raise RuntimeError("API_KEYS environment variable is required")
     await model_manager.load_model_async()
     yield
 
@@ -247,11 +256,6 @@ def get_csrf_config() -> CsrfSettings:
 
 csrf_protect = CsrfProtect()
 
-API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
-if not API_KEYS:
-    raise RuntimeError(
-        "API_KEYS environment variable is required. Set API_KEYS to a comma-separated list of tokens."
-    )
 
 ALLOWED_HOSTS = {"127.0.0.1", "::1"}
 host = os.getenv(
