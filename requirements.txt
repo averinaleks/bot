@@ -50,7 +50,6 @@ cachetools==5.5.2
     #   mlflow-tracing
 catalyst==21.5
     # via -r requirements-core.in
-ccxt==4.5.0
     # via -r requirements-core.in
 ccxtpro==1.0.1
     # via -r requirements-core.in
