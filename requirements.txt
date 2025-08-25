@@ -333,7 +333,7 @@ packaging==25.0
     #   tensorboardx
     #   torchmetrics
     #   transformers
-pandas==2.3.1
+pandas==2.3.2
     # via
     #   -r requirements-core.in
     #   mlflow
