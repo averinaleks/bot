@@ -3,6 +3,7 @@ import sys
 import logging
 import asyncio
 import hmac
+import re
 from typing import List, Mapping
 from contextlib import asynccontextmanager
 
@@ -99,6 +100,10 @@ class ModelManager:
         fallback_revision = os.getenv(
             "GPT_MODEL_FALLBACK_REVISION", "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
         )
+        if not re.fullmatch(r"[0-9a-f]{40}", fallback_revision):
+            raise ValueError(
+                "GPT_MODEL_FALLBACK_REVISION must be a 40-character SHA commit"
+            )
         cache_dir = os.getenv("MODEL_CACHE_DIR")
 
         try:
@@ -159,14 +164,14 @@ class ModelManager:
                 revision=fallback_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )
+            )  # nosec: revision pinned to specific commit
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     fallback_model,
                     revision=fallback_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
-                ).to(device_local)
+                ).to(device_local)  # nosec: revision pinned to specific commit
             )
         except (OSError, ValueError) as exc:
             logging.exception(
@@ -179,7 +184,7 @@ class ModelManager:
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )
+                )  # nosec: revision pinned to specific commit
                 model_local = (
                     AutoModelForCausalLM.from_pretrained(
                         fallback_model,
@@ -187,7 +192,7 @@ class ModelManager:
                         trust_remote_code=False,
                         cache_dir=cache_dir,
                         local_files_only=True,
-                    ).to(device_local)
+                    ).to(device_local)  # nosec: revision pinned to specific commit
                 )
             except (OSError, ValueError) as exc2:
                 logging.exception(
