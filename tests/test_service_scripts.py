@@ -24,7 +24,8 @@ def _run_dh(port: int):
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
     sys.modules['ccxt'] = ccxt
-    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1'}):
+    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1', 'TEST_MODE': '1'}):
+        import utils
         from bot.services import data_handler_service
         data_handler_service.app.run(host='127.0.0.1', port=port)
 
@@ -48,7 +49,8 @@ def _run_dh_fail(port: int):
     ccxt.bybit = lambda *a, **kw: DummyExchange()
     import sys
     sys.modules['ccxt'] = ccxt
-    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1'}):
+    with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1', 'TEST_MODE': '1'}):
+        import utils
         from bot.services import data_handler_service
         data_handler_service.app.run(host='127.0.0.1', port=port)
 
@@ -91,7 +93,8 @@ def _run_mb(model_dir: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    with patch.dict(os.environ, {'MODEL_DIR': model_dir}):
+    with patch.dict(os.environ, {'MODEL_DIR': model_dir, 'TEST_MODE': '1'}):
+        import utils
         from bot.services import model_builder_service
         model_builder_service.app.run(port=port)
 
@@ -177,7 +180,8 @@ def _run_mb_fail(model_file: str, port: int):
     sys.modules['sklearn'] = sklearn
     sys.modules['sklearn.linear_model'] = linear_model
 
-    with patch.dict(os.environ, {'MODEL_FILE': model_file}):
+    with patch.dict(os.environ, {'MODEL_FILE': model_file, 'TEST_MODE': '1'}):
+        import utils
         from bot.services import model_builder_service
         model_builder_service._load_model()
         model_builder_service.app.run(port=port)
@@ -240,8 +244,10 @@ def _run_tm(
         'HOST': '127.0.0.1',
         'TRADE_MANAGER_TOKEN': 'test-token',
         'TRADE_RISK_USD': os.environ.get('TRADE_RISK_USD', '10'),
+        'TEST_MODE': '1',
     }
     with patch.dict(os.environ, env):
+        import utils
         from bot.services import trade_manager_service
         trade_manager_service.app.run(host='127.0.0.1', port=port)
 
