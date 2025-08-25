@@ -113,7 +113,6 @@ filelock==3.19.1
     #   ray
     #   torch
     #   transformers
-flask==3.1.1
     # via
     #   -r requirements-core.in
     #   mlflow
@@ -224,7 +223,6 @@ matplotlib==3.10.5
     # via
     #   mlflow
     #   stable-baselines3
-mlflow==3.3.1
     # via -r requirements-core.in
 mlflow-skinny==3.3.1
     # via mlflow
@@ -303,7 +301,6 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.100.2
     # via -r requirements-core.in
 opentelemetry-api==1.36.0
     # via
@@ -336,7 +333,7 @@ packaging==25.0
     #   tensorboardx
     #   torchmetrics
     #   transformers
-pandas==2.3.1
+pandas==2.3.2
     # via
     #   -r requirements-core.in
     #   mlflow
