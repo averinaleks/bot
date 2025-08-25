@@ -2,6 +2,7 @@ import sys
 import asyncio
 import socket
 import logging
+import json
 
 import pytest
 import httpx
@@ -24,47 +25,66 @@ from bot.gpt_client import (
 )
 
 
-class DummyResponse:
-    def __init__(self, json_data=None, json_exc=None, content=b"content"):
-        self._json_data = json_data
-        self._json_exc = json_exc
+class DummyStream:
+    def __init__(self, content=b"content"):
         self.content = content
 
     def raise_for_status(self):
         pass
 
-    def json(self):
-        if self._json_exc:
-            raise self._json_exc
-        return self._json_data
+    def iter_bytes(self):
+        yield self.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        pass
+
+
+class DummyAStream:
+    def __init__(self, content=b"content"):
+        self.content = content
+
+    def raise_for_status(self):
+        pass
+
+    async def aiter_bytes(self):
+        yield self.content
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
 
 
 def test_query_gpt_network_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     with pytest.raises(GPTClientNetworkError):
         query_gpt("hi")
 
 
 def test_query_gpt_non_json(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_exc=ValueError("no json"))
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=b"not json")
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     with pytest.raises(GPTClientJSONError):
         query_gpt("hi")
 
 
 def test_query_gpt_missing_fields(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_data={"foo": "bar"})
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=json.dumps({"foo": "bar"}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     with pytest.raises(GPTClientResponseError):
         query_gpt("hi")
 
@@ -78,10 +98,10 @@ def test_query_gpt_insecure_url(monkeypatch):
 def test_query_gpt_uppercase_scheme(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "HTTPS://example.com")
 
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     assert query_gpt("hi") == "ok"
 
 
@@ -93,13 +113,10 @@ def test_query_gpt_prompt_too_long():
 def test_query_gpt_response_too_long(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
 
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(
-            json_data={"choices": [{"text": "ok"}]},
-            content=b"x" * (MAX_RESPONSE_BYTES + 1),
-        )
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=b"x" * (MAX_RESPONSE_BYTES + 1))
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     with pytest.raises(GPTClientError):
         query_gpt("hi")
 
@@ -113,10 +130,10 @@ def test_query_gpt_response_too_long(monkeypatch):
 def test_query_gpt_private_ip_allowed(monkeypatch, ip):
     monkeypatch.setenv("GPT_OSS_API", f"http://{ip}")
 
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     assert query_gpt("hi") == "ok"
 
 
@@ -133,10 +150,10 @@ def test_query_gpt_public_ip_blocked(monkeypatch):
 def test_query_gpt_private_ipv6_allowed(monkeypatch, ip):
     monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
 
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     assert query_gpt("hi") == "ok"
 
 
@@ -175,10 +192,10 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
-    def fake_post(self, *args, **kwargs):
-        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+    def fake_stream(self, *args, **kwargs):
+        return DummyStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     assert query_gpt("hi") == "ok"
     assert called["value"]
 
@@ -245,13 +262,13 @@ def test_query_gpt_retry_success(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     calls = {"count": 0}
 
-    def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         calls["count"] += 1
         if calls["count"] == 1:
             raise httpx.HTTPError("boom")
-        return DummyResponse(json_data={"choices": [{"text": "ok"}]})
+        return DummyStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     monkeypatch.setattr("time.sleep", lambda *_: None)
     assert query_gpt("hi") == "ok"
     assert calls["count"] == 2
@@ -261,11 +278,11 @@ def test_query_gpt_retry_failure(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     calls = {"count": 0}
 
-    def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         calls["count"] += 1
         raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     monkeypatch.setattr("time.sleep", lambda *_: None)
     with pytest.raises(GPTClientNetworkError):
         query_gpt("hi")
@@ -275,10 +292,10 @@ def test_query_gpt_retry_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_async_network_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    async def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with pytest.raises(GPTClientNetworkError):
         await query_gpt_async("hi")
 
@@ -286,18 +303,10 @@ async def test_query_gpt_async_network_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_async_non_json(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    class DummyResp:
-        content = b"content"
-        def raise_for_status(self):
-            pass
+    def fake_stream(self, *args, **kwargs):
+        return DummyAStream(content=b"not json")
 
-        def json(self):
-            raise ValueError("no json")
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with pytest.raises(GPTClientJSONError):
         await query_gpt_async("hi")
 
@@ -305,18 +314,10 @@ async def test_query_gpt_async_non_json(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_async_missing_fields(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
-    class DummyResp:
-        content = b"content"
-        def raise_for_status(self):
-            pass
+    def fake_stream(self, *args, **kwargs):
+        return DummyAStream(content=json.dumps({"foo": "bar"}).encode())
 
-        def json(self):
-            return {"foo": "bar"}
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with pytest.raises(GPTClientResponseError):
         await query_gpt_async("hi")
 
@@ -338,18 +339,10 @@ async def test_query_gpt_async_insecure_url(monkeypatch):
 async def test_query_gpt_async_private_ip_allowed(monkeypatch, ip):
     monkeypatch.setenv("GPT_OSS_API", f"http://{ip}")
 
-    class DummyResp:
-        content = b"content"
-        def raise_for_status(self):
-            pass
+    def fake_stream(self, *args, **kwargs):
+        return DummyAStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-        def json(self):
-            return {"choices": [{"text": "ok"}]}
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     assert await query_gpt_async("hi") == "ok"
 
 
@@ -368,19 +361,10 @@ async def test_query_gpt_async_public_ip_blocked(monkeypatch):
 async def test_query_gpt_async_private_ipv6_allowed(monkeypatch, ip):
     monkeypatch.setenv("GPT_OSS_API", f"http://[{ip}]")
 
-    class DummyResp:
-        content = b"content"
+    def fake_stream(self, *args, **kwargs):
+        return DummyAStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"choices": [{"text": "ok"}]}
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     assert await query_gpt_async("hi") == "ok"
 
 
@@ -434,22 +418,13 @@ async def test_query_gpt_async_no_env(monkeypatch):
 async def test_query_gpt_async_retry_success(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     calls = {"count": 0}
-
-    class DummyResp:
-        content = b"content"
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"choices": [{"text": "ok"}]}
-
-    async def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         calls["count"] += 1
         if calls["count"] == 1:
             raise httpx.HTTPError("boom")
-        return DummyResp()
+        return DummyAStream(content=json.dumps({"choices": [{"text": "ok"}]}).encode())
 
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
 
     async def no_sleep(*args, **kwargs):
         pass
@@ -464,11 +439,11 @@ async def test_query_gpt_async_retry_failure(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     calls = {"count": 0}
 
-    async def fake_post(self, *args, **kwargs):
+    def fake_stream(self, *args, **kwargs):
         calls["count"] += 1
         raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
 
     async def no_sleep(*args, **kwargs):
         pass
@@ -488,19 +463,10 @@ async def test_query_gpt_async_prompt_too_long():
 @pytest.mark.asyncio
 async def test_query_gpt_async_response_too_long(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    def fake_stream(self, *args, **kwargs):
+        return DummyAStream(content=b"x" * (MAX_RESPONSE_BYTES + 1))
 
-    class DummyResp:
-        content = b"x" * (MAX_RESPONSE_BYTES + 1)
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"choices": [{"text": "ok"}]}
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with pytest.raises(GPTClientError):
         await query_gpt_async("hi")
 
@@ -508,18 +474,10 @@ async def test_query_gpt_async_response_too_long(monkeypatch):
 @pytest.mark.asyncio
 async def test_query_gpt_json_async(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": '{"signal": "buy"}' }]}).encode()
+        return DummyAStream(content=content)
 
-    class DummyResp:
-        content = b"content"
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"choices": [{"text": '{"signal": "buy"}'}]}
-
-    async def fake_post(self, *args, **kwargs):
-        return DummyResp()
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     result = await query_gpt_json_async("hi")
     assert result["signal"] == "buy"

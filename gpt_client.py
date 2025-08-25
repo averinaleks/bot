@@ -70,12 +70,17 @@ def _validate_api_url(api_url: str) -> None:
     wait=wait_exponential(min=1, max=10),
     reraise=True,
 )
-def _post_with_retry(url: str, prompt: str, timeout: float) -> httpx.Response:
+def _post_with_retry(url: str, prompt: str, timeout: float) -> bytes:
     """POST helper that retries on network failures."""
     with httpx.Client(trust_env=False, timeout=timeout) as client:
-        response = client.post(url, json={"prompt": prompt})
-        response.raise_for_status()
-        return response
+        with client.stream("POST", url, json={"prompt": prompt}) as response:
+            response.raise_for_status()
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content) > MAX_RESPONSE_BYTES:
+                    raise GPTClientError("Response exceeds maximum length")
+            return bytes(content)
 
 
 def _get_api_url_timeout() -> tuple[str, float]:
@@ -119,14 +124,12 @@ def query_gpt(prompt: str) -> str:
 
     url, timeout = _get_api_url_timeout()
     try:
-        response = _post_with_retry(url, prompt, timeout)
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise GPTClientError("Response exceeds maximum length")
+        content = _post_with_retry(url, prompt, timeout)
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     try:
-        data = response.json()
+        data = json.loads(content)
     except ValueError as exc:
         logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
         raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
@@ -163,18 +166,21 @@ async def query_gpt_async(prompt: str) -> str:
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
-    async def _post() -> httpx.Response:
+    async def _post() -> bytes:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
-            response = await client.post(url, json={"prompt": prompt})
-            response.raise_for_status()
-            return response
+            async with client.stream("POST", url, json={"prompt": prompt}) as response:
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > MAX_RESPONSE_BYTES:
+                        raise GPTClientError("Response exceeds maximum length")
+                return bytes(content)
 
     try:
-        response = await _post()
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise GPTClientError("Response exceeds maximum length")
+        content = await _post()
         try:
-            data = response.json()
+            data = json.loads(content)
         except ValueError as exc:
             logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
             raise GPTClientJSONError(
