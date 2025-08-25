@@ -35,7 +35,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
         continue-on-error: true
         with:
           docker-images: true
