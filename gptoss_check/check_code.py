@@ -37,8 +37,6 @@ def query(prompt: str) -> str:
     if not api_url:
         raise RuntimeError("Переменная окружения GPT_OSS_API не установлена")
 
-    wait_for_api(api_url)
-
     max_retries = 3
     backoff = 1
     for attempt in range(1, max_retries + 1):
