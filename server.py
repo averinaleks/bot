@@ -15,7 +15,7 @@ except ImportError as exc:  # pragma: no cover - dependency required
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
-    from fastapi_csrf_protect import CsrfProtect
+    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
@@ -286,7 +286,7 @@ async def enforce_csrf(request: Request, call_next):
     if request.method == "POST":
         try:
             await csrf_protect.validate_csrf(request)
-        except Exception:
+        except CsrfProtectError:
             logging.warning(
                 "CSRF validation failed: method=%s url=%s headers=%s",
                 request.method,
@@ -294,6 +294,14 @@ async def enforce_csrf(request: Request, call_next):
                 _loggable_headers(request.headers),
             )
             raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+        except Exception:
+            logging.exception(
+                "Unexpected error during CSRF validation: method=%s url=%s headers=%s",
+                request.method,
+                request.url,
+                _loggable_headers(request.headers),
+            )
+            raise
     return await call_next(request)
 
 
