@@ -59,6 +59,10 @@ jobs:
           build-mount-path: /mnt
           pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
+      - name: Additional cleanup before build
+        run: |
+          docker image prune -af
+          sudo apt-get clean
       - name: Build an image from Dockerfile.ci
         run: |
           docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
@@ -120,4 +124,4 @@ jobs:
       - name: Cleanup after Trivy scan
         run: |
           docker system prune -af || true
-          sudo rm -rf /tmp/* || true
+          sudo rm -rf /tmp/* /mnt/trivy-* || true
