@@ -6,18 +6,12 @@ import hmac
 from typing import List, Mapping
 from contextlib import asynccontextmanager
 
-import types
-
 try:
     import dotenv  # type: ignore
-except Exception:  # pragma: no cover - fallback if python-dotenv is missing
-    dotenv = None
-
-if not getattr(dotenv, "dotenv_values", None):  # pragma: no cover - stub for tests
-    dotenv = types.ModuleType("dotenv")
-    dotenv.dotenv_values = lambda *args, **kwargs: {}
-    dotenv.load_dotenv = lambda *args, **kwargs: None
-    sys.modules["dotenv"] = dotenv
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "python-dotenv is required. Install it with 'pip install python-dotenv'."
+    ) from exc
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
