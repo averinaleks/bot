@@ -20,6 +20,7 @@ def test_load_model_async_raises_runtime_error(monkeypatch):
         torch.cuda = types.SimpleNamespace(is_available=lambda: False)
         m.setitem(sys.modules, "torch", torch)
 
+        os.environ["CSRF_SECRET"] = "testsecret"
         import server
 
         with pytest.raises(RuntimeError, match="Failed to load both primary and fallback models"):
@@ -29,3 +30,5 @@ def test_load_model_async_raises_runtime_error(monkeypatch):
         importlib.reload(server)
     except ModuleNotFoundError:
         pass
+    finally:
+        os.environ.pop("CSRF_SECRET", None)
