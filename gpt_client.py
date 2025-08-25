@@ -74,13 +74,6 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     wait=wait_exponential(min=1, max=10),
     reraise=True,
 )
-def _post_with_retry(
-    url: str,
-    prompt: str,
-    timeout: float,
-    hostname: str,
-    allowed_ips: set[str],
-) -> httpx.Response:
     """POST helper that retries on network failures."""
     try:
         current_ips = {
@@ -105,9 +98,14 @@ def _post_with_retry(
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
 
     with httpx.Client(trust_env=False, timeout=timeout) as client:
-        response = client.post(url, json={"prompt": prompt})
-        response.raise_for_status()
-        return response
+        with client.stream("POST", url, json={"prompt": prompt}) as response:
+            response.raise_for_status()
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content) > MAX_RESPONSE_BYTES:
+                    raise GPTClientError("Response exceeds maximum length")
+            return bytes(content)
 
 
 def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
@@ -151,14 +149,11 @@ def query_gpt(prompt: str) -> str:
 
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
     try:
-        response = _post_with_retry(url, prompt, timeout, hostname, allowed_ips)
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise GPTClientError("Response exceeds maximum length")
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     try:
-        data = response.json()
+        data = json.loads(content)
     except ValueError as exc:
         logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
         raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
@@ -195,40 +190,20 @@ async def query_gpt_async(prompt: str) -> str:
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
-    async def _post() -> httpx.Response:
-        try:
-            current_ips = {
-                info[4][0]
-                for info in socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
-            }
-        except socket.gaierror as exc:
-            logger.error(
-                "Failed to resolve GPT_OSS_API host %s before request: %s",
-                hostname,
-                exc,
-            )
-            raise GPTClientNetworkError("Failed to resolve GPT_OSS_API host") from exc
-
-        if not current_ips & allowed_ips:
-            logger.error(
-                "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
-                hostname,
-                current_ips,
-                allowed_ips,
-            )
-            raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
-
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
-            response = await client.post(url, json={"prompt": prompt})
-            response.raise_for_status()
-            return response
+            async with client.stream("POST", url, json={"prompt": prompt}) as response:
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > MAX_RESPONSE_BYTES:
+                        raise GPTClientError("Response exceeds maximum length")
+                return bytes(content)
 
     try:
-        response = await _post()
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise GPTClientError("Response exceeds maximum length")
+        content = await _post()
         try:
-            data = response.json()
+            data = json.loads(content)
         except ValueError as exc:
             logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
             raise GPTClientJSONError(
