@@ -54,7 +54,7 @@ RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel &&
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     RAY_JARS_DIR=$($VIRTUAL_ENV/bin/python -c "import os, ray; print(os.path.join(os.path.dirname(ray.__file__), 'jars'))") && \
     rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
-    curl -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
+    curl --retry 5 --retry-delay 5 -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete && \
     pip uninstall -y pip setuptools wheel && \
