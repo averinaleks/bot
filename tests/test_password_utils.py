@@ -15,6 +15,7 @@ from password_utils import (
 
 
 VALID_PASSWORD = "Aa1!" + "a" * (MIN_PASSWORD_LENGTH - 4)
+VALID_PASSWORD_NON_ASCII = "Aa1€" + "a" * (MIN_PASSWORD_LENGTH - 4)
 WEAK_PASSWORDS = [
     "aaaaaaaa",  # no uppercase, digit, special
     "AAAAAAAA",  # no lowercase, digit, special
@@ -46,6 +47,11 @@ def test_hash_password_allows_short_password():
 def test_verify_password_success():
     hashed = hash_password(VALID_PASSWORD)
     assert verify_password(VALID_PASSWORD, hashed)
+
+
+def test_hash_password_accepts_non_ascii_special_char():
+    hashed = hash_password(VALID_PASSWORD_NON_ASCII)
+    assert verify_password(VALID_PASSWORD_NON_ASCII, hashed)
 
 
 def test_hash_password_rejects_long_password():

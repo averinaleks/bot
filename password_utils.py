@@ -2,7 +2,6 @@ import os
 import bcrypt
 import logging
 import re
-import string
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
@@ -40,7 +39,7 @@ def validate_password_complexity(password: str) -> None:
         raise ValueError("Password must contain a lowercase letter")
     if not re.search(r"\d", password):
         raise ValueError("Password must contain a digit")
-    if not any(ch in string.punctuation for ch in password):
+    if not re.search(r"[^\w\s]", password):
         raise ValueError("Password must contain a special character")
 
 

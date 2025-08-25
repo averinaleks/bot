@@ -70,8 +70,14 @@ GPU-зависимости вынесены в отдельный файл `requ
 
 - После обновления зависимостей пакет `optuna-integration[botorch]` больше не используется.
 - Библиотека `catalyst` закреплена на версии `21.4`, так как новые версии не устанавливаются с `pip>=24.1`. Если требуется `catalyst>=22.2`, понизьте `pip` ниже 24.1.
-2. Отредактируйте файл `.env`, указав в нём свои значения. При запуске основные
-    скрипты вызывают `load_dotenv()` из библиотеки `python-dotenv`, поэтому
+2. Установите `python-dotenv` и отредактируйте файл `.env`, указав в нём свои
+    значения:
+
+    ```bash
+    pip install python-dotenv
+    ```
+
+    Скрипты вызывают `load_dotenv()` из этой библиотеки, поэтому
     переменные из файла подхватываются автоматически. При необходимости задайте
     торговую пару через переменную `SYMBOL` (по умолчанию используется
     `BTCUSDT`). Через переменную `HOST` можно задать адрес, на котором
@@ -315,6 +321,24 @@ registered`. These lines appear while each framework loads CUDA plugins and
 tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
+
+## Настройка API ключей
+
+Сервер FastAPI использует переменную окружения `API_KEYS` для проверки запросов.
+Задайте её как список токенов через запятую до запуска приложения:
+
+```bash
+export API_KEYS=key1,key2
+```
+
+Переменную можно также добавить в файл `.env`:
+
+```dotenv
+API_KEYS=key1,key2
+```
+
+Каждый запрос должен передавать заголовок `Authorization: Bearer <token>` с
+одним из перечисленных ключей, иначе сервер вернёт `401`.
 
 ## Lightweight service scripts
 
