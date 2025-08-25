@@ -23,6 +23,7 @@ except ImportError as exc:  # pragma: no cover - dependency required
 
 from pydantic import BaseModel, Field, ValidationError
 
+API_KEYS: set[str] = set()
 TIMEOUT = float(os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30"))
 
 
