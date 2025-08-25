@@ -227,7 +227,7 @@ def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     monkeypatch.setenv("GPT_OSS_TIMEOUT", "0")
     with caplog.at_level(logging.WARNING):
-        _, timeout = _get_api_url_timeout()
+        _, timeout, _, _ = _get_api_url_timeout()
     assert timeout == 5.0
     assert "Non-positive GPT_OSS_TIMEOUT value" in caplog.text
 
@@ -236,7 +236,7 @@ def test_get_api_url_timeout_invalid(monkeypatch, caplog):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     monkeypatch.setenv("GPT_OSS_TIMEOUT", "abc")
     with caplog.at_level(logging.WARNING):
-        _, timeout = _get_api_url_timeout()
+        _, timeout, _, _ = _get_api_url_timeout()
     assert timeout == 5.0
     assert "Invalid GPT_OSS_TIMEOUT value 'abc'; defaulting to 5.0" in caplog.text
 
