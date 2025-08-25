@@ -74,6 +74,13 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     wait=wait_exponential(min=1, max=10),
     reraise=True,
 )
+def _post_with_retry(
+    prompt: str,
+    url: str,
+    timeout: float,
+    hostname: str,
+    allowed_ips: set[str],
+) -> bytes:
     """POST helper that retries on network failures."""
     try:
         current_ips = {
@@ -149,6 +156,9 @@ def query_gpt(prompt: str) -> str:
 
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
     try:
+        content = _post_with_retry(
+            prompt, url, timeout, hostname, allowed_ips
+        )
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -190,6 +200,7 @@ async def query_gpt_async(prompt: str) -> str:
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
+    async def _post() -> bytes:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             async with client.stream("POST", url, json={"prompt": prompt}) as response:
                 response.raise_for_status()
