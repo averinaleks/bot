@@ -36,7 +36,7 @@ class GPTClientResponseError(GPTClientError):
     """Raised when the GPT OSS API returns an unexpected structure."""
 
 
-def _validate_api_url(api_url: str) -> None:
+def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     parsed = urlparse(api_url)
     if not parsed.scheme or not parsed.hostname:
         raise GPTClientError("Invalid GPT_OSS_API URL")
@@ -55,8 +55,10 @@ def _validate_api_url(api_url: str) -> None:
         )
         raise GPTClientError("Invalid GPT_OSS_API host") from exc
 
+    resolved_ips = {info[4][0] for info in addr_info}
+
     if scheme == "http":
-        for resolved_ip in {info[4][0] for info in addr_info}:
+        for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
                 logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
@@ -64,14 +66,37 @@ def _validate_api_url(api_url: str) -> None:
                     "GPT_OSS_API must use HTTPS or be a private address"
                 )
 
+    return parsed.hostname, resolved_ips
+
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10),
     reraise=True,
 )
-def _post_with_retry(url: str, prompt: str, timeout: float) -> bytes:
     """POST helper that retries on network failures."""
+    try:
+        current_ips = {
+            info[4][0]
+            for info in socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
+        }
+    except socket.gaierror as exc:
+        logger.error(
+            "Failed to resolve GPT_OSS_API host %s before request: %s",
+            hostname,
+            exc,
+        )
+        raise GPTClientNetworkError("Failed to resolve GPT_OSS_API host") from exc
+
+    if not current_ips & allowed_ips:
+        logger.error(
+            "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
+            hostname,
+            current_ips,
+            allowed_ips,
+        )
+        raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
+
     with httpx.Client(trust_env=False, timeout=timeout) as client:
         with client.stream("POST", url, json={"prompt": prompt}) as response:
             response.raise_for_status()
@@ -83,13 +108,13 @@ def _post_with_retry(url: str, prompt: str, timeout: float) -> bytes:
             return bytes(content)
 
 
-def _get_api_url_timeout() -> tuple[str, float]:
+def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
         logger.error("Environment variable GPT_OSS_API is not set")
         raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
 
-    _validate_api_url(api_url)
+    hostname, allowed_ips = _validate_api_url(api_url)
 
     timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
     try:
@@ -107,7 +132,7 @@ def _get_api_url_timeout() -> tuple[str, float]:
         timeout = 5.0
 
     url = api_url.rstrip("/") + "/v1/completions"
-    return url, timeout
+    return url, timeout, hostname, allowed_ips
 
 
 def query_gpt(prompt: str) -> str:
@@ -122,9 +147,8 @@ def query_gpt(prompt: str) -> str:
     if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
 
-    url, timeout = _get_api_url_timeout()
+    url, timeout, hostname, allowed_ips = _get_api_url_timeout()
     try:
-        content = _post_with_retry(url, prompt, timeout)
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -159,14 +183,13 @@ async def query_gpt_async(prompt: str) -> str:
     if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
 
-    url, timeout = _get_api_url_timeout()
+    url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
-    async def _post() -> bytes:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             async with client.stream("POST", url, json={"prompt": prompt}) as response:
                 response.raise_for_status()
