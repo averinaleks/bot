@@ -33,8 +33,6 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.2.0
-    # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
 blinker==1.9.0
