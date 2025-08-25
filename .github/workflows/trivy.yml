@@ -82,7 +82,8 @@ jobs:
         run: mkdir -p /mnt/trivy-cache
 
       - name: Cache Trivy vulnerability database
-        uses: actions/cache@v4
+        id: trivy-cache
+        uses: actions/cache/restore@v4
         with:
           path: /mnt/trivy-cache
           key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
@@ -121,6 +122,14 @@ jobs:
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Save Trivy cache
+        if: steps.trivy-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/trivy-cache
+          key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
+
       - name: Cleanup after Trivy scan
         run: |
           docker system prune -af || true
