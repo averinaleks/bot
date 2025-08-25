@@ -322,6 +322,24 @@ tries to register them more than once. They are warnings, not fatal errors, and
 can be safely ignored. Building the image with `Dockerfile.cpu` avoids them
 entirely.
 
+## Настройка API ключей
+
+Сервер FastAPI использует переменную окружения `API_KEYS` для проверки запросов.
+Задайте её как список токенов через запятую до запуска приложения:
+
+```bash
+export API_KEYS=key1,key2
+```
+
+Переменную можно также добавить в файл `.env`:
+
+```dotenv
+API_KEYS=key1,key2
+```
+
+Каждый запрос должен передавать заголовок `Authorization: Bearer <token>` с
+одним из перечисленных ключей, иначе сервер вернёт `401`.
+
 ## Lightweight service scripts
 
 The `services` directory provides minimal versions of the microservices. They

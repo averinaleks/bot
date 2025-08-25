@@ -145,6 +145,10 @@ def get_csrf_config() -> CsrfSettings:
 csrf_protect = CsrfProtect()
 
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
+if not API_KEYS:
+    raise RuntimeError(
+        "API_KEYS environment variable is required. Set API_KEYS to a comma-separated list of tokens."
+    )
 
 ALLOWED_HOSTS = {"127.0.0.1", "::1"}
 host = os.getenv(
@@ -158,14 +162,6 @@ except ValueError:
     sys.exit(1)
 
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
-
-if not API_KEYS:
-    logging.error(
-        "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
-        host,
-        port,
-    )
-    raise RuntimeError("API_KEYS environment variable is required")
 
 
 def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
