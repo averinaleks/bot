@@ -2,7 +2,7 @@ import os
 import logging
 import pytest
 
-os.environ["API_KEYS"] = "testkey"
+os.environ["CSRF_SECRET"] = "testsecret"
 
 pytest.importorskip("transformers")
 
@@ -15,6 +15,8 @@ def make_client(monkeypatch):
         server.model_manager.tokenizer = object()
         server.model_manager.model = object()
     monkeypatch.setattr(server.model_manager, "load_model", dummy_load_model)
+    monkeypatch.setenv("API_KEYS", "testkey")
+    server.API_KEYS.clear()
     return TestClient(server.app)
 
 
