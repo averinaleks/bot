@@ -4,8 +4,6 @@
 #
 #    pip-compile --output-file=requirements.txt --strip-extras requirements-core.in
 #
-# CPU- and GPU-specific dependencies like torch are provided via
-# requirements-cpu.txt and requirements-gpu.txt.
 a2wsgi==1.10.10
     # via -r requirements-core.in
 aiodns==3.5.0
@@ -30,15 +28,11 @@ anyio==4.10.0
     #   httpx
     #   openai
     #   starlette
-async-timeout==5.0.1
-    # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.2.0
-    # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
 blinker==1.9.0
@@ -50,6 +44,7 @@ cachetools==5.5.2
     #   mlflow-tracing
 catalyst==21.5
     # via -r requirements-core.in
+ccxt==4.5.2
     # via -r requirements-core.in
 ccxtpro==1.0.1
     # via -r requirements-core.in
@@ -96,10 +91,6 @@ distro==1.9.0
     # via openai
 docker==7.1.0
     # via mlflow
-exceptiongroup==1.3.0
-    # via
-    #   anyio
-    #   pytest
 farama-notifications==0.0.4
     # via gymnasium
 fastapi==0.116.1
@@ -112,6 +103,7 @@ filelock==3.19.1
     #   ray
     #   torch
     #   transformers
+flask==3.1.2
     # via
     #   -r requirements-core.in
     #   mlflow
@@ -222,6 +214,7 @@ matplotlib==3.10.5
     # via
     #   mlflow
     #   stable-baselines3
+mlflow==3.3.1
     # via -r requirements-core.in
 mlflow-skinny==3.3.1
     # via mlflow
@@ -300,6 +293,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
+openai==1.101.0
     # via -r requirements-core.in
 opentelemetry-api==1.36.0
     # via
@@ -503,10 +497,6 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.21.4
     # via transformers
-tomli==2.2.1
-    # via
-    #   alembic
-    #   pytest
 torch==2.8.0
     # via
     #   catalyst
@@ -530,19 +520,16 @@ triton==3.4.0
     # via torch
 typing-extensions==4.14.1
     # via
-    #   a2wsgi
     #   aiosignal
     #   alembic
     #   anyio
     #   ccxt
-    #   exceptiongroup
     #   fastapi
     #   graphene
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
     #   mlflow-skinny
-    #   multidict
     #   openai
     #   opentelemetry-api
     #   opentelemetry-sdk
@@ -556,7 +543,6 @@ typing-extensions==4.14.1
     #   starlette
     #   torch
     #   typing-inspection
-    #   uvicorn
 typing-inspection==0.4.1
     # via
     #   pydantic
