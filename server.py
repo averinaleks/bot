@@ -29,6 +29,40 @@ except ImportError as exc:  # pragma: no cover - dependency required
 
 from pydantic import BaseModel, Field, ValidationError
 
+TIMEOUT = float(os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30"))
+
+
+def _configure_timeout(timeout: float) -> None:
+    """Ensure all HTTP clients use a default timeout."""
+    try:  # requests
+        import requests
+        from requests.sessions import Session
+
+        original = Session.request
+
+        def request(self, method, url, **kwargs):
+            kwargs.setdefault("timeout", timeout)
+            return original(self, method, url, **kwargs)
+
+        Session.request = request
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.debug("requests timeout setup failed: %s", exc)
+
+    try:  # httpx
+        import httpx
+
+        orig_init = httpx.Client.__init__
+
+        def init(self, *args, **kwargs):  # type: ignore[override]
+            kwargs.setdefault("timeout", timeout)
+            orig_init(self, *args, **kwargs)
+
+        httpx.Client.__init__ = init  # type: ignore[assignment]
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logging.debug("httpx timeout setup failed: %s", exc)
+
+
+_configure_timeout(TIMEOUT)
 
 class ModelManager:
     """Manage loading and inference model state."""
@@ -64,23 +98,59 @@ class ModelManager:
 
         model_name = os.getenv("GPT_MODEL", "openai/gpt-oss-20b")
         fallback_model = os.getenv("GPT_MODEL_FALLBACK", "sshleifer/tiny-gpt2")
+        model_revision = os.getenv(
+            "GPT_MODEL_REVISION", "10e9d713f8e4a9281c59c40be6c58537480635ea"
+        )
+        fallback_revision = os.getenv(
+            "GPT_MODEL_FALLBACK_REVISION", "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
+        )
+        cache_dir = os.getenv("MODEL_CACHE_DIR")
 
         try:
             tokenizer_local = AutoTokenizer.from_pretrained(
                 model_name,
-                revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+                revision=model_revision,
                 trust_remote_code=False,
+                cache_dir=cache_dir,
             )
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    revision="10e9d713f8e4a9281c59c40be6c58537480635ea",
+                    revision=model_revision,
                     trust_remote_code=False,
-                )
-                .to(device_local)
+                    cache_dir=cache_dir,
+                ).to(device_local)
             )
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
+            try:
+                tokenizer_local = AutoTokenizer.from_pretrained(
+                    model_name,
+                    revision=model_revision,
+                    trust_remote_code=False,
+                    cache_dir=cache_dir,
+                    local_files_only=True,
+                )
+                model_local = (
+                    AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        revision=model_revision,
+                        trust_remote_code=False,
+                        cache_dir=cache_dir,
+                        local_files_only=True,
+                    ).to(device_local)
+                )
+            except (OSError, ValueError) as exc2:
+                logging.exception(
+                    "Failed to load model '%s' from local cache: %s", model_name, exc2
+                )
+            else:
+                self.tokenizer = tokenizer_local
+                self.model = model_local
+                self.device = device_local
+                self.torch = torch_module
+                logging.info("Loaded model '%s' from local cache", model_name)
+                return "primary"
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
@@ -91,22 +161,55 @@ class ModelManager:
         try:
             tokenizer_local = AutoTokenizer.from_pretrained(
                 fallback_model,
-                revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+                revision=fallback_revision,
                 trust_remote_code=False,
+                cache_dir=cache_dir,
             )
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     fallback_model,
-                    revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+                    revision=fallback_revision,
                     trust_remote_code=False,
-                )
-                .to(device_local)
+                    cache_dir=cache_dir,
+                ).to(device_local)
             )
         except (OSError, ValueError) as exc:
             logging.exception(
                 "Failed to load fallback model '%s': %s", fallback_model, exc
             )
-            raise RuntimeError("Failed to load both primary and fallback models") from exc
+            try:
+                tokenizer_local = AutoTokenizer.from_pretrained(
+                    fallback_model,
+                    revision=fallback_revision,
+                    trust_remote_code=False,
+                    cache_dir=cache_dir,
+                    local_files_only=True,
+                )
+                model_local = (
+                    AutoModelForCausalLM.from_pretrained(
+                        fallback_model,
+                        revision=fallback_revision,
+                        trust_remote_code=False,
+                        cache_dir=cache_dir,
+                        local_files_only=True,
+                    ).to(device_local)
+                )
+            except (OSError, ValueError) as exc2:
+                logging.exception(
+                    "Failed to load fallback model '%s' from local cache: %s",
+                    fallback_model,
+                    exc2,
+                )
+                raise RuntimeError("Failed to load both primary and fallback models") from exc2
+            else:
+                self.tokenizer = tokenizer_local
+                self.model = model_local
+                self.device = device_local
+                self.torch = torch_module
+                logging.info(
+                    "Loaded fallback model '%s' from local cache", fallback_model
+                )
+                return "fallback"
         else:
             self.tokenizer = tokenizer_local
             self.model = model_local
