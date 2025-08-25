@@ -59,12 +59,12 @@ def send_telegram(msg: str) -> None:
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
         try:
-            httpx.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                data={"chat_id": chat_id, "text": msg[:4000]},
-                timeout=15,
-                trust_env=False,
-            )
+            with httpx.Client(timeout=15, trust_env=False) as client:
+                response = client.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    data={"chat_id": chat_id, "text": msg[:4000]},
+                )
+                response.close()
         except httpx.HTTPError as err:
             logger.warning("⚠️ Failed to send Telegram message: %s", err)
 
