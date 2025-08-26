@@ -8,19 +8,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    linux-libc-dev=6.8.0-78.78 \
-    libgcrypt20=1.10.3-2build1 \
-    libpam0g=1.5.3-5ubuntu5.4 \
-    libssl3t64=3.0.13-0ubuntu3.5 \
-    python3.12-minimal=3.12.3-1ubuntu0.8 \
-    zlib1g-dev=1:1.3.dfsg-3.1ubuntu2.1 \
-    build-essential=12.10ubuntu1 \
-    python3=3.12.3-0ubuntu2 \
-    python3-dev=3.12.3-0ubuntu2 \
-    python3-venv=3.12.3-0ubuntu2 \
-    python3-pip=24.0+dfsg-1ubuntu1 \
-    && apt-get install -y --only-upgrade openssl libssl3t64 \
     && python3 -m venv /venv \
     && /venv/bin/python -m pip install --no-cache-dir --upgrade --break-system-packages pip==25.2 \
     && find / -xdev -type l -lname "*..*" -print \
@@ -45,10 +32,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Устанавливаем только необходимые пакеты выполнения
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    libssl3t64=3.0.13-0ubuntu3.5 \
-    python3.12-minimal=3.12.3-1ubuntu0.8 \
-    && apt-get install -y --only-upgrade openssl libssl3t64 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
