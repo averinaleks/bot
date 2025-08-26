@@ -1,0 +1,55 @@
+name: GPT-OSS GPU Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/llm-review'))
+    runs-on: [self-hosted, linux, x64, gpu]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Start vLLM container
+        run: |
+          docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+      - name: Generate diff
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER | jq -r .base.sha)
+          git fetch origin $base_sha
+          git diff $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
+          head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
+      - name: LLM review
+        run: |
+          curl -s -X POST http://127.0.0.1:8000/v1/completions \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" \
+            | jq -r '.choices[0].text' > review.md
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review.md', 'utf8');
+            await github.rest.issues.createComment({
+              ...context.issue,
+              body: review,
+            });
+      - name: Cleanup
+        if: always()
+        run: docker rm -f gptoss || true
