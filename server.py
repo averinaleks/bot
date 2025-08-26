@@ -18,6 +18,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
+    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."

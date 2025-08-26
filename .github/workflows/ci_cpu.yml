@@ -41,9 +41,9 @@ jobs:
           HTTPServer(('127.0.0.1', 8009), Handler).serve_forever()
           PY
           sleep 1
-      - name: Run flake8
-        run: flake8 bot
-      - name: Run mypy
-        run: mypy bot
+        - name: Run mypy
+          run: mypy .
+        - name: Run flake8
+          run: flake8 bot
       - name: Run tests
         run: pytest -q --cov=bot --cov-report=term-missing
