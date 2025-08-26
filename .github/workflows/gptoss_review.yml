@@ -35,14 +35,41 @@ jobs:
           git fetch origin $base_sha
           git diff $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
           head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
+          # crude token count (words) to detect overly large diffs
+          token_limit=6000
+          token_count=$(wc -w < diff.patch)
+          echo "Token count: $token_count"
+          if [ "$token_count" -gt "$token_limit" ]; then
+            echo "Diff too large, regenerating with 20 lines of context"
+            git diff -U20 $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
+            head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
+            token_count=$(wc -w < diff.patch)
+            echo "Token count after context reduction: $token_count"
+          fi
+          if [ "$token_count" -gt "$token_limit" ]; then
+            echo "Diff still large, splitting into chunks"
+            split -b 100000 diff.patch diff_part_
+          fi
       - name: LLM review
         id: llm-review
         run: |
-          response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
-          review=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
-          printf "%s" "$review" > review.md
+          if ls diff_part_* 1> /dev/null 2>&1; then
+            review=""
+            for part in diff_part_*; do
+              response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
+                -H "Content-Type: application/json" \
+                -d "$(jq -n --arg prompt "$(cat $part)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
+              review_part=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
+              review="$review\n\n$review_part"
+            done
+            printf "%s" "$review" > review.md
+          else
+            response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
+            review=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
+            printf "%s" "$review" > review.md
+          fi
           if [ ! -s review.md ]; then
             echo "LLM response was empty" > review.md
             echo "has_content=false" >> "$GITHUB_OUTPUT"
