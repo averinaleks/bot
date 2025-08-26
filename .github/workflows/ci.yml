@@ -31,19 +31,15 @@ jobs:
         run: >
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-        timeout-minutes: 10
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo npm cache clean --force || true
+          sudo rm -rf /var/lib/docker/*
+        timeout-minutes: 4
         continue-on-error: true
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          # avoid removing large packages such as google-cloud-cli
-          large-packages: false
-          swap-storage: true
-      - name: Clean Docker dir
-        run: sudo rm -rf /var/lib/docker/*
       - name: Prepare build volume
         run: |
           if [ -e /dev/buildvg/buildlv ]; then
@@ -123,19 +119,15 @@ jobs:
         run: >
           git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-        timeout-minutes: 10
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo npm cache clean --force || true
+          sudo rm -rf /var/lib/docker/*
+        timeout-minutes: 4
         continue-on-error: true
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          # avoid removing large packages such as google-cloud-cli
-          large-packages: false
-          swap-storage: true
-      - name: Clean Docker dir
-        run: sudo rm -rf /var/lib/docker/*
       - name: Prepare build volume
         run: |
           if [ -e /dev/buildvg/buildlv ]; then
