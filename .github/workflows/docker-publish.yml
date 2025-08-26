@@ -185,7 +185,7 @@ jobs:
       - name: Start data handler service
         run: |
           scripts/run_data_handler_service.sh --bind 0.0.0.0:8000 &
-          echo $! > service.pid
+          echo $! > "$GITHUB_WORKSPACE/service.pid"
           sleep 5
         working-directory: bot
       - name: Health check
@@ -194,4 +194,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          kill $(cat service.pid) || true
+          kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
+        working-directory: bot
