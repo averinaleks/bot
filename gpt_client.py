@@ -4,6 +4,7 @@ import json
 import socket
 from urllib.parse import urlparse
 from ipaddress import ip_address
+import asyncio
 
 # NOTE: httpx is imported for exception types only.
 import httpx
@@ -72,19 +73,14 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     return parsed.hostname, resolved_ips
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(min=1, max=10),
-    reraise=True,
-)
-def _post_with_retry(
+async def _fetch_response(
+    client: httpx.Client | httpx.AsyncClient,
     prompt: str,
     url: str,
-    timeout: float,
     hostname: str,
     allowed_ips: set[str],
 ) -> bytes:
-    """POST helper that retries on network failures."""
+    """Resolve hostname, verify IP and return response bytes."""
     try:
         current_ips = {
             info[4][0]
@@ -107,7 +103,19 @@ def _post_with_retry(
         )
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
 
-    with get_httpx_client(timeout=timeout, trust_env=False) as client:
+    if isinstance(client, httpx.AsyncClient):
+        async with client.stream("POST", url, json={"prompt": prompt}) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "")
+            if not content_type.startswith("application/json"):
+                raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
+            content = bytearray()
+            async for chunk in response.aiter_bytes():
+                content.extend(chunk)
+                if len(content) > MAX_RESPONSE_BYTES:
+                    raise GPTClientError("Response exceeds maximum length")
+            return bytes(content)
+    else:
         with client.stream("POST", url, json={"prompt": prompt}) as response:
             response.raise_for_status()
             content_type = response.headers.get("Content-Type", "")
@@ -161,10 +169,20 @@ def query_gpt(prompt: str) -> str:
         raise GPTClientError("Prompt exceeds maximum length")
 
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        reraise=True,
+    )
+    def _post() -> bytes:
+        with get_httpx_client(timeout=timeout, trust_env=False) as client:
+            return asyncio.run(
+                _fetch_response(client, prompt, url, hostname, allowed_ips)
+            )
+
     try:
-        content = _post_with_retry(
-            prompt, url, timeout, hostname, allowed_ips
-        )
+        content = _post()
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -207,46 +225,8 @@ async def query_gpt_async(prompt: str) -> str:
         reraise=True,
     )
     async def _post() -> bytes:
-        try:
-            current_ips = {
-                info[4][0]
-                for info in socket.getaddrinfo(
-                    hostname, None, family=socket.AF_UNSPEC
-                )
-            }
-        except socket.gaierror as exc:
-            logger.error(
-                "Failed to resolve GPT_OSS_API host %s before request: %s",
-                hostname,
-                exc,
-            )
-            raise GPTClientNetworkError(
-                "Failed to resolve GPT_OSS_API host"
-            ) from exc
-
-        if not current_ips & allowed_ips:
-            logger.error(
-                "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
-                hostname,
-                current_ips,
-                allowed_ips,
-            )
-            raise GPTClientNetworkError(
-                "GPT_OSS_API host resolution mismatch"
-            )
-
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
-            async with client.stream("POST", url, json={"prompt": prompt}) as response:
-                response.raise_for_status()
-                content_type = response.headers.get("Content-Type", "")
-                if not content_type.startswith("application/json"):
-                    raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
-                content = bytearray()
-                async for chunk in response.aiter_bytes():
-                    content.extend(chunk)
-                    if len(content) > MAX_RESPONSE_BYTES:
-                        raise GPTClientError("Response exceeds maximum length")
-                return bytes(content)
+            return await _fetch_response(client, prompt, url, hostname, allowed_ips)
 
     try:
         content = await _post()
