@@ -5,11 +5,12 @@ import socket
 from urllib.parse import urlparse
 from ipaddress import ip_address
 import asyncio
+import threading
+from typing import Any, Coroutine
 
 # NOTE: httpx is imported for exception types only.
 import httpx
 
-from http_client import get_httpx_client
 import sys
 
 if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
@@ -170,16 +171,40 @@ def query_gpt(prompt: str) -> str:
 
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
+    def _run_coro_in_thread(coro: Coroutine[Any, Any, bytes]) -> bytes:
+        result: dict[str, Any] = {}
+
+        def runner() -> None:
+            try:
+                result["value"] = asyncio.run(coro)
+            except Exception as exc:  # pragma: no cover - unexpected
+                result["error"] = exc
+
+        thread = threading.Thread(target=runner)
+        thread.start()
+        thread.join()
+        if "error" in result:
+            raise result["error"]
+        return result["value"]
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
     def _post() -> bytes:
-        with get_httpx_client(timeout=timeout, trust_env=False) as client:
-            return asyncio.run(
-                _fetch_response(client, prompt, url, hostname, allowed_ips)
-            )
+        async def _async_post() -> bytes:
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                return await _fetch_response(
+                    client, prompt, url, hostname, allowed_ips
+                )
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(_async_post())
+        else:
+            return _run_coro_in_thread(_async_post())
 
     try:
         content = _post()

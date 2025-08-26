@@ -53,7 +53,7 @@ class DummyStream:
 
 
 QUERIES = [
-    (query_gpt, httpx.Client),
+    (query_gpt, httpx.AsyncClient),
     (query_gpt_async, httpx.AsyncClient),
 ]
 
@@ -225,9 +225,9 @@ async def test_retry_success(monkeypatch, func, client_cls):
         return DummyStream(content=content)
 
     monkeypatch.setattr(client_cls, "stream", fake_stream)
-    sleep_path = "asyncio.sleep" if client_cls is httpx.AsyncClient else "time.sleep"
-    if client_cls is httpx.AsyncClient:
-        async def no_sleep(*args, **kwargs):
+    sleep_path = "asyncio.sleep" if asyncio.iscoroutinefunction(func) else "time.sleep"
+    if asyncio.iscoroutinefunction(func):
+        async def no_sleep(*args, **kwargs):  # pragma: no cover - no sleep
             pass
         monkeypatch.setattr(sleep_path, no_sleep)
     else:
@@ -247,9 +247,9 @@ async def test_retry_failure(monkeypatch, func, client_cls):
         raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(client_cls, "stream", fake_stream)
-    sleep_path = "asyncio.sleep" if client_cls is httpx.AsyncClient else "time.sleep"
-    if client_cls is httpx.AsyncClient:
-        async def no_sleep(*args, **kwargs):
+    sleep_path = "asyncio.sleep" if asyncio.iscoroutinefunction(func) else "time.sleep"
+    if asyncio.iscoroutinefunction(func):
+        async def no_sleep(*args, **kwargs):  # pragma: no cover - no sleep
             pass
         monkeypatch.setattr(sleep_path, no_sleep)
     else:
@@ -307,7 +307,7 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
         content = json.dumps({"choices": [{"text": "ok"}]}).encode()
         return DummyStream(content=content)
 
-    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     assert query_gpt("hi") == "ok"
     assert called["value"]
 
@@ -316,6 +316,18 @@ def test_query_gpt_dns_error(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
     with pytest.raises(GPTClientError):
         query_gpt("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_context(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    assert query_gpt("hi") == "ok"
 
 
 def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
