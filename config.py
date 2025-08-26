@@ -16,21 +16,34 @@ from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_t
 
 logger = logging.getLogger(__name__)
 
-# Load defaults from config.json
+# Load defaults from config.json lazily
 CONFIG_PATH = os.getenv(
     "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
 )
-DEFAULTS: Dict[str, Any] = {}
-try:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        DEFAULTS = json.load(f)
-except (OSError, json.JSONDecodeError) as exc:
-    logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
-    raise SystemExit from exc
+# Cached defaults; populated on first load
+DEFAULTS: Optional[Dict[str, Any]] = None
+
+
+class ConfigLoadError(Exception):
+    """Raised when the default configuration cannot be loaded."""
+
+
+def load_defaults() -> Dict[str, Any]:
+    """Load default configuration from CONFIG_PATH on first access."""
+    global DEFAULTS
+    if DEFAULTS is None:
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                DEFAULTS = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
+            raise ConfigLoadError from exc
+    return DEFAULTS
 
 
 def _get_default(key: str, fallback: Any) -> Any:
-    return DEFAULTS.get(key, fallback)
+    defaults = load_defaults()
+    return defaults.get(key, fallback)
 
 
 @dataclass
@@ -68,7 +81,9 @@ class BotConfig:
     risk_vol_min: float = _get_default("risk_vol_min", 0.5)
     risk_vol_max: float = _get_default("risk_vol_max", 2.0)
     max_positions: int = _get_default("max_positions", 5)
-    top_signals: int = _get_default("top_signals", DEFAULTS.get("max_positions", 5))
+    top_signals: int = _get_default(
+        "top_signals", _get_default("max_positions", 5)
+    )
     check_interval: float = _get_default("check_interval", 60.0)
     data_cleanup_interval: int = _get_default("data_cleanup_interval", 3600)
     base_probability_threshold: float = _get_default("base_probability_threshold", 0.6)
