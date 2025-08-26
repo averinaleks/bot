@@ -204,6 +204,34 @@ async def query_gpt_async(prompt: str) -> str:
         reraise=True,
     )
     async def _post() -> bytes:
+        try:
+            current_ips = {
+                info[4][0]
+                for info in socket.getaddrinfo(
+                    hostname, None, family=socket.AF_UNSPEC
+                )
+            }
+        except socket.gaierror as exc:
+            logger.error(
+                "Failed to resolve GPT_OSS_API host %s before request: %s",
+                hostname,
+                exc,
+            )
+            raise GPTClientNetworkError(
+                "Failed to resolve GPT_OSS_API host"
+            ) from exc
+
+        if not current_ips & allowed_ips:
+            logger.error(
+                "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
+                hostname,
+                current_ips,
+                allowed_ips,
+            )
+            raise GPTClientNetworkError(
+                "GPT_OSS_API host resolution mismatch"
+            )
+
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             async with client.stream("POST", url, json={"prompt": prompt}) as response:
                 response.raise_for_status()
