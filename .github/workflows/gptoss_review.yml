@@ -60,6 +60,7 @@ jobs:
       - name: LLM review
         id: llm-review
         run: |
+          if [ -z "$review" ]; then
             echo "has_content=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
