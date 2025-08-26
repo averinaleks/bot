@@ -146,10 +146,11 @@ def validate_host() -> str:
         if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
             raise ValueError(f"Некорректный IP: {host}")
         logger.warning("HOST '%s' не локальный хост", host)
-        return host
+        raise ValueError(f"HOST '{host}' не локальный хост")
 
     if host != "127.0.0.1":
         logger.warning("HOST '%s' не локальный хост", host)
+        raise ValueError(f"HOST '{host}' не локальный хост")
     return host
 
 
