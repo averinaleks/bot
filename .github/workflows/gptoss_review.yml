@@ -36,12 +36,21 @@ jobs:
           git diff $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
           head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
       - name: LLM review
+        id: llm-review
         run: |
-          curl -s -X POST http://127.0.0.1:8000/v1/completions \
+          response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" \
-            | jq -r '.choices[0].text' > review.md
+            -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
+          review=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
+          printf "%s" "$review" > review.md
+          if [ ! -s review.md ]; then
+            echo "LLM response was empty" > review.md
+            echo "has_content=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "has_content=true" >> "$GITHUB_OUTPUT"
       - name: Comment PR
+        if: always() && steps.llm-review.outputs.has_content == 'true'
         uses: actions/github-script@v7
         with:
           script: |
