@@ -33,14 +33,17 @@ else:
 
 def validate_password_complexity(password: str) -> None:
     """Проверяет наличие цифр, верхнего/нижнего регистра и спецсимволов."""
+    violations = []
     if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must contain an uppercase letter")
+        violations.append("uppercase")
     if not re.search(r"[a-z]", password):
-        raise ValueError("Password must contain a lowercase letter")
+        violations.append("lowercase")
     if not re.search(r"\d", password):
-        raise ValueError("Password must contain a digit")
+        violations.append("digit")
     if not re.search(r"[^\w\s]", password):
-        raise ValueError("Password must contain a special character")
+        violations.append("special")
+    if violations:
+        raise ValueError("Пароль не соответствует требованиям сложности")
 
 
 def validate_password_length(password: str) -> None:
