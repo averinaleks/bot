@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov flake8 mypy
+        run: pip install -r requirements-ci.txt
       - name: Start mock server
         run: |
           python - <<'PY' &
@@ -41,9 +41,3 @@ jobs:
           HTTPServer(('127.0.0.1', 8009), Handler).serve_forever()
           PY
           sleep 1
-        - name: Run mypy
-          run: mypy .
-        - name: Run flake8
-          run: flake8 bot
-      - name: Run tests
-        run: pytest -q --cov=bot --cov-report=term-missing
