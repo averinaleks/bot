@@ -58,10 +58,6 @@ def configure_logging() -> None:
     )
 
 
-# Инициализировать логирование при импорте модуля
-configure_logging()
-
-
 # Hide Numba performance warnings
 try:
     from numba import jit, prange, NumbaPerformanceWarning  # type: ignore

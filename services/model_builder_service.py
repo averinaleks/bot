@@ -119,7 +119,10 @@ def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':
+    from bot.utils import configure_logging
+
     load_dotenv()
+    configure_logging()
     host = validate_host()
     port = safe_int(os.getenv("PORT", "8000"))
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)

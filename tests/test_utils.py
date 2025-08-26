@@ -79,6 +79,10 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
 
     utils_mod = importlib.import_module("bot.utils")
     captured = capsys.readouterr()
+    assert "Logging initialized" not in captured.err
+
+    utils_mod.configure_logging()
+    captured = capsys.readouterr()
     assert captured.err.count("Logging initialized") == 1
 
     utils_mod.logger.info("first")
