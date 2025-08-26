@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 try:  # pragma: no cover - optional dependency
     from numba import njit
-except Exception:  # pragma: no cover - fallback if numba unavailable
+except ImportError:  # pragma: no cover - fallback if numba unavailable
     def njit(*args, **kwargs):
         def decorator(func):
             return func
