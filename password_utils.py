@@ -9,26 +9,30 @@ DEFAULT_BCRYPT_ROUNDS = 12
 logger = logging.getLogger(__name__)
 
 
-_bcrypt_rounds_env = os.getenv("BCRYPT_ROUNDS")
-if _bcrypt_rounds_env is not None:
-    try:
-        _rounds = int(_bcrypt_rounds_env)
-        if 4 <= _rounds <= 31:
-            BCRYPT_ROUNDS = _rounds
-        else:
+def get_bcrypt_rounds() -> int:
+    """Возвращает число раундов bcrypt из переменной окружения.
+
+    Допустимый диапазон значений: от 4 до 31. При недопустимом значении или
+    отсутствии переменной используется ``DEFAULT_BCRYPT_ROUNDS`` и
+    выводится предупреждение.
+    """
+
+    env_value = os.getenv("BCRYPT_ROUNDS")
+    if env_value is not None:
+        try:
+            rounds = int(env_value)
+            if 4 <= rounds <= 31:
+                return rounds
             logger.warning(
                 "BCRYPT_ROUNDS must be between 4 and 31; using default %d",
                 DEFAULT_BCRYPT_ROUNDS,
             )
-            BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
-    except ValueError:
-        logger.warning(
-            "BCRYPT_ROUNDS is not an integer; using default %d",
-            DEFAULT_BCRYPT_ROUNDS,
-        )
-        BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
-else:
-    BCRYPT_ROUNDS = DEFAULT_BCRYPT_ROUNDS
+        except ValueError:
+            logger.warning(
+                "BCRYPT_ROUNDS is not an integer; using default %d",
+                DEFAULT_BCRYPT_ROUNDS,
+            )
+    return DEFAULT_BCRYPT_ROUNDS
 
 
 def validate_password_complexity(password: str) -> None:
@@ -58,7 +62,7 @@ def hash_password(password: str) -> str:
     """Хэширует пароль, используя bcrypt."""
     validate_password_length(password)
     validate_password_complexity(password)
-    rounds = BCRYPT_ROUNDS
+    rounds = get_bcrypt_rounds()
     return bcrypt.hashpw(
         password.encode(), bcrypt.gensalt(rounds=rounds)
     ).decode()
