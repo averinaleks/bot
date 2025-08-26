@@ -133,4 +133,4 @@ jobs:
       - name: Cleanup after Trivy scan
         run: |
           docker system prune -af || true
-          sudo rm -rf /tmp/* /mnt/trivy-* || true
+          sudo rm -rf /tmp/* /mnt/trivy-tmp || true
