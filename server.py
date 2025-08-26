@@ -8,15 +8,18 @@ from typing import List, Mapping
 from contextlib import asynccontextmanager
 
 try:
-    import dotenv  # type: ignore
+    from dotenv import load_dotenv
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "python-dotenv is required. Install it with 'pip install python-dotenv'."
     ) from exc
 
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
-    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
+    from fastapi_csrf_protect import CsrfProtect
+    from fastapi_csrf_protect.exceptions import CsrfProtectError
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
