@@ -14,7 +14,7 @@ def _sanitize_symbol(symbol: str) -> str:
 
     Import is done lazily to avoid circular dependencies with ``bot.utils``.
     """
-    from bot.utils import sanitize_symbol  # noqa: WPS433 (import inside function)
+    from .utils import sanitize_symbol  # noqa: WPS433 (import inside function)
 
     return sanitize_symbol(symbol)
 
