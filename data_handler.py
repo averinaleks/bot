@@ -2913,6 +2913,13 @@ def clusters(symbol: str):
     return jsonify({"clusters": value})
 
 
+@api_app.route("/health")
+def health():
+    """Basic health check endpoint."""
+
+    return jsonify({"status": "ok"})
+
+
 @api_app.route("/ping")
 def ping():
     return jsonify({"status": "ok"})
