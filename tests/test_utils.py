@@ -98,6 +98,25 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
     assert captured.err.count("second") == 1
 
 
+def test_configure_logging_invalid_level(monkeypatch, tmp_path, caplog):
+    import logging
+
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("LOG_LEVEL", "NOPE")
+
+    logger = logging.getLogger("TradingBot")
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
+    with caplog.at_level(logging.WARNING):
+        utils.configure_logging()
+
+    assert "LOG_LEVEL 'NOPE' недопустим, используется INFO" in caplog.text
+    assert logger.level == logging.INFO
+
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
 def test_jit_stub_preserves_metadata(monkeypatch):
     if not hasattr(utils, "_numba_missing"):
         pytest.skip("numba is installed")
