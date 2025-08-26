@@ -16,7 +16,12 @@ except ImportError as exc:  # pragma: no cover - dependency required
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
-    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
+    import fastapi_csrf_protect  # type: ignore
+
+    CsrfProtect = fastapi_csrf_protect.CsrfProtect  # type: ignore
+    CsrfProtectError = getattr(
+        fastapi_csrf_protect, "CsrfProtectError", Exception
+    )  # type: ignore
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
@@ -100,6 +105,10 @@ class ModelManager:
         fallback_revision = os.getenv(
             "GPT_MODEL_FALLBACK_REVISION", "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
         )
+        if not re.fullmatch(r"[0-9a-f]{40}", model_revision):
+            raise ValueError(
+                "GPT_MODEL_REVISION must be a 40-character SHA commit"
+            )
         if not re.fullmatch(r"[0-9a-f]{40}", fallback_revision):
             raise ValueError(
                 "GPT_MODEL_FALLBACK_REVISION must be a 40-character SHA commit"
@@ -112,14 +121,14 @@ class ModelManager:
                 revision=model_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )
+            )  # nosec: revision pinned to specific commit
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     model_name,
                     revision=model_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
-                ).to(device_local)
+                ).to(device_local)  # nosec: revision pinned to specific commit
             )
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
@@ -130,7 +139,7 @@ class ModelManager:
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )
+                )  # nosec: revision pinned to specific commit
                 model_local = (
                     AutoModelForCausalLM.from_pretrained(
                         model_name,
@@ -138,7 +147,7 @@ class ModelManager:
                         trust_remote_code=False,
                         cache_dir=cache_dir,
                         local_files_only=True,
-                    ).to(device_local)
+                    ).to(device_local)  # nosec: revision pinned to specific commit
                 )
             except (OSError, ValueError) as exc2:
                 logging.exception(
