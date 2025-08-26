@@ -5,7 +5,10 @@ import socket
 from urllib.parse import urlparse
 from ipaddress import ip_address
 
+# NOTE: httpx is imported for exception types only.
 import httpx
+
+from http_client import get_httpx_client
 import sys
 
 if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
@@ -104,7 +107,7 @@ def _post_with_retry(
         )
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
 
-    with httpx.Client(trust_env=False, timeout=timeout) as client:
+    with get_httpx_client(timeout=timeout, trust_env=False) as client:
         with client.stream("POST", url, json={"prompt": prompt}) as response:
             response.raise_for_status()
             content = bytearray()

@@ -27,40 +27,6 @@ except ImportError as exc:  # pragma: no cover - dependency required
 from pydantic import BaseModel, Field, ValidationError
 
 API_KEYS: set[str] = set()
-TIMEOUT = float(os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30"))
-
-
-def _configure_timeout(timeout: float) -> None:
-    """Ensure all HTTP clients use a default timeout."""
-    try:  # requests
-        import requests
-        from requests.sessions import Session
-
-        original = Session.request
-
-        def request(self, method, url, **kwargs):
-            kwargs.setdefault("timeout", timeout)
-            return original(self, method, url, **kwargs)
-
-        Session.request = request
-    except Exception as exc:  # pragma: no cover - best effort
-        logging.debug("requests timeout setup failed: %s", exc)
-
-    try:  # httpx
-        import httpx
-
-        orig_init = httpx.Client.__init__
-
-        def init(self, *args, **kwargs):  # type: ignore[override]
-            kwargs.setdefault("timeout", timeout)
-            orig_init(self, *args, **kwargs)
-
-        httpx.Client.__init__ = init  # type: ignore[assignment]
-    except Exception as exc:  # pragma: no cover - optional dependency
-        logging.debug("httpx timeout setup failed: %s", exc)
-
-
-_configure_timeout(TIMEOUT)
 
 class ModelManager:
     """Manage loading and inference model state."""
