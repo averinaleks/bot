@@ -26,8 +26,9 @@ from bot.gpt_client import (
 
 
 class DummyStream:
-    def __init__(self, content=b"content"):
+    def __init__(self, content=b"content", headers=None):
         self.content = content
+        self.headers = headers or {"Content-Type": "application/json"}
 
     def raise_for_status(self):
         pass
@@ -43,8 +44,9 @@ class DummyStream:
 
 
 class DummyAStream:
-    def __init__(self, content=b"content"):
+    def __init__(self, content=b"content", headers=None):
         self.content = content
+        self.headers = headers or {"Content-Type": "application/json"}
 
     def raise_for_status(self):
         pass
@@ -76,6 +78,18 @@ def test_query_gpt_non_json(monkeypatch):
 
     monkeypatch.setattr(httpx.Client, "stream", fake_stream)
     with pytest.raises(GPTClientJSONError):
+        query_gpt("hi")
+
+
+def test_query_gpt_bad_content_type(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content, headers={"Content-Type": "text/plain"})
+
+    monkeypatch.setattr(httpx.Client, "stream", fake_stream)
+    with pytest.raises(GPTClientResponseError):
         query_gpt("hi")
 
 
@@ -308,6 +322,19 @@ async def test_query_gpt_async_non_json(monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with pytest.raises(GPTClientJSONError):
+        await query_gpt_async("hi")
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_async_bad_content_type(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyAStream(content=content, headers={"Content-Type": "text/plain"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    with pytest.raises(GPTClientResponseError):
         await query_gpt_async("hi")
 
 
