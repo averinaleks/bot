@@ -110,6 +110,9 @@ def _post_with_retry(
     with get_httpx_client(timeout=timeout, trust_env=False) as client:
         with client.stream("POST", url, json={"prompt": prompt}) as response:
             response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "")
+            if not content_type.startswith("application/json"):
+                raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
             content = bytearray()
             for chunk in response.iter_bytes():
                 content.extend(chunk)
@@ -207,6 +210,9 @@ async def query_gpt_async(prompt: str) -> str:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             async with client.stream("POST", url, json={"prompt": prompt}) as response:
                 response.raise_for_status()
+                content_type = response.headers.get("Content-Type", "")
+                if not content_type.startswith("application/json"):
+                    raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
                 content = bytearray()
                 async for chunk in response.aiter_bytes():
                     content.extend(chunk)
