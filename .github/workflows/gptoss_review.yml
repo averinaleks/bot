@@ -26,7 +26,14 @@ jobs:
       - name: Start vLLM container
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+      - name: Wait for LLM container
+        run: |
+          for i in {1..30}; do
+            curl -sf http://127.0.0.1:8000/v1/models && break
+            sleep 1
+          done
       - name: Generate diff
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
