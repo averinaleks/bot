@@ -84,7 +84,7 @@ def test_hash_password_generates_unique_hashes():
 
 @pytest.mark.parametrize("weak_password", WEAK_PASSWORDS)
 def test_hash_password_rejects_weak_passwords(weak_password):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Пароль не соответствует требованиям сложности"):
         hash_password(weak_password)
 
 
