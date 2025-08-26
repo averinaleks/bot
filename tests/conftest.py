@@ -198,6 +198,7 @@ def _stub_modules():
 
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *a, **k: None
+    dotenv_mod.dotenv_values = lambda *a, **k: {}
     sys.modules.setdefault("dotenv", dotenv_mod)
     sys.modules.setdefault("dotenv.main", dotenv_mod)
 
