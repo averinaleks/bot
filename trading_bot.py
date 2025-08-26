@@ -21,9 +21,6 @@ from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
 from bot.utils import logger, suppress_tf_logs
 
-load_dotenv()
-suppress_tf_logs()
-
 CFG = BotConfig()
 
 GPT_ADVICE: dict[str, float | str | None] = {
@@ -840,6 +837,8 @@ async def main_async() -> None:
 
 
 def main() -> None:
+    load_dotenv()
+    suppress_tf_logs()
     asyncio.run(main_async())
 
 
