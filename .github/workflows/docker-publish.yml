@@ -167,3 +167,35 @@ jobs:
           docker buildx prune -af || true
           docker system prune -af || true
           rm -rf /mnt/.buildx-cache* || true
+
+  healthcheck:
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
+      DOCKERHUB_TOKEN: ${{ secrets.BOT }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          path: bot
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+      - name: Run container
+        run: |
+          docker run -d -p 8000:8000 --name bot-test ${{ env.DOCKERHUB_USERNAME }}/myapp:latest
+      - name: Install dependencies
+        run: pip install requests
+      - name: Health check
+        run: python scripts/health_check.py
+        working-directory: bot
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop bot-test || true
+          docker rm bot-test || true
