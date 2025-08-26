@@ -4,6 +4,7 @@ import logging
 import ccxt
 import os
 from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -73,8 +74,10 @@ def too_large(_):
     return jsonify({'error': 'payload too large'}), 413
 
 @app.errorhandler(Exception)
-def handle_unexpected_error(exc: Exception) -> tuple:
+def handle_unexpected_error(exc: Exception):
     """Log unexpected errors and return a 500 response."""
+    if isinstance(exc, HTTPException):
+        return exc
     logging.exception("Unhandled error: %s", exc)
     return jsonify({'error': 'internal server error'}), 500
 
