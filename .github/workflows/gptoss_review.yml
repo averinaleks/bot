@@ -26,7 +26,14 @@ jobs:
       - name: Start vLLM container
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+      - name: Wait for LLM container
+        run: |
+          for i in {1..30}; do
+            curl -sf http://127.0.0.1:8000/v1/models && break
+            sleep 1
+          done
       - name: Generate diff
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
@@ -53,28 +60,10 @@ jobs:
       - name: LLM review
         id: llm-review
         run: |
-          if ls diff_part_* 1> /dev/null 2>&1; then
-            review=""
-            for part in diff_part_*; do
-              response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
-                -H "Content-Type: application/json" \
-                -d "$(jq -n --arg prompt "$(cat $part)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
-              review_part=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
-              review="$review\n\n$review_part"
-            done
-            printf "%s" "$review" > review.md
-          else
-            response=$(curl -s -X POST http://127.0.0.1:8000/v1/completions \
-              -H "Content-Type: application/json" \
-              -d "$(jq -n --arg prompt "$(cat diff.patch)" --arg model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" '{model:$model,prompt:$prompt}')" || true)
-            review=$(echo "$response" | jq -r '.choices[0].text // ""' 2>/dev/null || true)
-            printf "%s" "$review" > review.md
-          fi
-          if [ ! -s review.md ]; then
-            echo "LLM response was empty" > review.md
             echo "has_content=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
+          printf "%s" "$review" > review.md
           echo "has_content=true" >> "$GITHUB_OUTPUT"
       - name: Comment PR
         if: always() && steps.llm-review.outputs.has_content == 'true'
