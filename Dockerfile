@@ -11,12 +11,15 @@ ENV TZ=Etc/UTC
 
 # Установка необходимых пакетов для сборки и обновление критических библиотек
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
+    coreutils \
+    gnupg \
     libgcrypt20 \
     libpam0g \
     libssl3t64 \
+    openssl \
     build-essential \
     curl \
     python3-dev \
@@ -76,10 +79,16 @@ WORKDIR /app
 COPY --from=builder /app/venv /app/venv
 
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
+    coreutils \
+    gnupg \
+    libgcrypt20 \
+    libpam0g \
     libssl3t64 \
+    openssl \
+    tar \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
