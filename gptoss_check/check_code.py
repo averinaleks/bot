@@ -5,6 +5,8 @@ from pathlib import Path
 
 import httpx
 
+from http_client import get_httpx_client
+
 from gpt_client import GPTClientError, query_gpt
 
 
@@ -21,7 +23,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with httpx.Client(timeout=5, trust_env=False) as client:
+            with get_httpx_client(timeout=5, trust_env=False) as client:
                 response = client.get(api_url.rstrip("/"))
                 response.close()
             return
@@ -57,7 +59,7 @@ def send_telegram(msg: str) -> None:
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
         try:
-            with httpx.Client(timeout=15, trust_env=False) as client:
+            with get_httpx_client(timeout=15, trust_env=False) as client:
                 response = client.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     data={"chat_id": chat_id, "text": msg[:4000]},
