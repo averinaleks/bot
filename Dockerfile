@@ -98,7 +98,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-RUN apt-get update && apt-get install -y <нужные пакеты> \
+RUN apt-get update && apt-get install -y git curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY . /app/bot
 
