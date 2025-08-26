@@ -1,16 +1,15 @@
-import importlib
 import logging
 
 import pytest
 import bcrypt
 
 from password_utils import (
-    BCRYPT_ROUNDS,
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     validate_password_length,
     hash_password,
     verify_password,
+    get_bcrypt_rounds,
 )
 
 
@@ -40,7 +39,8 @@ def test_validate_password_length_rejects_invalid_length(password):
 def test_hash_password_allows_short_password():
     password = "Aa1!" + "a" * (MAX_PASSWORD_LENGTH - 4)
     hashed = hash_password(password)
-    assert hashed.startswith(f"$2b${BCRYPT_ROUNDS:02d}$")
+    rounds = get_bcrypt_rounds()
+    assert hashed.startswith(f"$2b${rounds:02d}$")
     assert verify_password(password, hashed)
 
 
@@ -99,9 +99,20 @@ def test_invalid_bcrypt_rounds_env_uses_default(monkeypatch, caplog):
 
     monkeypatch.setenv("BCRYPT_ROUNDS", "32")
     with caplog.at_level(logging.WARNING):
-        importlib.reload(pu)
-        assert pu.BCRYPT_ROUNDS == pu.DEFAULT_BCRYPT_ROUNDS
-        assert "BCRYPT_ROUNDS" in caplog.text
+        assert pu.get_bcrypt_rounds() == pu.DEFAULT_BCRYPT_ROUNDS
+        pu.get_bcrypt_rounds()
+    assert caplog.text.count("BCRYPT_ROUNDS") == 2
     monkeypatch.delenv("BCRYPT_ROUNDS", raising=False)
-    importlib.reload(pu)
+
+
+def test_env_change_affects_rounds(monkeypatch):
+    import password_utils as pu
+
+    monkeypatch.setenv("BCRYPT_ROUNDS", "04")
+    hashed_low = pu.hash_password(VALID_PASSWORD)
+    assert hashed_low.startswith("$2b$04$")
+
+    monkeypatch.setenv("BCRYPT_ROUNDS", "05")
+    hashed_high = pu.hash_password(VALID_PASSWORD)
+    assert hashed_high.startswith("$2b$05$")
 
