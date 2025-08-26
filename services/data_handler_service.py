@@ -29,7 +29,7 @@ def init_exchange() -> None:
 @app.before_request
 def _ensure_exchange() -> None:
     global initialized
-    if not initialized and request.endpoint != 'ping':
+    if not initialized and request.endpoint not in {'ping', 'health'}:
         init_exchange()
         initialized = True
 
@@ -60,6 +60,11 @@ def price(symbol: str):
 
 @app.route('/ping')
 def ping():
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/health')
+def health():
     return jsonify({'status': 'ok'})
 
 
