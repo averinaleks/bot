@@ -140,21 +140,21 @@ def test_validate_host_default(monkeypatch, caplog):
     assert host == '127.0.0.1'
     assert 'HOST не установлен' in caplog.text
 
+def test_validate_host_accepts_loopback(monkeypatch):
+    monkeypatch.setenv('HOST', '127.0.0.1')
+    assert utils.validate_host() == '127.0.0.1'
 
-def test_validate_host_rejects_all_interfaces(monkeypatch):
-    monkeypatch.setenv('HOST', '0.0.0.0')
-    with pytest.raises(ValueError):
-        utils.validate_host()
 
-def test_validate_host_rejects_localhost(monkeypatch, caplog):
+def test_validate_host_accepts_localhost(monkeypatch, caplog):
     monkeypatch.setenv('HOST', 'localhost')
-    with caplog.at_level('WARNING'):
-        with pytest.raises(ValueError):
-            utils.validate_host()
-    assert 'не локальный хост' in caplog.text
+    with caplog.at_level('INFO'):
+        host = utils.validate_host()
+    assert host == '127.0.0.1'
+    assert 'localhost' in caplog.text
 
 
-def test_validate_host_rejects_example_com(monkeypatch):
-    monkeypatch.setenv('HOST', 'example.com')
+@pytest.mark.parametrize('host', ['0.0.0.0', '256.0.0.1', 'example.com'])
+def test_validate_host_rejects_invalid(host, monkeypatch):
+    monkeypatch.setenv('HOST', host)
     with pytest.raises(ValueError):
         utils.validate_host()

@@ -141,6 +141,10 @@ def validate_host() -> str:
         logger.info("HOST не установлен, используется 127.0.0.1")
         return "127.0.0.1"
 
+    if host == "localhost":
+        logger.info("HOST 'localhost' интерпретирован как 127.0.0.1")
+        return "127.0.0.1"
+
     try:
         ip = ipaddress.ip_address(host)
         if ip.is_unspecified:
