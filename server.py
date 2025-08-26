@@ -84,14 +84,14 @@ class ModelManager:
                 revision=model_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )  # nosec: revision pinned to specific commit
+            )  # nosec
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     model_name,
                     revision=model_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
-                ).to(device_local)  # nosec: revision pinned to specific commit
+                ).to(device_local)  # nosec
             )
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
@@ -102,7 +102,7 @@ class ModelManager:
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )  # nosec: revision pinned to specific commit
+                )  # nosec
                 model_local = (
                     AutoModelForCausalLM.from_pretrained(
                         model_name,
@@ -110,7 +110,7 @@ class ModelManager:
                         trust_remote_code=False,
                         cache_dir=cache_dir,
                         local_files_only=True,
-                    ).to(device_local)  # nosec: revision pinned to specific commit
+                    ).to(device_local)  # nosec
                 )
             except (OSError, ValueError) as exc2:
                 logging.exception(
@@ -136,14 +136,14 @@ class ModelManager:
                 revision=fallback_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )  # nosec: revision pinned to specific commit
+            )  # nosec
             model_local = (
                 AutoModelForCausalLM.from_pretrained(
                     fallback_model,
                     revision=fallback_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
-                ).to(device_local)  # nosec: revision pinned to specific commit
+                ).to(device_local)  # nosec
             )
         except (OSError, ValueError) as exc:
             logging.exception(
@@ -156,7 +156,7 @@ class ModelManager:
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )  # nosec: revision pinned to specific commit
+                )  # nosec
                 model_local = (
                     AutoModelForCausalLM.from_pretrained(
                         fallback_model,
@@ -164,7 +164,7 @@ class ModelManager:
                         trust_remote_code=False,
                         cache_dir=cache_dir,
                         local_files_only=True,
-                    ).to(device_local)  # nosec: revision pinned to specific commit
+                    ).to(device_local)  # nosec
                 )
             except (OSError, ValueError) as exc2:
                 logging.exception(
