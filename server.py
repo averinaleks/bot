@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover - dependency required
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, Response
+
 try:
     from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
 except ImportError as exc:  # pragma: no cover - dependency required
@@ -27,6 +28,7 @@ except ImportError as exc:  # pragma: no cover - dependency required
 from pydantic import BaseModel, Field, ValidationError
 
 API_KEYS: set[str] = set()
+
 
 class ModelManager:
     """Manage loading and inference model state."""
@@ -69,9 +71,7 @@ class ModelManager:
             "GPT_MODEL_FALLBACK_REVISION", "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
         )
         if not re.fullmatch(r"[0-9a-f]{40}", model_revision):
-            raise ValueError(
-                "GPT_MODEL_REVISION must be a 40-character SHA commit"
-            )
+            raise ValueError("GPT_MODEL_REVISION must be a 40-character SHA commit")
         if not re.fullmatch(r"[0-9a-f]{40}", fallback_revision):
             raise ValueError(
                 "GPT_MODEL_FALLBACK_REVISION must be a 40-character SHA commit"
@@ -85,14 +85,14 @@ class ModelManager:
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
-            model_local = (
-                AutoModelForCausalLM.from_pretrained(
-                    model_name,
-                    revision=model_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                ).to(device_local)  # nosec
-            )
+            model_local = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                revision=model_revision,
+                trust_remote_code=False,
+                cache_dir=cache_dir,
+            ).to(
+                device_local
+            )  # nosec
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
             try:
@@ -103,15 +103,15 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = (
-                    AutoModelForCausalLM.from_pretrained(
-                        model_name,
-                        revision=model_revision,
-                        trust_remote_code=False,
-                        cache_dir=cache_dir,
-                        local_files_only=True,
-                    ).to(device_local)  # nosec
-                )
+                model_local = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    revision=model_revision,
+                    trust_remote_code=False,
+                    cache_dir=cache_dir,
+                    local_files_only=True,
+                ).to(
+                    device_local
+                )  # nosec
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load model '%s' from local cache: %s", model_name, exc2
@@ -137,14 +137,14 @@ class ModelManager:
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
-            model_local = (
-                AutoModelForCausalLM.from_pretrained(
-                    fallback_model,
-                    revision=fallback_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                ).to(device_local)  # nosec
-            )
+            model_local = AutoModelForCausalLM.from_pretrained(
+                fallback_model,
+                revision=fallback_revision,
+                trust_remote_code=False,
+                cache_dir=cache_dir,
+            ).to(
+                device_local
+            )  # nosec
         except (OSError, ValueError) as exc:
             logging.exception(
                 "Failed to load fallback model '%s': %s", fallback_model, exc
@@ -157,22 +157,24 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = (
-                    AutoModelForCausalLM.from_pretrained(
-                        fallback_model,
-                        revision=fallback_revision,
-                        trust_remote_code=False,
-                        cache_dir=cache_dir,
-                        local_files_only=True,
-                    ).to(device_local)  # nosec
-                )
+                model_local = AutoModelForCausalLM.from_pretrained(
+                    fallback_model,
+                    revision=fallback_revision,
+                    trust_remote_code=False,
+                    cache_dir=cache_dir,
+                    local_files_only=True,
+                ).to(
+                    device_local
+                )  # nosec
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load fallback model '%s' from local cache: %s",
                     fallback_model,
                     exc2,
                 )
-                raise RuntimeError("Failed to load both primary and fallback models") from exc2
+                raise RuntimeError(
+                    "Failed to load both primary and fallback models"
+                ) from exc2
             else:
                 self.tokenizer = tokenizer_local
                 self.model = model_local
@@ -205,7 +207,9 @@ model_manager = ModelManager()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     API_KEYS.clear()
-    API_KEYS.update({k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()})
+    API_KEYS.update(
+        {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
+    )
     if not API_KEYS:
         logging.error(
             "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
@@ -276,14 +280,6 @@ async def enforce_csrf(request: Request, call_next):
                 _loggable_headers(request.headers),
             )
             raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
-        except Exception:
-            logging.exception(
-                "Unexpected error during CSRF validation: method=%s url=%s headers=%s",
-                request.method,
-                request.url,
-                _loggable_headers(request.headers),
-            )
-            raise
     return await call_next(request)
 
 
@@ -312,8 +308,6 @@ async def check_api_key(request: Request, call_next):
         )
         return Response(status_code=401)
     return await call_next(request)
-
-
 
 
 def generate_text(
@@ -406,6 +400,7 @@ async def completions(request: Request):
 if __name__ == "__main__":
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     import uvicorn
+
     if host in ALLOWED_HOSTS:
         uvicorn.run("server:app", host=host, port=port)
     else:
