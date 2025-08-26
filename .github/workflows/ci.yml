@@ -47,6 +47,8 @@ jobs:
           else
             echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
+          sudo swapoff /mnt/swapfile || true
+          sudo rm -f /mnt/swapfile
           sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -142,6 +144,8 @@ jobs:
           else
             echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
+          sudo swapoff /mnt/swapfile || true
+          sudo rm -f /mnt/swapfile
           sudo rm -rf /mnt/*
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
