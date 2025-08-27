@@ -77,6 +77,7 @@ async def send_telegram_alert(message: str) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
+        logger.warning("Telegram inactive, message not sent: %s", message)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     client = get_http_client()
@@ -92,15 +93,16 @@ async def send_telegram_alert(message: str) -> None:
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             redacted_url = str(exc.request.url).replace(token, "***")
             logger.warning(
-                "Failed to send Telegram alert (attempt %s/%s): %s (%s)",
+                "Failed to send Telegram alert (attempt %s/%s): %s (%s) %s",
                 attempt,
                 max_attempts,
                 redacted_url,
                 exc.__class__.__name__,
+                str(exc).replace(token, "***"),
             )
             if attempt == max_attempts:
                 logger.error(
-                    "Failed to send Telegram alert after %s attempts", max_attempts
+                    "Failed to send Telegram alert after %s attempts", max_attempts,
                 )
                 return
             await asyncio.sleep(delay)
@@ -846,6 +848,8 @@ async def main_async() -> None:
 def main() -> None:
     load_dotenv()
     suppress_tf_logs()
+    if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
+        logger.warning("Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set")
     asyncio.run(main_async())
 
 
