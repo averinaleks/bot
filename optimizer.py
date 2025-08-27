@@ -6,10 +6,27 @@ Sharpe ratio and supports an optional grid search refinement step.
 
 import pandas as pd
 import numpy as np
-import optuna
 import asyncio
 import time
 import os
+from itertools import product
+
+try:
+    import polars as pl  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    pl = None  # type: ignore
+
+try:
+    import optuna  # type: ignore
+    from optuna.samplers import TPESampler  # type: ignore
+    try:
+        from optuna.integration.mlflow import MLflowCallback  # type: ignore
+    except ImportError:  # pragma: no cover - optional dependency may not be installed
+        MLflowCallback = None  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    optuna = None  # type: ignore
+    TPESampler = None  # type: ignore
+    MLflowCallback = None  # type: ignore
 try:
     import torch
 except ImportError:  # pragma: no cover - optional dependency
@@ -50,11 +67,6 @@ from bot.utils import (
     check_dataframe_empty_async as _check_df_async,
 )
 from bot.config import BotConfig
-from optuna.samplers import TPESampler
-try:
-    from optuna.integration.mlflow import MLflowCallback
-except ImportError:  # pragma: no cover - optional dependency may not be installed
-    MLflowCallback = None  # type: ignore
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
 try:
@@ -277,7 +289,37 @@ class ParameterOptimizer:
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
             method = self.optimizer_method
             best_value = 0.0
-            if method == "gp" and SkOptimizer is not None:
+            if optuna is None and (method != "gp" or SkOptimizer is None):
+                logger.warning(
+                    "optuna не установлен, используется упрощённый перебор параметров"
+                )
+                param_grid = {
+                    "ema30_period": [10, 30],
+                    "ema100_period": [50, 100],
+                    "ema200_period": [200, 300],
+                    "atr_period_default": [5, 14],
+                }
+                best_value = float("-inf")
+                best_params = self.config.asdict()
+                for ema30, ema100, ema200, atr in product(
+                    param_grid["ema30_period"],
+                    param_grid["ema100_period"],
+                    param_grid["ema200_period"],
+                    param_grid["atr_period_default"],
+                ):
+                    if not (ema30 < ema100 < ema200):
+                        continue
+                    params = {
+                        "ema30_period": ema30,
+                        "ema100_period": ema100,
+                        "ema200_period": ema200,
+                        "atr_period_default": atr,
+                    }
+                    value = ray.get(self._evaluate_params(params, symbol, df))
+                    if value > best_value:
+                        best_value = value
+                        best_params = {**self.config.asdict(), **params}
+            elif method == "gp" and SkOptimizer is not None:
                 dims = [
                     Integer(10, 50, name="ema30_period"),
                     Integer(50, 200, name="ema100_period"),

@@ -6,8 +6,18 @@ import asyncio
 
 import numpy as np
 import pandas as pd
-import optuna
 import os
+from itertools import product
+
+try:
+    import polars as pl  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    pl = None  # type: ignore
+
+try:
+    import optuna  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    optuna = None  # type: ignore
 
 if os.getenv("TEST_MODE") == "1":
     import types
@@ -87,6 +97,45 @@ class StrategyOptimizer:
         if not df_dict:
             logger.warning("Нет данных для оптимизации стратегии")
             return self.config.asdict()
+
+        if optuna is None:
+            logger.warning(
+                "optuna не установлен, используется упрощённый перебор параметров"
+            )
+            param_grid = {
+                "ema30_period": [10, 30],
+                "ema100_period": [50, 100],
+                "ema200_period": [200, 300],
+            }
+            best_value = float("-inf")
+            best_params = self.config.asdict()
+            for ema30, ema100, ema200 in product(
+                param_grid["ema30_period"],
+                param_grid["ema100_period"],
+                param_grid["ema200_period"],
+            ):
+                if not (ema30 < ema100 < ema200):
+                    continue
+                params = {
+                    **self.config.asdict(),
+                    "ema30_period": ema30,
+                    "ema100_period": ema100,
+                    "ema200_period": ema200,
+                }
+                value = await asyncio.to_thread(
+                    ray.get,
+                    _portfolio_backtest_remote.remote(
+                        df_dict,
+                        params,
+                        self.config["timeframe"],
+                        self.metric,
+                        self.config.get("max_positions", 5),
+                    ),
+                )
+                if value > best_value:
+                    best_value = value
+                    best_params = params
+            return best_params
 
         study = optuna.create_study(direction="maximize")
         obj_refs = []

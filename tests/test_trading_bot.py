@@ -11,15 +11,42 @@ import httpx
 async def test_get_http_client_timeout_env(monkeypatch):
     monkeypatch.delenv("HTTP_CLIENT_TIMEOUT", raising=False)
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", None)
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT_LOCK", asyncio.Lock())
     monkeypatch.setenv("HTTP_CLIENT_TIMEOUT", "7")
 
-    client = trading_bot.get_http_client()
+    client = await trading_bot.get_http_client()
     try:
         assert client.timeout.connect == 7.0
         assert client.timeout.read == 7.0
     finally:
         await client.aclose()
         trading_bot.HTTP_CLIENT = None
+
+
+@pytest.mark.asyncio
+async def test_get_http_client_single_instance(monkeypatch):
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", None)
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT_LOCK", asyncio.Lock())
+
+    creations = []
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            creations.append(1)
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", DummyClient)
+
+    clients = await asyncio.gather(
+        *(trading_bot.get_http_client() for _ in range(10))
+    )
+    assert len({id(c) for c in clients}) == 1
+    assert len(creations) == 1
+
+    await clients[0].aclose()
+    trading_bot.HTTP_CLIENT = None
 
 
 @pytest.mark.asyncio
@@ -57,7 +84,11 @@ async def test_send_telegram_alert_reuses_client(monkeypatch):
 
     dummy = DummyClient()
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
-    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+
+    async def _get_client():
+        return dummy
+
+    monkeypatch.setattr(trading_bot, "get_http_client", _get_client)
     monkeypatch.setattr(
         trading_bot.httpx,
         "AsyncClient",
@@ -81,7 +112,11 @@ async def test_send_telegram_alert_hides_token(monkeypatch, caplog):
             raise httpx.RequestError("boom", request=request)
 
     dummy = DummyClient()
-    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+
+    async def _get_client():
+        return dummy
+
+    monkeypatch.setattr(trading_bot, "get_http_client", _get_client)
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setenv("TELEGRAM_ALERT_RETRIES", "1")
@@ -91,6 +126,15 @@ async def test_send_telegram_alert_hides_token(monkeypatch, caplog):
 
     assert "***" in caplog.text
     assert "secret-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_alert_without_env(monkeypatch, caplog):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    with caplog.at_level(logging.WARNING):
+        await trading_bot.send_telegram_alert("hi")
+    assert "hi" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -112,11 +156,11 @@ async def test_send_trade_timeout_env(monkeypatch):
     dummy = DummyClient()
     monkeypatch.setattr(trading_bot, 'HTTP_CLIENT', dummy)
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
-    result = await trading_bot.send_trade_async(
+    ok, err = await trading_bot.send_trade_async(
         dummy, 'BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'}
     )
     assert called['timeout'] == 9.0
-    assert result is True
+    assert ok is True and err is None
 
 
 @pytest.mark.parametrize("side", ["hold", "BUY", ""])
@@ -415,10 +459,11 @@ async def test_send_trade_reports_error_field(monkeypatch):
         called.append(msg)
 
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
-    ok = await trading_bot.send_trade_async(
+    ok, err = await trading_bot.send_trade_async(
         dummy, 'BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert not ok
+    assert err
     assert called
 
 
@@ -549,6 +594,7 @@ def test_run_once_invalid_price(monkeypatch):
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
     async def fake_send_trade(*a, **k):
         sent.append(True)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
@@ -638,6 +684,7 @@ def test_run_once_forwards_prediction_params(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(
@@ -669,6 +716,7 @@ def test_run_once_skips_on_gpt(monkeypatch):
 
     async def fake_send(*a, **k):
         sent.append(True)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send)
 
@@ -700,6 +748,7 @@ def test_run_once_env_fallback(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade2)
     monkeypatch.setattr(
@@ -732,6 +781,7 @@ def test_run_once_config_fallback(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade3)
     monkeypatch.setattr(
@@ -770,6 +820,7 @@ def test_run_once_ignores_invalid_env(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade4)
     monkeypatch.setattr(
@@ -860,7 +911,7 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy4)
     async def fake_send_trade5(*a, **k):
-        return None
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade5)
     monkeypatch.setattr(
@@ -877,3 +928,26 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
         asyncio.run(trading_bot.run_once_async())
 
     assert "Prediction: buy" in caplog.messages
+
+
+@pytest.mark.asyncio
+async def test_trading_enabled_parallel():
+    await trading_bot.set_trading_enabled(False)
+
+    async def enable():
+        for _ in range(100):
+            await trading_bot.set_trading_enabled(True)
+            await asyncio.sleep(0)
+
+    async def disable():
+        for _ in range(100):
+            await trading_bot.set_trading_enabled(False)
+            await asyncio.sleep(0)
+
+    await asyncio.gather(
+        *(enable() for _ in range(5)),
+        *(disable() for _ in range(5)),
+    )
+
+    await trading_bot.set_trading_enabled(True)
+    assert await trading_bot.get_trading_enabled() is True

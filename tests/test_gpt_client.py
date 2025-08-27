@@ -19,6 +19,7 @@ from bot.gpt_client import (
     MAX_RESPONSE_BYTES,
     _get_api_url_timeout,
     _validate_api_url,
+    _parse_gpt_response,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -63,6 +64,21 @@ async def run_query(func, prompt):
         return await func(prompt)
     return await asyncio.to_thread(func, prompt)
 
+
+def test_parse_gpt_response_success():
+    content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+    assert _parse_gpt_response(content) == "ok"
+
+
+def test_parse_gpt_response_invalid_json():
+    with pytest.raises(GPTClientJSONError):
+        _parse_gpt_response(b"not json")
+
+
+def test_parse_gpt_response_missing_field():
+    content = json.dumps({"foo": "bar"}).encode()
+    with pytest.raises(GPTClientResponseError):
+        _parse_gpt_response(content)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
@@ -123,6 +139,19 @@ async def test_insecure_url(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     with pytest.raises(GPTClientError):
         await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_localhost_allowed(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://localhost")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(client_cls, "stream", fake_stream)
+    assert await run_query(func, "hi") == "ok"
 
 
 @pytest.mark.asyncio
@@ -301,7 +330,13 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
         assert host == "foo.local"
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
 
+    async def fake_async_getaddrinfo(
+        self, host, port, family=0, type=0, proto=0, flags=0
+    ):
+        return fake_getaddrinfo(host, port, family, type, proto, flags)
+
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(asyncio.AbstractEventLoop, "getaddrinfo", fake_async_getaddrinfo)
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": "ok"}]}).encode()

@@ -75,18 +75,12 @@ class PositionManager:
                 continue
             current_price = df["close"].iloc[-1]
 
-            if (
-                "symbol" in self.trade_manager.positions.index.names
-                and symbol in self.trade_manager.positions.index.get_level_values("symbol")
-            ):
+            if self.trade_manager._has_position(symbol):
                 res = self.trade_manager.check_stop_loss_take_profit(symbol, current_price)
                 if inspect.isawaitable(res):
                     await res
 
-            if (
-                "symbol" in self.trade_manager.positions.index.names
-                and symbol in self.trade_manager.positions.index.get_level_values("symbol")
-            ):
+            if self.trade_manager._has_position(symbol):
                 res = self.trade_manager.check_trailing_stop(symbol, current_price)
                 if inspect.isawaitable(res):
                     await res

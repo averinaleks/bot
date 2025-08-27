@@ -6,6 +6,7 @@ belong to a single class.
 """
 
 from flask import Flask, request, jsonify
+from flask.typing import ResponseReturnValue
 import numpy as np
 import joblib
 import os
@@ -50,7 +51,7 @@ def _load_model() -> None:
 
 
 @app.route('/train', methods=['POST'])
-def train() -> tuple:
+def train() -> ResponseReturnValue:
     data = request.get_json(force=True)
     # ``features`` may contain multiple attributes such as price, volume and
     # technical indicators.  Ensure the array is always two-dimensional so the
@@ -85,7 +86,7 @@ def train() -> tuple:
 
 
 @app.route('/predict', methods=['POST'])
-def predict() -> tuple:
+def predict() -> ResponseReturnValue:
     data = request.get_json(force=True)
     features = data.get('features')
     if features is None:
@@ -110,12 +111,12 @@ def predict() -> tuple:
 
 
 @app.route('/ping')
-def ping() -> tuple:
+def ping() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
 
 @app.errorhandler(413)
-def too_large(_):
+def too_large(_) -> ResponseReturnValue:
     return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':

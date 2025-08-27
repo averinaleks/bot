@@ -6,6 +6,7 @@ environment variables.
 """
 
 from flask import Flask, request, jsonify
+from flask.typing import ResponseReturnValue
 import ccxt
 import os
 from dotenv import load_dotenv
@@ -49,7 +50,7 @@ def _ensure_exchange() -> None:
 
 
 @app.before_request
-def _require_api_token():
+def _require_api_token() -> ResponseReturnValue | None:
     """Simple token-based authentication middleware."""
     if request.method == 'POST' or request.path == '/positions':
         token = request.headers.get('Authorization', '')
@@ -59,6 +60,7 @@ def _require_api_token():
             token = request.headers.get('X-API-KEY', token)
         if not token or token != API_TOKEN:
             return jsonify({'error': 'unauthorized'}), 401
+    return None
 
 # Gracefully handle missing ccxt error classes when running under test stubs
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
@@ -95,7 +97,7 @@ def _record(
 
 
 @app.route('/open_position', methods=['POST'])
-def open_position() -> tuple:
+def open_position() -> ResponseReturnValue:
     data = request.get_json(force=True)
     symbol = data.get('symbol')
     side = str(data.get('side', 'buy')).lower()
@@ -207,7 +209,7 @@ def open_position() -> tuple:
 
 
 @app.route('/close_position', methods=['POST'])
-def close_position() -> tuple:
+def close_position() -> ResponseReturnValue:
     data = request.get_json(force=True)
     order_id = data.get('order_id')
     side = str(data.get('side', '')).lower()
@@ -260,27 +262,27 @@ def close_position() -> tuple:
 
 
 @app.route('/positions')
-def positions():
+def positions() -> ResponseReturnValue:
     return jsonify({'positions': POSITIONS})
 
 
 @app.route('/ping')
-def ping():
+def ping() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
 
 @app.route('/ready')
-def ready():
+def ready() -> ResponseReturnValue:
     """Health check endpoint used by docker-compose."""
     return jsonify({'status': 'ok'})
 
 
 @app.errorhandler(413)
-def too_large(_):
+def too_large(_) -> ResponseReturnValue:
     return jsonify({'error': 'payload too large'}), 413
 
 @app.errorhandler(Exception)
-def handle_unexpected_error(exc: Exception) -> tuple:
+def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
     """Log unexpected errors and return a 500 response."""
     app.logger.exception('unhandled error: %s', exc)
     return jsonify({'error': 'internal server error'}), 500
