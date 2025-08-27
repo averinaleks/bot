@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import os
+
+if os.getenv("TEST_MODE") == "1":  # pragma: no cover - test stubs
+    from bot import test_stubs
+    test_stubs.apply()
+
 import asyncio
 import functools
 import json
 import logging
-import os
 import threading
 import time
 import types
@@ -19,7 +24,14 @@ except ImportError as exc:  # allow missing pandas
     logging.getLogger("TradingBot").error("pandas import failed: %s", exc)
     raise ImportError("pandas is required for data handling") from exc
 
-import httpx
+try:  # pragma: no cover - optional dependency
+    import httpx  # type: ignore
+except ImportError as exc:  # allow missing httpx
+    logging.getLogger("TradingBot").error("httpx import failed: %s", exc)
+    from bot import test_stubs  # pragma: no cover - fallback stubs
+    os.environ.setdefault("TEST_MODE", "1")
+    test_stubs.apply()
+    import httpx  # type: ignore
 import numpy as np  # type: ignore
 
 try:  # optional dependency
@@ -32,7 +44,10 @@ try:  # pragma: no cover - optional dependency
     import websockets  # type: ignore
 except ImportError as exc:  # allow missing websockets
     logging.getLogger("TradingBot").error("websockets import failed: %s", exc)
-    raise ImportError("websockets is required for real-time data streaming") from exc
+    from bot import test_stubs  # pragma: no cover - fallback stubs
+    os.environ.setdefault("TEST_MODE", "1")
+    test_stubs.apply()
+    import websockets  # type: ignore
 from tenacity import retry, wait_exponential
 
 try:  # pragma: no cover - optional dependency

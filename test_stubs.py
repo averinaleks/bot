@@ -165,6 +165,32 @@ def apply() -> None:
     httpx_mod.HTTPError = Exception
     sys.modules["httpx"] = cast(ModuleType, httpx_mod)
 
+    # ---------------------------------------------------------------- websockets
+    ws_mod = cast(ModuleType, types.ModuleType("websockets"))
+
+    class _WSConnectionClosed(Exception):
+        ...
+
+    class _WebSocket:
+        async def __aenter__(self) -> "_WebSocket":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
+            return None
+
+        async def send(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover
+            return None
+
+        async def recv(self) -> str:  # pragma: no cover - simple default
+            return ""
+
+    async def _ws_connect(*_a: Any, **_k: Any) -> _WebSocket:
+        return _WebSocket()
+
+    ws_mod.connect = _ws_connect
+    ws_mod.exceptions = types.SimpleNamespace(ConnectionClosed=_WSConnectionClosed)
+    sys.modules["websockets"] = cast(ModuleType, ws_mod)
+
     # ------------------------------------------------------------------- PyBit
     pybit_mod = cast(PyBitModule, types.ModuleType("pybit"))
     ut_mod = cast(PyBitUTModule, types.ModuleType("unified_trading"))
