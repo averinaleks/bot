@@ -187,8 +187,8 @@ def apply() -> None:
     async def _ws_connect(*_a: Any, **_k: Any) -> _WebSocket:
         return _WebSocket()
 
-    ws_mod.connect = _ws_connect
-    ws_mod.exceptions = types.SimpleNamespace(ConnectionClosed=_WSConnectionClosed)
+    setattr(ws_mod, "connect", _ws_connect)
+    setattr(ws_mod, "exceptions", types.SimpleNamespace(ConnectionClosed=_WSConnectionClosed))
     sys.modules["websockets"] = cast(ModuleType, ws_mod)
 
     # ------------------------------------------------------------------- PyBit
