@@ -317,7 +317,13 @@ def test_query_gpt_private_fqdn_allowed(monkeypatch):
         assert host == "foo.local"
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
 
+    async def fake_async_getaddrinfo(
+        self, host, port, family=0, type=0, proto=0, flags=0
+    ):
+        return fake_getaddrinfo(host, port, family, type, proto, flags)
+
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(asyncio.AbstractEventLoop, "getaddrinfo", fake_async_getaddrinfo)
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": "ok"}]}).encode()

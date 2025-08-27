@@ -85,9 +85,12 @@ async def _fetch_response(
 ) -> bytes:
     """Resolve hostname, verify IP and return response bytes."""
     try:
+        loop = asyncio.get_running_loop()
         current_ips = {
             info[4][0]
-            for info in socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
+            for info in await loop.getaddrinfo(
+                hostname, None, family=socket.AF_UNSPEC
+            )
         }
     except socket.gaierror as exc:
         logger.error(
@@ -190,7 +193,6 @@ def query_gpt(prompt: str) -> str:
     """
     if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
-
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
     # Maximum time to wait for the asynchronous task considering retries and backoff
@@ -263,8 +265,9 @@ async def query_gpt_async(prompt: str) -> str:
     """
     if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
-
-    url, timeout, hostname, allowed_ips = _get_api_url_timeout()
+    url, timeout, hostname, allowed_ips = await asyncio.to_thread(
+        _get_api_url_timeout
+    )
 
     @retry(
         stop=stop_after_attempt(MAX_RETRIES),
