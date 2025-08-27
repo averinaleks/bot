@@ -192,7 +192,7 @@ def create_exchange() -> BybitSDKAsync:
         )
     client = BybitSDKAsync(api_key=api_key, api_secret=api_secret)
     # Best effort to clear sensitive credentials from memory
-    api_key = api_secret = None
+    del api_key, api_secret
     if "BYBIT_API_KEY" in os.environ:
         del os.environ["BYBIT_API_KEY"]
     if "BYBIT_API_SECRET" in os.environ:
