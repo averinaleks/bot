@@ -60,11 +60,11 @@ class HistoricalSimulator:
                 continue
             price = df["close"].iloc[-1]
             idx_names = getattr(self.trade_manager.positions.index, "names", [])
-            if "symbol" in idx_names and symbol in self.trade_manager.positions.index.get_level_values("symbol"):
+            if self.trade_manager._has_position(symbol):
                 await self.trade_manager.check_trailing_stop(symbol, price)
-            if "symbol" in idx_names and symbol in self.trade_manager.positions.index.get_level_values("symbol"):
+            if self.trade_manager._has_position(symbol):
                 await self.trade_manager.check_stop_loss_take_profit(symbol, price)
-            if "symbol" in idx_names and symbol in self.trade_manager.positions.index.get_level_values("symbol"):
+            if self.trade_manager._has_position(symbol):
                 await self.trade_manager.check_exit_signal(symbol, price)
 
     async def run(self, start_ts: pd.Timestamp, end_ts: pd.Timestamp, speed: float = 1.0) -> None:
