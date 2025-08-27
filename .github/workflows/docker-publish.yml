@@ -54,7 +54,9 @@ jobs:
           else
             echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
-          sudo rm -rf /mnt/*
+            sudo swapoff /mnt/swapfile || true
+            sudo rm -f /mnt/swapfile || true
+            sudo rm -rf /mnt/* || true
       - name: Install LVM
         run: sudo apt-get update && sudo apt-get install -y lvm2
       - name: Maximize build space
