@@ -11,6 +11,7 @@ import ccxt
 import os
 from dotenv import load_dotenv
 import logging
+import threading
 from utils import validate_host, safe_int
 
 load_dotenv()
@@ -18,6 +19,7 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
+_init_lock = threading.Lock()
 
 
 def init_exchange() -> None:
@@ -38,16 +40,16 @@ def init_exchange() -> None:
 # Expected API token for simple authentication
 API_TOKEN = os.getenv('TRADE_MANAGER_TOKEN')
 
-_exchange_initialized = False
 
-
-@app.before_request
-def _ensure_exchange() -> None:
-    """Initialize the exchange on the first request."""
-    global _exchange_initialized
-    if not _exchange_initialized:
-        init_exchange()
-        _exchange_initialized = True
+if hasattr(app, "before_first_request"):
+    app.before_first_request(init_exchange)
+else:
+    @app.before_request
+    def _ensure_exchange() -> None:
+        if exchange is None:
+            with _init_lock:
+                if exchange is None:
+                    init_exchange()
 
 
 @app.before_request

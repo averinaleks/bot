@@ -1,18 +1,18 @@
 """Simple reference data handler service fetching real prices from Bybit."""
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask.typing import ResponseReturnValue
 import logging
+import threading
 import ccxt
 import os
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 
-load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
-initialized = False
+_init_lock = threading.Lock()
 
 
 def init_exchange() -> None:
@@ -30,12 +30,15 @@ def init_exchange() -> None:
         raise RuntimeError("Invalid Bybit configuration") from exc
 
 
-@app.before_request
-def _ensure_exchange() -> None:
-    global initialized
-    if not initialized and request.endpoint not in {'ping', 'health'}:
-        init_exchange()
-        initialized = True
+if hasattr(app, "before_first_request"):
+    app.before_first_request(init_exchange)
+else:
+    @app.before_request
+    def _ensure_exchange() -> None:
+        if exchange is None:
+            with _init_lock:
+                if exchange is None:
+                    init_exchange()
 
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
