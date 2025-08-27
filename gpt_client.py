@@ -200,9 +200,11 @@ def query_gpt(prompt: str) -> str:
             except Exception as exc:  # pragma: no cover - unexpected
                 result["error"] = exc
 
-        thread = threading.Thread(target=runner)
+        thread = threading.Thread(target=runner, daemon=True)
         thread.start()
-        thread.join()
+        thread.join(timeout)
+        if thread.is_alive():
+            raise GPTClientError("Timed out waiting for async task to finish")
         if "error" in result:
             raise result["error"]
         return result["value"]
