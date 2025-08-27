@@ -80,7 +80,7 @@ async def send_telegram_alert(message: str) -> None:
         logger.warning("Telegram inactive, message not sent: %s", message)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    client = get_http_client()
+    client = await get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = 1
     for attempt in range(1, max_attempts + 1):
@@ -183,18 +183,20 @@ async def set_trading_enabled(value: bool) -> None:
 
 # Shared HTTP client for outgoing requests
 HTTP_CLIENT: httpx.AsyncClient | None = None
+HTTP_CLIENT_LOCK = asyncio.Lock()
 
 
-def get_http_client() -> httpx.AsyncClient:
+async def get_http_client() -> httpx.AsyncClient:
     """Return a shared HTTP client instance.
 
     Timeout for requests can be configured via the ``HTTP_CLIENT_TIMEOUT``
     environment variable (default 5 seconds).
     """
     global HTTP_CLIENT
-    if HTTP_CLIENT is None:
-        timeout = safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
-        HTTP_CLIENT = httpx.AsyncClient(trust_env=False, timeout=timeout)
+    async with HTTP_CLIENT_LOCK:
+        if HTTP_CLIENT is None:
+            timeout = safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
+            HTTP_CLIENT = httpx.AsyncClient(trust_env=False, timeout=timeout)
     return HTTP_CLIENT
 
 
@@ -850,8 +852,9 @@ async def run_once_async() -> None:
         )
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
+        client = await get_http_client()
         await send_trade_async(
-            get_http_client(),
+            client,
             SYMBOL,
             model_signal,
             price,
