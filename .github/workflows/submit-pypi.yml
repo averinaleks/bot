@@ -12,13 +12,21 @@ jobs:
     env:
       TOKENPYPI: ${{ secrets.TOKENPYPI }}
     # Explicit permissions for OIDC-based publishing
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
+      permissions:
+        id-token: write
+        contents: read
+      steps:
+        - name: Select branch
+          id: select-branch
+          run: |
+            if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git dependabot/pip/openai-1.102.0 >/dev/null; then
+              echo "ref=dependabot/pip/openai-1.102.0" >> "$GITHUB_OUTPUT"
+            else
+              echo "ref=main" >> "$GITHUB_OUTPUT"
+            fi
+        - uses: actions/checkout@v5
+          with:
+            ref: ${{ steps.select-branch.outputs.ref }}
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
