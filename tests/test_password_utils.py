@@ -16,12 +16,28 @@ from password_utils import (
 VALID_PASSWORD = "Aa1!" + "a" * (MIN_PASSWORD_LENGTH - 4)
 VALID_PASSWORD_NON_ASCII = "Aa1€" + "a" * (MIN_PASSWORD_LENGTH - 4)
 WEAK_PASSWORDS = [
-    ("aaaaaaaa", ["uppercase", "digit", "special"]),
-    ("AAAAAAAA", ["lowercase", "digit", "special"]),
-    ("AAAAaaaa", ["digit", "special"]),
-    ("AAAAaaa1", ["special"]),
-    ("AAAA!aaa", ["digit"]),
+    (
+        "aaaaaaaa",
+        [
+            "отсутствует символ верхнего регистра",
+            "отсутствует цифра",
+            "отсутствует спецсимвол",
+        ],
+    ),
+    (
+        "AAAAAAAA",
+        [
+            "отсутствует символ нижнего регистра",
+            "отсутствует цифра",
+            "отсутствует спецсимвол",
+        ],
+    ),
+    ("AAAAaaaa", ["отсутствует цифра", "отсутствует спецсимвол"]),
+    ("AAAAaaa1", ["отсутствует спецсимвол"]),
+    ("AAAA!aaa", ["отсутствует цифра"]),
 ]
+
+WEAK_PASSWORD_STRINGS = [pw for pw, _ in WEAK_PASSWORDS]
 
 
 
@@ -87,6 +103,9 @@ def test_hash_password_generates_unique_hashes():
     assert hash_password(VALID_PASSWORD) != hash_password(VALID_PASSWORD)
 
 
+@pytest.mark.parametrize("weak_password, expected_parts", WEAK_PASSWORDS)
+def test_hash_password_rejects_weak_password(weak_password, expected_parts):
+    with pytest.raises(ValueError) as exc:
         hash_password(weak_password)
     message = str(exc.value)
     assert message.startswith("Пароль не соответствует требованиям сложности:")
