@@ -142,7 +142,9 @@ GPU-зависимости вынесены в отдельный файл `requ
     - `GPT_OSS_API` — базовый адрес сервиса [GPT OSS](https://github.com/jina-ai/gpt-oss)
       (без суффикса `/completions`), к которому обращаются функции
       `query_gpt` и `query_gpt_async`. Переменная обязательна; при её отсутствии
-      эти функции завершатся ошибкой. Например:
+      будет выброшено исключение с подсказкой по настройке. Для локального сервера
+      допустим адрес `http://localhost`, во всех остальных случаях следует
+      использовать HTTPS. Например:
 
       ```python
       from bot.gpt_client import query_gpt
@@ -151,9 +153,9 @@ GPU-зависимости вынесены в отдельный файл `requ
       ```
 
     - `GPT_OSS_WAIT_TIMEOUT` — время ожидания запуска сервера GPT OSS в
-      секундах (по умолчанию `30`).
-    - `GPT_OSS_TIMEOUT` — таймаут запроса к GPT OSS API в секундах (по
-      умолчанию `5`). Используется функциями `query_gpt` и `query_gpt_async`.
+      секундах (по умолчанию `300`).
+    - `GPT_OSS_TIMEOUT` — таймаут каждого запроса к GPT OSS API в секундах
+      (по умолчанию `5`). Используется функциями `query_gpt` и `query_gpt_async`.
 
      В `docker-compose.yml` теперь есть сервис `gptoss`,
      запускающий образ `ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest` на порту `8003`

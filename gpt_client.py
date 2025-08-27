@@ -64,13 +64,13 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
 
     resolved_ips = {info[4][0] for info in addr_info}
 
-    if scheme == "http":
+    if scheme == "http" and parsed.hostname != "localhost":
         for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
                 logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
                 raise GPTClientError(
-                    "GPT_OSS_API must use HTTPS or be a private address"
+                    "GPT_OSS_API must use HTTPS, be a private address, or point to localhost"
                 )
 
     return parsed.hostname, resolved_ips
@@ -138,8 +138,12 @@ async def _fetch_response(
 def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
     api_url = os.getenv("GPT_OSS_API")
     if not api_url:
-        logger.error("Environment variable GPT_OSS_API is not set")
-        raise GPTClientNetworkError("GPT_OSS_API environment variable not set")
+        message = (
+            "GPT_OSS_API environment variable is not set. "
+            "Set GPT_OSS_API to the base URL of the GPT OSS service, e.g. http://localhost:8003."
+        )
+        logger.error(message)
+        raise GPTClientNetworkError(message)
 
     hostname, allowed_ips = _validate_api_url(api_url)
 
