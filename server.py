@@ -156,7 +156,7 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(
+                model_local = AutoModelForCausalLM.from_pretrained(  # nosec B506
                     fallback_model,
                     revision=fallback_revision,
                     trust_remote_code=False,
@@ -164,7 +164,7 @@ class ModelManager:
                     local_files_only=True,
                 ).to(
                     device_local
-                )  # nosec
+                )
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load fallback model '%s' from local cache: %s",
