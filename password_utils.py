@@ -47,7 +47,10 @@ def validate_password_complexity(password: str) -> None:
     if not re.search(r"[^\w\s]", password):
         violations.append("special")
     if violations:
-        raise ValueError("Пароль не соответствует требованиям сложности")
+        raise ValueError(
+            "Пароль не соответствует требованиям сложности: "
+            + ", ".join(violations)
+        )
 
 
 def validate_password_length(password: str) -> None:
