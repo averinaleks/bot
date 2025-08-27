@@ -24,6 +24,11 @@ def configure_logging() -> None:
     """Настроить переменные окружения и handlers для логирования."""
 
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    try:
+        logger.setLevel(level_name)
+    except ValueError:
+        logger.warning("LOG_LEVEL '%s' недопустим, используется INFO", level_name)
+        logger.setLevel(logging.INFO)
 
     log_dir = os.getenv("LOG_DIR", "/app/logs")
     fallback_dir = os.path.join(os.path.dirname(__file__), "logs")

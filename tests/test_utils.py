@@ -117,6 +117,29 @@ def test_configure_logging_invalid_level(monkeypatch, tmp_path, caplog):
     for h in logger.handlers[:]:
         logger.removeHandler(h)
 
+
+def test_configure_logging_updates_level(monkeypatch, tmp_path):
+    import logging
+
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+
+    logger = logging.getLogger("TradingBot")
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    utils.configure_logging()
+    assert logger.level == logging.WARNING
+    handler_count = len(logger.handlers)
+
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    utils.configure_logging()
+    assert logger.level == logging.DEBUG
+    assert len(logger.handlers) == handler_count
+
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
 def test_jit_stub_preserves_metadata(monkeypatch):
     if not hasattr(utils, "_numba_missing"):
         pytest.skip("numba is installed")
