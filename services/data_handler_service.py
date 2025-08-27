@@ -1,5 +1,6 @@
 """Simple reference data handler service fetching real prices from Bybit."""
 from flask import Flask, jsonify, request
+from flask.typing import ResponseReturnValue
 import logging
 import ccxt
 import os
@@ -39,7 +40,7 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 
 # Correct price endpoint without trailing whitespace
 @app.route('/price/<symbol>')
-def price(symbol: str):
+def price(symbol: str) -> ResponseReturnValue:
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     try:
@@ -60,21 +61,21 @@ def price(symbol: str):
         return jsonify({'error': 'exchange error fetching price'}), 502
 
 @app.route('/ping')
-def ping():
+def ping() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
 
 @app.route('/health')
-def health():
+def health() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
 
 @app.errorhandler(413)
-def too_large(_):
+def too_large(_) -> ResponseReturnValue:
     return jsonify({'error': 'payload too large'}), 413
 
 @app.errorhandler(Exception)
-def handle_unexpected_error(exc: Exception):
+def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
     """Log unexpected errors and return a 500 response."""
     if isinstance(exc, HTTPException):
         return exc
