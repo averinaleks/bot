@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
+import threading
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ CONFIG_PATH = os.getenv(
 )
 # Cached defaults; populated on first load
 DEFAULTS: Optional[Dict[str, Any]] = None
+DEFAULTS_LOCK = threading.Lock()
 
 
 class ConfigLoadError(Exception):
@@ -31,13 +33,14 @@ class ConfigLoadError(Exception):
 def load_defaults() -> Dict[str, Any]:
     """Load default configuration from CONFIG_PATH on first access."""
     global DEFAULTS
-    if DEFAULTS is None:
-        try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                DEFAULTS = json.load(f)
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
-            raise ConfigLoadError from exc
+    with DEFAULTS_LOCK:
+        if DEFAULTS is None:
+            try:
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                    DEFAULTS = json.load(f)
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
+                raise ConfigLoadError from exc
     return DEFAULTS
 
 
