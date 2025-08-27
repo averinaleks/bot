@@ -94,6 +94,15 @@ async def test_send_telegram_alert_hides_token(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
+async def test_send_telegram_alert_without_env(monkeypatch, caplog):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    with caplog.at_level(logging.WARNING):
+        await trading_bot.send_telegram_alert("hi")
+    assert "hi" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_send_trade_timeout_env(monkeypatch):
     called = {}
 

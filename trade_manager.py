@@ -1823,14 +1823,20 @@ async def create_trade_manager() -> TradeManager | None:
 
                 if text.startswith("/start"):
                     await tb.set_trading_enabled(True)
-                    await telegram_bot.send_message(
-                        chat_id=msg.chat_id, text="Trading enabled"
-                    )
+                    try:
+                        await telegram_bot.send_message(
+                            chat_id=msg.chat_id, text="Trading enabled"
+                        )
+                    except Exception as exc:
+                        logger.error("Failed to send Telegram message: %s", exc)
                 elif text.startswith("/stop"):
                     await tb.set_trading_enabled(False)
-                    await telegram_bot.send_message(
-                        chat_id=msg.chat_id, text="Trading disabled"
-                    )
+                    try:
+                        await telegram_bot.send_message(
+                            chat_id=msg.chat_id, text="Trading disabled"
+                        )
+                    except Exception as exc:
+                        logger.error("Failed to send Telegram message: %s", exc)
                 elif text.startswith("/status"):
                     status = "enabled" if await tb.get_trading_enabled() else "disabled"
                     positions = []
@@ -1845,7 +1851,10 @@ async def create_trade_manager() -> TradeManager | None:
                     message = f"Trading {status}"
                     if positions:
                         message += "\n" + "\n".join(str(p) for p in positions)
-                    await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
+                    try:
+                        await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
+                    except Exception as exc:
+                        logger.error("Failed to send Telegram message: %s", exc)
 
             threading.Thread(
                 target=lambda: asyncio.run(listener.listen(handle_command)),
