@@ -11,15 +11,42 @@ import httpx
 async def test_get_http_client_timeout_env(monkeypatch):
     monkeypatch.delenv("HTTP_CLIENT_TIMEOUT", raising=False)
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", None)
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT_LOCK", asyncio.Lock())
     monkeypatch.setenv("HTTP_CLIENT_TIMEOUT", "7")
 
-    client = trading_bot.get_http_client()
+    client = await trading_bot.get_http_client()
     try:
         assert client.timeout.connect == 7.0
         assert client.timeout.read == 7.0
     finally:
         await client.aclose()
         trading_bot.HTTP_CLIENT = None
+
+
+@pytest.mark.asyncio
+async def test_get_http_client_single_instance(monkeypatch):
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT", None)
+    monkeypatch.setattr(trading_bot, "HTTP_CLIENT_LOCK", asyncio.Lock())
+
+    creations = []
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            creations.append(1)
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", DummyClient)
+
+    clients = await asyncio.gather(
+        *(trading_bot.get_http_client() for _ in range(10))
+    )
+    assert len({id(c) for c in clients}) == 1
+    assert len(creations) == 1
+
+    await clients[0].aclose()
+    trading_bot.HTTP_CLIENT = None
 
 
 @pytest.mark.asyncio
@@ -57,7 +84,11 @@ async def test_send_telegram_alert_reuses_client(monkeypatch):
 
     dummy = DummyClient()
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
-    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+
+    async def _get_client():
+        return dummy
+
+    monkeypatch.setattr(trading_bot, "get_http_client", _get_client)
     monkeypatch.setattr(
         trading_bot.httpx,
         "AsyncClient",
@@ -81,7 +112,11 @@ async def test_send_telegram_alert_hides_token(monkeypatch, caplog):
             raise httpx.RequestError("boom", request=request)
 
     dummy = DummyClient()
-    monkeypatch.setattr(trading_bot, "get_http_client", lambda: dummy)
+
+    async def _get_client():
+        return dummy
+
+    monkeypatch.setattr(trading_bot, "get_http_client", _get_client)
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setenv("TELEGRAM_ALERT_RETRIES", "1")
