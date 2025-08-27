@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import contextmanager
 from functools import wraps
@@ -10,7 +11,15 @@ from typing import Generator
 import httpx
 import requests
 
-DEFAULT_TIMEOUT = float(os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30"))
+DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30")
+try:
+    DEFAULT_TIMEOUT = float(DEFAULT_TIMEOUT_STR)
+except ValueError:
+    logging.warning(
+        "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout 30s",
+        DEFAULT_TIMEOUT_STR,
+    )
+    DEFAULT_TIMEOUT = 30.0
 
 
 @contextmanager
