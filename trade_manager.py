@@ -1847,17 +1847,17 @@ async def create_trade_manager() -> TradeManager | None:
                 import trading_bot as tb
 
                 if text.startswith("/start"):
-                    tb.trading_enabled = True
+                    await tb.set_trading_enabled(True)
                     await telegram_bot.send_message(
                         chat_id=msg.chat_id, text="Trading enabled"
                     )
                 elif text.startswith("/stop"):
-                    tb.trading_enabled = False
+                    await tb.set_trading_enabled(False)
                     await telegram_bot.send_message(
                         chat_id=msg.chat_id, text="Trading disabled"
                     )
                 elif text.startswith("/status"):
-                    status = "enabled" if tb.trading_enabled else "disabled"
+                    status = "enabled" if await tb.get_trading_enabled() else "disabled"
                     positions = []
                     if trade_manager is not None:
                         try:
