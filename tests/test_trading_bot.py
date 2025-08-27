@@ -877,3 +877,26 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
         asyncio.run(trading_bot.run_once_async())
 
     assert "Prediction: buy" in caplog.messages
+
+
+@pytest.mark.asyncio
+async def test_trading_enabled_parallel():
+    await trading_bot.set_trading_enabled(False)
+
+    async def enable():
+        for _ in range(100):
+            await trading_bot.set_trading_enabled(True)
+            await asyncio.sleep(0)
+
+    async def disable():
+        for _ in range(100):
+            await trading_bot.set_trading_enabled(False)
+            await asyncio.sleep(0)
+
+    await asyncio.gather(
+        *(enable() for _ in range(5)),
+        *(disable() for _ in range(5)),
+    )
+
+    await trading_bot.set_trading_enabled(True)
+    assert await trading_bot.get_trading_enabled() is True

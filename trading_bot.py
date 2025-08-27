@@ -163,7 +163,21 @@ DEFAULT_SERVICE_CHECK_RETRIES = 30
 DEFAULT_SERVICE_CHECK_DELAY = 2.0
 
 # Global flag toggled via Telegram commands to enable/disable trading
-trading_enabled: bool = True
+_TRADING_ENABLED: bool = True
+_TRADING_ENABLED_LOCK = asyncio.Lock()
+
+
+async def get_trading_enabled() -> bool:
+    """Return the current trading enabled state."""
+    async with _TRADING_ENABLED_LOCK:
+        return _TRADING_ENABLED
+
+
+async def set_trading_enabled(value: bool) -> None:
+    """Set the trading enabled state to ``value``."""
+    global _TRADING_ENABLED
+    async with _TRADING_ENABLED_LOCK:
+        _TRADING_ENABLED = value
 
 # Shared HTTP client for outgoing requests
 HTTP_CLIENT: httpx.AsyncClient | None = None
