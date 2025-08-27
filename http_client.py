@@ -33,7 +33,14 @@ def get_requests_session(
         session.close()
 
 
-def get_httpx_client(timeout: float = DEFAULT_TIMEOUT, **kwargs) -> httpx.Client:
+@contextmanager
+def get_httpx_client(
+    timeout: float = DEFAULT_TIMEOUT, **kwargs
+) -> Generator[httpx.Client, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
     kwargs.setdefault("timeout", timeout)
-    return httpx.Client(**kwargs)
+    client = httpx.Client(**kwargs)
+    try:
+        yield client
+    finally:
+        client.close()
