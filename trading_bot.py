@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs, safe_int as util_safe_int
+from bot.utils import logger, suppress_tf_logs
 
 CFG = BotConfig()
 
@@ -43,6 +43,16 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
     try:
         result = cast(value) if value is not None else default
     except (TypeError, ValueError):
+        return default
+
+    if value is None:
+        return default
+    try:
+        result = cast(value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid %s value '%s', using default %s", env_var, value, default
+        )
         return default
 
     if isinstance(result, float) and not math.isfinite(result):
