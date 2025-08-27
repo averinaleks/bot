@@ -238,6 +238,13 @@ class TradeManager:
         self._min_retrain_size: dict[str, int] = {}
         self.load_state()
 
+    def _has_position(self, symbol: str) -> bool:
+        """Check if a position for ``symbol`` exists using the MultiIndex."""
+        return (
+            "symbol" in self.positions.index.names
+            and symbol in self.positions.index.get_level_values("symbol")
+        )
+
     async def compute_risk_per_trade(self, symbol: str, volatility: float) -> float:
         base_risk = self.config.get("risk_per_trade", self.min_risk_per_trade)
         async with self.returns_lock:
@@ -562,10 +569,7 @@ class TradeManager:
                 if side not in {"buy", "sell"}:
                     logger.warning("Invalid side %s for %s", side, symbol)
                     return
-                if (
-                    "symbol" in self.positions.index.names
-                    and symbol in self.positions.index.get_level_values("symbol")
-                ):
+                if self._has_position(symbol):
                     logger.warning("Position for %s already open", symbol)
                     return
 
@@ -666,18 +670,9 @@ class TradeManager:
                 "breakeven_triggered": False,
             }
             timestamp = pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC")
-            new_position_df = pd.DataFrame(
-                [new_position],
-                index=pd.MultiIndex.from_tuples(
-                    [(symbol, timestamp)], names=["symbol", "timestamp"]
-                ),
-                dtype=object,
-            )
+            idx = (symbol, timestamp)
             async with self.position_lock:
-                if (
-                    "symbol" in self.positions.index.names
-                    and symbol in self.positions.index.get_level_values("symbol")
-                ):
+                if self._has_position(symbol):
                     logger.warning(
                         "Position for %s already open after order placed",
                         symbol,
@@ -689,12 +684,7 @@ class TradeManager:
                         self.max_positions,
                     )
                     return
-                if self.positions.empty:
-                    self.positions = new_position_df
-                else:
-                    self.positions = pd.concat(
-                        [self.positions, new_position_df], ignore_index=False
-                    )
+                self.positions.loc[idx, :] = new_position
                 self._sort_positions()
                 self.positions_changed = True
             self.save_state()
@@ -1059,10 +1049,7 @@ class TradeManager:
                     ema_ok = await self.evaluate_ema_condition(symbol, opposite)
                     if ema_ok:
                         async with self.position_lock:
-                            already_open = (
-                                "symbol" in self.positions.index.names
-                                and symbol in self.positions.index.get_level_values("symbol")
-                            )
+                            already_open = self._has_position(symbol)
                         if not already_open:
                             params = await self.data_handler.parameter_optimizer.optimize(symbol)
                             await self.open_position(symbol, opposite, current_price, params)
@@ -1079,10 +1066,7 @@ class TradeManager:
                     ema_ok = await self.evaluate_ema_condition(symbol, opposite)
                     if ema_ok:
                         async with self.position_lock:
-                            already_open = (
-                                "symbol" in self.positions.index.names
-                                and symbol in self.positions.index.get_level_values("symbol")
-                            )
+                            already_open = self._has_position(symbol)
                         if not already_open:
                             params = await self.data_handler.parameter_optimizer.optimize(symbol)
                             await self.open_position(symbol, opposite, current_price, params)
@@ -1203,24 +1187,15 @@ class TradeManager:
                     if empty:
                         continue
                     current_price = df["close"].iloc[-1]
-                    if (
-                        "symbol" in self.positions.index.names
-                        and symbol in self.positions.index.get_level_values("symbol")
-                    ):
+                    if self._has_position(symbol):
                         res = self.check_trailing_stop(symbol, current_price)
                         if inspect.isawaitable(res):
                             await res
-                    if (
-                        "symbol" in self.positions.index.names
-                        and symbol in self.positions.index.get_level_values("symbol")
-                    ):
+                    if self._has_position(symbol):
                         res = self.check_stop_loss_take_profit(symbol, current_price)
                         if inspect.isawaitable(res):
                             await res
-                    if (
-                        "symbol" in self.positions.index.names
-                        and symbol in self.positions.index.get_level_values("symbol")
-                    ):
+                    if self._has_position(symbol):
                         res = self.check_exit_signal(symbol, current_price)
                         if inspect.isawaitable(res):
                             await res
