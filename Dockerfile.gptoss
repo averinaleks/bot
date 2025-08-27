@@ -1,7 +1,9 @@
 FROM python:3.11-slim
 
+# Install only required runtime libraries; coreutils, gnupg, and patch are omitted
+# to reduce the attack surface as they are not needed in production.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libtbbmalloc2 libnuma1 curl git \
+    libtbbmalloc2 libnuma1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
