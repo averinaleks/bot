@@ -112,11 +112,11 @@ async def test_send_trade_timeout_env(monkeypatch):
     dummy = DummyClient()
     monkeypatch.setattr(trading_bot, 'HTTP_CLIENT', dummy)
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
-    result = await trading_bot.send_trade_async(
+    ok, err = await trading_bot.send_trade_async(
         dummy, 'BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'}
     )
     assert called['timeout'] == 9.0
-    assert result is True
+    assert ok is True and err is None
 
 
 @pytest.mark.parametrize("side", ["hold", "BUY", ""])
@@ -415,10 +415,11 @@ async def test_send_trade_reports_error_field(monkeypatch):
         called.append(msg)
 
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
-    ok = await trading_bot.send_trade_async(
+    ok, err = await trading_bot.send_trade_async(
         dummy, 'BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert not ok
+    assert err
     assert called
 
 
@@ -549,6 +550,7 @@ def test_run_once_invalid_price(monkeypatch):
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
     async def fake_send_trade(*a, **k):
         sent.append(True)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
@@ -638,6 +640,7 @@ def test_run_once_forwards_prediction_params(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade)
     monkeypatch.setattr(
@@ -669,6 +672,7 @@ def test_run_once_skips_on_gpt(monkeypatch):
 
     async def fake_send(*a, **k):
         sent.append(True)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send)
 
@@ -700,6 +704,7 @@ def test_run_once_env_fallback(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade2)
     monkeypatch.setattr(
@@ -732,6 +737,7 @@ def test_run_once_config_fallback(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade3)
     monkeypatch.setattr(
@@ -770,6 +776,7 @@ def test_run_once_ignores_invalid_env(monkeypatch):
         *a, tp=None, sl=None, trailing_stop=None, **k
     ):
         sent.update(tp=tp, sl=sl, trailing_stop=trailing_stop)
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade4)
     monkeypatch.setattr(
@@ -860,7 +867,7 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
         return {"signal": "buy"}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy4)
     async def fake_send_trade5(*a, **k):
-        return None
+        return True, None
 
     monkeypatch.setattr(trading_bot, "send_trade_async", fake_send_trade5)
     monkeypatch.setattr(
