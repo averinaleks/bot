@@ -184,8 +184,8 @@ def create_exchange() -> BybitSDKAsync:
 
         return _DummyEx()  # type: ignore[return-value]
 
-    api_key = os.environ.pop("BYBIT_API_KEY", "")
-    api_secret = os.environ.pop("BYBIT_API_SECRET", "")
+    api_key = os.getenv("BYBIT_API_KEY")
+    api_secret = os.getenv("BYBIT_API_SECRET")
     if not api_key or not api_secret:
         raise RuntimeError(
             "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
@@ -193,6 +193,10 @@ def create_exchange() -> BybitSDKAsync:
     client = BybitSDKAsync(api_key=api_key, api_secret=api_secret)
     # Best effort to clear sensitive credentials from memory
     api_key = api_secret = None
+    if "BYBIT_API_KEY" in os.environ:
+        del os.environ["BYBIT_API_KEY"]
+    if "BYBIT_API_SECRET" in os.environ:
+        del os.environ["BYBIT_API_SECRET"]
     return client
 
 
