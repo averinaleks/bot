@@ -275,7 +275,7 @@ async def check_services() -> None:
     }
     if env.get("gptoss_api"):
         services["gptoss"] = (env["gptoss_api"], "health")
-    async with httpx.AsyncClient(trust_env=False) as client:
+    async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
         async def _probe(name: str, url: str, endpoint: str) -> str | None:
             for attempt in range(retries):
                 try:
@@ -493,13 +493,19 @@ async def _post_trade(
         symbol, side, price, tp, sl, trailing_stop
     )
     url = f"{env['trade_manager_url']}/open_position"
-    resp = await client.post(
-        url, json=payload, timeout=timeout, headers=headers or None
-    )
-    return _handle_trade_response(resp, symbol, start)
+    try:
+        resp = await client.post(
+            url, json=payload, timeout=timeout, headers=headers or None
+        )
+        return _handle_trade_response(resp, symbol, start)
+    except httpx.TimeoutException:
+        return False, time.time() - start, "request timed out"
+    except httpx.ConnectError:
+        return False, time.time() - start, "connection error"
+    except httpx.HTTPError as exc:  # pragma: no cover - other network errors
+        return False, time.time() - start, str(exc)
 
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
 async def send_trade_async(
     client: httpx.AsyncClient,
     symbol: str,
@@ -509,35 +515,90 @@ async def send_trade_async(
     tp: float | None = None,
     sl: float | None = None,
     trailing_stop: float | None = None,
-) -> bool:
-    """Asynchronously send trade request to trade manager."""
+    max_attempts: int = 3,
+    retry_delay: float = 1.0,
+) -> tuple[bool, str | None]:
+    """Asynchronously send trade request to trade manager.
 
-    try:
+    Returns a tuple ``(ok, error)`` where ``error`` is ``None`` on success.
+    """
+
+    for attempt in range(1, max_attempts + 1):
         ok, elapsed, error = await _post_trade(
             client, symbol, side, price, env, tp, sl, trailing_stop
         )
-        if elapsed > CONFIRMATION_TIMEOUT:
-            await send_telegram_alert(
-                f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+        if ok:
+            if elapsed > CONFIRMATION_TIMEOUT:
+                await send_telegram_alert(
+                    f"⚠️ Slow TradeManager response {elapsed:.2f}s for {symbol}"
+                )
+            return True, None
+        msg = error or "unknown error"
+        if attempt < max_attempts:
+            logger.warning(
+                "Retrying order for %s (attempt %s/%s): %s",
+                symbol,
+                attempt,
+                max_attempts,
+                msg,
             )
-        if not ok:
-            logger.error("Trade manager error: %s", error)
-            await send_telegram_alert(
-                f"Trade manager responded with {error} for {symbol}"
-            )
-        return ok
-    except httpx.HTTPError as exc:
-        logger.error("Trade manager request error: %s", exc)
+            await asyncio.sleep(retry_delay)
+            continue
+        logger.error("Failed to place order for %s: %s", symbol, msg)
         await send_telegram_alert(
-            f"Trade manager request failed for {symbol}: {exc}"
+            f"Trade manager request failed for {symbol}: {msg}"
         )
-        return False
+        return False, msg
+
+
+async def close_position_async(
+    client: httpx.AsyncClient,
+    env: dict,
+    order_id: str,
+    side: str,
+    max_attempts: int = 3,
+    retry_delay: float = 1.0,
+) -> tuple[bool, str | None]:
+    """Close an existing position via the trade manager.
+
+    Returns a tuple ``(ok, error)`` similar to :func:`send_trade_async`.
+    """
+
+    url = f"{env['trade_manager_url']}/close_position"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = await client.post(
+                url,
+                json={"order_id": order_id, "side": side},
+                timeout=5,
+            )
+            if response.status_code == 200:
+                return True, None
+            msg = f"HTTP {response.status_code} - {response.text}"
+        except httpx.TimeoutException:
+            msg = "request timed out"
+        except httpx.ConnectError:
+            msg = "connection error"
+        except httpx.HTTPError as exc:  # pragma: no cover - other network errors
+            msg = str(exc)
+        if attempt < max_attempts:
+            logger.warning(
+                "Retrying close for %s (attempt %s/%s): %s",
+                order_id,
+                attempt,
+                max_attempts,
+                msg,
+            )
+            await asyncio.sleep(retry_delay)
+            continue
+        logger.error("Failed to close position %s: %s", order_id, msg)
+        return False, msg
 
 
 async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
     """Poll open positions and close them when exit conditions are met."""
     trail_state: dict[str, float] = {}
-    async with httpx.AsyncClient(trust_env=False) as client:
+    async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
         while True:
             try:
                 resp = await client.get(
@@ -610,26 +671,12 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
                     close_side = "buy"
 
                 if reason:
-                    try:
-                        response = await client.post(
-                            f"{env['trade_manager_url']}/close_position",
-                            json={"order_id": order_id, "side": close_side},
-                            timeout=5,
-                        )
-                        if response.status_code != 200:
-                            logger.error(
-                                "Failed to close position %s: HTTP %s - %s",
-                                order_id,
-                                response.status_code,
-                                response.text,
-                            )
-                            await send_telegram_alert(
-                                f"Failed to close position {order_id}: HTTP {response.status_code} - {response.text}"
-                            )
-                    except httpx.HTTPError as exc:
-                        logger.error("Failed to close position %s: %s", order_id, exc)
+                    ok, err = await close_position_async(
+                        client, env, order_id, close_side
+                    )
+                    if not ok and err:
                         await send_telegram_alert(
-                            f"Failed to close position {order_id}: {exc}"
+                            f"Failed to close position {order_id}: {err}"
                         )
                     trail_state.pop(order_id, None)
             await asyncio.sleep(interval)
