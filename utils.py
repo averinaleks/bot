@@ -24,10 +24,11 @@ def configure_logging() -> None:
     """Настроить переменные окружения и handlers для логирования."""
 
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
-    if level_name not in logging._nameToLevel:
+    level_value = getattr(logging, level_name, None)
+    if not isinstance(level_value, int):
         logger.warning("LOG_LEVEL '%s' недопустим, используется INFO", level_name)
-        level_name = "INFO"
-    logger.setLevel(logging._nameToLevel[level_name])
+        level_value = logging.INFO
+    logger.setLevel(level_value)
 
     log_dir = os.getenv("LOG_DIR", "/app/logs")
     fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -46,7 +47,9 @@ def configure_logging() -> None:
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
+    file_handler = logging.FileHandler(
+        os.path.join(log_dir, "trading_bot.log"), encoding="utf-8"
+    )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 

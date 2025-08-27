@@ -32,48 +32,11 @@ except ImportError as exc:  # noqa: W0703 - allow missing pandas
     pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
 
 import numpy as np  # type: ignore
+from bot import test_stubs
+test_stubs.apply()
+from bot.test_stubs import IS_TEST_MODE
 
-if os.getenv("TEST_MODE") == "1":
-    ray = types.ModuleType("ray")
-
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):
-            return self
-
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-            return wrapper
-        return _RayRemoteFunction(func)
-
-    ray.remote = _ray_remote
-    ray.get = lambda x: x
-    ray.init = lambda *a, **k: None
-    ray.is_initialized = lambda: False
-    httpx_mod = types.ModuleType("httpx")
-    httpx_mod.HTTPError = Exception
-    sys.modules.setdefault("httpx", httpx_mod)
-    pybit_mod = types.ModuleType("pybit")
-    ut_mod = types.ModuleType("unified_trading")
-    ut_mod.HTTP = object
-    pybit_mod.unified_trading = ut_mod
-    sys.modules.setdefault("pybit", pybit_mod)
-    sys.modules.setdefault("pybit.unified_trading", ut_mod)
-    a2wsgi_mod = types.ModuleType("a2wsgi")
-    a2wsgi_mod.WSGIMiddleware = lambda app: app
-    sys.modules.setdefault("a2wsgi", a2wsgi_mod)
-    uvicorn_mod = types.ModuleType("uvicorn")
-    uvicorn_mod.middleware = types.SimpleNamespace(wsgi=types.SimpleNamespace(WSGIMiddleware=lambda app: app))
-    sys.modules.setdefault("uvicorn", uvicorn_mod)
-else:
-    import ray
+import ray
 import httpx
 from tenacity import retry, wait_exponential, stop_after_attempt
 import inspect
@@ -110,8 +73,6 @@ import time
 from typing import Dict, Optional, Tuple
 import shutil
 from flask import Flask, request, jsonify
-if os.getenv("TEST_MODE") == "1" and not hasattr(Flask, "asgi_app"):
-    Flask.asgi_app = property(lambda self: self.wsgi_app)
 import threading
 import multiprocessing as mp
 
@@ -1700,9 +1661,7 @@ class TradeManager:
                 # event loop already closed
                 pass
         try:
-            if os.getenv("TEST_MODE") == "1":
-                ray.shutdown()
-            elif hasattr(ray, "is_initialized") and ray.is_initialized():
+            if IS_TEST_MODE or getattr(ray, "is_initialized", lambda: False)():
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Ray shutdown failed (%s): %s", type(exc).__name__, exc)
@@ -1918,7 +1877,7 @@ async def create_trade_manager() -> TradeManager | None:
                 daemon=True,
             ).start()
             trade_manager._listener = listener
-        if os.getenv("TEST_MODE") != "1":
+        if not IS_TEST_MODE:
             _register_cleanup_handlers(trade_manager)
     return trade_manager
 
@@ -1946,7 +1905,7 @@ def _initialize_trade_manager() -> None:
 
 
 # Set ready event immediately in test mode
-if os.getenv("TEST_MODE") == "1":
+if IS_TEST_MODE:
     _ready_event.set()
 
 
@@ -1957,7 +1916,7 @@ _startup_launched = False
 def _start_trade_manager() -> None:
     """Launch trade manager initialization in a background thread."""
     global _startup_launched
-    if _startup_launched or os.getenv("TEST_MODE") == "1":
+    if _startup_launched or IS_TEST_MODE:
         return
     _startup_launched = True
     threading.Thread(target=_initialize_trade_manager, daemon=True).start()
