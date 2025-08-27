@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 from utils import validate_host, safe_int
 
+load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -122,7 +123,6 @@ def too_large(_) -> ResponseReturnValue:
 if __name__ == '__main__':
     from bot.utils import configure_logging
 
-    load_dotenv()
     configure_logging()
     host = validate_host()
     port = safe_int(os.getenv("PORT", "8000"))
