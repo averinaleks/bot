@@ -19,6 +19,7 @@ from bot.gpt_client import (
     MAX_RESPONSE_BYTES,
     _get_api_url_timeout,
     _validate_api_url,
+    _parse_gpt_response,
     query_gpt,
     query_gpt_async,
     query_gpt_json_async,
@@ -63,6 +64,21 @@ async def run_query(func, prompt):
         return await func(prompt)
     return await asyncio.to_thread(func, prompt)
 
+
+def test_parse_gpt_response_success():
+    content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+    assert _parse_gpt_response(content) == "ok"
+
+
+def test_parse_gpt_response_invalid_json():
+    with pytest.raises(GPTClientJSONError):
+        _parse_gpt_response(b"not json")
+
+
+def test_parse_gpt_response_missing_field():
+    content = json.dumps({"foo": "bar"}).encode()
+    with pytest.raises(GPTClientResponseError):
+        _parse_gpt_response(content)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
