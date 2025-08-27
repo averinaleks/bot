@@ -22,7 +22,7 @@ jobs:
           echo "json=$(jq -c '.' github_registries_proxy.json)" >> $GITHUB_OUTPUT
 
       - name: Run Dependabot
-        run: scripts/run_dependabot.sh
+        run: bash scripts/run_dependabot.sh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           TOKEN: ${{ secrets.TOKEN }}
