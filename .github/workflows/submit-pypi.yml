@@ -12,21 +12,21 @@ jobs:
     env:
       TOKENPYPI: ${{ secrets.TOKENPYPI }}
     # Explicit permissions for OIDC-based publishing
-      permissions:
-        id-token: write
-        contents: read
-      steps:
-        - name: Select branch
-          id: select-branch
-          run: |
-            if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git dependabot/pip/openai-1.102.0 >/dev/null; then
-              echo "ref=dependabot/pip/openai-1.102.0" >> "$GITHUB_OUTPUT"
-            else
-              echo "ref=main" >> "$GITHUB_OUTPUT"
-            fi
-        - uses: actions/checkout@v5
-          with:
-            ref: ${{ steps.select-branch.outputs.ref }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Select branch
+        id: select-branch
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git dependabot/pip/openai-1.102.0 >/dev/null; then
+            echo "ref=dependabot/pip/openai-1.102.0" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.select-branch.outputs.ref }}
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -45,9 +45,9 @@ jobs:
           else
             echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
-            sudo swapoff /mnt/swapfile || true
-            sudo rm -f /mnt/swapfile || true
-            sudo rm -rf /mnt/* || true
+          sudo swapoff /mnt/swapfile || true
+          sudo rm -f /mnt/swapfile || true
+          sudo rm -rf /mnt/* || true
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
