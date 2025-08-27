@@ -379,7 +379,7 @@ pyyaml==6.0.2
     #   pytorch-lightning
     #   ray
     #   transformers
-ray==2.48.0
+ray==2.49.0
     # via -r requirements-core.in
 referencing==0.36.2
     # via
