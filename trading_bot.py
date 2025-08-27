@@ -42,7 +42,6 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
     value = os.getenv(env_var)
     if value is None:
         return default
-
     try:
         result = cast(value)
     except (TypeError, ValueError):
@@ -50,7 +49,6 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
             "Invalid %s value '%s', using default %s", env_var, value, default
         )
         return default
-
     if isinstance(result, float) and not math.isfinite(result):
         logger.warning(
             "Invalid %s value '%s', using default %s", env_var, value, default
