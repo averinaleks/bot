@@ -132,14 +132,12 @@ class ModelManager:
 
         try:
             tokenizer_local = AutoTokenizer.from_pretrained(
-                fallback_model,
-                revision=fallback_revision,
+                f"{fallback_model}@{fallback_revision}",
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
             model_local = AutoModelForCausalLM.from_pretrained(
-                fallback_model,
-                revision=fallback_revision,
+                f"{fallback_model}@{fallback_revision}",
                 trust_remote_code=False,
                 cache_dir=cache_dir,
                 local_files_only=True,
@@ -156,15 +154,12 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(  # nosec B506
-                    fallback_model,
-                    revision=fallback_revision,
+                model_local = AutoModelForCausalLM.from_pretrained(
+                    f"{fallback_model}@{fallback_revision}",
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                ).to(
-                    device_local
-                )
+                ).to(device_local)
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load fallback model '%s' from local cache: %s",
