@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs
+from bot.utils import logger, suppress_tf_logs, safe_int as util_safe_int
 
 CFG = BotConfig()
 
@@ -37,21 +37,7 @@ class ServiceUnavailableError(Exception):
 def safe_int(env_var: str, default: int) -> int:
     """Return int value of ``env_var`` or ``default`` on failure."""
     value = os.getenv(env_var)
-    if value is None:
-        return default
-    try:
-        result = int(value)
-        if result <= 0:
-            logger.warning(
-                "Non-positive %s value '%s', using default %s", env_var, value, default
-            )
-            return default
-        return result
-    except ValueError:
-        logger.warning(
-            "Invalid %s value '%s', using default %s", env_var, value, default
-        )
-        return default
+    return util_safe_int(value, default, env_var=env_var)
 
 
 def safe_float(env_var: str, default: float) -> float:
