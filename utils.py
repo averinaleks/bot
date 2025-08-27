@@ -46,7 +46,9 @@ def configure_logging() -> None:
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    file_handler = logging.FileHandler(os.path.join(log_dir, "trading_bot.log"))
+    file_handler = logging.FileHandler(
+        os.path.join(log_dir, "trading_bot.log"), encoding="utf-8"
+    )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
