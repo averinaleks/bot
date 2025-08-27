@@ -48,4 +48,16 @@ jobs:
                       self.end_headers()
           HTTPServer(('127.0.0.1', 8009), Handler).serve_forever()
           PY
+          echo $! > server.pid
           sleep 1
+      - name: Run flake8
+        run: flake8 .
+      - name: Run mypy
+        run: mypy .
+      - name: Run pytest
+        run: pytest
+      - name: Stop mock server
+        if: always()
+        run: |
+          kill $(cat server.pid)
+          rm server.pid
