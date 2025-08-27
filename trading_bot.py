@@ -40,6 +40,10 @@ T = TypeVar("T", int, float)
 def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
     """Return ``env_var`` cast by ``cast`` or ``default`` on failure or invalid value."""
     value = os.getenv(env_var)
+    try:
+        result = cast(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
 
     if isinstance(result, float) and not math.isfinite(result):
         logger.warning(
