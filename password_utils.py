@@ -39,13 +39,13 @@ def validate_password_complexity(password: str) -> None:
     """Проверяет наличие цифр, верхнего/нижнего регистра и спецсимволов."""
     violations = []
     if not re.search(r"[A-Z]", password):
-        violations.append("uppercase")
+        violations.append("отсутствует символ верхнего регистра")
     if not re.search(r"[a-z]", password):
-        violations.append("lowercase")
+        violations.append("отсутствует символ нижнего регистра")
     if not re.search(r"\d", password):
-        violations.append("digit")
+        violations.append("отсутствует цифра")
     if not re.search(r"[^\w\s]", password):
-        violations.append("special")
+        violations.append("отсутствует спецсимвол")
     if violations:
         raise ValueError(
             "Пароль не соответствует требованиям сложности: "

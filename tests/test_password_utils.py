@@ -23,7 +23,6 @@ WEAK_PASSWORDS = [
     ("AAAA!aaa", ["digit"]),
 ]
 
-WEAK_PASSWORD_STRINGS = [p for p, _ in WEAK_PASSWORDS]
 
 
 def test_validate_password_length_accepts_valid_length():
@@ -88,14 +87,11 @@ def test_hash_password_generates_unique_hashes():
     assert hash_password(VALID_PASSWORD) != hash_password(VALID_PASSWORD)
 
 
-@pytest.mark.parametrize("weak_password, violations", WEAK_PASSWORDS)
-def test_hash_password_rejects_weak_passwords(weak_password, violations):
-    msg = ", ".join(violations)
-    with pytest.raises(
-        ValueError,
-        match=f"Пароль не соответствует требованиям сложности: {msg}",
-    ):
         hash_password(weak_password)
+    message = str(exc.value)
+    assert message.startswith("Пароль не соответствует требованиям сложности:")
+    for part in expected_parts:
+        assert part in message
 
 
 @pytest.mark.parametrize("weak_password", WEAK_PASSWORD_STRINGS)
