@@ -16,12 +16,13 @@ from password_utils import (
 VALID_PASSWORD = "Aa1!" + "a" * (MIN_PASSWORD_LENGTH - 4)
 VALID_PASSWORD_NON_ASCII = "Aa1€" + "a" * (MIN_PASSWORD_LENGTH - 4)
 WEAK_PASSWORDS = [
-    "aaaaaaaa",  # no uppercase, digit, special
-    "AAAAAAAA",  # no lowercase, digit, special
-    "AAAAaaaa",  # no digit, special
-    "AAAAaaa1",  # no special
-    "AAAA!aaa",  # no digit
+    ("aaaaaaaa", ["uppercase", "digit", "special"]),
+    ("AAAAAAAA", ["lowercase", "digit", "special"]),
+    ("AAAAaaaa", ["digit", "special"]),
+    ("AAAAaaa1", ["special"]),
+    ("AAAA!aaa", ["digit"]),
 ]
+
 
 
 def test_validate_password_length_accepts_valid_length():
@@ -29,10 +30,14 @@ def test_validate_password_length_accepts_valid_length():
 
 
 @pytest.mark.parametrize(
-    "password", ["a" * (MIN_PASSWORD_LENGTH - 1), "a" * (MAX_PASSWORD_LENGTH + 1)]
+    "password, message",
+    [
+        ("a" * (MIN_PASSWORD_LENGTH - 1), "Password too short"),
+        ("a" * (MAX_PASSWORD_LENGTH + 1), "Password exceeds maximum length"),
+    ],
 )
-def test_validate_password_length_rejects_invalid_length(password):
-    with pytest.raises(ValueError):
+def test_validate_password_length_rejects_invalid_length(password, message):
+    with pytest.raises(ValueError, match=message):
         validate_password_length(password)
 
 
@@ -56,7 +61,7 @@ def test_hash_password_accepts_non_ascii_special_char():
 
 def test_hash_password_rejects_long_password():
     long_password = "Aa1!" + "a" * (MAX_PASSWORD_LENGTH - 3)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Password exceeds maximum length"):
         hash_password(long_password)
 
 
@@ -68,7 +73,7 @@ def test_verify_password_rejects_long_password():
 
 @pytest.mark.parametrize("password", ["", "a" * (MIN_PASSWORD_LENGTH - 1)])
 def test_hash_password_rejects_short_password(password):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Password too short"):
         hash_password(password)
 
 
@@ -82,13 +87,14 @@ def test_hash_password_generates_unique_hashes():
     assert hash_password(VALID_PASSWORD) != hash_password(VALID_PASSWORD)
 
 
-@pytest.mark.parametrize("weak_password", WEAK_PASSWORDS)
-def test_hash_password_rejects_weak_passwords(weak_password):
-    with pytest.raises(ValueError, match="Пароль не соответствует требованиям сложности"):
         hash_password(weak_password)
+    message = str(exc.value)
+    assert message.startswith("Пароль не соответствует требованиям сложности:")
+    for part in expected_parts:
+        assert part in message
 
 
-@pytest.mark.parametrize("weak_password", WEAK_PASSWORDS)
+@pytest.mark.parametrize("weak_password", WEAK_PASSWORD_STRINGS)
 def test_verify_password_accepts_existing_weak_hashes(weak_password):
     stored_hash = bcrypt.hashpw(weak_password.encode(), bcrypt.gensalt()).decode()
     assert verify_password(weak_password, stored_hash)

@@ -8,7 +8,7 @@ import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
-from typing import Awaitable
+from typing import Awaitable, Callable, TypeVar
 import atexit
 
 from model_builder_client import schedule_retrain
@@ -34,35 +34,35 @@ class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
 
-def safe_int(env_var: str, default: int) -> int:
-    """Return int value of ``env_var`` or ``default`` on failure."""
-    value = os.getenv(env_var)
-    return util_safe_int(value, default, env_var=env_var)
+T = TypeVar("T", int, float)
 
 
-def safe_float(env_var: str, default: float) -> float:
-    """Return float value of ``env_var`` or ``default`` on failure or non-positive value."""
+def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
+    """Return ``env_var`` cast by ``cast`` or ``default`` on failure or invalid value."""
     value = os.getenv(env_var)
-    if value is None:
-        return default
-    try:
-        result = float(value)
-        if not math.isfinite(result):
-            logger.warning(
-                "Invalid %s value '%s', using default %s", env_var, value, default
-            )
-            return default
-        if result <= 0:
-            logger.warning(
-                "Non-positive %s value '%s', using default %s", env_var, value, default
-            )
-            return default
-        return result
-    except ValueError:
+
+    if isinstance(result, float) and not math.isfinite(result):
         logger.warning(
             "Invalid %s value '%s', using default %s", env_var, value, default
         )
         return default
+
+    if result <= 0:
+        logger.warning(
+            "Non-positive %s value '%s', using default %s", env_var, value, default
+        )
+        return default
+    return result
+
+
+def safe_int(env_var: str, default: int) -> int:
+    """Return int value of ``env_var`` or ``default`` on failure or non-positive value."""
+    return safe_number(env_var, default, int)
+
+
+def safe_float(env_var: str, default: float) -> float:
+    """Return float value of ``env_var`` or ``default`` on failure or non-positive value."""
+    return safe_number(env_var, default, float)
 
 
 async def send_telegram_alert(message: str) -> None:
