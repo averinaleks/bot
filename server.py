@@ -137,14 +137,13 @@ class ModelManager:
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
-            model_local = AutoModelForCausalLM.from_pretrained(
+            model_local = AutoModelForCausalLM.from_pretrained(  # nosec B611
                 fallback_model,
-                revision=fallback_revision,
+                revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            ).to(
-                device_local
-            )  # nosec
+                local_files_only=True,
+            ).to(device_local)
         except (OSError, ValueError) as exc:
             logging.exception(
                 "Failed to load fallback model '%s': %s", fallback_model, exc
