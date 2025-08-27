@@ -139,7 +139,7 @@ class ModelManager:
             )  # nosec
             model_local = AutoModelForCausalLM.from_pretrained(  # nosec B611
                 fallback_model,
-                revision="5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+                revision=fallback_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
                 local_files_only=True,
