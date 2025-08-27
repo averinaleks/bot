@@ -45,9 +45,10 @@ Commit both the `.in` and generated `.txt` files when updating.
 ## Repository secrets
 
 Some GitHub Actions workflows pull container images from GitHub Container Registry
-(GHCR). These workflows expect a secret named `TOKEN` that provides a personal
-access token with the `read:packages` scope so the runner can authenticate and
-download images from GHCR.
+(GHCR) and trigger Dependabot runs. These workflows expect a secret named
+`TOKEN` that provides a personal access token with the `repo` and
+`security_events` scopes so the runner can authenticate and interact with the
+GitHub API.
 
 ## CI troubleshooting
 

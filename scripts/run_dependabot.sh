@@ -8,7 +8,7 @@ fi
 repo="${GITHUB_REPOSITORY}"
 
 if [[ -z "${TOKEN:-}" ]]; then
-    echo "TOKEN is not set; cannot trigger Dependabot" >&2
+    echo "TOKEN is not set; export a PAT with repo and security_events scopes" >&2
     exit 1
 fi
 token="${TOKEN}"
