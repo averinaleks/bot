@@ -23,6 +23,8 @@ logger = logging.getLogger("TradingBot")
 MAX_PROMPT_BYTES = 10000
 # Maximum allowed response size in bytes
 MAX_RESPONSE_BYTES = 10000
+# Maximum number of retries for network requests
+MAX_RETRIES = 3
 
 
 class GPTClientError(Exception):
@@ -186,12 +188,16 @@ def query_gpt(prompt: str) -> str:
     The API endpoint is read from the ``GPT_OSS_API`` environment variable. If
     it is not set a :class:`GPTClientNetworkError` is raised. Request timeout is
     read from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are
-    retried up to three times with exponential backoff between one and ten
+    retried up to MAX_RETRIES times with exponential backoff between one and ten
     seconds before giving up.
     """
     if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
         raise GPTClientError("Prompt exceeds maximum length")
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
+
+    # Maximum time to wait for the asynchronous task considering retries and backoff
+    backoff_total = sum(min(2**i, 10) for i in range(MAX_RETRIES - 1))
+    max_wait_time = timeout * MAX_RETRIES + backoff_total
 
     def _run_coro_in_thread(coro: Coroutine[Any, Any, bytes]) -> bytes:
         result: dict[str, Any] = {}
@@ -204,15 +210,17 @@ def query_gpt(prompt: str) -> str:
 
         thread = threading.Thread(target=runner, daemon=True)
         thread.start()
-        thread.join(timeout)
+        thread.join(max_wait_time)
         if thread.is_alive():
-            raise GPTClientError("Timed out waiting for async task to finish")
+            raise GPTClientError(
+                "Timed out waiting for async task after maximum retries"
+            )
         if "error" in result:
             raise result["error"]
         return result["value"]
 
     @retry(
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(MAX_RETRIES),
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
@@ -232,7 +240,12 @@ def query_gpt(prompt: str) -> str:
 
     try:
         content = _post()
-    except httpx.HTTPError as exc:  # pragma: no cover - network errors
+    except httpx.TimeoutException as exc:  # pragma: no cover - request timeout
+        logger.exception("Timed out querying GPT OSS API: %s", exc)
+        raise GPTClientNetworkError(
+            "GPT OSS API request timed out after maximum retries"
+        ) from exc
+    except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     return _parse_gpt_response(content)
@@ -244,8 +257,8 @@ async def query_gpt_async(prompt: str) -> str:
     The API endpoint is taken from the ``GPT_OSS_API`` environment variable. If it
     is not set a :class:`GPTClientNetworkError` is raised. Request timeout is read
     from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are retried
-    up to three times with exponential backoff between one and ten seconds before
-    giving up.
+    up to MAX_RETRIES times with exponential backoff between one and ten seconds
+    before giving up.
 
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
@@ -257,7 +270,7 @@ async def query_gpt_async(prompt: str) -> str:
     )
 
     @retry(
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(MAX_RETRIES),
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
@@ -267,7 +280,12 @@ async def query_gpt_async(prompt: str) -> str:
 
     try:
         content = await _post()
-    except httpx.HTTPError as exc:  # pragma: no cover - network errors
+    except httpx.TimeoutException as exc:  # pragma: no cover - request timeout
+        logger.exception("Timed out querying GPT OSS API: %s", exc)
+        raise GPTClientNetworkError(
+            "GPT OSS API request timed out after maximum retries"
+        ) from exc
+    except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     except GPTClientError:
