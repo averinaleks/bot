@@ -132,11 +132,11 @@ def apply() -> None:
     def _shutdown(*_a, **_k):
         _ray_state["initialized"] = False
 
-    ray_mod.remote = _ray_remote
-    ray_mod.get = lambda x: x
-    ray_mod.init = _init
-    ray_mod.is_initialized = _is_initialized
-    ray_mod.shutdown = _shutdown
+    setattr(ray_mod, "remote", _ray_remote)
+    setattr(ray_mod, "get", lambda x: x)
+    setattr(ray_mod, "init", _init)
+    setattr(ray_mod, "is_initialized", _is_initialized)
+    setattr(ray_mod, "shutdown", _shutdown)
     sys.modules["ray"] = cast(ModuleType, ray_mod)
 
     # ----------------------------------------------------------------- HTTPX
@@ -158,30 +158,34 @@ def apply() -> None:
     def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
         return _HTTPXResponse()
 
-    httpx_mod.Response = _HTTPXResponse
-    httpx_mod.get = _return_response
-    httpx_mod.post = _return_response
-    httpx_mod.AsyncClient = object
-    httpx_mod.HTTPError = Exception
+    setattr(httpx_mod, "Response", _HTTPXResponse)
+    setattr(httpx_mod, "get", _return_response)
+    setattr(httpx_mod, "post", _return_response)
+    setattr(httpx_mod, "AsyncClient", object)
+    setattr(httpx_mod, "HTTPError", Exception)
     sys.modules["httpx"] = cast(ModuleType, httpx_mod)
 
     # ------------------------------------------------------------------- PyBit
     pybit_mod = cast(PyBitModule, types.ModuleType("pybit"))
     ut_mod = cast(PyBitUTModule, types.ModuleType("unified_trading"))
-    ut_mod.HTTP = object
-    pybit_mod.unified_trading = ut_mod
+    setattr(ut_mod, "HTTP", object)
+    setattr(pybit_mod, "unified_trading", ut_mod)
     sys.modules["pybit"] = cast(ModuleType, pybit_mod)
     sys.modules["pybit.unified_trading"] = cast(ModuleType, ut_mod)
 
     # ------------------------------------------------------------------ a2wsgi
     a2wsgi_mod = cast(A2WSGIModule, types.ModuleType("a2wsgi"))
-    a2wsgi_mod.WSGIMiddleware = lambda app: app
+    setattr(a2wsgi_mod, "WSGIMiddleware", lambda app: app)
     sys.modules["a2wsgi"] = cast(ModuleType, a2wsgi_mod)
 
     # ------------------------------------------------------------------ uvicorn
     uvicorn_mod = cast(UvicornModule, types.ModuleType("uvicorn"))
-    uvicorn_mod.middleware = types.SimpleNamespace(
-        wsgi=types.SimpleNamespace(WSGIMiddleware=lambda app: app)
+    setattr(
+        uvicorn_mod,
+        "middleware",
+        types.SimpleNamespace(
+            wsgi=types.SimpleNamespace(WSGIMiddleware=lambda app: app)
+        ),
     )
     sys.modules["uvicorn"] = cast(ModuleType, uvicorn_mod)
 
@@ -191,7 +195,7 @@ def apply() -> None:
 
         Flask = cast(type[FlaskWithASGI], _Flask)
         if not hasattr(Flask, "asgi_app"):
-            Flask.asgi_app = property(lambda self: self.wsgi_app)
+            setattr(Flask, "asgi_app", property(lambda self: self.wsgi_app))
     except Exception:
         pass
 
