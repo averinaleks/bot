@@ -14,6 +14,7 @@ import logging
 import threading
 from utils import validate_host, safe_int
 
+load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -293,7 +294,6 @@ def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
 if __name__ == '__main__':
     from utils import configure_logging
 
-    load_dotenv()
     configure_logging()
     host = validate_host()
     port = safe_int(os.getenv("PORT", "8002"))
