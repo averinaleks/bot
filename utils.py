@@ -159,20 +159,37 @@ def validate_host() -> str:
     return host
 
 
-def safe_int(value: str | int | None, default: int = 0) -> int:
+def safe_int(
+    value: str | int | None, default: int = 0, *, env_var: str | None = None
+) -> int:
     """Safely convert ``value`` to a positive integer.
 
-    Any ``None`` value, non-integer string, or non-positive number results in
-    ``default`` being returned.  This helper is used by the service scripts to
-    parse port numbers from environment variables without raising exceptions.
+    Any ``None`` value results in ``default`` without logging. If ``env_var`` is
+    provided, invalid or non-positive inputs are logged as warnings.
     """
 
+    if value is None:
+        return default
     try:
-        if value is None:
-            return default
         result = int(value)
-        return result if result > 0 else default
+        if result <= 0:
+            if env_var:
+                logger.warning(
+                    "Non-positive %s value '%s', using default %s",
+                    env_var,
+                    value,
+                    default,
+                )
+            return default
+        return result
     except (TypeError, ValueError):
+        if env_var:
+            logger.warning(
+                "Invalid %s value '%s', using default %s",
+                env_var,
+                value,
+                default,
+            )
         return default
 
 

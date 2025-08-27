@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs
+from bot.utils import logger, suppress_tf_logs, safe_int as util_safe_int
 
 CFG = BotConfig()
 
@@ -40,15 +40,6 @@ T = TypeVar("T", int, float)
 def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
     """Return ``env_var`` cast by ``cast`` or ``default`` on failure or invalid value."""
     value = os.getenv(env_var)
-    if value is None:
-        return default
-    try:
-        result = cast(value)
-    except ValueError:
-        logger.warning(
-            "Invalid %s value '%s', using default %s", env_var, value, default
-        )
-        return default
 
     if isinstance(result, float) and not math.isfinite(result):
         logger.warning(
