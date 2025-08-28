@@ -16,7 +16,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     tzdata \
     linux-libc-dev \
     coreutils \
-    gnupg \
+    gnupg=2.4.4-2ubuntu17.3 \
+    dirmngr=2.4.4-2ubuntu17.3 \
     libgcrypt20 \
     build-essential \
     ca-certificates \
@@ -88,7 +89,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     python3 \
     libpython3.12-stdlib \
     coreutils \
-    gnupg \
+    gnupg=2.4.4-2ubuntu17.3 \
+    dirmngr=2.4.4-2ubuntu17.3 \
     libgcrypt20 \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
