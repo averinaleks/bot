@@ -1,5 +1,7 @@
 """Main entry point for the trading bot."""
 
+from __future__ import annotations
+
 from data_handler import get_settings
 from pydantic import BaseModel, ValidationError
 
@@ -12,6 +14,7 @@ import time
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
+from typing import Callable, TypeVar
 
 from model_builder_client import schedule_retrain
 
@@ -33,7 +36,11 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
+    """Model for parsing GPT advice responses."""
 
+    signal: float | None = None
+    tp_mult: float | None = None
+    sl_mult: float | None = None
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
