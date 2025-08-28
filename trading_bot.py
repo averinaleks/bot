@@ -35,10 +35,6 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
-    signal: Optional[Literal["buy", "sell", "hold"]] = None
-    tp_mult: Optional[float] = None
-    sl_mult: Optional[float] = None
-
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
