@@ -16,7 +16,6 @@ from model_builder_client import schedule_retrain
 import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
-from pydantic import BaseModel, ValidationError
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
@@ -31,10 +30,6 @@ GPT_ADVICE: dict[str, float | str | None] = {
 }
 
 
-class GPTAdviceModel(BaseModel):
-    signal: str | None = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
 
 
 class ServiceUnavailableError(Exception):
@@ -161,8 +156,8 @@ _PRICE_HISTORY: deque[float] = deque(maxlen=50)
 PRICE_HISTORY_LOCK = asyncio.Lock()
 
 
-# Default trading symbol. Override with the SYMBOL environment variable.
-SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
+# Default trading symbol; overridden from configuration at runtime.
+SYMBOL = "BTCUSDT"
 INTERVAL = safe_float("INTERVAL", 5.0)
 # How often to retrain the reference model (seconds)
 TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
@@ -908,9 +903,18 @@ async def main_async() -> None:
 
 def main() -> None:
     load_dotenv()
+    try:
+        cfg = get_settings()
+    except ValidationError as exc:  # pragma: no cover - config errors
+        logger.error("Invalid environment configuration: %s", exc)
+        raise SystemExit(1)
     suppress_tf_logs()
+    global SYMBOL
+    SYMBOL = cfg.symbols[0]
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
-        logger.warning("Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set")
+        logger.warning(
+            "Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"
+        )
     asyncio.run(main_async())
 
 

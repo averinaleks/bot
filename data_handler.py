@@ -78,6 +78,8 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
     raise ImportError("ray is required for distributed computations") from exc
 from dotenv import load_dotenv
 from flask import Flask, jsonify
+from pydantic import Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings
 
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
@@ -92,6 +94,37 @@ from bot.utils import (
     logger,
     safe_api_call,
 )
+
+
+class DataHandlerSettings(BaseSettings):
+    """Schema for required DataHandler environment variables."""
+
+    model_dir: Path = Field(..., alias="MODEL_DIR")
+    symbols: list[str] = Field(..., alias="STREAM_SYMBOLS")
+    bybit_api_key: str = Field(..., alias="BYBIT_API_KEY")
+    bybit_api_secret: str = Field(..., alias="BYBIT_API_SECRET")
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _split_symbols(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+            if not items:
+                raise ValueError("STREAM_SYMBOLS must contain at least one symbol")
+            return items
+        return v
+
+
+_SETTINGS: DataHandlerSettings | None = None
+
+
+def get_settings() -> DataHandlerSettings:
+    """Return cached ``DataHandlerSettings`` instance."""
+
+    global _SETTINGS
+    if _SETTINGS is None:
+        _SETTINGS = DataHandlerSettings()
+    return _SETTINGS
 
 # Profiling configuration
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
@@ -162,7 +195,7 @@ def _init_cuda() -> None:
         GPU_INITIALIZED = True
 
 
-def create_exchange() -> BybitSDKAsync:
+def create_exchange(settings: DataHandlerSettings | None = None) -> BybitSDKAsync:
     """Create an authenticated Bybit SDK instance.
 
     Raises
@@ -199,15 +232,9 @@ def create_exchange() -> BybitSDKAsync:
 
         return _DummyEx()  # type: ignore[return-value]
 
-    api_key = os.getenv("BYBIT_API_KEY")
-    api_secret = os.getenv("BYBIT_API_SECRET")
-    if not api_key or not api_secret:
-        raise RuntimeError(
-            "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
-        )
-    client = BybitSDKAsync(api_key=api_key, api_secret=api_secret)
+    cfg = settings or get_settings()
+    client = BybitSDKAsync(api_key=cfg.bybit_api_key, api_secret=cfg.bybit_api_secret)
     # Best effort to clear sensitive credentials from memory
-    del api_key, api_secret
     if "BYBIT_API_KEY" in os.environ:
         del os.environ["BYBIT_API_KEY"]
     if "BYBIT_API_SECRET" in os.environ:
@@ -2948,6 +2975,11 @@ if __name__ == "__main__":
     from bot.utils import configure_logging
 
     load_dotenv()
+    try:
+        _SETTINGS = get_settings()
+    except ValidationError as exc:  # pragma: no cover - config errors
+        logger.error("Invalid environment configuration: %s", exc)
+        raise SystemExit(1)
     configure_logging()
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8000"))

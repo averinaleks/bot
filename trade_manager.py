@@ -222,6 +222,7 @@ class TradeManager:
         self.max_positions = config.get("max_positions", 5)
         self.top_signals = config.get("top_signals", self.max_positions)
         self.leverage = config.get("leverage", 10)
+        self.max_position_pct = config.get("max_position_pct", 0.1)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
         self.check_interval = config.get("check_interval", 60.0)
@@ -351,14 +352,24 @@ class TradeManager:
                     disk_usage.free / (1024 ** 3),
                 )
                 return
-            self.positions.to_parquet(self.state_file)
-            with open(self.returns_file, "w", encoding="utf-8") as f:
+            tmp_state = f"{self.state_file}.tmp"
+            tmp_returns = f"{self.returns_file}.tmp"
+            self.positions.to_parquet(tmp_state)
+            with open(tmp_returns, "w", encoding="utf-8") as f:
                 json.dump(self.returns_by_symbol, f)
+            os.replace(tmp_state, self.state_file)
+            os.replace(tmp_returns, self.returns_file)
             self.last_save_time = time.time()
             self.positions_changed = False
             logger.info("TradeManager state saved")
         except (OSError, ValueError) as e:
             logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
+            for path in (locals().get("tmp_state"), locals().get("tmp_returns")):
+                try:
+                    if path and os.path.exists(path):
+                        os.remove(path)
+                except OSError as cleanup_err:
+                    logger.exception("Failed to remove temp file %s: %s", path, cleanup_err)
             raise
 
     def load_state(self):
@@ -521,7 +532,10 @@ class TradeManager:
                 logger.warning("Invalid stop_loss_distance for %s", symbol)
                 return 0.0
             position_size = risk_amount / (stop_loss_distance * self.leverage)
-            position_size = min(position_size, equity * self.leverage / price * 0.1)
+            position_size = min(
+                position_size,
+                equity * self.leverage / price * self.max_position_pct,
+            )
             logger.info(
                 "Position size for %s: %.4f (risk %.2f USDT, ATR %.2f)",
                 symbol,
