@@ -27,6 +27,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libblas-dev \
     liblapack-dev \
     tar=${TAR_VERSION} \
+    && apt-get install -y --no-install-recommends --only-upgrade gnupg dirmngr \
     && python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
@@ -38,7 +39,9 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && ldconfig \
     && python3 --version \
     && openssl version \
-    && curl --version
+    && curl --version \
+    && gpg --version \
+    && dirmngr --version
 
 WORKDIR /app
 
