@@ -222,6 +222,7 @@ class TradeManager:
         self.max_positions = config.get("max_positions", 5)
         self.top_signals = config.get("top_signals", self.max_positions)
         self.leverage = config.get("leverage", 10)
+        self.max_position_pct = config.get("max_position_pct", 0.1)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
         self.check_interval = config.get("check_interval", 60.0)
@@ -521,7 +522,10 @@ class TradeManager:
                 logger.warning("Invalid stop_loss_distance for %s", symbol)
                 return 0.0
             position_size = risk_amount / (stop_loss_distance * self.leverage)
-            position_size = min(position_size, equity * self.leverage / price * 0.1)
+            position_size = min(
+                position_size,
+                equity * self.leverage / price * self.max_position_pct,
+            )
             logger.info(
                 "Position size for %s: %.4f (risk %.2f USDT, ATR %.2f)",
                 symbol,
