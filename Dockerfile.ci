@@ -33,12 +33,6 @@ FROM ubuntu:24.04 AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Устанавливаем только необходимые пакеты выполнения
-RUN apt-get update \
-    && apt-get dist-upgrade -y \
-    && apt-get install --no-install-recommends -y \
-        libssl3t64 python3.12-minimal \
-        coreutils libgcrypt20 login passwd tar \
-    && apt-get install -y --only-upgrade openssl libssl3t64 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
