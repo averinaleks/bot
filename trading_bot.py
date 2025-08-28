@@ -11,7 +11,7 @@ import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, TypeVar, Optional, Literal
 import atexit
 
 from model_builder_client import schedule_retrain
@@ -35,10 +35,6 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
-
-    signal: str | None = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
