@@ -19,7 +19,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     gnupg \
     libgcrypt20 \
     build-essential \
-    curl \
+    ca-certificates \
+    wget \
     python3-dev \
     python3-venv \
     python3-pip \
@@ -28,6 +29,10 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libblas-dev \
     liblapack-dev \
     tar=${TAR_VERSION} \
+    && wget -q https://archive.ubuntu.com/ubuntu/pool/main/c/curl/libcurl4t64_8.9.1-2ubuntu2.2_amd64.deb \
+    && wget -q https://archive.ubuntu.com/ubuntu/pool/main/c/curl/curl_8.9.1-2ubuntu2.2_amd64.deb \
+    && apt-get install -y ./libcurl4t64_8.9.1-2ubuntu2.2_amd64.deb ./curl_8.9.1-2ubuntu2.2_amd64.deb \
+    && rm -f libcurl4t64_8.9.1-2ubuntu2.2_amd64.deb curl_8.9.1-2ubuntu2.2_amd64.deb \
     && python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
@@ -38,7 +43,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && python3 --version \
-    && openssl version
+    && openssl version \
+    && curl --version
 
 WORKDIR /app
 
@@ -91,8 +97,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-RUN apt-get update && apt-get install -y git=1:2.43.0-1ubuntu7.3 curl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY . /app/bot
 
 # Устанавливаем переменные окружения для виртуального окружения
