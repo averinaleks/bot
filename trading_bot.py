@@ -11,7 +11,7 @@ import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, TypeVar, Optional, Literal
 import atexit
 
 from model_builder_client import schedule_retrain
@@ -35,8 +35,9 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
-
-
+    signal: Optional[Literal["buy", "sell", "hold"]] = None
+    tp_mult: Optional[float] = None
+    sl_mult: Optional[float] = None
 
 
 class ServiceUnavailableError(Exception):
