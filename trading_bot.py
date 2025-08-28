@@ -36,8 +36,9 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 class GPTAdviceModel(BaseModel):
 
-
-
+    signal: str | None = None
+    tp_mult: float | None = None
+    sl_mult: float | None = None
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
