@@ -78,10 +78,6 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
     raise ImportError("ray is required for distributed computations") from exc
 from dotenv import load_dotenv
 from flask import Flask, jsonify
-from bot.http_client import (
-    get_async_http_client as get_http_client,
-    close_async_http_client as close_http_client,
-)
 
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
@@ -96,6 +92,37 @@ from bot.utils import (
     logger,
     safe_api_call,
 )
+
+
+class DataHandlerSettings(BaseSettings):
+    """Schema for required DataHandler environment variables."""
+
+    model_dir: Path = Field(..., alias="MODEL_DIR")
+    symbols: list[str] = Field(..., alias="STREAM_SYMBOLS")
+    bybit_api_key: str = Field(..., alias="BYBIT_API_KEY")
+    bybit_api_secret: str = Field(..., alias="BYBIT_API_SECRET")
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _split_symbols(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+            if not items:
+                raise ValueError("STREAM_SYMBOLS must contain at least one symbol")
+            return items
+        return v
+
+
+_SETTINGS: DataHandlerSettings | None = None
+
+
+def get_settings() -> DataHandlerSettings:
+    """Return cached ``DataHandlerSettings`` instance."""
+
+    global _SETTINGS
+    if _SETTINGS is None:
+        _SETTINGS = DataHandlerSettings()
+    return _SETTINGS
 
 # Profiling configuration
 PROFILE_DATA_HANDLER = os.getenv("DATA_HANDLER_PROFILE") == "1"
@@ -166,7 +193,7 @@ def _init_cuda() -> None:
         GPU_INITIALIZED = True
 
 
-def create_exchange() -> BybitSDKAsync:
+def create_exchange(settings: DataHandlerSettings | None = None) -> BybitSDKAsync:
     """Create an authenticated Bybit SDK instance.
 
     Raises
@@ -203,15 +230,9 @@ def create_exchange() -> BybitSDKAsync:
 
         return _DummyEx()  # type: ignore[return-value]
 
-    api_key = os.getenv("BYBIT_API_KEY")
-    api_secret = os.getenv("BYBIT_API_SECRET")
-    if not api_key or not api_secret:
-        raise RuntimeError(
-            "BYBIT_API_KEY and BYBIT_API_SECRET must be set for DataHandler"
-        )
-    client = BybitSDKAsync(api_key=api_key, api_secret=api_secret)
+    cfg = settings or get_settings()
+    client = BybitSDKAsync(api_key=cfg.bybit_api_key, api_secret=cfg.bybit_api_secret)
     # Best effort to clear sensitive credentials from memory
-    del api_key, api_secret
     if "BYBIT_API_KEY" in os.environ:
         del os.environ["BYBIT_API_KEY"]
     if "BYBIT_API_SECRET" in os.environ:
@@ -901,20 +922,35 @@ class DataHandler:
             config.get("max_symbols"),
             GPU_AVAILABLE,
         )
-        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get(
-            "TELEGRAM_CHAT_ID"
-        ):
-            logger.warning(
-                "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
-            )
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
-        self.telegram_logger = TelegramLogger(
-            telegram_bot,
-            chat_id,
-            max_queue_size=config.get("telegram_queue_size"),
-        )
+        if (
+            not config.enable_notifications
+            or not os.environ.get("TELEGRAM_BOT_TOKEN")
+            or not os.environ.get("TELEGRAM_CHAT_ID")
+        ):
+            logger.warning(
+                "Telegram notifications disabled; messages will not be sent"
+            )
+            async def _noop(*_, **__):
+                pass
+
+            self.telegram_logger = types.SimpleNamespace(
+                send_telegram_message=_noop,
+            )
+        else:
+            unsent_path = None
+            if config.save_unsent_telegram:
+                unsent_path = os.path.join(
+                    config.log_dir, config.unsent_telegram_path
+                )
+            self.telegram_logger = TelegramLogger(
+                telegram_bot,
+                chat_id,
+                max_queue_size=config.get("telegram_queue_size"),
+                unsent_path=unsent_path,
+            )
         self.feature_callback = feature_callback
         self.trade_callback = trade_callback
         self.cache = HistoricalDataCache(config["cache_dir"])
@@ -2955,6 +2991,11 @@ if __name__ == "__main__":
     from bot.utils import configure_logging
 
     load_dotenv()
+    try:
+        _SETTINGS = get_settings()
+    except ValidationError as exc:  # pragma: no cover - config errors
+        logger.error("Invalid environment configuration: %s", exc)
+        raise SystemExit(1)
     configure_logging()
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8000"))

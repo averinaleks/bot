@@ -77,6 +77,7 @@ class BotConfig:
     latency_log_interval: int = _get_default("latency_log_interval", 3600)
     load_threshold: float = _get_default("load_threshold", 0.8)
     leverage: int = _get_default("leverage", 10)
+    max_position_pct: float = _get_default("max_position_pct", 0.1)
     min_risk_per_trade: float = _get_default("min_risk_per_trade", 0.01)
     max_risk_per_trade: float = _get_default("max_risk_per_trade", 0.05)
     risk_sharpe_loss_factor: float = _get_default("risk_sharpe_loss_factor", 0.5)
@@ -169,11 +170,16 @@ class BotConfig:
     ema_weight: float = _get_default("ema_weight", 0.2)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
     balance_key: Optional[str] = _get_default("balance_key", None)
+    enable_notifications: bool = _get_default("enable_notifications", True)
+    save_unsent_telegram: bool = _get_default("save_unsent_telegram", False)
+    unsent_telegram_path: str = _get_default("unsent_telegram_path", "unsent_telegram.log")
 
     def __post_init__(self) -> None:
         if self.ws_subscription_batch_size is None:
             self.ws_subscription_batch_size = self.max_subscriptions_per_connection
         self._validate_types()
+        if not 0 < self.max_position_pct <= 1:
+            raise ValueError("max_position_pct must be between 0 and 1")
 
     @staticmethod
     def _isinstance(value: Any, typ: Any) -> bool:

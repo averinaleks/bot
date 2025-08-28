@@ -42,7 +42,7 @@ else:
                 if exchange is None:
                     init_exchange()
 
-def close_exchange(_: Exception | None = None) -> None:
+def close_exchange(_: BaseException | None = None) -> None:
     """Закрыть соединение с биржей при завершении контекста приложения."""
     global exchange
     if exchange is not None:
