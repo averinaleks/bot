@@ -8,6 +8,8 @@ import os
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 
+load_dotenv()
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
