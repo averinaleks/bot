@@ -3,16 +3,15 @@
 from data_handler import get_settings
 from pydantic import BaseModel, ValidationError
 
+import atexit
 import asyncio
+import math
 import os
 import statistics
 import time
-import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar, Optional, Literal
-import atexit
 
 from model_builder_client import schedule_retrain
 
