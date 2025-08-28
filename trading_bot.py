@@ -3,16 +3,16 @@
 from data_handler import get_settings
 from pydantic import BaseModel, ValidationError
 
+import atexit
 import asyncio
+import math
 import os
 import statistics
 import time
-import math
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
-import atexit
 
 from model_builder_client import schedule_retrain
 
@@ -23,7 +23,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
 from bot.utils import logger, suppress_tf_logs
-from pydantic import BaseModel, ValidationError
 
 CFG = BotConfig()
 
@@ -35,9 +34,7 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
-
-
-
+    pass
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
