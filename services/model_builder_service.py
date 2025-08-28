@@ -50,6 +50,10 @@ def _load_model() -> None:
             app.logger.exception("Failed to load model: %s", exc)
             _model = None
 
+if hasattr(app, "before_first_request"):
+    app.before_first_request(_load_model)  # type: ignore[attr-defined]
+else:  # pragma: no cover - Flask 3 removed before_first_request
+    _load_model()
 
 @app.route('/train', methods=['POST'])
 def train() -> ResponseReturnValue:
