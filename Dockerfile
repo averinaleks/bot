@@ -17,6 +17,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     build-essential \
     ca-certificates \
     wget \
+    curl \
     python3-dev \
     python3-venv \
     python3-pip \
