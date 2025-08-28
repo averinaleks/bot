@@ -83,7 +83,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libpython3.12-stdlib \
     coreutils \
     zlib1g \
-    && apt-get install -y --no-install-recommends --only-upgrade coreutils \
+    && apt-get install -y --no-install-recommends --only-upgrade coreutils tar \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && /app/venv/bin/python --version \
