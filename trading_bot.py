@@ -16,8 +16,6 @@ from model_builder_client import schedule_retrain
 import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
-from pydantic import Field, ValidationError, field_validator
-from pydantic_settings import BaseSettings
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
@@ -32,35 +30,6 @@ GPT_ADVICE: dict[str, float | str | None] = {
 }
 
 
-class TradingBotSettings(BaseSettings):
-    """Schema for required TradingBot environment variables."""
-
-    model_dir: Path = Field(..., alias="MODEL_DIR")
-    symbols: list[str] = Field(..., alias="SYMBOLS")
-    bybit_api_key: str = Field(..., alias="BYBIT_API_KEY")
-    bybit_api_secret: str = Field(..., alias="BYBIT_API_SECRET")
-
-    @field_validator("symbols", mode="before")
-    @classmethod
-    def _split_symbols(cls, v: str | list[str]) -> list[str]:
-        if isinstance(v, str):
-            items = [s.strip() for s in v.split(",") if s.strip()]
-            if not items:
-                raise ValueError("SYMBOLS must contain at least one symbol")
-            return items
-        return v
-
-
-_SETTINGS: TradingBotSettings | None = None
-
-
-def get_settings() -> TradingBotSettings:
-    """Return cached ``TradingBotSettings`` instance."""
-
-    global _SETTINGS
-    if _SETTINGS is None:
-        _SETTINGS = TradingBotSettings()
-    return _SETTINGS
 
 
 class ServiceUnavailableError(Exception):
@@ -801,14 +770,18 @@ async def refresh_gpt_advice() -> None:
         gpt_result = await query_gpt_json_async(
             "Что ты видишь в этом коде:\n" + strategy_code
         )
+        advice = GPTAdviceModel.model_validate(gpt_result)
         GPT_ADVICE.update(
-            signal=gpt_result.get("signal"),
-            tp_mult=gpt_result.get("tp_mult"),
-            sl_mult=gpt_result.get("sl_mult"),
+            signal=advice.signal,
+            tp_mult=advice.tp_mult,
+            sl_mult=advice.sl_mult,
         )
-        logger.info("GPT analysis: %s", gpt_result)
+        logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientError as exc:  # pragma: no cover - non-critical
         logger.debug("GPT analysis failed: %s", exc)
+    except ValidationError as exc:
+        await send_telegram_alert(f"Invalid GPT advice schema: {exc}")
+        raise
 
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:

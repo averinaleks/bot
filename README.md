@@ -8,8 +8,10 @@
 {"signal": "buy", "tp_mult": 1.2, "sl_mult": 0.8}
 ```
 
-где `signal` — рекомендация (`buy`, `sell` или `hold`), а `tp_mult` и `sl_mult`
-задают множители для расчёта тейк‑профита и стоп‑лосса.
+Поле `signal` — строка с рекомендацией (`buy`, `sell` или `hold`),
+а `tp_mult` и `sl_mult` — числовые множители для расчёта
+тейк‑профита и стоп‑лосса. Все поля необязательны; при несоответствии
+формату бот поднимает исключение и отправляет уведомление в Telegram.
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
