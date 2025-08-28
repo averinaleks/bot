@@ -98,7 +98,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-RUN apt-get update && apt-get install -y git curl \
+RUN apt-get update && apt-get install -y git=1:2.43.0-1ubuntu7.3 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY . /app/bot
 
