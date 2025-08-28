@@ -1,5 +1,8 @@
 """Main entry point for the trading bot."""
 
+from data_handler import get_settings
+from pydantic import BaseModel, ValidationError
+
 import asyncio
 import os
 import statistics
@@ -32,9 +35,6 @@ GPT_ADVICE: dict[str, float | str | None] = {
 
 
 class GPTAdviceModel(BaseModel):
-    signal: str
-    tp_mult: float
-    sl_mult: float
 
 
 
