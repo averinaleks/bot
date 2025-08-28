@@ -207,6 +207,7 @@ class TradeManager:
                 "highest_price",
                 "lowest_price",
                 "breakeven_triggered",
+                "last_checked_ts",
             ],
             index=pd.MultiIndex.from_arrays(
                 [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
@@ -668,8 +669,9 @@ class TradeManager:
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
+                "last_checked_ts": pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC"),
             }
-            timestamp = pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC")
+            timestamp = new_position["last_checked_ts"]
             idx = (symbol, timestamp)
             async with self.position_lock:
                 if self._has_position(symbol):
@@ -851,9 +853,18 @@ class TradeManager:
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "size"
                     ] = remaining_size
+                    tick_size = 0.0
+                    if hasattr(self.data_handler, "get_tick_size"):
+                        ts = self.data_handler.get_tick_size(symbol)
+                        tick_size = (
+                            await ts if inspect.isawaitable(ts) else ts
+                        )
+                    breakeven_sl = position["entry_price"] + (
+                        tick_size if position["side"] == "buy" else -tick_size
+                    )
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "stop_loss_price"
-                    ] = position["entry_price"]
+                    ] = breakeven_sl
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "breakeven_triggered"
                     ] = True
@@ -905,6 +916,22 @@ class TradeManager:
                 if position.empty:
                     return
                 position = position.iloc[0]
+                ohlcv = self.data_handler.ohlcv
+                if (
+                    "symbol" not in ohlcv.index.names
+                    or symbol not in ohlcv.index.get_level_values("symbol")
+                ):
+                    return
+                df = ohlcv.xs(symbol, level="symbol", drop_level=False)
+                current_ts = df.index.get_level_values("timestamp")[-1]
+                last_checked = position.get("last_checked_ts")
+                if last_checked is not None and current_ts <= last_checked:
+                    return
+                self.positions.loc[
+                    pd.IndexSlice[symbol, :], "last_checked_ts"
+                ] = current_ts
+                self.positions_changed = True
+                self.save_state()
                 indicators = self.data_handler.indicators.get(symbol)
                 if not indicators or not indicators.atr.iloc[-1]:
                     return
