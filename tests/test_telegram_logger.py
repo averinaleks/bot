@@ -2,17 +2,13 @@ import logging
 import os
 import types
 import asyncio
-import importlib.util
 import pytest
 import sys
 import threading
 import time
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
-spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
-utils_real = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(utils_real)
-TelegramLogger = utils_real.TelegramLogger
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from bot.telegram_logger import TelegramLogger
 
 class DummyBot:
     async def send_message(self, chat_id, text):
@@ -39,29 +35,25 @@ def test_emit_without_running_loop_no_exception(monkeypatch):
 
 def test_worker_thread_stops_after_shutdown():
 
-    spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    TL = mod.TelegramLogger
-
     class _Bot:
         async def send_message(self, chat_id, text):
             return types.SimpleNamespace(message_id=1)
 
+    asyncio.run(TelegramLogger.shutdown())
     start_threads = threading.active_count()
-    TL(_Bot(), chat_id=1)
+    TelegramLogger(_Bot(), chat_id=1)
     for _ in range(20):
-        if threading.active_count() > start_threads or TL._worker_task is not None:
+        if threading.active_count() > start_threads or TelegramLogger._worker_task is not None:
             break
         time.sleep(0.05)
-    assert threading.active_count() > start_threads or TL._worker_task is not None
+    assert threading.active_count() > start_threads or TelegramLogger._worker_task is not None
 
-    asyncio.run(mod.TelegramLogger.shutdown())
+    asyncio.run(TelegramLogger.shutdown())
     for _ in range(20):
-        if threading.active_count() <= start_threads and TL._worker_task is None:
+        if threading.active_count() <= start_threads and TelegramLogger._worker_task is None:
             break
         time.sleep(0.05)
-    assert threading.active_count() <= start_threads and TL._worker_task is None
+    assert threading.active_count() <= start_threads and TelegramLogger._worker_task is None
 
 
 @pytest.mark.asyncio
