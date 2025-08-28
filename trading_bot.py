@@ -1,6 +1,5 @@
 """Main entry point for the trading bot."""
 
-from data_handler import get_settings
 from pydantic import BaseModel, ValidationError
 
 import atexit
@@ -12,6 +11,7 @@ import time
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
+from typing import Awaitable, Callable, Literal, Optional, TypeVar
 
 from model_builder_client import schedule_retrain
 
@@ -27,13 +27,6 @@ CFG = BotConfig()
 
 
 class GPTAdviceModel(BaseModel):
-    signal: str | None = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
-
-
-GPT_ADVICE = GPTAdviceModel()
-
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
@@ -902,6 +895,8 @@ async def main_async() -> None:
 
 
 def main() -> None:
+    from data_handler import get_settings  # local import to avoid circular dependency
+
     load_dotenv()
     try:
         cfg = get_settings()
