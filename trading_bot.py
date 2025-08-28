@@ -16,6 +16,8 @@ from model_builder_client import schedule_retrain
 import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
@@ -28,6 +30,37 @@ GPT_ADVICE: dict[str, float | str | None] = {
     "tp_mult": None,
     "sl_mult": None,
 }
+
+
+class TradingBotSettings(BaseSettings):
+    """Schema for required TradingBot environment variables."""
+
+    model_dir: Path = Field(..., alias="MODEL_DIR")
+    symbols: list[str] = Field(..., alias="SYMBOLS")
+    bybit_api_key: str = Field(..., alias="BYBIT_API_KEY")
+    bybit_api_secret: str = Field(..., alias="BYBIT_API_SECRET")
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _split_symbols(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+            if not items:
+                raise ValueError("SYMBOLS must contain at least one symbol")
+            return items
+        return v
+
+
+_SETTINGS: TradingBotSettings | None = None
+
+
+def get_settings() -> TradingBotSettings:
+    """Return cached ``TradingBotSettings`` instance."""
+
+    global _SETTINGS
+    if _SETTINGS is None:
+        _SETTINGS = TradingBotSettings()
+    return _SETTINGS
 
 
 class ServiceUnavailableError(Exception):
@@ -154,8 +187,8 @@ _PRICE_HISTORY: deque[float] = deque(maxlen=50)
 PRICE_HISTORY_LOCK = asyncio.Lock()
 
 
-# Default trading symbol. Override with the SYMBOL environment variable.
-SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
+# Default trading symbol; overridden from configuration at runtime.
+SYMBOL = "BTCUSDT"
 INTERVAL = safe_float("INTERVAL", 5.0)
 # How often to retrain the reference model (seconds)
 TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
@@ -897,9 +930,18 @@ async def main_async() -> None:
 
 def main() -> None:
     load_dotenv()
+    try:
+        cfg = get_settings()
+    except ValidationError as exc:  # pragma: no cover - config errors
+        logger.error("Invalid environment configuration: %s", exc)
+        raise SystemExit(1)
     suppress_tf_logs()
+    global SYMBOL
+    SYMBOL = cfg.symbols[0]
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
-        logger.warning("Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set")
+        logger.warning(
+            "Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"
+        )
     asyncio.run(main_async())
 
 
