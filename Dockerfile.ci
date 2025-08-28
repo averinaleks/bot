@@ -7,11 +7,6 @@ FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update \
-    && apt-get dist-upgrade -y \
-    && apt-get install --no-install-recommends -y \
-        python3 python3-venv build-essential linux-libc-dev \
-        libgcrypt20 libssl3t64 coreutils login passwd tar \
     && python3 -m venv /venv \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
