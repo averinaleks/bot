@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-from contextlib import contextmanager
+import asyncio
+from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from typing import Generator
+from typing import AsyncGenerator, Generator
 
 import httpx
 import requests
@@ -53,3 +54,56 @@ def get_httpx_client(
         yield client
     finally:
         client.close()
+
+
+# ---------------------------------------------------------------------------
+# Asynchronous HTTPX client management
+# ---------------------------------------------------------------------------
+
+_ASYNC_CLIENT: httpx.AsyncClient | None = None
+_ASYNC_CLIENT_LOCK = asyncio.Lock()
+
+
+async def get_async_http_client(
+    timeout: float = DEFAULT_TIMEOUT, **kwargs
+) -> httpx.AsyncClient:
+    """Return a shared :class:`httpx.AsyncClient` instance."""
+    global _ASYNC_CLIENT
+    async with _ASYNC_CLIENT_LOCK:
+        if _ASYNC_CLIENT is None:
+            kwargs.setdefault("timeout", timeout)
+            kwargs.setdefault("trust_env", False)
+            try:
+                _ASYNC_CLIENT = httpx.AsyncClient(**kwargs)
+            except TypeError:  # pragma: no cover - stubbed client
+                _ASYNC_CLIENT = httpx.AsyncClient()
+    return _ASYNC_CLIENT
+
+
+async def close_async_http_client() -> None:
+    """Close the shared asynchronous HTTP client if it exists."""
+    global _ASYNC_CLIENT
+    if _ASYNC_CLIENT is not None:
+        close = getattr(_ASYNC_CLIENT, "aclose", None)
+        if callable(close):
+            await close()
+        _ASYNC_CLIENT = None
+
+
+@asynccontextmanager
+async def async_http_client(
+    timeout: float = DEFAULT_TIMEOUT, **kwargs
+) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """Context manager providing a temporary :class:`httpx.AsyncClient`."""
+    kwargs.setdefault("timeout", timeout)
+    kwargs.setdefault("trust_env", False)
+    try:
+        client = httpx.AsyncClient(**kwargs)
+    except TypeError:  # pragma: no cover - stubbed client
+        client = httpx.AsyncClient()
+    try:
+        yield client
+    finally:
+        close = getattr(client, "aclose", None)
+        if callable(close):
+            await close()

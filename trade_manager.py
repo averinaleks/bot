@@ -58,6 +58,10 @@ except ImportError:  # pragma: no cover - заглушка
         pass
 from bot.config import BotConfig, load_config
 import contextlib
+from bot.http_client import (
+    get_async_http_client as get_http_client,
+    close_async_http_client as close_http_client,
+)
 
 try:  # pragma: no cover - optional dependency
     import torch  # type: ignore
@@ -248,6 +252,7 @@ class TradeManager:
         self.last_stats_day = int(time.time() // 86400)
         self._min_retrain_size: dict[str, int] = {}
         self.load_state()
+        self.http_client = None
 
     def _has_position(self, symbol: str) -> bool:
         """Check if a position for ``symbol`` exists using the MultiIndex."""
@@ -1644,6 +1649,7 @@ class TradeManager:
                 pass
         self.tasks.clear()
         await TelegramLogger.shutdown()
+        await close_http_client()
 
     def shutdown(self) -> None:
         """Synchronous wrapper for graceful shutdown."""
@@ -1666,6 +1672,8 @@ class TradeManager:
             logger.exception("Ray shutdown failed (%s): %s", type(exc).__name__, exc)
 
     async def process_symbol(self, symbol: str):
+        if self.http_client is None:
+            self.http_client = await get_http_client()
         while symbol not in self.model_builder.predictive_models:
             logger.debug("Waiting for model for %s", symbol)
             await asyncio.sleep(30)

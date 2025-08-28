@@ -78,8 +78,6 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
     raise ImportError("ray is required for distributed computations") from exc
 from dotenv import load_dotenv
 from flask import Flask, jsonify
-from pydantic import Field, ValidationError, field_validator
-from pydantic_settings import BaseSettings
 
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
@@ -1012,6 +1010,7 @@ class DataHandler:
         self.restart_attempts = 0
         self.max_restart_attempts = 20
         self.ws_inactivity_timeout = config.get("ws_inactivity_timeout", 30)
+        self.http_client = None
         logger.info("DataHandler initialization complete")
         # Maximum number of symbols to work with overall
         self.max_symbols = config.get("max_symbols", 50)
@@ -1159,6 +1158,7 @@ class DataHandler:
 
     async def load_initial(self):
         try:
+            self.http_client = await get_http_client()
             markets = await safe_api_call(self.exchange, "load_markets")
             self.usdt_pairs = await self.select_liquid_pairs(markets)
             if not self.usdt_pairs:
@@ -2859,6 +2859,7 @@ class DataHandler:
                 pass
 
         await TelegramLogger.shutdown()
+        await close_http_client()
         if ray.is_initialized():
             ray.shutdown()
 
