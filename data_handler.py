@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from trading_bot import get_http_client, close_http_client
+
 import os
 
 if os.getenv("TEST_MODE") == "1":  # pragma: no cover - test stubs
