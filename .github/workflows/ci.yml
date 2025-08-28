@@ -112,7 +112,7 @@ jobs:
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -name '*.pyc' -delete
       - name: Run unit tests
-        run: pytest -m "not integration" --cache-dir=/mnt/pytest_cache
+        run: pytest -m "not integration" -o cache_dir=/mnt/pytest_cache
       - name: Cleanup buildx
         run: docker buildx prune -af || true
 
@@ -202,6 +202,6 @@ jobs:
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -name '*.pyc' -delete
       - name: Run integration tests
-        run: pytest -m integration --cache-dir=/mnt/pytest_cache
+        run: pytest -m integration -o cache_dir=/mnt/pytest_cache
       - name: Cleanup buildx
         run: docker buildx prune -af || true
