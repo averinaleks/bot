@@ -924,20 +924,35 @@ class DataHandler:
             config.get("max_symbols"),
             GPU_AVAILABLE,
         )
-        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get(
-            "TELEGRAM_CHAT_ID"
-        ):
-            logger.warning(
-                "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
-            )
         self.config = config
         self.exchange = exchange or create_exchange()
         self.pro_exchange = pro_exchange
-        self.telegram_logger = TelegramLogger(
-            telegram_bot,
-            chat_id,
-            max_queue_size=config.get("telegram_queue_size"),
-        )
+        if (
+            not config.enable_notifications
+            or not os.environ.get("TELEGRAM_BOT_TOKEN")
+            or not os.environ.get("TELEGRAM_CHAT_ID")
+        ):
+            logger.warning(
+                "Telegram notifications disabled; messages will not be sent"
+            )
+            async def _noop(*_, **__):
+                pass
+
+            self.telegram_logger = types.SimpleNamespace(
+                send_telegram_message=_noop,
+            )
+        else:
+            unsent_path = None
+            if config.save_unsent_telegram:
+                unsent_path = os.path.join(
+                    config.log_dir, config.unsent_telegram_path
+                )
+            self.telegram_logger = TelegramLogger(
+                telegram_bot,
+                chat_id,
+                max_queue_size=config.get("telegram_queue_size"),
+                unsent_path=unsent_path,
+            )
         self.feature_callback = feature_callback
         self.trade_callback = trade_callback
         self.cache = HistoricalDataCache(config["cache_dir"])

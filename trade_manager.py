@@ -177,7 +177,11 @@ class TradeManager:
         self.data_handler = data_handler
         self.model_builder = model_builder
         self.rl_agent = rl_agent
-        if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
+        if (
+            not config.enable_notifications
+            or not os.environ.get("TELEGRAM_BOT_TOKEN")
+            or not os.environ.get("TELEGRAM_CHAT_ID")
+        ):
             logger.warning(
                 "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; Telegram alerts will not be sent"
             )
@@ -190,10 +194,16 @@ class TradeManager:
                 send_telegram_message=_noop,
             )
         else:
+            unsent_path = None
+            if config.save_unsent_telegram:
+                unsent_path = os.path.join(
+                    config.log_dir, config.unsent_telegram_path
+                )
             self.telegram_logger = TelegramLogger(
                 telegram_bot,
                 chat_id,
                 max_queue_size=config.get("telegram_queue_size"),
+                unsent_path=unsent_path,
             )
         self.positions = pd.DataFrame(
             columns=[

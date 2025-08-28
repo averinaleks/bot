@@ -106,5 +106,8 @@
     "early_stopping_patience": 3,
     "reversal_margin": 0.05,
     "prediction_target": "direction",
-    "trading_fee": 0.0
+    "trading_fee": 0.0,
+    "enable_notifications": true,
+    "save_unsent_telegram": false,
+    "unsent_telegram_path": "unsent_telegram.log"
 }

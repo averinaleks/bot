@@ -96,6 +96,11 @@ except ImportError:
 
 import httpx
 
+try:  # pragma: no cover - allow running outside package
+    from .telegram_logger import TelegramLogger
+except Exception:  # pragma: no cover - fallback when executed directly
+    from telegram_logger import TelegramLogger  # type: ignore
+
 if os.getenv("TEST_MODE") == "1":
     import types
     import sys
@@ -511,183 +516,6 @@ class BybitSDKAsync:
         return await asyncio.to_thread(_sync)
 
 
-class TelegramLogger(logging.Handler):
-    """Logging handler that forwards records to a Telegram chat."""
-
-    _queue: asyncio.Queue | None = None
-    _worker_task: asyncio.Task | None = None
-    _worker_lock = asyncio.Lock()
-    _bot = None
-    _stop_event: asyncio.Event | None = None
-
-    def __init__(
-        self, bot, chat_id, level=logging.NOTSET, max_queue_size: int | None = None
-    ):
-        super().__init__(level)
-        self.bot = bot
-        self.chat_id = chat_id
-        self.last_message_time = 0
-        self.message_interval = 1800
-        self.message_lock = asyncio.Lock()
-
-        if TelegramLogger._queue is None:
-            TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
-            TelegramLogger._bot = bot
-            TelegramLogger._stop_event = asyncio.Event()
-            if os.getenv("TEST_MODE") != "1":
-                try:
-                    loop = asyncio.get_running_loop()
-                    TelegramLogger._worker_task = loop.create_task(self._worker())
-                except RuntimeError:
-                    threading.Thread(
-                        target=lambda: asyncio.run(self._worker()),
-                        daemon=True,
-                    ).start()
-
-        self.last_sent_text = ""
-
-    async def _worker(self):
-        while True:
-            if TelegramLogger._queue is None or TelegramLogger._stop_event is None:
-                return
-            if TelegramLogger._stop_event.is_set():
-                return
-            queue = TelegramLogger._queue
-            try:
-                item = await asyncio.wait_for(queue.get(), 1.0)
-            except asyncio.TimeoutError:
-                continue
-            chat_id, text, urgent = item
-            if chat_id is None:
-                queue.task_done()
-                return
-            try:
-                await self._send(text, chat_id, urgent)
-            except (RetryAfter, Forbidden, BadRequest, httpx.HTTPError):
-                logger.exception("Ошибка отправки сообщения в Telegram")
-            finally:
-                queue.task_done()
-            await asyncio.sleep(1)
-
-    async def _send(self, message: str, chat_id: int | str, urgent: bool):
-        async with self.message_lock:
-            if (
-                not urgent
-                and time.time() - self.last_message_time < self.message_interval
-            ):
-                logger.debug(
-                    "Сообщение Telegram пропущено из-за интервала: %s...",
-                    message[:100],
-                )
-                return
-
-            parts = [message[i : i + 500] for i in range(0, len(message), 500)]
-            for part in parts:
-                if part == self.last_sent_text:
-                    logger.debug("Повторное сообщение Telegram пропущено")
-                    continue
-                delay = 1
-                for attempt in range(5):
-                    try:
-                        result = await TelegramLogger._bot.send_message(
-                            chat_id=chat_id, text=part
-                        )
-                        if not getattr(result, "message_id", None):
-                            logger.error("Telegram message response without message_id")
-                        else:
-                            self.last_sent_text = part
-                        self.last_message_time = time.time()
-                        break
-                    except RetryAfter as e:
-                        wait_time = getattr(e, "retry_after", delay)
-                        logger.warning(
-                            "Flood control: ожидание %sс",
-                            wait_time,
-                        )
-                        await asyncio.sleep(wait_time)
-                        delay = min(delay * 2, 60)
-                    except httpx.ConnectError as e:
-                        logger.warning(
-                            "Ошибка соединения Telegram: %s. Попытка %s/5",
-                            e,
-                            attempt + 1,
-                        )
-                        if attempt < 4:
-                            await asyncio.sleep(delay)
-                            delay = min(delay * 2, 60)
-                    except BadRequest as e:
-                        logger.error("BadRequest Telegram: %s. Проверьте chat_id", e)
-                        break
-                    except Forbidden as e:
-                        logger.error(
-                            "Forbidden Telegram: %s. Проверьте токен и chat_id",
-                            e,
-                        )
-                        break
-                    except httpx.HTTPError as e:
-                        logger.error("HTTP ошибка Telegram: %s", e)
-                        break
-                    except asyncio.CancelledError:
-                        raise
-                    except (ValueError, RuntimeError) as e:
-                        logger.exception("Ошибка отправки сообщения Telegram: %s", e)
-                        return
-
-    async def send_telegram_message(self, message, urgent: bool = False):
-        # Telegram allows up to 4096 characters per message. The worker will
-        # further split messages into 500 character chunks, so only trim to the
-        # API limit here instead of the previous 512 characters.
-        if TelegramLogger._queue is None:
-            logger.warning("TelegramLogger queue is None, message dropped")
-            return
-        msg = message[:4096]
-        try:
-            TelegramLogger._queue.put_nowait((self.chat_id, msg, urgent))
-        except asyncio.QueueFull:
-            logger.warning("Очередь Telegram переполнена, сообщение пропущено")
-
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.send_telegram_message(msg))
-            except RuntimeError:
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(self.send_telegram_message(msg))
-                    else:
-                        raise RuntimeError
-                except RuntimeError:
-                    threading.Thread(
-                        target=lambda: asyncio.run(self.send_telegram_message(msg)),
-                        daemon=True,
-                    ).start()
-        except (ValueError, RuntimeError) as e:
-            logger.error("Ошибка в TelegramLogger: %s", e)
-
-    @classmethod
-    async def shutdown(cls):
-        if cls._stop_event is None:
-            return
-        if cls._queue is not None:
-            try:
-                cls._queue.put_nowait((None, "", False))
-            except asyncio.QueueFull:
-                pass
-        cls._stop_event.set()
-        if cls._worker_task is not None:
-            cls._worker_task.cancel()
-            try:
-                await cls._worker_task
-            except asyncio.CancelledError:
-                pass
-            cls._worker_task = None
-        cls._queue = None
-        cls._stop_event = None
-
-
 class TelegramUpdateListener:
     """Listen for incoming Telegram updates with persistent offset."""
 
@@ -869,4 +697,7 @@ def calculate_volume_profile(prices, volumes, bins=50):
 
 
 
-from bot.cache import HistoricalDataCache  # noqa: E402
+try:  # pragma: no cover - allow importing without package
+    from bot.cache import HistoricalDataCache  # noqa: E402
+except Exception:  # pragma: no cover - fallback when package missing
+    HistoricalDataCache = None  # type: ignore

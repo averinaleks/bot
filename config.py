@@ -170,6 +170,9 @@ class BotConfig:
     ema_weight: float = _get_default("ema_weight", 0.2)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
     balance_key: Optional[str] = _get_default("balance_key", None)
+    enable_notifications: bool = _get_default("enable_notifications", True)
+    save_unsent_telegram: bool = _get_default("save_unsent_telegram", False)
+    unsent_telegram_path: str = _get_default("unsent_telegram_path", "unsent_telegram.log")
 
     def __post_init__(self) -> None:
         if self.ws_subscription_batch_size is None:
