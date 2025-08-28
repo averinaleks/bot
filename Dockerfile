@@ -17,7 +17,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     linux-libc-dev \
     coreutils \
     gnupg \
-    libgcrypt20 \
+    libgcrypt20=1.10.3-2build1 \
     libpam0g \
     libssl3t64 \
     openssl \
@@ -86,7 +86,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libpython3.12-stdlib \
     coreutils \
     gnupg \
-    libgcrypt20 \
+    libgcrypt20=1.10.3-2build1 \
     libpam0g \
     libssl3t64 \
     openssl \
