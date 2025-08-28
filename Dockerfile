@@ -1,7 +1,5 @@
 # Этап сборки
-ARG TAR_VERSION=1.35+dfsg-3.1
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
-ARG TAR_VERSION
 ARG ZLIB_VERSION=1.3.1
 ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ENV OMP_NUM_THREADS=1
@@ -26,7 +24,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libffi-dev \
     libblas-dev \
     liblapack-dev \
-    tar=${TAR_VERSION} \
+    tar \
     && python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0' \
     && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
     && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
@@ -65,7 +63,6 @@ RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools<81' wheel &&
 
 # Этап выполнения (минимальный образ)
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
-ARG TAR_VERSION
 ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
 ARG PYTHON_META=3.12.3-0ubuntu2
 ENV OMP_NUM_THREADS=1
