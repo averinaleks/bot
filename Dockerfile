@@ -18,9 +18,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g \
-    libssl3t64=3.0.13-0ubuntu3.5 \
-    openssl=3.0.13-0ubuntu3.5 \
     build-essential \
     curl \
     python3-dev \
@@ -87,7 +84,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
