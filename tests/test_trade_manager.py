@@ -157,6 +157,9 @@ class DummyDataHandler:
             return {}
         self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
 
+    async def get_tick_size(self, symbol: str) -> float:
+        return 0.1
+
     async def get_atr(self, symbol: str) -> float:
         if "symbol" in self.ohlcv.index.names and symbol in self.ohlcv.index.get_level_values("symbol"):
             return float(self.ohlcv.loc[pd.IndexSlice[symbol], "atr"].iloc[-1])
@@ -296,7 +299,7 @@ def test_trailing_stop_to_breakeven():
     open_btc_order = next(o for o in dh.exchange.orders if o['symbol'] == 'BTCUSDT')
     assert pos['breakeven_triggered'] is True
     assert pos['size'] < open_btc_order['amount']
-    assert pos['stop_loss_price'] == pytest.approx(pos['entry_price'])
+    assert pos['stop_loss_price'] == pytest.approx(pos['entry_price'] + 0.1)
 
 
 def test_open_position_skips_existing():
@@ -1205,6 +1208,14 @@ async def test_check_stop_loss_take_profit_triggers_close_long(monkeypatch):
 
     await tm.open_position("BTCUSDT", "buy", 100, {})
 
+    open_ts = tm.positions.index.get_level_values("timestamp")[0]
+    new_ts = open_ts + pd.Timedelta(minutes=1)
+    dh.ohlcv = pd.DataFrame(
+        {"close": [99], "atr": [1.0]},
+        index=pd.MultiIndex.from_tuples([("BTCUSDT", new_ts)], names=["symbol", "timestamp"]),
+    )
+    dh.indicators["BTCUSDT"].atr = pd.Series([1.0])
+
     called = {"n": 0}
 
     async def wrapped(symbol, price, reason=""):
@@ -1230,6 +1241,14 @@ async def test_check_stop_loss_take_profit_triggers_close_short(monkeypatch):
     tm.compute_risk_per_trade = fake_compute
 
     await tm.open_position("BTCUSDT", "sell", 100, {})
+
+    open_ts = tm.positions.index.get_level_values("timestamp")[0]
+    new_ts = open_ts + pd.Timedelta(minutes=1)
+    dh.ohlcv = pd.DataFrame(
+        {"close": [101], "atr": [1.0]},
+        index=pd.MultiIndex.from_tuples([("BTCUSDT", new_ts)], names=["symbol", "timestamp"]),
+    )
+    dh.indicators["BTCUSDT"].atr = pd.Series([1.0])
 
     called = {"n": 0}
 
@@ -1261,6 +1280,14 @@ async def test_check_stop_loss_take_profit_breakeven_uses_fixed_price(monkeypatc
     tm.positions.loc[pd.IndexSlice["BTCUSDT", :], "stop_loss_price"] = 100
     dh.indicators["BTCUSDT"].atr = pd.Series([10.0])
 
+    open_ts = tm.positions.index.get_level_values("timestamp")[0]
+    new_ts = open_ts + pd.Timedelta(minutes=1)
+    dh.ohlcv = pd.DataFrame(
+        {"close": [99.5], "atr": [1.0]},
+        index=pd.MultiIndex.from_tuples([("BTCUSDT", new_ts)], names=["symbol", "timestamp"]),
+    )
+    dh.indicators["BTCUSDT"].atr = pd.Series([10.0])
+
     called = {"n": 0}
 
     async def wrapped(symbol, price, reason=""):
@@ -1271,6 +1298,56 @@ async def test_check_stop_loss_take_profit_breakeven_uses_fixed_price(monkeypatc
 
     await tm.check_stop_loss_take_profit("BTCUSDT", 99.5)
 
+    assert called["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_check_stop_loss_take_profit_delayed(monkeypatch):
+    dh = DummyDataHandler()
+    cfg = make_config()
+    cfg.update(
+        {
+            "trailing_stop_percentage": 1.0,
+            "trailing_stop_coeff": 0.0,
+            "trailing_stop_multiplier": 1.0,
+        }
+    )
+    tm = TradeManager(cfg, dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "buy", 100, {})
+    open_ts = tm.positions.index.get_level_values("timestamp")[0]
+    dh.ohlcv = pd.DataFrame(
+        {"close": [100], "atr": [1.0]},
+        index=pd.MultiIndex.from_tuples([("BTCUSDT", open_ts)], names=["symbol", "timestamp"]),
+    )
+    dh.indicators["BTCUSDT"].atr = pd.Series([1.0])
+
+    await tm.check_trailing_stop("BTCUSDT", 101)
+
+    called = {"n": 0}
+
+    async def wrapped(symbol, price, reason=""):
+        called["n"] += 1
+        tm.positions = tm.positions.drop(symbol, level="symbol")
+
+    monkeypatch.setattr(tm, "close_position", wrapped)
+
+    await tm.check_stop_loss_take_profit("BTCUSDT", 100)
+    assert called["n"] == 0
+
+    new_ts = open_ts + pd.Timedelta(minutes=1)
+    dh.ohlcv = pd.DataFrame(
+        {"close": [100], "atr": [1.0]},
+        index=pd.MultiIndex.from_tuples([("BTCUSDT", new_ts)], names=["symbol", "timestamp"]),
+    )
+    dh.indicators["BTCUSDT"].atr = pd.Series([1.0])
+
+    await tm.check_stop_loss_take_profit("BTCUSDT", 100)
     assert called["n"] == 1
 
 
