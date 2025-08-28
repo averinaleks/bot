@@ -158,11 +158,25 @@ def apply() -> None:
     def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
         return _HTTPXResponse()
 
+    class _HTTPXClient:  # pragma: no cover - minimal placeholder
+        ...
+
+    class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
+        ...
+
+    _client_mod = types.SimpleNamespace(
+        UseClientDefault=object,  # pragma: no cover - minimal
+        USE_CLIENT_DEFAULT=object(),
+    )
+
     setattr(httpx_mod, "Response", _HTTPXResponse)
     setattr(httpx_mod, "get", _return_response)
     setattr(httpx_mod, "post", _return_response)
     setattr(httpx_mod, "AsyncClient", object)
     setattr(httpx_mod, "HTTPError", Exception)
+    setattr(httpx_mod, "Client", _HTTPXClient)
+    setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
+    setattr(httpx_mod, "_client", _client_mod)
     sys.modules["httpx"] = cast(ModuleType, httpx_mod)
 
     # ---------------------------------------------------------------- websockets
