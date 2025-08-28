@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from trading_bot import get_http_client, close_http_client
+
 import os
 
 if os.getenv("TEST_MODE") == "1":  # pragma: no cover - test stubs
@@ -78,11 +80,16 @@ except ImportError as exc:  # pragma: no cover - optional dependency missing
     raise ImportError("ray is required for distributed computations") from exc
 from dotenv import load_dotenv
 from flask import Flask, jsonify
+from pydantic import BaseSettings, Field, ValidationError, field_validator
 
 from bot.config import BotConfig
 from bot.optimizer import ParameterOptimizer
 from bot.strategy_optimizer import StrategyOptimizer
 from bot.cache import HistoricalDataCache
+from bot.http_client import (
+    get_async_http_client as get_http_client,
+    close_async_http_client as close_http_client,
+)
 from bot.utils import BybitSDKAsync, TelegramLogger, bybit_interval
 from bot.utils import calculate_volume_profile as utils_volume_profile
 from bot.utils import (
