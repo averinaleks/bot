@@ -85,14 +85,14 @@ class ModelManager:
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
-            model_local = AutoModelForCausalLM.from_pretrained(
+            model_local = AutoModelForCausalLM.from_pretrained(  # nosec
                 model_name,
                 revision=model_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             ).to(
                 device_local
-            )  # nosec
+            )
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
             try:
@@ -103,7 +103,7 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(
+                model_local = AutoModelForCausalLM.from_pretrained(  # nosec
                     model_name,
                     revision=model_revision,
                     trust_remote_code=False,
@@ -111,7 +111,7 @@ class ModelManager:
                     local_files_only=True,
                 ).to(
                     device_local
-                )  # nosec
+                )
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load model '%s' from local cache: %s", model_name, exc2
@@ -136,8 +136,9 @@ class ModelManager:
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )  # nosec
-            model_local = AutoModelForCausalLM.from_pretrained(
-                f"{fallback_model}@{fallback_revision}",
+            model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+                fallback_model,
+                revision=fallback_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
                 local_files_only=True,
@@ -154,8 +155,9 @@ class ModelManager:
                     cache_dir=cache_dir,
                     local_files_only=True,
                 )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(
-                    f"{fallback_model}@{fallback_revision}",
+                model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+                    fallback_model,
+                    revision=fallback_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
