@@ -1,3 +1,10 @@
+"""Utilities for interacting with the GPT OSS API.
+
+The API endpoint is configured via the ``GPT_OSS_API`` environment variable.
+For security reasons, the URL must either use HTTPS or resolve to a local
+or private address (HTTP is allowed only for such addresses).
+"""
+
 import logging
 import os
 import json
@@ -43,14 +50,36 @@ class GPTClientResponseError(GPTClientError):
     """Raised when the GPT OSS API returns an unexpected structure."""
 
 
+def _truncate_prompt(prompt: str) -> str:
+    """Trim *prompt* to :data:`MAX_PROMPT_BYTES` bytes if necessary.
+
+    A warning is logged when truncation happens.
+    """
+
+    prompt_bytes = prompt.encode("utf-8")
+    if len(prompt_bytes) > MAX_PROMPT_BYTES:
+        logger.warning(
+            "Prompt exceeds maximum length of %s bytes; truncating",
+            MAX_PROMPT_BYTES,
+        )
+        prompt = prompt_bytes[:MAX_PROMPT_BYTES].decode("utf-8", errors="ignore")
+    return prompt
+
+
 def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     parsed = urlparse(api_url)
-    if not parsed.scheme or not parsed.hostname:
-        raise GPTClientError("Invalid GPT_OSS_API URL")
+    if not parsed.scheme:
+        raise GPTClientError(
+            "GPT_OSS_API URL must include a scheme (http or https)"
+        )
+    if not parsed.hostname:
+        raise GPTClientError("GPT_OSS_API URL must include a hostname")
 
     scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"}:
-        raise GPTClientError("Invalid GPT_OSS_API scheme")
+        raise GPTClientError(
+            f"GPT_OSS_API URL scheme {scheme!r} is not supported; use http or https"
+        )
 
     try:
         addr_info = socket.getaddrinfo(
@@ -60,7 +89,9 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
         logger.error(
             "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
         )
-        raise GPTClientError("Invalid GPT_OSS_API host") from exc
+        raise GPTClientError(
+            f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
+        ) from exc
 
     resolved_ips = {info[4][0] for info in addr_info}
 
@@ -193,10 +224,10 @@ def query_gpt(prompt: str) -> str:
     it is not set a :class:`GPTClientNetworkError` is raised. Request timeout is
     read from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are
     retried up to MAX_RETRIES times with exponential backoff between one and ten
-    seconds before giving up.
+    seconds before giving up. Prompts longer than :data:`MAX_PROMPT_BYTES` are
+    truncated with a warning.
     """
-    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
-        raise GPTClientError("Prompt exceeds maximum length")
+    prompt = _truncate_prompt(prompt)
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
     # Maximum time to wait for the asynchronous task considering retries and backoff
@@ -266,9 +297,9 @@ async def query_gpt_async(prompt: str) -> str:
 
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
+    Prompts longer than :data:`MAX_PROMPT_BYTES` are truncated with a warning.
     """
-    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
-        raise GPTClientError("Prompt exceeds maximum length")
+    prompt = _truncate_prompt(prompt)
     url, timeout, hostname, allowed_ips = await asyncio.to_thread(
         _get_api_url_timeout
     )
