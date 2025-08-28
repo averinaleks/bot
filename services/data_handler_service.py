@@ -42,6 +42,18 @@ else:
                 if exchange is None:
                     init_exchange()
 
+def close_exchange(_: Exception | None = None) -> None:
+    """Закрыть соединение с биржей при завершении контекста приложения."""
+    global exchange
+    if exchange is not None:
+        close_method = getattr(exchange, "close", None)
+        if callable(close_method):
+            close_method()
+        exchange = None
+
+if hasattr(app, "teardown_appcontext"):
+    app.teardown_appcontext(close_exchange)
+
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 
