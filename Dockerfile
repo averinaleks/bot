@@ -1,5 +1,5 @@
 # Этап сборки
-ARG TAR_VERSION=1.35+dfsg-3build1
+ARG TAR_VERSION=1.35+dfsg-3.1
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
 ARG TAR_VERSION
 ARG ZLIB_VERSION=1.3.1
@@ -18,11 +18,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g=1.5.3-5ubuntu5.4 \
-    libpam-modules=1.5.3-5ubuntu5.4 \
-    libpam-modules-bin=1.5.3-5ubuntu5.4 \
-    libssl3t64 \
-    openssl \
     build-essential \
     curl \
     python3-dev \
@@ -89,12 +84,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g=1.5.3-5ubuntu5.4 \
-    libpam-modules=1.5.3-5ubuntu5.4 \
-    libpam-modules-bin=1.5.3-5ubuntu5.4 \
-    libssl3t64 \
-    openssl \
-    tar \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
@@ -102,7 +91,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-RUN apt-get update && apt-get install -y git curl \
+RUN apt-get update && apt-get install -y git=1:2.43.0-1ubuntu7.3 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY . /app/bot
 
