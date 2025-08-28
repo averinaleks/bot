@@ -18,7 +18,9 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g \
+    libpam0g=1.5.3-5ubuntu5.4 \
+    libpam-modules=1.5.3-5ubuntu5.4 \
+    libpam-modules-bin=1.5.3-5ubuntu5.4 \
     libssl3t64 \
     openssl \
     build-essential \
@@ -87,7 +89,9 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     gnupg \
     libgcrypt20 \
-    libpam0g \
+    libpam0g=1.5.3-5ubuntu5.4 \
+    libpam-modules=1.5.3-5ubuntu5.4 \
+    libpam-modules-bin=1.5.3-5ubuntu5.4 \
     libssl3t64 \
     openssl \
     tar \
