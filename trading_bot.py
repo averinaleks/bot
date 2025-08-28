@@ -25,17 +25,8 @@ from bot.utils import logger, suppress_tf_logs
 
 CFG = BotConfig()
 
-GPT_ADVICE: dict[str, float | str | None] = {
-    "signal": None,
-    "tp_mult": None,
-    "sl_mult": None,
-}
-
 
 class GPTAdviceModel(BaseModel):
-    signal: Optional[Literal["buy", "sell", "hold"]] = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
 
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
@@ -740,10 +731,10 @@ def _resolve_trade_params(
 
     tp_mult = CFG.tp_multiplier
     sl_mult = CFG.sl_multiplier
-    if GPT_ADVICE.get("tp_mult") is not None:
-        tp_mult *= float(GPT_ADVICE["tp_mult"])
-    if GPT_ADVICE.get("sl_mult") is not None:
-        sl_mult *= float(GPT_ADVICE["sl_mult"])
+    if GPT_ADVICE.tp_mult is not None:
+        tp_mult *= float(GPT_ADVICE.tp_mult)
+    if GPT_ADVICE.sl_mult is not None:
+        sl_mult *= float(GPT_ADVICE.sl_mult)
 
     tp = _resolve(tp, env_tp, tp_mult)
     sl = _resolve(sl, env_sl, sl_mult)
@@ -757,7 +748,7 @@ def _resolve_trade_params(
 def should_trade(model_signal: str) -> bool:
     """Return ``True`` if trade should proceed based on GPT advice."""
 
-    gpt_signal = GPT_ADVICE.get("signal")
+    gpt_signal = GPT_ADVICE.signal
     if gpt_signal and gpt_signal != model_signal:
         logger.info(
             "GPT advice %s conflicts with model signal %s", gpt_signal, model_signal
@@ -776,11 +767,8 @@ async def refresh_gpt_advice() -> None:
             "Что ты видишь в этом коде:\n" + strategy_code
         )
         advice = GPTAdviceModel.model_validate(gpt_result)
-        GPT_ADVICE.update(
-            signal=advice.signal,
-            tp_mult=advice.tp_mult,
-            sl_mult=advice.sl_mult,
-        )
+        global GPT_ADVICE
+        GPT_ADVICE = advice
         logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientError as exc:  # pragma: no cover - non-critical
         logger.debug("GPT analysis failed: %s", exc)

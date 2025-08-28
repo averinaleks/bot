@@ -730,9 +730,9 @@ def test_run_once_skips_on_gpt(monkeypatch):
         },
     )
 
-    trading_bot.GPT_ADVICE["signal"] = "sell"
+    trading_bot.GPT_ADVICE.signal = "sell"
     asyncio.run(trading_bot.run_once_async())
-    trading_bot.GPT_ADVICE["signal"] = None
+    trading_bot.GPT_ADVICE.signal = None
     assert not sent
 
 
@@ -884,11 +884,11 @@ def test_resolve_trade_params_gpt(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(trading_bot.CFG, "tp_multiplier", 1.0, raising=False)
     monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 1.0, raising=False)
-    trading_bot.GPT_ADVICE["tp_mult"] = 1.5
-    trading_bot.GPT_ADVICE["sl_mult"] = 0.5
+    trading_bot.GPT_ADVICE.tp_mult = 1.5
+    trading_bot.GPT_ADVICE.sl_mult = 0.5
     result = trading_bot._resolve_trade_params(None, None, None, price=100.0)
-    trading_bot.GPT_ADVICE["tp_mult"] = None
-    trading_bot.GPT_ADVICE["sl_mult"] = None
+    trading_bot.GPT_ADVICE.tp_mult = None
+    trading_bot.GPT_ADVICE.sl_mult = None
     assert result[:2] == pytest.approx((150.0, 50.0))
 
 
