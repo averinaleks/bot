@@ -16,6 +16,7 @@ from model_builder_client import schedule_retrain
 import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import BaseModel, ValidationError
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
@@ -28,6 +29,12 @@ GPT_ADVICE: dict[str, float | str | None] = {
     "tp_mult": None,
     "sl_mult": None,
 }
+
+
+class GPTAdviceModel(BaseModel):
+    signal: str | None = None
+    tp_mult: float | None = None
+    sl_mult: float | None = None
 
 
 class ServiceUnavailableError(Exception):
@@ -768,14 +775,18 @@ async def refresh_gpt_advice() -> None:
         gpt_result = await query_gpt_json_async(
             "Что ты видишь в этом коде:\n" + strategy_code
         )
+        advice = GPTAdviceModel.model_validate(gpt_result)
         GPT_ADVICE.update(
-            signal=gpt_result.get("signal"),
-            tp_mult=gpt_result.get("tp_mult"),
-            sl_mult=gpt_result.get("sl_mult"),
+            signal=advice.signal,
+            tp_mult=advice.tp_mult,
+            sl_mult=advice.sl_mult,
         )
-        logger.info("GPT analysis: %s", gpt_result)
+        logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientError as exc:  # pragma: no cover - non-critical
         logger.debug("GPT analysis failed: %s", exc)
+    except ValidationError as exc:
+        await send_telegram_alert(f"Invalid GPT advice schema: {exc}")
+        raise
 
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
