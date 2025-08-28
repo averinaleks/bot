@@ -810,12 +810,21 @@ class ModelBuilder:
                 "threshold_offset": self.threshold_offset,
                 "base_thresholds": self.base_thresholds,
             }
-            with open(self.state_file, "wb") as f:
+            tmp_file = f"{self.state_file}.tmp"
+            with open(tmp_file, "wb") as f:
                 joblib.dump(state, f)
+            os.replace(tmp_file, self.state_file)
             self.last_save_time = time.time()
             logger.info("Состояние ModelBuilder сохранено")
         except (OSError, ValueError) as e:
             logger.exception("Ошибка сохранения состояния ModelBuilder: %s", e)
+            try:
+                if os.path.exists(tmp_file):
+                    os.remove(tmp_file)
+            except OSError as cleanup_err:
+                logger.exception(
+                    "Не удалось удалить временный файл %s: %s", tmp_file, cleanup_err
+                )
             raise
 
     def load_state(self):
