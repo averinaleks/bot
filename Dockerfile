@@ -1,5 +1,5 @@
 # Этап сборки
-ARG TAR_VERSION=1.35+dfsg-3build1
+ARG TAR_VERSION=1.35+dfsg-3.1
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
 ARG TAR_VERSION
 ARG ZLIB_VERSION=1.3.1
@@ -90,7 +90,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libpam0g \
     libssl3t64 \
     openssl \
-    tar \
+    tar=${TAR_VERSION} \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
