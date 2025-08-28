@@ -2,13 +2,16 @@
 
 # -------- Builder stage --------
 # Используем публичный LTS-образ Ubuntu для сборки зависимостей
-FROM ubuntu:noble-20250716 AS builder
+FROM ubuntu:24.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    python3 python3-venv build-essential linux-libc-dev libgcrypt20 \
+RUN apt-get update \
+    && apt-get dist-upgrade -y \
+    && apt-get install --no-install-recommends -y \
+        python3 python3-venv build-essential linux-libc-dev \
+        libgcrypt20 libssl3t64 coreutils login passwd tar \
     && python3 -m venv /venv \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
@@ -25,16 +28,11 @@ COPY services services
 COPY tests tests
 
 # -------- Runtime stage --------
-FROM ubuntu:noble-20250716 AS runtime
+FROM ubuntu:24.04 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Устанавливаем только необходимые пакеты выполнения
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    libssl3t64=3.0.13-0ubuntu3.5 \
-    python3.12-minimal=3.12.3-1ubuntu0.8 \
-    curl=8.5.0-2ubuntu10.6 \
-    && apt-get install -y --only-upgrade openssl libssl3t64 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
