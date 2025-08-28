@@ -20,6 +20,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, query_gpt_json_async
 from bot.utils import logger, suppress_tf_logs
+from pydantic import BaseModel, ValidationError
 
 CFG = BotConfig()
 
@@ -28,6 +29,12 @@ GPT_ADVICE: dict[str, float | str | None] = {
     "tp_mult": None,
     "sl_mult": None,
 }
+
+
+class GPTAdviceModel(BaseModel):
+    signal: str
+    tp_mult: float
+    sl_mult: float
 
 
 
