@@ -220,7 +220,7 @@ async def test_invalid_ipv6(monkeypatch, func, client_cls, url):
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_invalid_url(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "bad-url")
-    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
+    with pytest.raises(GPTClientError, match="scheme"):
         await run_query(func, "hi")
 
 
@@ -228,7 +228,7 @@ async def test_invalid_url(monkeypatch, func, client_cls):
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_invalid_url_no_host(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "https://")
-    with pytest.raises(GPTClientError, match="Invalid GPT_OSS_API URL"):
+    with pytest.raises(GPTClientError, match="hostname"):
         await run_query(func, "hi")
 
 
@@ -290,9 +290,22 @@ async def test_retry_failure(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, _", QUERIES)
-async def test_prompt_too_long(func, _):
-    with pytest.raises(GPTClientError):
-        await run_query(func, "я" * (MAX_PROMPT_BYTES // 2 + 1))
+async def test_prompt_too_long(monkeypatch, func, _, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    sent = {}
+
+    def fake_stream(self, *args, **kwargs):
+        sent["bytes"] = len(kwargs["json"]["prompt"].encode("utf-8"))
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    long_prompt = "я" * (MAX_PROMPT_BYTES // 2 + 1)
+    with caplog.at_level(logging.WARNING):
+        result = await run_query(func, long_prompt)
+    assert result == "ok"
+    assert sent["bytes"] == MAX_PROMPT_BYTES
+    assert "Prompt exceeds maximum length" in caplog.text
 
 
 @pytest.mark.asyncio
