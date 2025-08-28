@@ -19,8 +19,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     gnupg \
     libgcrypt20 \
     libpam0g \
-    libssl3t64 \
-    openssl \
+    libssl3t64=3.0.13-0ubuntu3.5 \
+    openssl=3.0.13-0ubuntu3.5 \
     build-essential \
     curl \
     python3-dev \
@@ -88,9 +88,6 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     gnupg \
     libgcrypt20 \
     libpam0g \
-    libssl3t64 \
-    openssl \
-    tar=${TAR_VERSION} \
     zlib1g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
@@ -98,7 +95,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-RUN apt-get update && apt-get install -y git curl \
+RUN apt-get update && apt-get install -y git=1:2.43.0-1ubuntu7.3 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY . /app/bot
 
