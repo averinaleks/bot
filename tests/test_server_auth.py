@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 import pytest
 
 os.environ["CSRF_SECRET"] = "testsecret"
