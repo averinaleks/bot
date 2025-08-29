@@ -12,7 +12,6 @@ jobs:
     env:
       TOKENPYPI: ${{ secrets.TOKENPYPI }}
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Select branch
