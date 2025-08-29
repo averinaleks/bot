@@ -31,12 +31,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
           path: bot
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
         timeout-minutes: 10
         continue-on-error: true
         with:
@@ -60,7 +60,7 @@ jobs:
       - name: Install LVM
         run: sudo apt-get update && sudo apt-get install -y lvm2
       - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
+        uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
         with:
           root-reserve-mb: 4096
           temp-reserve-mb: 100
@@ -83,7 +83,7 @@ jobs:
         run: mkdir -p /mnt/.buildx-cache
 
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
           path: /mnt/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -91,7 +91,7 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
         with:
           driver: docker-container
 
@@ -123,7 +123,7 @@ jobs:
         working-directory: bot
 
       - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@v0.2.3
+        uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d # v0.2.3
         with:
           version: v0.65.0
 
@@ -138,7 +138,7 @@ jobs:
         run: mkdir -p /mnt/trivy-tmp
         working-directory: bot
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # 0.32.0
         env:
           TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
@@ -154,12 +154,12 @@ jobs:
         working-directory: bot
 
       - name: Upload Trivy report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact }}
           path: bot/${{ matrix.artifact }}.txt
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         if: matrix.artifact == 'trivy-report-ci'
         with:
           name: trivy-report-ci
@@ -175,7 +175,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
           path: bot
