@@ -77,7 +77,7 @@ jobs:
           sudo systemctl start docker
 
       - name: Login to Docker Hub
-        run: docker login -u ${{ secrets.AVERINALEKS }} -p ${{ secrets.BOT }}
+        run: echo "${{ secrets.BOT }}" | docker login --username "${{ secrets.AVERINALEKS }}" --password-stdin
 
       - name: Prepare buildx cache directory
         run: mkdir -p /mnt/.buildx-cache
@@ -105,7 +105,7 @@ jobs:
         run: |
           docker buildx build \
             -f ${{ matrix.file }} \
-            -t docker.io/${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest \
+            -t docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest \
             --push \
             --cache-from type=local,src=/mnt/.buildx-cache \
             --cache-to type=local,dest=/mnt/.buildx-cache-new,mode=max \
