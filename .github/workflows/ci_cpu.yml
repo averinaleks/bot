@@ -9,6 +9,7 @@ on:
 env:
   GPT_OSS_API: http://127.0.0.1:8009
   GPT_OSS_TIMEOUT: 5
+  TEST_MODE: "1"
 
 jobs:
   lint-type-test:

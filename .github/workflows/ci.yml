@@ -12,6 +12,7 @@ on:
 
 env:
   PYTHONPYCACHEPREFIX: /mnt/pycache
+  TEST_MODE: "1"
 
 jobs:
   unit:
@@ -121,6 +122,8 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-24.04
     needs: unit
+    env:
+      TEST_MODE: "1"
     strategy:
       matrix:
         device: [cpu]
