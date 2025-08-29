@@ -103,6 +103,7 @@ jobs:
         working-directory: bot
 
       - name: Build and push Docker image
+        working-directory: bot
         run: |
           docker buildx build \
             --progress=plain \
