@@ -26,8 +26,8 @@ jobs:
             image: myapp
             artifact: trivy-report-gptoss
     env:
-      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
-      DOCKERHUB_TOKEN: ${{ secrets.BOT }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKER_PASS }}
 
     steps:
       - name: Checkout code
@@ -76,12 +76,8 @@ jobs:
           sudo ln -s /mnt/docker /var/lib/docker
           sudo systemctl start docker
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: docker.io
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        run: docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
 
       - name: Prepare buildx cache directory
         run: mkdir -p /mnt/.buildx-cache
@@ -106,13 +102,14 @@ jobs:
         working-directory: bot
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          load: true
-          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
-          cache-from: type=local,src=/mnt/.buildx-cache
-          cache-to: type=local,dest=/mnt/.buildx-cache-new,mode=max
+        run: |
+          docker buildx build \
+            -f ${{ matrix.file }} \
+            -t docker.io/${{ secrets.DOCKER_USER }}/${{ matrix.image }}:latest \
+            --push \
+            --cache-from type=local,src=/mnt/.buildx-cache \
+            --cache-to type=local,dest=/mnt/.buildx-cache-new,mode=max \
+            .
 
       - name: Apply security upgrades in built image
         run: |
