@@ -67,5 +67,5 @@ jobs:
       - name: Stop mock server
         if: always()
         run: |
-          kill $(cat server.pid)
+          pkill -F server.pid || true
           rm server.pid
