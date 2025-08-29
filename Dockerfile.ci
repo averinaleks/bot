@@ -2,7 +2,7 @@
 
 # -------- Builder stage --------
 # Используем публичный LTS-образ Ubuntu для сборки зависимостей
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:24.04@sha256:7c06e91f61fa88c08cc74f7e1b7c69ae24910d745357e0dfe1d2c0322aaf20f9 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -28,7 +28,7 @@ COPY services services
 COPY tests tests
 
 # -------- Runtime stage --------
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:24.04@sha256:7c06e91f61fa88c08cc74f7e1b7c69ae24910d745357e0dfe1d2c0322aaf20f9 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 
