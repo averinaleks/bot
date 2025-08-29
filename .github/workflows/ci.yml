@@ -91,6 +91,7 @@ jobs:
             export TMPDIR=/mnt/tmp
             export PIP_CACHE_DIR=/mnt/pip-cache
             pip install -r requirements-ci.txt
+            pip install -r requirements-cpu.txt
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Audit dependencies
@@ -194,6 +195,7 @@ jobs:
             export TMPDIR=/mnt/tmp
             export PIP_CACHE_DIR=/mnt/pip-cache
             pip install -r requirements-ci.txt
+            pip install -r requirements-cpu.txt
           fi
           echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Remove test caches
