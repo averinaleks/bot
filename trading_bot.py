@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, ValidationError
 
+from typing import Callable, TypeVar
+from typing import Awaitable
 import atexit
 import asyncio
 import math
