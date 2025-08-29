@@ -2,8 +2,7 @@
 
 from pydantic import BaseModel, ValidationError
 
-from typing import Callable, TypeVar
-from typing import Awaitable
+from typing import Awaitable, Callable, TypeVar
 import atexit
 import asyncio
 import math
@@ -13,7 +12,6 @@ import time
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar
 
 from model_builder_client import schedule_retrain
 
