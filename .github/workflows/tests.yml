@@ -14,7 +14,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements-ci.txt -r requirements-cpu.txt
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+      - name: Install requirements-ci
+        run: pip install -r requirements-ci.txt
+      - name: Install requirements-cpu
+        run: pip install -r requirements-cpu.txt
       - name: Run tests
         run: pytest
