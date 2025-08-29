@@ -1,8 +1,6 @@
-import os
 import logging
+import os
 import pytest
-
-os.environ["CSRF_SECRET"] = "testsecret"
 
 pytest.importorskip("transformers")
 
@@ -11,7 +9,6 @@ from contextlib import contextmanager
 from fastapi.testclient import TestClient
 
 
-@contextmanager
 def make_client(monkeypatch):
     def dummy_load_model():
         server.model_manager.tokenizer = object()
@@ -29,14 +26,14 @@ def make_client(monkeypatch):
         server.API_KEYS.update(original_keys)
 
 
-def test_completions_requires_key(monkeypatch):
+def test_completions_requires_key(monkeypatch, csrf_secret):
     with make_client(monkeypatch) as client:
         resp = client.post("/v1/completions", json={"prompt": "hi"})
         assert resp.status_code == 401
     assert not server.API_KEYS
 
 
-def test_chat_completions_requires_key(monkeypatch):
+def test_chat_completions_requires_key(monkeypatch, csrf_secret):
     with make_client(monkeypatch) as client:
         resp = client.post(
             "/v1/chat/completions",
@@ -46,7 +43,7 @@ def test_chat_completions_requires_key(monkeypatch):
     assert not server.API_KEYS
 
 
-def test_check_api_key_masks_sensitive_headers(monkeypatch, caplog):
+def test_check_api_key_masks_sensitive_headers(monkeypatch, csrf_secret, caplog):
     with make_client(monkeypatch) as client:
         headers = {
             "Authorization": "Bearer secret-token",
