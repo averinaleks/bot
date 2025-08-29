@@ -13,6 +13,7 @@ import time
 from collections import deque
 from contextlib import suppress
 from pathlib import Path
+from typing import Awaitable, Callable, TypeVar
 
 from model_builder_client import schedule_retrain
 
