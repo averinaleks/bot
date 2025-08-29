@@ -14,6 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         include:
           - file: Dockerfile.cpu
@@ -104,6 +105,7 @@ jobs:
       - name: Build and push Docker image
         run: |
           docker buildx build \
+            --progress=plain \
             -f ${{ matrix.file }} \
             -t docker.io/${{ secrets.AVERINALEKS }}/${{ matrix.image }}:latest \
             --push \
