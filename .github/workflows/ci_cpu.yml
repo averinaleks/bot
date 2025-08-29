@@ -54,7 +54,7 @@ jobs:
           HTTPServer(('127.0.0.1', 8009), Handler).serve_forever()
           PY
           echo $! > server.pid
-          sleep 1
+          until curl -sf http://127.0.0.1:8009 >/dev/null; do sleep 0.5; done
       - name: Run flake8
         run: flake8 .
       - name: Run mypy
