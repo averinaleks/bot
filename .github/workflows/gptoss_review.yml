@@ -71,6 +71,18 @@ jobs:
         if: steps.generate-diff.outputs.has_diff == 'true'
         id: llm-review
         run: |
+          model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+          review=""
+          if ls diff_part_* 1> /dev/null 2>&1; then
+            for part in diff_part_*; do
+              payload=$(jq -n --arg diff "$(cat "$part")" --arg model "$model" '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}' )
+              part_review=$(curl -s -H "Content-Type: application/json" -d "$payload" http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
+              review="${review}${part_review}\n"
+            done
+          else
+            payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}' )
+            review=$(curl -s -H "Content-Type: application/json" -d "$payload" http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
+          fi
           if [ -z "$review" ]; then
             echo "has_content=false" >> "$GITHUB_OUTPUT"
             exit 0
