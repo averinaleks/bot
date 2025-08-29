@@ -28,7 +28,6 @@ jobs:
       - name: Audit dependencies
         working-directory: /mnt
         run: |
-          pip install pip-audit
           pip-audit -f json -o pip-audit.json
       - name: Upload pip-audit report
         if: always()
