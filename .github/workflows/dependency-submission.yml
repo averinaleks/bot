@@ -1,0 +1,21 @@
+name: Dependency Submission
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install build deps
+        run: pip install --upgrade pip build
+      - name: Validate project
+        run: python -m build
+      - name: Submit dependency snapshot
+        uses: advanced-security/python-dependency-submission@v1
