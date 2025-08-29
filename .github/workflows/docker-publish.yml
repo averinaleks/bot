@@ -112,8 +112,7 @@ jobs:
             .
 
       - name: Apply security upgrades in built image
-        run: |
-          docker run --rm ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
+        run: docker run --rm docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
         working-directory: bot
 
       - name: Move Docker layer cache
