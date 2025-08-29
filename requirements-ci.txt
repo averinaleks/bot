@@ -19,4 +19,4 @@ requests>=2.32.0
 types-requests
 mypy==1.17.1
 hypothesis>=6.0.0
-pip-audit
+pip-audit==2.9.0
