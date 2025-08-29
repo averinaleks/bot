@@ -16,14 +16,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Read registries proxy
-        id: read_proxy
-        run: |
-          echo "json=$(jq -c '.' github_registries_proxy.json)" >> $GITHUB_OUTPUT
-
       - name: Run Dependabot
         run: bash scripts/run_dependabot.sh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           TOKEN: ${{ secrets.TOKEN }}
-          GITHUB_REGISTRIES_PROXY: "${{ steps.read_proxy.outputs.json }}"
