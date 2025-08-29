@@ -2,12 +2,15 @@ import logging
 import os
 import pytest
 
-os.environ["CSRF_SECRET"] = "testsecret"
-
 pytest.importorskip("transformers")
 
 import server
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def csrf_secret(monkeypatch):
+    monkeypatch.setenv("CSRF_SECRET", "testsecret")
 
 
 def make_client(monkeypatch):
@@ -20,13 +23,13 @@ def make_client(monkeypatch):
     return TestClient(server.app)
 
 
-def test_completions_requires_key(monkeypatch):
+def test_completions_requires_key(monkeypatch, csrf_secret):
     with make_client(monkeypatch) as client:
         resp = client.post("/v1/completions", json={"prompt": "hi"})
         assert resp.status_code == 401
 
 
-def test_chat_completions_requires_key(monkeypatch):
+def test_chat_completions_requires_key(monkeypatch, csrf_secret):
     with make_client(monkeypatch) as client:
         resp = client.post(
             "/v1/chat/completions",
@@ -35,7 +38,7 @@ def test_chat_completions_requires_key(monkeypatch):
         assert resp.status_code == 401
 
 
-def test_check_api_key_masks_sensitive_headers(monkeypatch, caplog):
+def test_check_api_key_masks_sensitive_headers(monkeypatch, csrf_secret, caplog):
     with make_client(monkeypatch) as client:
         headers = {
             "Authorization": "Bearer secret-token",
