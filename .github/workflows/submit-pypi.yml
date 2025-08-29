@@ -62,12 +62,11 @@ jobs:
           python-version-file: .python-version
       - name: Create virtual environment
         run: |
-          python -m venv /mnt/venv && source /mnt/venv/bin/activate
+          python -m venv /mnt/venv
       - name: Add venv to PATH
         run: echo "/mnt/venv/bin" >> $GITHUB_PATH
       - name: Install build tools
         run: |
-          source /mnt/venv/bin/activate
           python -m pip install --upgrade pip
           pip install build twine
       - name: Install pip-tools
@@ -76,21 +75,18 @@ jobs:
           pip install pip-tools==7.5.0
       - name: Generate dependency lock
         run: |
-          source /mnt/venv/bin/activate
           pip-compile --strip-extras -o requirements.out requirements.txt
       - name: Copy project to /mnt
         run: rsync -a . /mnt/project
       - name: Check dependencies
         working-directory: /mnt/project
         run: |
-          source /mnt/venv/bin/activate
           pip-compile --dry-run -o requirements.out requirements.txt
       - name: Return generated files
         if: always()
         run: rsync -a /mnt/project/requirements.out requirements.out || true
       - name: Build package
         run: |
-          source /mnt/venv/bin/activate
           python -m build
       - name: Publish to PyPI
         if: env.TOKENPYPI != ''
