@@ -33,6 +33,7 @@ jobs:
             sleep 1
           done
       - name: Generate diff
+        id: generate-diff
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
@@ -44,7 +45,7 @@ jobs:
             exit 1
           fi
           git fetch origin $base_sha
-          git diff $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
+          git diff $base_sha...HEAD -- '**/*.py' > diff.patch
           head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
           # crude token count (words) to detect overly large diffs
           token_limit=6000
@@ -52,7 +53,7 @@ jobs:
           echo "Token count: $token_count"
           if [ "$token_count" -gt "$token_limit" ]; then
             echo "Diff too large, regenerating with 20 lines of context"
-            git diff -U20 $base_sha...HEAD -- 'bot/**/*.py' > diff.patch
+            git diff -U20 $base_sha...HEAD -- '**/*.py' > diff.patch
             head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
             token_count=$(wc -w < diff.patch)
             echo "Token count after context reduction: $token_count"
@@ -61,10 +62,16 @@ jobs:
             echo "Diff still large, splitting into chunks"
             split -b 100000 diff.patch diff_part_
           fi
+          if [ -s diff.patch ]; then
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: LLM review
+        if: steps.generate-diff.outputs.has_diff == 'true'
         id: llm-review
         run: |
-          if [ ! -s diff.patch ] || [ -z "$review" ]; then
+          if [ -z "$review" ]; then
             echo "has_content=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
