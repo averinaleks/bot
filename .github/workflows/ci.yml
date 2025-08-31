@@ -41,10 +41,7 @@ jobs:
       - name: Run flake8
         run: flake8 .
       - name: Remove test caches
-        run: |
-          rm -rf /mnt/pytest_cache .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+        uses: ./.github/actions/clear-test-caches
       - name: Run unit tests
         run: pytest -m "not integration" -o cache_dir=/mnt/pytest_cache
       - name: Cleanup buildx
@@ -63,10 +60,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: ./.github/actions/setup-env
       - name: Remove test caches
-        run: |
-          rm -rf /mnt/pytest_cache .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+        uses: ./.github/actions/clear-test-caches
       - name: Run integration tests
         run: pytest -m integration -o cache_dir=/mnt/pytest_cache
       - name: Cleanup buildx
