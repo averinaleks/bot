@@ -16,6 +16,7 @@ on:
 env:
   PYTHONPYCACHEPREFIX: /mnt/pycache
   TEST_MODE: "1"
+  CSRF_SECRET: testsecret
 
 jobs:
   unit:

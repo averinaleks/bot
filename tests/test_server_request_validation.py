@@ -1,7 +1,9 @@
+import os
 import pytest
 pytest.importorskip("transformers")
 pytest.importorskip("fastapi_csrf_protect")
 
+os.environ.setdefault("CSRF_SECRET", "testsecret")
 import server
 from contextlib import contextmanager
 from fastapi.testclient import TestClient
@@ -19,7 +21,6 @@ def make_client(monkeypatch):
 
     monkeypatch.setattr(server.model_manager, "load_model", dummy_load_model)
     monkeypatch.setenv("API_KEYS", "testkey")
-    monkeypatch.setenv("CSRF_SECRET", "testsecret")
     original_keys = server.API_KEYS.copy()
     server.API_KEYS.clear()
     try:
