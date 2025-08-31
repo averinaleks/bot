@@ -34,6 +34,7 @@ jobs:
           pip-audit -f json -o pip-audit.json
       - name: Upload pip-audit report
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: pip-audit-report
           path: /mnt/pip-audit.json
