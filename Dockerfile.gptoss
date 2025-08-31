@@ -1,14 +1,14 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libtbbmalloc2 libnuma1 curl=7.88.1-10+deb12u5 git \
+    libtbbmalloc2 libnuma1 curl git \
     && apt-get install -y --no-install-recommends --only-upgrade gnupg dirmngr \
     && rm -rf /var/lib/apt/lists/* \
     && gpg --version \
     && dirmngr --version
 
-# Ensure curl is pulled from the security repository
-RUN apt-get update && apt-get install -y curl=7.88.1-10+deb12u5 -t bookworm-security \
+# Ensure curl is up to date
+RUN apt-get update && apt-get install -y --only-upgrade curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
