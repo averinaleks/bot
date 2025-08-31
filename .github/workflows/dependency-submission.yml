@@ -21,5 +21,3 @@ jobs:
         run: pip install --upgrade pip build
       - name: Validate project
         run: python -m build
-      - name: Submit dependency snapshot
-        uses: advanced-security/python-dependency-submission@v1
