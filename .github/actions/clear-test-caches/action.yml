@@ -1,0 +1,11 @@
+name: Clear test caches
+description: Remove pytest and Python caches
+runs:
+  using: composite
+  steps:
+    - name: Remove caches
+      shell: bash
+      run: |
+        rm -rf /mnt/pytest_cache .pytest_cache .cache
+        find . -type d -name '__pycache__' -exec rm -rf {} +
+        find . -name '*.pyc' -delete
