@@ -5,6 +5,7 @@ runs:
   steps:
     - name: Initial cleanup
       shell: bash
+      run: rm -rf build/
     - name: Cleanup git submodules
       shell: bash
       run: >-
