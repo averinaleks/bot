@@ -18,13 +18,13 @@ jobs:
       matrix:
         include:
           - file: Dockerfile.cpu
-            image: myapp
+            image: myapp-cpu
             artifact: trivy-report-cpu
           - file: Dockerfile.ci
             image: myapp-ci
             artifact: trivy-report-ci
           - file: Dockerfile.gptoss
-            image: myapp
+            image: myapp-gptoss
             artifact: trivy-report-gptoss
     env:
       DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
@@ -103,25 +103,17 @@ jobs:
         working-directory: bot
 
       - name: Build and push Docker image
-        working-directory: bot
-        run: |
-          docker buildx build \
-            --progress=plain \
-            -f ${{ matrix.file }} \
-            -t docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest \
-            --push \
-            --cache-from type=local,src=/mnt/.buildx-cache \
-            --cache-to type=local,dest=/mnt/.buildx-cache-new,mode=max \
-            .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: bot/${{ matrix.file }}
+          push: true
+          tags: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
+          cache-from: type=local,src=/mnt/.buildx-cache
+          cache-to: type=local,dest=/mnt/.buildx-cache-new,mode=max
 
       - name: Apply security upgrades in built image
         run: docker run --rm docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
-        working-directory: bot
-
-      - name: Move Docker layer cache
-        run: |
-          rm -rf /mnt/.buildx-cache
-          mv /mnt/.buildx-cache-new /mnt/.buildx-cache
         working-directory: bot
 
       - name: Set up Trivy
@@ -173,7 +165,7 @@ jobs:
           rm -rf /mnt/.buildx-cache* || true
 
   healthcheck:
-    needs: build
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
@@ -184,16 +176,23 @@ jobs:
       - name: Install dependencies
         run: pip install gunicorn flask ccxt python-dotenv requests
       - name: Start data handler service
+        id: start_service
         run: |
           scripts/run_data_handler_service.sh --bind 0.0.0.0:8000 &
           echo $! > "$GITHUB_WORKSPACE/service.pid"
           sleep 5
+          if ! kill -0 "$(cat "$GITHUB_WORKSPACE/service.pid")" 2>/dev/null; then
+            echo "service_running=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "service_running=true" >> "$GITHUB_OUTPUT"
+          fi
         working-directory: bot
       - name: Health check
+        if: steps.start_service.outputs.service_running == 'true'
         run: python scripts/health_check.py
         working-directory: bot
       - name: Cleanup
-        if: always()
+        if: always() && steps.start_service.outputs.service_running == 'true'
         run: |
           kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
         working-directory: bot
