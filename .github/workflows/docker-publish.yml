@@ -18,13 +18,13 @@ jobs:
       matrix:
         include:
           - file: Dockerfile.cpu
-            image: myapp
+            image: myapp-cpu
             artifact: trivy-report-cpu
           - file: Dockerfile.ci
             image: myapp-ci
             artifact: trivy-report-ci
           - file: Dockerfile.gptoss
-            image: myapp
+            image: myapp-gptoss
             artifact: trivy-report-gptoss
     env:
       DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
