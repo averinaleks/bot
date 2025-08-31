@@ -25,6 +25,7 @@ jobs:
       matrix:
         device: [cpu]
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-env
       - name: Audit dependencies
         working-directory: /mnt
@@ -58,6 +59,7 @@ jobs:
       matrix:
         device: [cpu]
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-env
       - name: Remove test caches
         run: |
