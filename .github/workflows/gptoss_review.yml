@@ -38,7 +38,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
-          base_sha=$(curl -s -H "Authorization: token $TOKEN" \
+          base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER | jq -r .base.sha)
           if [ -z "$base_sha" ] || [ "$base_sha" = "null" ]; then
             echo "Error: failed to retrieve base SHA" >&2
