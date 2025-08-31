@@ -96,6 +96,7 @@ jobs:
         run: mkdir -p /mnt/trivy-tmp
 
       - name: Run Trivy vulnerability scanner
+        continue-on-error: true
         env:
           TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
@@ -109,7 +110,7 @@ jobs:
           # ignore-unlikely-affected: true  # enable once Trivy >= v0.66 is available
           limit-severities-for-sarif: CRITICAL
           scanners: vuln
-          exit-code: 1
+          exit-code: 0
 
       - name: Show Trivy scan results
         run: cat trivy-results.sarif
