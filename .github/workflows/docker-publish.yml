@@ -173,7 +173,7 @@ jobs:
           rm -rf /mnt/.buildx-cache* || true
 
   healthcheck:
-    needs: build
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
@@ -184,16 +184,23 @@ jobs:
       - name: Install dependencies
         run: pip install gunicorn flask ccxt python-dotenv requests
       - name: Start data handler service
+        id: start_service
         run: |
           scripts/run_data_handler_service.sh --bind 0.0.0.0:8000 &
           echo $! > "$GITHUB_WORKSPACE/service.pid"
           sleep 5
+          if ! kill -0 "$(cat "$GITHUB_WORKSPACE/service.pid")" 2>/dev/null; then
+            echo "service_running=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "service_running=true" >> "$GITHUB_OUTPUT"
+          fi
         working-directory: bot
       - name: Health check
+        if: steps.start_service.outputs.service_running == 'true'
         run: python scripts/health_check.py
         working-directory: bot
       - name: Cleanup
-        if: always()
+        if: always() && steps.start_service.outputs.service_running == 'true'
         run: |
           kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
         working-directory: bot
