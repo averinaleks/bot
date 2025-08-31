@@ -16,8 +16,8 @@ jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: release-drafter/release-drafter@v7
         with:
           config-name: release-drafter.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
