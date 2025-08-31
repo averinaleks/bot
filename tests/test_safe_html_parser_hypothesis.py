@@ -1,6 +1,8 @@
 import sys
 import types
 import pytest
+
+pytest.importorskip("hypothesis")
 from hypothesis import given, strategies as st
 
 from safe_html_parser import SafeHTMLParser
