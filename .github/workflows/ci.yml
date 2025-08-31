@@ -21,12 +21,12 @@ env:
 jobs:
   unit:
     name: Unit tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         device: [cpu]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: ./.github/actions/setup-env
       - name: Audit dependencies
         working-directory: /mnt
@@ -34,7 +34,6 @@ jobs:
           pip-audit -f json -o pip-audit.json
       - name: Upload pip-audit report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pip-audit-report
           path: /mnt/pip-audit.json
@@ -49,10 +48,7 @@ jobs:
           name: flake8-log
           path: flake8.log
       - name: Remove test caches
-        run: |
-          rm -rf /mnt/pytest_cache .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+        uses: ./.github/actions/clear-test-caches
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -68,21 +64,16 @@ jobs:
 
   integration:
     name: Integration tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: unit
-    env:
-      TEST_MODE: "1"
     strategy:
       matrix:
         device: [cpu]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: ./.github/actions/setup-env
       - name: Remove test caches
-        run: |
-          rm -rf /mnt/pytest_cache .pytest_cache .cache
-          find . -type d -name '__pycache__' -exec rm -rf {} +
-          find . -name '*.pyc' -delete
+        uses: ./.github/actions/clear-test-caches
       - name: Run integration tests
         run: |
           set -o pipefail
