@@ -36,7 +36,7 @@ jobs:
         id: generate-diff
         if: success()
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER | jq -r .base.sha)

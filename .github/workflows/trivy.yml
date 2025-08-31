@@ -71,8 +71,8 @@ jobs:
 
       - name: Login to GHCR
         env:
-          CR_PAT: ${{ secrets.TOKEN }}
-        run: echo "$CR_PAT" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Cleanup before Trivy scan
         run: |
