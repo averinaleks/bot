@@ -34,19 +34,35 @@ jobs:
           pip-audit -f json -o pip-audit.json
       - name: Upload pip-audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pip-audit-report
           path: /mnt/pip-audit.json
       - name: Run flake8
-        run: flake8 .
+        run: |
+          set -o pipefail
+          flake8 . | tee flake8.log
+      - name: Upload flake8 log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flake8-log
+          path: flake8.log
       - name: Remove test caches
         run: |
           rm -rf /mnt/pytest_cache .pytest_cache .cache
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -name '*.pyc' -delete
       - name: Run unit tests
-        run: pytest -m "not integration" -o cache_dir=/mnt/pytest_cache
+        run: |
+          set -o pipefail
+          pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
+      - name: Upload unit test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unit-test-log
+          path: pytest.log
       - name: Cleanup buildx
         run: docker buildx prune -af || true
 
@@ -68,6 +84,14 @@ jobs:
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -name '*.pyc' -delete
       - name: Run integration tests
-        run: pytest -m integration -o cache_dir=/mnt/pytest_cache
+        run: |
+          set -o pipefail
+          pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
+      - name: Upload integration test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: integration-test-log
+          path: pytest.log
       - name: Cleanup buildx
         run: docker buildx prune -af || true
