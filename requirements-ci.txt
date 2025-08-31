@@ -2,9 +2,6 @@
 aiohttp>=3.12.15
 bcrypt>=4.3.0
 flake8==7.3.0
-httpx>=0.28.1
-joblib>=1.5.2
-pandas>=2.3.2,<3.0.0
 pytest==8.4.1
 pytest-asyncio>=1.1
 tenacity>=8.5,<10
