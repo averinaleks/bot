@@ -27,7 +27,7 @@ jobs:
           else
             echo "ref=main" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           ref: ${{ steps.select-branch.outputs.ref }}
       - name: Free disk space
