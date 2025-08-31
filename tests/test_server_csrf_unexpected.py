@@ -1,7 +1,4 @@
-import os
 import pytest
-
-os.environ["CSRF_SECRET"] = "testsecret"
 
 pytest.importorskip("transformers")
 
@@ -18,6 +15,7 @@ def make_client(monkeypatch):
 
     monkeypatch.setattr(server.model_manager, "load_model", dummy_load_model)
     monkeypatch.setenv("API_KEYS", "testkey")
+    monkeypatch.setenv("CSRF_SECRET", "testsecret")
     original_keys = server.API_KEYS.copy()
     server.API_KEYS.clear()
     try:
