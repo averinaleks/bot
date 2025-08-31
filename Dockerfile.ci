@@ -48,3 +48,5 @@ COPY --from=builder /app /app
 
 ENV PATH="/venv/bin:$PATH"
 
+CMD ["bash"]
+
