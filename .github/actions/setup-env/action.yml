@@ -5,7 +5,6 @@ runs:
   steps:
     - name: Initial cleanup
       shell: bash
-      run: docker system prune -af && sudo rm -rf /tmp/*
     - name: Cleanup git submodules
       shell: bash
       run: >-
