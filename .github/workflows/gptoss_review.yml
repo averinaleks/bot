@@ -26,7 +26,8 @@ jobs:
           fetch-depth: 0
       - name: Start vLLM container
         run: |
-          docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+          docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
+            vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
       - name: Wait for LLM container
         run: |
           for i in {1..30}; do
@@ -37,7 +38,7 @@ jobs:
         id: generate-diff
         if: success()
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER | jq -r .base.sha)
@@ -76,13 +77,17 @@ jobs:
           review=""
           if ls diff_part_* 1> /dev/null 2>&1; then
             for part in diff_part_*; do
-              payload=$(jq -n --arg diff "$(cat "$part")" --arg model "$model" '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
-              part_review=$(curl -s -H "Content-Type: application/json" -d "$payload" http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
+              payload=$(jq -n --arg diff "$(cat "$part")" --arg model "$model" \
+                '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
+              part_review=$(curl -s -H "Content-Type: application/json" -d "$payload" \
+                http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
               review="${review}${part_review}\n"
             done
           else
-            payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
-            review=$(curl -s -H "Content-Type: application/json" -d "$payload" http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
+            payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" \
+              '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
+            review=$(curl -s -H "Content-Type: application/json" -d "$payload" \
+              http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
           fi
           if [ -z "$review" ]; then
             echo "has_content=false" >> "$GITHUB_OUTPUT"
