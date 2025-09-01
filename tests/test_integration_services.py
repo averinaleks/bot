@@ -162,6 +162,7 @@ def test_check_services_success(monkeypatch):
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
+        monkeypatch.delenv('GPT_OSS_API', raising=False)
         monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
         monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
         asyncio.run(trading_bot.check_services())
@@ -212,4 +213,5 @@ def test_check_services_host_only(monkeypatch):
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
         monkeypatch.setenv('TRADE_MANAGER_URL', f'http://localhost:{tm_port}')
+        monkeypatch.delenv('GPT_OSS_API', raising=False)
         asyncio.run(trading_bot.check_services())
