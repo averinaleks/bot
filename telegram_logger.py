@@ -103,8 +103,6 @@ class TelegramLogger(logging.Handler):
     async def _send(self, message: str, chat_id: int | str, urgent: bool) -> None:
         async with self.message_lock:
             if (
-                not urgent
-                and self.last_message_time
                 and time.time() - self.last_message_time < self.message_interval
             ):
                 logger.debug(
@@ -206,9 +204,11 @@ class TelegramLogger(logging.Handler):
         if cls._queue is not None:
             try:
                 cls._queue.put_nowait((None, "", False))
+                await cls._queue.join()
             except asyncio.QueueFull:
                 pass
-        cls._stop_event.set()
+        if cls._stop_event is not None:
+            cls._stop_event.set()
         if cls._worker_task is not None:
             cls._worker_task.cancel()
             try:
@@ -217,8 +217,9 @@ class TelegramLogger(logging.Handler):
                 pass
             cls._worker_task = None
         if cls._worker_thread is not None:
-            cls._worker_thread.join(timeout=1)
+            cls._worker_thread.join()
             cls._worker_thread = None
         cls._queue = None
         cls._stop_event = None
+        cls._bot = None
 
