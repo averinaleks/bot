@@ -112,6 +112,11 @@ jobs:
           cache-from: type=local,src=/mnt/.buildx-cache
           cache-to: type=local,dest=/mnt/.buildx-cache-new,mode=max
 
+      - name: Update buildx cache
+        run: |
+          rm -rf /mnt/.buildx-cache
+          mv /mnt/.buildx-cache-new /mnt/.buildx-cache
+
       - name: Apply security upgrades in built image
         run: docker run --rm docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
         working-directory: bot
@@ -162,7 +167,6 @@ jobs:
         run: |
           docker buildx prune -af || true
           docker system prune -af || true
-          rm -rf /mnt/.buildx-cache* || true
 
   healthcheck:
     if: always()
