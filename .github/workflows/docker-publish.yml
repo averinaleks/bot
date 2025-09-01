@@ -117,11 +117,6 @@ jobs:
           rm -rf /mnt/.buildx-cache
           mv /mnt/.buildx-cache-new /mnt/.buildx-cache
 
-      - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d # v0.2.3
-        with:
-          version: v0.65.0
-
       - name: Cleanup before Trivy scan
         run: |
           sudo rm -rf /tmp/* || true
