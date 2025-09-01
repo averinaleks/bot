@@ -1,6 +1,8 @@
+# yamllint disable rule:line-length
+---
 name: GPT-OSS Code Review
 
-on:
+'on':
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
@@ -14,20 +16,26 @@ permissions:
 jobs:
   review:
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null &&
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/llm-review'))
     runs-on: ubuntu-latest
     env:
-      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      PR_NUMBER: >-
+        ${{ github.event.pull_request.number ||
+           github.event.issue.number }}
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
         with:
           fetch-depth: 0
       - name: Start vLLM container
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" --device cpu
+            vllm/vllm-openai:latest \
+            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" \
+            --device cpu
       - name: Wait for LLM container
         run: |
           for i in {1..30}; do
@@ -46,7 +54,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
           base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER | jq -r .base.sha)
+            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER \
+            | jq -r .base.sha)
           if [ -z "$base_sha" ] || [ "$base_sha" = "null" ]; then
             echo "Error: failed to retrieve base SHA" >&2
             exit 1
