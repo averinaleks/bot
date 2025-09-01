@@ -90,9 +90,12 @@ async def send_telegram_alert(message: str) -> None:
     payload = {"chat_id": chat_id, "text": message}
     for attempt in range(1, max_attempts + 1):
         try:
+            resp = await client.post(url, data=payload, timeout=10)
+            resp.raise_for_status()
             return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
-            redacted_url = str(exc.request.url).replace(token, "***")
+            req_url = getattr(getattr(exc, "request", None), "url", url)
+            redacted_url = str(req_url).replace(token, "***")
             logger.warning(
                 "Failed to send Telegram alert (attempt %s/%s): %s (%s) %s",
                 attempt,

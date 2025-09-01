@@ -1641,8 +1641,8 @@ class TradingEnv(gym.Env if gym else object):
         done = False
         reward = 0.0
         prev_position = self.position
-        if action == 1:  # toggle long/short
-            self.position = 1 if self.position <= 0 else -1
+        if action == 1:  # go long
+            self.position = 1
         elif action == 2:  # close position
             self.position = 0
 
@@ -1651,7 +1651,7 @@ class TradingEnv(gym.Env if gym else object):
                 self.df["close"].iloc[self.current_step + 1]
                 - self.df["close"].iloc[self.current_step]
             )
-            active_position = prev_position if action == 2 else self.position
+            active_position = -prev_position if action == 2 else self.position
             reward = price_diff * active_position
             self.balance += reward
             if self.balance > self.max_balance:
