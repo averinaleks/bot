@@ -7,3 +7,4 @@
 - Update linux-libc-dev to 6.8.0-76.76 to mitigate CVE-2025-21976.
 - Update linux-libc-dev to a patched revision to close CVE-2025-21946.
 - Replace Ray's commons-lang3 JAR with version 3.18.0 to address vulnerabilities.
+- Explicitly upgrade libpam0g to mitigate CVE-2024-10963.
