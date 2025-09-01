@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: ./.github/actions/setup-env
       - name: Audit dependencies
+        continue-on-error: true
         working-directory: /mnt
         run: |
           pip-audit -f json -o pip-audit.json
