@@ -23,6 +23,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     python3-pip \
     libssl-dev \
     libffi-dev \
+    libpam0g \
     libblas-dev \
     liblapack-dev \
     tar \
@@ -83,6 +84,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libpython3.12-stdlib \
     coreutils \
     zlib1g \
+    libpam0g \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && /app/venv/bin/python --version \

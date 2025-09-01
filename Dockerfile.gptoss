@@ -3,12 +3,13 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libtbbmalloc2 libnuma1 curl git \
     && apt-get install -y --no-install-recommends gnupg dirmngr \
+    && apt-get install -y --only-upgrade libpam0g \
     && rm -rf /var/lib/apt/lists/* \
     && gpg --version \
     && dirmngr --version
 
 # Ensure curl is up to date
-RUN apt-get update && apt-get install -y --only-upgrade curl \
+RUN apt-get update && apt-get install -y --only-upgrade curl libpam0g \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
