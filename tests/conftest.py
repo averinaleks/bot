@@ -4,10 +4,6 @@ import pytest
 import pandas as pd
 import asyncio
 
-# Ensure project root is on sys.path for module imports
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
 
 
 @pytest.fixture
@@ -36,4 +32,3 @@ def fast_sleep(monkeypatch):
     async def _sleep(_delay):
         return None
 
-    monkeypatch.setattr(asyncio, "sleep", _sleep)
