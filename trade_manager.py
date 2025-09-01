@@ -698,9 +698,12 @@ class TradeManager:
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
-                "last_checked_ts": pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC"),
+                # ``pd.NaT`` ensures first risk checks run even if cached data
+                # has timestamps older than the current wall clock time.
+                "last_checked_ts": pd.NaT,
             }
-            timestamp = new_position["last_checked_ts"]
+            # Use an explicit timezone-aware timestamp for the position index
+            timestamp = pd.Timestamp.now(tz="UTC")
             idx = (symbol, timestamp)
             async with self.position_lock:
                 if self._has_position(symbol):

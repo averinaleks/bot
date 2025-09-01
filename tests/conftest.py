@@ -16,6 +16,42 @@ except ImportError:  # pragma: no cover - optional dependency
 import pytest
 import pandas as pd
 
+
+# Provide a minimal TestClient compatible with httpx>=0.28.  The version of
+# Starlette bundled with this repository expects an older httpx API which
+# results in ``TypeError: object.__init__() takes exactly one argument`` when
+# instantiating ``fastapi.testclient.TestClient``.  To keep tests lightweight
+# and avoid pinning dependencies, we supply a tiny implementation here.
+import asyncio
+import httpx
+
+
+class _TestClient:
+    """Minimal sync wrapper around ``httpx.AsyncClient`` for tests."""
+
+    def __init__(self, app, base_url: str = "http://testserver") -> None:
+        transport = httpx.ASGITransport(app=app)
+        self._client = httpx.AsyncClient(transport=transport, base_url=base_url)
+
+    def __enter__(self):  # pragma: no cover - context manager support
+        return self
+
+    def __exit__(self, *exc):  # pragma: no cover - context manager support
+        asyncio.run(self._client.aclose())
+        return False
+
+    def post(self, *args, **kwargs):
+        return asyncio.run(self._client.post(*args, **kwargs))
+
+    def get(self, *args, **kwargs):  # pragma: no cover - rarely used
+        return asyncio.run(self._client.get(*args, **kwargs))
+
+    def request(self, *args, **kwargs):  # pragma: no cover - generic fallback
+        return asyncio.run(self._client.request(*args, **kwargs))
+
+
+sys.modules.setdefault("fastapi.testclient", types.SimpleNamespace(TestClient=_TestClient))
+
 # Register a marker for tests requiring scikit-learn
 def pytest_configure(config):
     config.addinivalue_line(
@@ -531,3 +567,11 @@ async def _cleanup_async_http_client():
     finally:
         from bot.http_client import close_async_http_client
         await close_async_http_client()
+
+
+@pytest.fixture
+def csrf_secret(monkeypatch):
+    """Ensure CSRF secret is available for server tests."""
+    monkeypatch.setenv("CSRF_SECRET", "testsecret")
+    yield "testsecret"
+    monkeypatch.delenv("CSRF_SECRET", raising=False)

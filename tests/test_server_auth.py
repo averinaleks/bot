@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from fastapi.testclient import TestClient
 
 
+@contextmanager
 def make_client(monkeypatch):
     def dummy_load_model():
         server.model_manager.tokenizer = object()
