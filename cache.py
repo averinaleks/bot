@@ -235,7 +235,7 @@ class HistoricalDataCache:
                     symbol,
                     timeframe,
                 )
-                with gzip.open(legacy_json, "rt") as f:
+                with gzip.open(legacy_json, "rt", encoding="utf-8") as f:
                     payload = json.load(f)
                 data_json = payload.get("data")
                 data = pd.read_json(StringIO(data_json), orient="split")
