@@ -102,7 +102,6 @@ class TelegramLogger(logging.Handler):
 
     async def _send(self, message: str, chat_id: int | str, urgent: bool) -> None:
         async with self.message_lock:
-            if not urgent and time.time() - self.last_message_time < self.message_interval:
                 logger.debug(
                     "Сообщение Telegram пропущено из-за интервала: %s...",
                     message[:100],
@@ -124,7 +123,7 @@ class TelegramLogger(logging.Handler):
                         result = await bot.send_message(chat_id=chat_id, text=part)
                         if not getattr(result, "message_id", None):
                             logger.error(
-                                "Telegram message response without message_id"
+                                "Telegram message response without message_id",
                             )
                         else:
                             self.last_sent_text = part
@@ -152,7 +151,10 @@ class TelegramLogger(logging.Handler):
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
-                        logger.exception("Ошибка отправки сообщения Telegram: %s", e)
+                        logger.exception(
+                            "Ошибка отправки сообщения Telegram: %s",
+                            e,
+                        )
                         raise
 
     def _save_unsent(self, chat_id: int | str, text: str) -> None:
