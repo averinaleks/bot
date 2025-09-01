@@ -117,10 +117,6 @@ jobs:
           rm -rf /mnt/.buildx-cache
           mv /mnt/.buildx-cache-new /mnt/.buildx-cache
 
-      - name: Apply security upgrades in built image
-        run: docker run --rm docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest bash -lc "apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
-        working-directory: bot
-
       - name: Set up Trivy
         uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d # v0.2.3
         with:
