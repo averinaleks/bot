@@ -49,15 +49,16 @@ jobs:
           swap-storage: true
       - name: Prepare build mount dir
         run: |
+          set -euo pipefail
           sudo mkdir -p /mnt
           if [ -e /dev/buildvg/buildlv ]; then
             sudo wipefs -a /dev/buildvg/buildlv || true
           else
             echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
           fi
-            sudo swapoff /mnt/swapfile || true
-            sudo rm -f /mnt/swapfile || true
-            sudo rm -rf /mnt/* || true
+          sudo swapoff /mnt/swapfile || true
+          sudo rm -f /mnt/swapfile || true
+          sudo rm -rf /mnt/* || true
       - name: Install LVM
         run: sudo apt-get update && sudo apt-get install -y lvm2
       - name: Maximize build space
