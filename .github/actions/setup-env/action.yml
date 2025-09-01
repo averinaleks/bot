@@ -6,7 +6,6 @@ inputs:
     required: true
   device:
     description: Target device
-    default: cpu
 runs:
   using: composite
   steps:
