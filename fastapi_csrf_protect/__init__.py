@@ -1,5 +1,13 @@
+"""Lightweight stub of fastapi-csrf-protect for testing."""
+
+from __future__ import annotations
+
+import os
+import pytest
+
+
 class CsrfProtectError(Exception):
-    pass
+    """Exception raised when CSRF validation fails."""
 
 
 class CsrfProtect:
@@ -19,3 +27,5 @@ class CsrfProtect:
         signed = request.cookies.get("fastapi-csrf-token")
         if token != signed:
             raise CsrfProtectError("CSRF token mismatch")
+
+

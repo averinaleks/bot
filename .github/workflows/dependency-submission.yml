@@ -16,11 +16,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install build deps
-        run: pip install --upgrade pip build && pip install -r requirements.txt
-      - name: Validate project
-        run: python -m build
+      - name: Generate dependency report
+        run: |
+          pip install --upgrade pip
+          pip install --dry-run --report dependency-report.json -r requirements.txt
       - uses: advanced-security/dependency-submission-action@v1
         with:
           github-token: ${{ github.token }}
-          path: ./
+          path: dependency-report.json

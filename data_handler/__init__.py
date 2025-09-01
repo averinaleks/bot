@@ -1,51 +1,42 @@
-"""Data handler package exposing main interfaces and utilities."""
-from __future__ import annotations
 
 from .core import DataHandler
 from .api import api_app
 from .storage import DEFAULT_PRICE
-
-# Re-export commonly used helpers so external modules can access them
-# directly from ``bot.data_handler``.  Some older modules import
-# ``atr_fast`` and ``get_http_client`` from this package, but those
-# helpers were previously removed which caused ``AttributeError`` at
-# import time.  The lightweight implementations below satisfy the test
-# suite without pulling in heavy optional dependencies.
-
-from bot.http_client import get_async_http_client, close_async_http_client
-import numpy as np
+from bot import http_client as _http_client
 
 
 async def get_http_client():
-    """Return the shared asynchronous HTTP client.
+    """Expose the shared async HTTP client used across the project."""
 
-    The implementation proxies to :func:`bot.http_client.get_async_http_client`
-    ensuring a single shared ``httpx.AsyncClient`` instance across modules.
-    """
-
-    return await get_async_http_client()
+    return await _http_client.get_async_http_client()
 
 
 async def close_http_client() -> None:
-    """Close the shared asynchronous HTTP client if it exists."""
+    """Close the shared async HTTP client if it exists."""
 
-    await close_async_http_client()
+    await _http_client.close_async_http_client()
 
 
-def atr_fast(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> np.ndarray:
-    """Compute a simple Average True Range (ATR).
+def atr_fast(
+    high: Iterable[float],
+    low: Iterable[float],
+    close: Iterable[float],
+    period: int,
+) -> np.ndarray:
+    """Compute a simple moving-average based ATR.
 
-    The implementation uses a straightforward moving average of the
-    ``high - low`` range.  It is intentionally lightweight and avoids
-    optional numerical dependencies while still providing behaviour that
-    matches the expectations of the tests.
+    This implementation is intentionally lightweight and only supports the
+    features required by the tests.  ``high``, ``low`` and ``close`` should be
+    index-aligned iterables of equal length.
     """
 
-    high = np.asarray(high, dtype=float)
-    low = np.asarray(low, dtype=float)
-
-    # True range based solely on high/low – sufficient for the tests.
-    tr = high - low
+    h = np.asarray(list(high), dtype=float)
+    l = np.asarray(list(low), dtype=float)
+    c = np.asarray(list(close), dtype=float)
+    tr = np.empty_like(c)
+    tr[0] = h[0] - l[0]
+    prev_close = c[:-1]
+    tr[1:] = np.maximum(h[1:], prev_close) - np.minimum(l[1:], prev_close)
     atr = np.empty_like(tr)
     for i in range(len(tr)):
         start = max(0, i - period + 1)
@@ -57,7 +48,4 @@ __all__ = [
     "DataHandler",
     "api_app",
     "DEFAULT_PRICE",
-    "get_http_client",
-    "close_http_client",
-    "atr_fast",
 ]

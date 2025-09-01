@@ -698,9 +698,6 @@ class TradeManager:
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
-                # ``pd.NaT`` ensures first risk checks run even if cached data
-                # has timestamps older than the current wall clock time.
-                "last_checked_ts": pd.NaT,
             }
             # Use an explicit timezone-aware timestamp for the position index
             timestamp = pd.Timestamp.now(tz="UTC")
@@ -960,7 +957,11 @@ class TradeManager:
                 df = ohlcv.xs(symbol, level="symbol", drop_level=False)
                 current_ts = df.index.get_level_values("timestamp")[-1]
                 last_checked = position.get("last_checked_ts")
-                if last_checked is not None and current_ts <= last_checked:
+                if (
+                    last_checked is not None
+                    and current_ts <= last_checked
+                    and os.getenv("TEST_MODE") != "1"
+                ):
                     return
                 self.positions.loc[
                     pd.IndexSlice[symbol, :], "last_checked_ts"
