@@ -1618,10 +1618,10 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
-        self.position = 0  # 1 for long, -1 for short
+        self.position = 0  # 1 for long position
         self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
-        # hold, open long, open short, close
-        self.action_space = spaces.Discrete(4)
+        # hold, open long, close
+        self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -1640,18 +1640,19 @@ class TradingEnv(gym.Env if gym else object):
     def step(self, action):
         done = False
         reward = 0.0
-        if action == 1:  # open long
-            self.position = 1
-        elif action == 2:  # open short
-            self.position = -1
-        elif action == 3:  # close
+        prev_position = self.position
+        if action == 1:  # toggle long/short
+            self.position = 1 if self.position <= 0 else -1
+        elif action == 2:  # close position
             self.position = 0
+
         if self.current_step < len(self.df) - 1:
             price_diff = (
                 self.df["close"].iloc[self.current_step + 1]
                 - self.df["close"].iloc[self.current_step]
             )
-            reward = price_diff * self.position
+            active_position = prev_position if action == 2 else self.position
+            reward = price_diff * active_position
             self.balance += reward
             if self.balance > self.max_balance:
                 self.max_balance = self.balance
