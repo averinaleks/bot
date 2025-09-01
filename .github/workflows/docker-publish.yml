@@ -78,7 +78,7 @@ jobs:
           sudo systemctl start docker
 
       - name: Login to Docker Hub
-        run: echo "${{ secrets.BOT }}" | docker login --username "${{ secrets.AVERINALEKS }}" --password-stdin
+        run: echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
 
       - name: Prepare buildx cache directory
         run: mkdir -p /mnt/.buildx-cache
