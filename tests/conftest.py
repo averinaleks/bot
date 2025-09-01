@@ -1,27 +1,13 @@
 import asyncio
 import os
 import sys
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
-# Ensure the repository root is on ``sys.path`` so that modules such as
-# ``config`` or ``trading_bot`` can be imported when tests are executed from the
-# ``tests`` directory.
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
-
-# Ensure project root is on the Python path so that top-level modules can be
-# imported regardless of the current working directory used by the test
-# runner.  This mirrors the behaviour of ``pip install -e .`` without requiring
-# an explicit installation step.
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
-
+# Ensure the project root is on sys.path so tests can import modules like ``config``.
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 
 @pytest.fixture
@@ -51,4 +37,3 @@ def fast_sleep(monkeypatch):
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _sleep)
-
