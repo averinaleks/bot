@@ -959,6 +959,7 @@ class TradeManager:
                 last_checked = position.get("last_checked_ts")
                 if (
                     last_checked is not None
+                    and not pd.isna(last_checked)
                     and current_ts <= last_checked
                     and os.getenv("TEST_MODE") != "1"
                 ):
