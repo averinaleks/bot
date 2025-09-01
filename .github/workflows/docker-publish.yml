@@ -105,8 +105,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
-          context: .
-          file: bot/${{ matrix.file }}
+          context: bot
+          file: ${{ matrix.file }}
           push: true
           tags: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           cache-from: type=local,src=/mnt/.buildx-cache
