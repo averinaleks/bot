@@ -19,8 +19,8 @@ jobs:
       - name: Generate dependency report
         run: |
           pip install --upgrade pip
-          pip install --dry-run --report dependency-report.json -r requirements.txt
-      - uses: advanced-security/dependency-submission-action@v1
+          pip install --dry-run --report dependency-report.json --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+      - uses: github/dependency-submission-action@v4
         with:
-          github-token: ${{ github.token }}
+          token: ${{ secrets.TOKEN }}
           path: dependency-report.json

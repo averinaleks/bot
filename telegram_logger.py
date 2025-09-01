@@ -55,21 +55,20 @@ class TelegramLogger(logging.Handler):
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()
 
-        if TelegramLogger._queue is None:
-            TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
-            TelegramLogger._bot = bot
-            TelegramLogger._stop_event = asyncio.Event()
-            if os.getenv("TEST_MODE") != "1":
-                try:
-                    loop = asyncio.get_running_loop()
-                    TelegramLogger._worker_task = loop.create_task(self._worker())
-                except RuntimeError:
-                    t = threading.Thread(
-                        target=lambda: asyncio.run(self._worker()),
-                        daemon=True,
-                    )
-                    t.start()
-                    TelegramLogger._worker_thread = t
+        TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
+        TelegramLogger._bot = bot
+        TelegramLogger._stop_event = asyncio.Event()
+        if os.getenv("TEST_MODE") != "1":
+            try:
+                loop = asyncio.get_running_loop()
+                TelegramLogger._worker_task = loop.create_task(self._worker())
+            except RuntimeError:
+                t = threading.Thread(
+                    target=lambda: asyncio.run(self._worker()),
+                    daemon=True,
+                )
+                t.start()
+                TelegramLogger._worker_thread = t
 
         self.last_sent_text = ""
 
@@ -104,8 +103,6 @@ class TelegramLogger(logging.Handler):
     async def _send(self, message: str, chat_id: int | str, urgent: bool) -> None:
         async with self.message_lock:
             if (
-                os.getenv("TEST_MODE") != "1"
-                and not urgent
                 and time.time() - self.last_message_time < self.message_interval
             ):
                 logger.debug(

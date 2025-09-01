@@ -687,6 +687,8 @@ class TradeManager:
                     f"❌ Order confirmation missing id {symbol}"
                 )
                 return
+            # Use an explicit timezone-aware timestamp for the position index
+            timestamp = pd.Timestamp.now(tz="UTC")
             new_position = {
                 "symbol": symbol,
                 "side": side,
@@ -699,8 +701,6 @@ class TradeManager:
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
             }
-            # Use an explicit timezone-aware timestamp for the position index
-            timestamp = pd.Timestamp.now(tz="UTC")
             idx = (symbol, timestamp)
             async with self.position_lock:
                 if self._has_position(symbol):
@@ -922,6 +922,9 @@ class TradeManager:
                     trailing_stop_price = new_lowest + trailing_stop_distance
                     if current_price >= trailing_stop_price:
                         should_close = True
+                self.positions.loc[
+                    pd.IndexSlice[symbol, :], "last_checked_ts"
+                ] = pd.Timestamp.now(tz="UTC")
             except (KeyError, ValueError) as e:
                 logger.exception(
                     "Failed trailing stop check for %s (%s): %s",
@@ -957,11 +960,6 @@ class TradeManager:
                 df = ohlcv.xs(symbol, level="symbol", drop_level=False)
                 current_ts = df.index.get_level_values("timestamp")[-1]
                 last_checked = position.get("last_checked_ts")
-                position_ts = position.name if isinstance(position.name, pd.Timestamp) else None
-                if not isinstance(last_checked, pd.Timestamp):
-                    if current_price == position["entry_price"]:
-                        last_checked = position_ts
-                if isinstance(last_checked, pd.Timestamp) and current_ts <= last_checked:
                     return
                 self.positions.loc[
                     pd.IndexSlice[symbol, :], "last_checked_ts"

@@ -1,14 +1,4 @@
 
-"""Public interface for the :mod:`data_handler` package.
-
-This module exposes the key classes and utilities used by the rest of the
-project.  Some tests import ``atr_fast`` directly from here, so we keep the
-implementation lightweight and dependency free.  Previously ``Iterable`` and
-``numpy`` were used without being imported which caused ``NameError`` during
-test collection.
-"""
-
-from collections.abc import Iterable
 
 import numpy as np
 

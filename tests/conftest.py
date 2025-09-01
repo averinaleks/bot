@@ -1,9 +1,13 @@
+import asyncio
 import os
 import sys
-import pytest
-import pandas as pd
-import asyncio
 
+import pandas as pd
+import pytest
+
+
+# Ensure the project root is on sys.path so tests can import modules like ``config``.
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 
 @pytest.fixture
@@ -34,3 +38,4 @@ def fast_sleep(monkeypatch):
     async def _sleep(_delay):
         return None
 
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
