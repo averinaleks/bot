@@ -31,6 +31,7 @@ jobs:
       - uses: ./.github/actions/setup-env
         with:
           python-version: ${{ matrix.python-version }}
+          device: ${{ matrix.device }}
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
@@ -88,6 +89,7 @@ jobs:
       - uses: ./.github/actions/setup-env
         with:
           python-version: ${{ matrix.python-version }}
+          device: ${{ matrix.device }}
       - name: Remove test caches
         if: always()
         uses: ./.github/actions/clear-test-caches
