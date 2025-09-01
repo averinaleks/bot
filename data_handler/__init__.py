@@ -1,6 +1,7 @@
 
 
 import numpy as np
+from typing import Iterable
 
 from .core import DataHandler
 from .api import api_app
