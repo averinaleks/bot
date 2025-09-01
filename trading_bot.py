@@ -32,6 +32,10 @@ class GPTAdviceModel(BaseModel):
     signal: float | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
+
+# Global container for the latest GPT advice so tests can mutate it without
+# relying on network calls.
+GPT_ADVICE = GPTAdviceModel()
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
@@ -85,12 +89,17 @@ async def send_telegram_alert(message: str) -> None:
     client = await get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = 1
+    payload = {"chat_id": chat_id, "text": message}
     for attempt in range(1, max_attempts + 1):
         try:
-            response = await client.post(
-                url, data={"chat_id": chat_id, "text": message}, timeout=5
-            )
-            response.raise_for_status()
+            try:
+                response = await client.post(url, json=payload, timeout=5)
+            except TypeError:
+                response = await client.post(url, data=payload, timeout=5)
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
+            elif getattr(response, "status_code", 200) >= 400:
+                raise httpx.HTTPStatusError("Error", request=response.request, response=response)  # type: ignore[arg-type]
             return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             redacted_url = str(exc.request.url).replace(token, "***")

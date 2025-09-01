@@ -131,3 +131,22 @@ class HistoricalSimulator:
                 dt = (timestamps[i + 1] - ts).total_seconds() / max(speed, 1e-6)
                 if dt > 0:
                     await asyncio.sleep(dt)
+
+        # Ensure any remaining open positions are closed at the end of the simulation
+        async with self.trade_manager.position_lock:
+            idx_names = getattr(self.trade_manager.positions.index, "names", [])
+            if "symbol" in idx_names:
+                symbols = self.trade_manager.positions.index.get_level_values("symbol").unique()
+            else:
+                symbols = []
+        for symbol in symbols:
+            if self.trade_manager._has_position(symbol):
+                ohlcv = self.data_handler.ohlcv
+                if (
+                    "symbol" in ohlcv.index.names
+                    and symbol in ohlcv.index.get_level_values("symbol")
+                ):
+                    price = ohlcv.xs(symbol, level="symbol")["close"].iloc[-1]
+                    await self.trade_manager.close_position(
+                        symbol, float(price), "Simulation End"
+                    )

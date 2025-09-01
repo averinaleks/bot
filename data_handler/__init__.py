@@ -1,15 +1,4 @@
 
-"""Data handler public interface.
-
-This module exposes a couple of convenience helpers used throughout the
-project.  The original version omitted a couple of required imports which meant
-the module failed to import during test collection.  In particular the
-``Iterable`` type from :mod:`typing` and :mod:`numpy` were referenced in
-``atr_fast`` without being imported, leading to a ``NameError``.  The tests
-exercise this helper directly, so we ensure the necessary imports are present
-here.
-"""
-
 from typing import Iterable
 
 import numpy as np
