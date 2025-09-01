@@ -34,6 +34,7 @@ class TelegramLogger(logging.Handler):
 
     _queue: asyncio.Queue | None = None
     _worker_task: asyncio.Task | None = None
+    _worker_thread: threading.Thread | None = None
     _worker_lock = asyncio.Lock()
     _bot: Any | None = None
     _stop_event: asyncio.Event | None = None
@@ -63,10 +64,12 @@ class TelegramLogger(logging.Handler):
                     loop = asyncio.get_running_loop()
                     TelegramLogger._worker_task = loop.create_task(self._worker())
                 except RuntimeError:
-                    threading.Thread(
+                    t = threading.Thread(
                         target=lambda: asyncio.run(self._worker()),
                         daemon=True,
-                    ).start()
+                    )
+                    t.start()
+                    TelegramLogger._worker_thread = t
 
         self.last_sent_text = ""
 
@@ -213,6 +216,9 @@ class TelegramLogger(logging.Handler):
             except asyncio.CancelledError:
                 pass
             cls._worker_task = None
+        if cls._worker_thread is not None:
+            cls._worker_thread.join(timeout=1)
+            cls._worker_thread = None
         cls._queue = None
         cls._stop_event = None
 
