@@ -75,7 +75,6 @@ runs:
           mkdir -p /mnt/tmp /mnt/pip-cache
           export TMPDIR=/mnt/tmp
           export PIP_CACHE_DIR=/mnt/pip-cache
-          pip install -r requirements-ci.txt
-          pip install -r requirements-cpu.txt
+          python -m pip install -r requirements-ci.txt -r requirements-cpu.txt
         fi
         echo "/mnt/venv/bin" >> $GITHUB_PATH
