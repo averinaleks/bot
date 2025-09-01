@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+import logging
 from types import ModuleType
 from typing import Any, Protocol, cast
 
@@ -240,8 +241,8 @@ def apply() -> None:
         Flask = cast(type[FlaskWithASGI], _Flask)
         if not hasattr(Flask, "asgi_app"):
             setattr(Flask, "asgi_app", property(lambda self: self.wsgi_app))
-    except Exception:
-        pass
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.debug("Failed to patch Flask for ASGI support: %s", exc)
 
 
 apply()
