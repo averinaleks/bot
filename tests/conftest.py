@@ -522,3 +522,12 @@ def fast_sleep(monkeypatch):
 
     monkeypatch.setattr(time, "sleep", _sleep)
     return calls
+
+
+@pytest.fixture(autouse=True)
+async def _cleanup_async_http_client():
+    try:
+        yield
+    finally:
+        from bot.http_client import close_async_http_client
+        await close_async_http_client()

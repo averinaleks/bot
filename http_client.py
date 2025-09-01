@@ -86,7 +86,10 @@ async def close_async_http_client() -> None:
     if _ASYNC_CLIENT is not None:
         close = getattr(_ASYNC_CLIENT, "aclose", None)
         if callable(close):
-            await close()
+            try:
+                await close()
+            except Exception:
+                logging.exception("Failed to close async HTTP client")
         _ASYNC_CLIENT = None
 
 
