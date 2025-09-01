@@ -17,8 +17,11 @@ def _load_skip_flag(config_path: Path) -> bool:
         if not line or line.startswith("#"):
             continue
         key, _, value = line.partition("=")
-        if key.strip() == "skip_gptoss_check":
-            return value.strip().lower() in {"1", "true", "yes"}
+        key = key.strip().lower()
+        if key == "skip_gptoss_check":
+            # allow inline comments after the value, e.g. "true  # comment"
+            value = value.split("#", 1)[0].strip().lower()
+            return value in {"1", "true", "yes"}
     # By default run the check when the flag is absent
     return False
 
