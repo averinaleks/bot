@@ -140,44 +140,48 @@ def apply() -> None:
     sys.modules["ray"] = cast(ModuleType, ray_mod)
 
     # ----------------------------------------------------------------- HTTPX
-    httpx_mod = cast(HTTPXModule, types.ModuleType("httpx"))
+    try:
+        import httpx as _real_httpx  # noqa: F401
+    except Exception:
+        httpx_mod = cast(HTTPXModule, types.ModuleType("httpx"))
 
-    class _HTTPXResponse:
-        def __init__(self, status_code: int = 200, text: str = "", json_data: Any | None = None):
-            self.status_code = status_code
-            self._text = text
-            self._json = json_data
+        class _HTTPXResponse:
+            def __init__(self, status_code: int = 200, text: str = "", json_data: Any | None = None):
+                self.status_code = status_code
+                self._text = text
+                self._json = json_data
 
-        def json(self) -> Any:
-            return self._json
+            def json(self) -> Any:
+                return self._json
 
-        @property
-        def text(self) -> str:
-            return self._text
+            @property
+            def text(self) -> str:
+                return self._text
 
-    def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
-        return _HTTPXResponse()
+        def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
+            return _HTTPXResponse()
 
-    class _HTTPXClient:  # pragma: no cover - minimal placeholder
-        ...
+        class _HTTPXClient:  # pragma: no cover - minimal placeholder
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
 
-    class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
-        ...
+        class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
+            ...
 
-    _client_mod = types.SimpleNamespace(
-        UseClientDefault=object,  # pragma: no cover - minimal
-        USE_CLIENT_DEFAULT=object(),
-    )
+        _client_mod = types.SimpleNamespace(
+            UseClientDefault=object,  # pragma: no cover - minimal
+            USE_CLIENT_DEFAULT=object(),
+        )
 
-    setattr(httpx_mod, "Response", _HTTPXResponse)
-    setattr(httpx_mod, "get", _return_response)
-    setattr(httpx_mod, "post", _return_response)
-    setattr(httpx_mod, "AsyncClient", object)
-    setattr(httpx_mod, "HTTPError", Exception)
-    setattr(httpx_mod, "Client", _HTTPXClient)
-    setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
-    setattr(httpx_mod, "_client", _client_mod)
-    sys.modules["httpx"] = cast(ModuleType, httpx_mod)
+        setattr(httpx_mod, "Response", _HTTPXResponse)
+        setattr(httpx_mod, "get", _return_response)
+        setattr(httpx_mod, "post", _return_response)
+        setattr(httpx_mod, "AsyncClient", object)
+        setattr(httpx_mod, "HTTPError", Exception)
+        setattr(httpx_mod, "Client", _HTTPXClient)
+        setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
+        setattr(httpx_mod, "_client", _client_mod)
+        sys.modules["httpx"] = cast(ModuleType, httpx_mod)
 
     # ---------------------------------------------------------------- websockets
     ws_mod = cast(ModuleType, types.ModuleType("websockets"))
