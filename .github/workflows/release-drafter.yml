@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
 
 jobs:
   update_release_draft:
@@ -15,8 +13,7 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: release-drafter/release-drafter@v7
+      - uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
         env:
