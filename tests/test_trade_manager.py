@@ -1497,5 +1497,4 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
 
 sys.modules.pop('utils', None)
 sys.modules.pop('bot.utils', None)
-os.environ.pop("TEST_MODE", None)
 

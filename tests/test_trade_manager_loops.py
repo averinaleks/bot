@@ -246,4 +246,3 @@ async def test_process_symbol_data_fresh_error(monkeypatch):
     assert dh.exchange.orders == []
 
 sys.modules.pop('utils', None)
-os.environ.pop("TEST_MODE", None)
