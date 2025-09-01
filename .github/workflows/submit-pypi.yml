@@ -27,11 +27,11 @@ jobs:
           else
             echo "ref=main" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4 08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           ref: ${{ steps.select-branch.outputs.ref }}
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main 54081f138730dfa15788a46383842cd2f914a1be
         with:
           tool-cache: true
           android: true
@@ -52,7 +52,7 @@ jobs:
           sudo rm -f /mnt/swapfile || true
           sudo rm -rf /mnt/* || true
       - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
+        uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10 fc881a613ad2a34aca9c9624518214ebc21dfc0c
         with:
           root-reserve-mb: 1024
           temp-reserve-mb: 100
@@ -61,7 +61,7 @@ jobs:
           pv-loop-path: /root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version-file: .python-version
       - name: Create virtual environment
@@ -94,7 +94,7 @@ jobs:
           python -m build
       - name: Publish to PyPI
         if: env.TOKENPYPI != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # release/v1 76f52bc884231f62b9a034ebfe128415bbaabdfc
         with:
           user: __token__
           password: ${{ env.TOKENPYPI }}

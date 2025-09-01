@@ -34,11 +34,11 @@ jobs:
       - name: Initial cleanup - Temp
         run: sudo rm -rf /tmp/*
       - name: Checkout code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4 08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           persist-credentials: false
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main 54081f138730dfa15788a46383842cd2f914a1be
         continue-on-error: true
         with:
           docker-images: true
@@ -56,7 +56,7 @@ jobs:
             sudo rm -f /mnt/swapfile || true
             sudo rm -rf /mnt/* || true
       - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
+        uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10 fc881a613ad2a34aca9c9624518214ebc21dfc0c
         with:
           root-reserve-mb: 1024
           temp-reserve-mb: 100
@@ -88,7 +88,7 @@ jobs:
 
       - name: Cache Trivy vulnerability database
         id: trivy-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4 0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: /mnt/trivy-cache
           key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
@@ -103,7 +103,7 @@ jobs:
         env:
           TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # 0.32.0 dc5a429b52fcf669ce959baa2c2dd26090d2a6c4
         with:
           cache-dir: /mnt/trivy-cache
           image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
@@ -119,19 +119,19 @@ jobs:
         run: cat trivy-results.sarif
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0 # v3
+        uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0 # v3 d6c5e1b140009be28958d3837ed3be3fb637d8c0
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Upload Trivy report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: trivy-results
           path: trivy-results.sarif
 
       - name: Save Trivy cache
         if: steps.trivy-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4 0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: /mnt/trivy-cache
           key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
