@@ -24,7 +24,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements-ci.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
       - name: Upgrade pip
@@ -34,7 +34,5 @@ jobs:
       - name: Install PyTorch CPU wheel
         run: |
           pip install torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
-      - name: Install requirements-cpu
-        run: pip install -r requirements-cpu.txt
       - name: Run tests
         run: pytest
