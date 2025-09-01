@@ -32,6 +32,12 @@ class GPTAdviceModel(BaseModel):
     signal: float | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
+
+
+# Latest GPT advice affecting trade parameters.  Tests expect this object to
+# exist even before any GPT call has been made, so initialise it with
+# ``None`` values.
+GPT_ADVICE = GPTAdviceModel()
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
@@ -87,10 +93,13 @@ async def send_telegram_alert(message: str) -> None:
     delay = 1
     for attempt in range(1, max_attempts + 1):
         try:
-            response = await client.post(
-                url, data={"chat_id": chat_id, "text": message}, timeout=5
-            )
-            response.raise_for_status()
+            payload = {"chat_id": chat_id, "text": message}
+            try:
+                response = await client.post(url, data=payload, timeout=5)
+            except TypeError:
+                response = await client.post(url, json=payload, timeout=5)
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
             return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             redacted_url = str(exc.request.url).replace(token, "***")

@@ -957,11 +957,11 @@ class TradeManager:
                 df = ohlcv.xs(symbol, level="symbol", drop_level=False)
                 current_ts = df.index.get_level_values("timestamp")[-1]
                 last_checked = position.get("last_checked_ts")
-                if (
-                    last_checked is not None
-                    and current_ts <= last_checked
-                    and os.getenv("TEST_MODE") != "1"
-                ):
+                position_ts = position.name if isinstance(position.name, pd.Timestamp) else None
+                if not isinstance(last_checked, pd.Timestamp):
+                    if current_price == position["entry_price"]:
+                        last_checked = position_ts
+                if isinstance(last_checked, pd.Timestamp) and current_ts <= last_checked:
                     return
                 self.positions.loc[
                     pd.IndexSlice[symbol, :], "last_checked_ts"
