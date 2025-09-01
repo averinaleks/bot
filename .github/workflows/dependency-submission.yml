@@ -20,7 +20,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install --dry-run --report dependency-report.json --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
-      - uses: advanced-security/dependency-submission-action@v1
+      - uses: github/dependency-submission-action@v4
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: dependency-report.json
