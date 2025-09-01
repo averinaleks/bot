@@ -23,5 +23,5 @@ jobs:
         run: python -m build
       - uses: advanced-security/dependency-submission-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           path: ./
