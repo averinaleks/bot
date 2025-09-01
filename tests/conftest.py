@@ -1,8 +1,17 @@
+import asyncio
 import os
 import sys
-import pytest
+from pathlib import Path
+
 import pandas as pd
-import asyncio
+import pytest
+
+# Ensure the repository root is on ``sys.path`` so that modules such as
+# ``config`` or ``trading_bot`` can be imported when tests are executed from the
+# ``tests`` directory.
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 
@@ -31,4 +40,6 @@ def sample_ohlcv() -> pd.DataFrame:
 def fast_sleep(monkeypatch):
     async def _sleep(_delay):
         return None
+
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
 
