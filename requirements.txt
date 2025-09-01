@@ -35,7 +35,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.0.0; python_version < "3.11"
+backports-asyncio-runner==1.2.0
     # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
@@ -411,7 +411,7 @@ python-dotenv==1.1.1
     #   pydantic-settings
 python-telegram-bot==22.3
     # via -r requirements-core.in
-pytorch-lightning==2.5.3
+pytorch-lightning==2.5.4
     # via -r requirements-core.in
 pytz==2025.2
     # via pandas
