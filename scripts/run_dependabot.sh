@@ -7,15 +7,10 @@ if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
 fi
 repo="${GITHUB_REPOSITORY}"
 
-token="${TOKEN:-${GITHUB_TOKEN:-}}"
-if [[ -z "${token}" ]]; then
-    echo "TOKEN or GITHUB_TOKEN is not set; export a PAT with repo and security_events scopes" >&2
-    exit 1
-fi
 
 for ecosystem in pip github-actions; do
   set +e
-  response=$(curl --fail-with-body -S -s -X POST \
+  response=$(curl ${fail_arg} -S -s -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
     -H "Content-Type: application/json" \
