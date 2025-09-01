@@ -98,7 +98,8 @@ import httpx
 
 try:  # pragma: no cover - allow running outside package
     from .telegram_logger import TelegramLogger
-except Exception:  # pragma: no cover - fallback when executed directly
+except ImportError as exc:  # pragma: no cover - fallback when executed directly
+    logger.warning("Failed to import TelegramLogger relatively: %s", exc)
     from telegram_logger import TelegramLogger  # type: ignore
 
 if os.getenv("TEST_MODE") == "1":
@@ -113,7 +114,7 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules.setdefault("pybit.unified_trading", ut_mod)
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
-except Exception as exc:  # pragma: no cover - allow missing telegram package
+except ImportError as exc:  # pragma: no cover - allow missing telegram package
     logging.getLogger("TradingBot").error("Telegram package not available: %s", exc)
 
     class _TelegramError(Exception):
@@ -699,5 +700,6 @@ def calculate_volume_profile(prices, volumes, bins=50):
 
 try:  # pragma: no cover - allow importing without package
     from bot.cache import HistoricalDataCache  # noqa: E402
-except Exception:  # pragma: no cover - fallback when package missing
+except ImportError as exc:  # pragma: no cover - fallback when package missing
+    logger.warning("HistoricalDataCache import failed: %s", exc)
     HistoricalDataCache = None  # type: ignore
