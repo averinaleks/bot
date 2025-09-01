@@ -169,6 +169,7 @@ jobs:
           docker system prune -af || true
 
   healthcheck:
+    needs: build
     if: always()
     runs-on: ubuntu-latest
     steps:
