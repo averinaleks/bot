@@ -960,11 +960,6 @@ class TradeManager:
                 df = ohlcv.xs(symbol, level="symbol", drop_level=False)
                 current_ts = df.index.get_level_values("timestamp")[-1]
                 last_checked = position.get("last_checked_ts")
-                try:
-                    last_checked_ts = pd.Timestamp(last_checked)
-                except Exception:
-                    last_checked_ts = None
-                if last_checked_ts is not None and current_ts <= last_checked_ts:
                     return
                 self.positions.loc[
                     pd.IndexSlice[symbol, :], "last_checked_ts"

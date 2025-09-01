@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pytest
+import secrets
 
 
 class CsrfProtectError(Exception):
@@ -19,7 +20,8 @@ class CsrfProtect:
         return func
 
     def generate_csrf_tokens(self):
-        token = "token"
+        """Generate a cryptographically secure CSRF token."""
+        token = secrets.token_urlsafe()
         return token, token
 
     async def validate_csrf(self, request):
