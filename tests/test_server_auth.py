@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("transformers")
 
+import pytest
 import server
 from contextlib import contextmanager
 from fastapi.testclient import TestClient

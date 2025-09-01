@@ -698,12 +698,6 @@ class TradeManager:
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
-                # ``last_checked_ts`` is initialised to the minimum timestamp so
-                # that risk-management routines run on the very next candle
-                # regardless of the historical data range. Previously this used
-                # the current time which could be ahead of the available data
-                # and caused checks like ``check_stop_loss_take_profit`` to
-                # return early, leaving positions open indefinitely in tests.
                 "last_checked_ts": pd.Timestamp.min.tz_localize("UTC"),
             }
             timestamp = new_position["last_checked_ts"]
