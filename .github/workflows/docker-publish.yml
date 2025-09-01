@@ -124,7 +124,7 @@ jobs:
 
       - name: Cleanup before Trivy scan
         run: |
-          sudo rm -rf /tmp/* || true
+          sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
           mkdir -p /mnt/trivy-cache
