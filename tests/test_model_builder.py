@@ -9,12 +9,16 @@ import importlib.util
 import contextlib
 from bot.config import BotConfig
 import asyncio
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import brier_score_loss
 import tempfile
+from collections import deque
+
+# Skip tests if required optional packages are missing
+pytest.importorskip("gymnasium", reason="requires gymnasium")
+sklearn = pytest.importorskip("sklearn", reason="requires scikit-learn")
+from sklearn.preprocessing import StandardScaler  # type: ignore
+from sklearn.metrics import brier_score_loss  # type: ignore
 
 pytestmark = pytest.mark.requires_sklearn
-from collections import deque
 
 try:  # require functional torch installation for these tests
     import torch
