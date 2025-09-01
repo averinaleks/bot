@@ -33,15 +33,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Audit dependencies
         id: audit
-        continue-on-error: true
         working-directory: /mnt
         run: |
-          pip-audit -f json -o pip-audit.json
+          pip-audit --strict -f json -o pip-audit.json
       - name: Check pip-audit report exists
-        if: always() && steps.audit.outcome == 'success'
+        if: always()
         run: test -f /mnt/pip-audit.json
       - name: Upload pip-audit report
-        if: always() && steps.audit.outcome == 'success'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pip-audit-report
