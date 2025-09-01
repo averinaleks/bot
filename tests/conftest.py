@@ -54,9 +54,13 @@ def _stub_modules():
     sys.modules.setdefault("pybit.unified_trading", ut_mod)
 
     try:  # use real httpx when available so integration tests can perform HTTP calls
-        import httpx as real_httpx
+        import importlib
+        # Remove any previously injected stub to force loading the real package
+        if "httpx" in sys.modules and not hasattr(sys.modules["httpx"], "__file__"):
+            sys.modules.pop("httpx", None)
+        real_httpx = importlib.import_module("httpx")
         if getattr(real_httpx, "AsyncClient", None):
-            sys.modules.setdefault("httpx", real_httpx)
+            sys.modules["httpx"] = real_httpx
         else:
             raise ImportError
     except Exception:  # pragma: no cover - optional dependency
@@ -64,7 +68,8 @@ def _stub_modules():
         class HTTPError(Exception):
             pass
         httpx_mod.HTTPError = HTTPError
-        sys.modules.setdefault("httpx", httpx_mod)
+        if "httpx" not in sys.modules or not getattr(sys.modules["httpx"], "AsyncClient", None):
+            sys.modules["httpx"] = httpx_mod
     telegram_error_mod = types.ModuleType("telegram.error")
     telegram_error_mod.RetryAfter = Exception
     sys.modules.setdefault("telegram", types.ModuleType("telegram"))
@@ -531,3 +536,13 @@ async def _cleanup_async_http_client():
     finally:
         from bot.http_client import close_async_http_client
         await close_async_http_client()
+
+
+@pytest.fixture
+def csrf_secret(monkeypatch):
+    """Provide a dummy CSRF secret required by server tests."""
+    monkeypatch.setenv("CSRF_SECRET", "testsecret")
+    try:
+        yield "testsecret"
+    finally:
+        monkeypatch.delenv("CSRF_SECRET", raising=False)
