@@ -169,7 +169,8 @@ jobs:
           persist-credentials: false
           path: bot
       - name: Install dependencies
-        run: pip install gunicorn flask ccxt python-dotenv requests
+        working-directory: bot
+        run: python -m pip install -r requirements-healthcheck.txt
       - name: Start data handler service
         id: start_service
         run: |
