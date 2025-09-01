@@ -4,6 +4,9 @@ inputs:
   python-version:
     description: Python version to use
     required: true
+  device:
+    description: Target device
+    required: true
 runs:
   using: composite
   steps:
@@ -63,13 +66,13 @@ runs:
       uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
       with:
         path: ${{ steps.pip-cache.outputs.dir }}
-        key: ${{ runner.os }}-pip-${{ matrix.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+        key: ${{ runner.os }}-pip-${{ inputs.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
     - name: Cache virtualenv
       id: cache-venv
       uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
       with:
         path: /mnt/venv
-        key: ${{ runner.os }}-venv-${{ matrix.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+        key: ${{ runner.os }}-venv-${{ inputs.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
     - name: Set up virtual environment
       shell: bash
       run: |
