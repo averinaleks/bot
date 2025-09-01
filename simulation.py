@@ -87,7 +87,11 @@ class HistoricalSimulator:
         })
         for i, ts in enumerate(timestamps):
             for symbol, df in self.history.items():
-                if ts in df.index:
+                if isinstance(df.index, pd.MultiIndex):
+                    ts_index = df.index.get_level_values("timestamp")
+                else:
+                    ts_index = df.index
+                if ts in ts_index:
                     if isinstance(df.index, pd.MultiIndex):
                         row = df.loc[df.index.get_level_values("timestamp") == ts]
                         if list(row.index.names) != ["symbol", "timestamp"]:
