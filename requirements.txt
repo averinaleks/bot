@@ -35,7 +35,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.0.0; python_version < "3.11"
+backports-asyncio-runner==1.2.0
     # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
@@ -80,7 +80,7 @@ colorlog==6.9.0
     # via optuna
 contourpy==1.3.2
     # via matplotlib
-cryptography==45.0.6
+cryptography==45.0.7
     # via
     #   -r requirements-core.in
     #   ccxt
