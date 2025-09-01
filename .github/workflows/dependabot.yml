@@ -3,6 +3,7 @@ name: Dependabot
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
 
 on:
   schedule:
@@ -20,4 +21,4 @@ jobs:
         run: bash scripts/run_dependabot.sh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TOKEN: ${{ secrets.TOKEN }}
+          TOKEN: ${{ secrets.TOKEN != '' && secrets.TOKEN || github.token }}
