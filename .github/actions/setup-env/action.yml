@@ -19,14 +19,14 @@ runs:
     - name: Free disk space
       shell: bash
       run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-        sudo npm cache clean --force || true
-        sudo rm -rf /var/lib/docker/*
-      timeout-minutes: 4
-      continue-on-error: true
+        timeout 4m bash -c '
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo npm cache clean --force || true
+          sudo rm -rf /var/lib/docker/*
+        ' || true
     - name: Prepare build volume
       shell: bash
       run: |
