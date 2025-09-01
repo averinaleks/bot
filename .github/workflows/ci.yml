@@ -29,12 +29,16 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: ./.github/actions/setup-env
       - name: Audit dependencies
+        id: audit
         continue-on-error: true
         working-directory: /mnt
         run: |
           pip-audit -f json -o pip-audit.json
+      - name: Check pip-audit report exists
+        if: always() && steps.audit.outcome == 'success'
+        run: test -f /mnt/pip-audit.json
       - name: Upload pip-audit report
-        if: always()
+        if: always() && steps.audit.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pip-audit-report
