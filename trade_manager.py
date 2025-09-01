@@ -698,7 +698,7 @@ class TradeManager:
                 "highest_price": price if side == "buy" else float("inf"),
                 "lowest_price": price if side == "sell" else 0.0,
                 "breakeven_triggered": False,
-                "last_checked_ts": pd.Timestamp.utcnow().tz_localize(None).tz_localize("UTC"),
+                "last_checked_ts": pd.Timestamp.min.tz_localize("UTC"),
             }
             timestamp = new_position["last_checked_ts"]
             idx = (symbol, timestamp)

@@ -1,23 +1,3 @@
-"""Data handler package exposing main interfaces.
-
-The project historically exposed a couple of utility functions at the package
-level.  Some tests import ``bot.data_handler`` directly and expect to find
-helpers like ``get_http_client`` or fast indicator implementations there.  The
-library's internals were refactored and these exports disappeared which caused
-runtime errors in the test-suite.  To maintain backwards compatibility we now
-re-export the HTTP client helpers and provide a small, pure Python
-implementation of ``atr_fast`` used in unit tests.
-"""
-
-from __future__ import annotations
-
-from typing import Iterable
-
-import numpy as np
-
-from bot import test_stubs
-
-test_stubs.apply()
 
 from .core import DataHandler
 from .api import api_app
@@ -68,7 +48,4 @@ __all__ = [
     "DataHandler",
     "api_app",
     "DEFAULT_PRICE",
-    "get_http_client",
-    "close_http_client",
-    "atr_fast",
 ]
