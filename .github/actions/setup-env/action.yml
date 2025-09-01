@@ -1,5 +1,9 @@
 name: Setup environment
 description: Prepare Python environment with cached dependencies
+inputs:
+  python-version:
+    description: Python version to use
+    required: true
 runs:
   using: composite
   steps:
@@ -50,7 +54,7 @@ runs:
         echo "PIP_CACHE_DIR=/mnt/pip-cache" >> $GITHUB_ENV
     - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
-        python-version: '3.11'
+        python-version: ${{ inputs.python-version }}
     - name: Get pip cache dir
       id: pip-cache
       shell: bash
@@ -59,13 +63,13 @@ runs:
       uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
       with:
         path: ${{ steps.pip-cache.outputs.dir }}
-        key: ${{ runner.os }}-pip-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+        key: ${{ runner.os }}-pip-${{ matrix.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
     - name: Cache virtualenv
       id: cache-venv
       uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
       with:
         path: /mnt/venv
-        key: ${{ runner.os }}-venv-${{ matrix.device }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
+        key: ${{ runner.os }}-venv-${{ matrix.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
     - name: Set up virtual environment
       shell: bash
       run: |
