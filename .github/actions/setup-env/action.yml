@@ -6,7 +6,6 @@ inputs:
     required: true
   device:
     description: Target device
-    required: true
 runs:
   using: composite
   steps:

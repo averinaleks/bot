@@ -15,7 +15,7 @@ classifiers = ["Programming Language :: Python :: 3"]
 dependencies = ["flask>=3.0.2"]
 
 [tool.setuptools]
-packages = ["services"]
+packages = ["bot", "services"]
 py-modules = [
   "cache",
   "config",
@@ -35,5 +35,6 @@ py-modules = [
   "telegram_logger",
   "trade_manager",
   "trading_bot",
+  "test_stubs",
   "utils"
 ]

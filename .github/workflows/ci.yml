@@ -34,25 +34,23 @@ jobs:
           device: ${{ matrix.device }}
       - name: Audit dependencies
         id: audit
-        continue-on-error: true
         working-directory: /mnt
         run: |
-          pip-audit -f json -o pip-audit.json
+          pip-audit --strict -f json -o pip-audit.json
       - name: Check pip-audit report exists
-        if: always() && steps.audit.outcome == 'success'
+        if: always()
         run: test -f /mnt/pip-audit.json
       - name: Upload pip-audit report
-        if: always() && steps.audit.outcome == 'success'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pip-audit-report
           path: /mnt/pip-audit.json
       - name: Run flake8
-        continue-on-error: true
         run: |
           set -o pipefail
-          flake8 . | tee flake8.log
-          echo $? > flake8.exitcode
+          flake8 . | tee flake8.log || code=$?
+          exit $code
       - name: Upload flake8 log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -76,14 +74,6 @@ jobs:
       - name: Cleanup buildx
         if: always()
         run: docker buildx prune -af || true
-      - name: Fail if flake8 failed
-        if: always()
-        run: |
-          code=$(cat flake8.exitcode)
-          if [ "$code" -ne 0 ]; then
-            echo "flake8 failed with exit code $code"
-            exit $code
-          fi
 
   integration:
     name: Integration tests

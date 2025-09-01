@@ -32,7 +32,7 @@ jobs:
         continue-on-error: true
         run: sudo docker system prune -af || true
       - name: Initial cleanup - Temp
-        run: sudo rm -rf /tmp/*
+        run: sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4 08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -79,7 +79,7 @@ jobs:
 
       - name: Cleanup before Trivy scan
         run: |
-          sudo rm -rf /tmp/* || true
+          sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
 
@@ -140,4 +140,6 @@ jobs:
         continue-on-error: true
         run: sudo docker system prune -af || true
       - name: Cleanup after Trivy scan - Temp
-        run: sudo rm -rf /tmp/* /mnt/trivy-tmp
+        run: |
+          sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} +
+          sudo rm -rf /mnt/trivy-tmp
