@@ -727,7 +727,10 @@ class TradeManager:
                 price,
             )
             await self.telegram_logger.send_telegram_message(
-                f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} SL={stop_loss_price:.2f} TP={take_profit_price:.2f}",
+                (
+                    f"📈 {symbol} {side.upper()} size={size:.4f} @ {price:.2f} "
+                    f"SL={stop_loss_price:.2f} TP={take_profit_price:.2f}"
+                ),
                 urgent=True,
             )
         except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
@@ -1190,7 +1193,10 @@ class TradeManager:
                                     retrained = await self._maybe_retrain_symbol(symbol)
                                     if retrained:
                                         await self.telegram_logger.send_telegram_message(
-                                            f"🔄 Retraining {symbol}: Sharpe={sharpe_ratio:.2f}, Volatility={volatility_change:.2f}"
+                                            (
+                                                f"🔄 Retraining {symbol}: Sharpe={sharpe_ratio:.2f}, "
+                                                f"Volatility={volatility_change:.2f}"
+                                            )
                                         )
                             if sharpe_ratio < self.config.get("min_sharpe_ratio", 0.5):
                                 logger.warning(
