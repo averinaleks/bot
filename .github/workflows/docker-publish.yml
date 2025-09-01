@@ -35,7 +35,6 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
-          path: bot
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
         timeout-minutes: 10
@@ -103,12 +102,11 @@ jobs:
         run: |
           mount | grep '/mnt'
           df -h /mnt
-        working-directory: bot
 
       - name: Build and push Docker image
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
-          context: bot
+          context: .
           file: ${{ matrix.file }}
           push: true
           tags: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
@@ -126,10 +124,8 @@ jobs:
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
           mkdir -p /mnt/trivy-cache
-        working-directory: bot
       - name: Prepare Trivy temp
         run: mkdir -p /mnt/trivy-tmp
-        working-directory: bot
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # 0.32.0
         env:
@@ -139,18 +135,17 @@ jobs:
           version: v0.65.0
           image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           format: table
-          output: bot/${{ matrix.artifact }}.txt
+          output: ${{ matrix.artifact }}.txt
           scanners: vuln
 
       - name: Show Trivy scan results
         run: cat ${{ matrix.artifact }}.txt
-        working-directory: bot
 
       - name: Upload Trivy report artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact }}
-          path: bot/${{ matrix.artifact }}.txt
+          path: ${{ matrix.artifact }}.txt
       - name: Cleanup Docker
         run: |
           docker buildx prune -af || true
@@ -165,9 +160,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
-          path: bot
       - name: Install dependencies
-        working-directory: bot
         run: python -m pip install -r requirements-healthcheck.txt
       - name: Start data handler service
         id: start_service
@@ -180,13 +173,10 @@ jobs:
           else
             echo "service_running=true" >> "$GITHUB_OUTPUT"
           fi
-        working-directory: bot
       - name: Health check
         if: steps.start_service.outputs.service_running == 'true'
         run: python scripts/health_check.py
-        working-directory: bot
       - name: Cleanup
         if: always() && steps.start_service.outputs.service_running == 'true'
         run: |
           kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
-        working-directory: bot
