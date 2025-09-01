@@ -7,21 +7,6 @@ if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
 fi
 repo="${GITHUB_REPOSITORY}"
 
-# Determine authentication token.
-if [[ -n "${TOKEN:-}" ]]; then
-    token="${TOKEN}"
-elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    token="${GITHUB_TOKEN}"
-else
-    echo "TOKEN or GITHUB_TOKEN is not set; export a token with repo and security_events scopes" >&2
-    exit 1
-fi
-
-# Use --fail-with-body when supported to surface response bodies on errors.
-fail_arg="--fail-with-body"
-if ! curl --help | grep -q -- '--fail-with-body'; then
-  fail_arg="--fail"
-fi
 
 for ecosystem in pip github-actions; do
   set +e

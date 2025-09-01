@@ -3,6 +3,8 @@ import logging
 import sys
 import types
 
+from gptoss_check.main import _load_skip_flag
+
 _fake_client = types.ModuleType("gpt_client")
 
 
@@ -69,3 +71,9 @@ def test_run_without_api(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING):
         check_code.run()
     assert "GPT_OSS_API" in caplog.text
+
+
+def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
+    cfg = tmp_path / "gptoss_check.config"
+    cfg.write_text("skip_gptoss_check=true # comment\n", encoding="utf-8")
+    assert _load_skip_flag(cfg) is True

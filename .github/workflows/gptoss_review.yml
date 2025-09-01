@@ -27,13 +27,18 @@ jobs:
       - name: Start vLLM container
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+            vllm/vllm-openai:latest --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" --device cpu
       - name: Wait for LLM container
         run: |
           for i in {1..30}; do
-            curl -sf http://127.0.0.1:8000/v1/models && break
+            if curl -sf http://127.0.0.1:8000/v1/models; then
+              exit 0
+            fi
             sleep 1
           done
+          echo "LLM container failed to start" >&2
+          docker logs gptoss || true
+          exit 1
       - name: Generate diff
         id: generate-diff
         if: success()
