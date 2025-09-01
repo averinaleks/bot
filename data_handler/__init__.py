@@ -1,5 +1,7 @@
 
 
+from collections.abc import Iterable
+
 import numpy as np
 
 from .core import DataHandler
