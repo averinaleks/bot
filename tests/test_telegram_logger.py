@@ -34,7 +34,8 @@ def test_emit_without_running_loop_no_exception(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_thread_stops_after_shutdown(fast_sleep):
+async def test_worker_thread_stops_after_shutdown(monkeypatch, fast_sleep):
+    monkeypatch.delenv("TEST_MODE", raising=False)
 
     class _Bot:
         async def send_message(self, chat_id, text):
@@ -44,29 +45,14 @@ async def test_worker_thread_stops_after_shutdown(fast_sleep):
     start_threads = threading.active_count()
     TelegramLogger(_Bot(), chat_id=1)
 
-    async def wait_for_start():
-        while (
-            threading.active_count() <= start_threads
-            and TelegramLogger._worker_task is None
-        ):
-            await asyncio.sleep(0)
-
-    await asyncio.wait_for(wait_for_start(), timeout=1)
+    await asyncio.sleep(0)
     assert (
         threading.active_count() > start_threads
         or TelegramLogger._worker_task is not None
     )
 
     await TelegramLogger.shutdown()
-
-    async def wait_for_stop():
-        while (
-            threading.active_count() > start_threads
-            or TelegramLogger._worker_task is not None
-        ):
-            await asyncio.sleep(0)
-
-    await asyncio.wait_for(wait_for_stop(), timeout=1)
+    await asyncio.sleep(0)
     assert (
         threading.active_count() <= start_threads
         and TelegramLogger._worker_task is None

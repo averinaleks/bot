@@ -1,4 +1,8 @@
 
+from typing import Iterable
+
+import numpy as np
+
 from .core import DataHandler
 from .api import api_app
 from .storage import DEFAULT_PRICE
