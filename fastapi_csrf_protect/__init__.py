@@ -29,12 +29,3 @@ class CsrfProtect:
             raise CsrfProtectError("CSRF token mismatch")
 
 
-@pytest.fixture
-def csrf_secret(monkeypatch):
-    """Provide a CSRF secret for tests via environment variable."""
-    secret = "testsecret"
-    monkeypatch.setenv("CSRF_SECRET", secret)
-    return secret
-
-
-__all__ = ["CsrfProtect", "CsrfProtectError", "csrf_secret"]

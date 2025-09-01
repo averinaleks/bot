@@ -12,7 +12,7 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 try:  # pragma: no cover - optional dependency
@@ -35,7 +35,7 @@ class TelegramLogger(logging.Handler):
     _queue: asyncio.Queue | None = None
     _worker_task: asyncio.Task | None = None
     _worker_lock = asyncio.Lock()
-    _bot = None
+    _bot: Any | None = None
     _stop_event: asyncio.Event | None = None
 
     def __init__(
@@ -119,9 +119,10 @@ class TelegramLogger(logging.Handler):
                 delay = 1
                 for attempt in range(5):
                     try:
-                        result = await TelegramLogger._bot.send_message(
-                            chat_id=chat_id, text=part
-                        )
+                        bot = TelegramLogger._bot
+                        if bot is None:
+                            raise RuntimeError("Telegram bot not initialized")
+                        result = await bot.send_message(chat_id=chat_id, text=part)
                         if not getattr(result, "message_id", None):
                             logger.error(
                                 "Telegram message response without message_id"
@@ -156,6 +157,8 @@ class TelegramLogger(logging.Handler):
                         raise
 
     def _save_unsent(self, chat_id: int | str, text: str) -> None:
+        if self.unsent_path is None:
+            return
         try:
             with open(self.unsent_path, "a", encoding="utf-8") as f:
                 f.write(f"{chat_id}\t{text}\n")
