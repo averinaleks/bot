@@ -1,3 +1,2 @@
 # CPU-specific dependencies
 # Install torch separately with CPU wheels
-gymnasium==1.2.0
