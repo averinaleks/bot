@@ -122,23 +122,25 @@ class StrategyOptimizer:
                     "ema100_period": ema100,
                     "ema200_period": ema200,
                 }
-                value = await asyncio.to_thread(
-                    ray.get,
-                    _portfolio_backtest_remote.remote(
-                        df_dict,
-                        params,
-                        self.config["timeframe"],
-                        self.metric,
-                        self.config.get("max_positions", 5),
-                    ),
+                result = _portfolio_backtest_remote.remote(
+                    df_dict,
+                    params,
+                    self.config["timeframe"],
+                    self.metric,
+                    self.config.get("max_positions", 5),
                 )
+                if ray.is_initialized():
+                    value = await asyncio.to_thread(ray.get, result)
+                else:
+                    value = result
                 if value > best_value:
                     best_value = value
                     best_params = params
             return best_params
 
         study = optuna.create_study(direction="maximize")
-        obj_refs = []
+        obj_refs: list = []
+        results: list[float] = []
         trials = []
         for _ in range(self.max_trials):
             trial = study.ask()
@@ -160,17 +162,22 @@ class StrategyOptimizer:
                 "risk_vol_min": trial.suggest_float("risk_vol_min", 0.1, 1.0),
                 "risk_vol_max": trial.suggest_float("risk_vol_max", 1.0, 3.0),
             }
-            obj_ref = _portfolio_backtest_remote.remote(
+            result = _portfolio_backtest_remote.remote(
                 df_dict,
                 params,
                 self.config["timeframe"],
                 self.metric,
                 self.config.get("max_positions", 5),
             )
-            obj_refs.append(obj_ref)
+            if ray.is_initialized():
+                obj_refs.append(result)
+            else:
+                results.append(result)
             trials.append((trial, params))
 
-        results = await asyncio.to_thread(ray.get, obj_refs)
+        if ray.is_initialized():
+            results = await asyncio.to_thread(ray.get, obj_refs)
+
         for (trial, _), value in zip(trials, results):
             study.tell(trial, value)
 
