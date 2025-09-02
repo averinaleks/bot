@@ -6,7 +6,7 @@ permissions:
   packages: write
   actions: write
 
-'on':
+on:
   push:
     branches: ["main"]  # или "master", если у тебя так называется основная ветка
   schedule:
