@@ -196,9 +196,18 @@ def _get_torch_modules():
     if _torch_modules is not None:
         return _torch_modules
 
-    import torch
-    import torch.nn as nn
-    from torch.utils.data import DataLoader, TensorDataset
+    try:
+        import torch
+    except ModuleNotFoundError:
+        if os.getenv("TEST_MODE") == "1":  # pragma: no cover - test helper
+            import test_stubs
+
+            test_stubs.apply()
+            import torch
+        else:  # pragma: no cover - real missing dependency
+            raise
+    import torch.nn as nn  # type: ignore
+    from torch.utils.data import DataLoader, TensorDataset  # type: ignore
 
 
     class CNNGRU(nn.Module):
