@@ -6,7 +6,7 @@ permissions:
   packages: write
   actions: write
 
-'on':
+on:
   push:
     branches: ["main"]  # или "master", если у тебя так называется основная ветка
   schedule:
@@ -30,7 +30,7 @@ jobs:
             image: myapp-gptoss
             artifact: trivy-report-gptoss
     env:
-      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
+      DOCKERHUB_USERNAME: ${{ secrets.averinaleks }}
       DOCKERHUB_TOKEN: ${{ secrets.BOT }}
 
     steps:
