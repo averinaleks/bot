@@ -232,6 +232,12 @@ def _get_torch_modules():
 
     try:
         import torch
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except ImportError as e:  # pragma: no cover - optional dependency
+        logger.warning("torch import failed: %s", e)
+        _torch_modules = {}
+        return _torch_modules
 
     class CNNGRU(nn.Module):
         """Conv1D + GRU variant."""
