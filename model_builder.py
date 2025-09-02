@@ -57,7 +57,7 @@ try:  # prefer gymnasium if available
     import gymnasium as gym  # type: ignore
     from gymnasium import spaces  # type: ignore
 except ImportError as e:  # pragma: no cover - gymnasium missing
-    logger.warning("gymnasium import failed: %s", e)
+    raise ImportError("gymnasium package is required") from e
     try:  # fall back to classic gym if available
         import gym  # type: ignore
         from gym import spaces  # type: ignore
@@ -214,6 +214,20 @@ def _get_torch_modules():
 
     try:
         import torch
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except Exception as e:  # pragma: no cover - optional dependency
+        logger.warning("torch import failed: %s", e)
+        _torch_modules = {
+            "torch": None,
+            "nn": None,
+            "DataLoader": None,
+            "TensorDataset": None,
+            "CNNGRU": None,
+            "TemporalFusionTransformer": None,
+            "Net": None,
+        }
+        return _torch_modules
 
 
     class CNNGRU(nn.Module):
@@ -678,7 +692,23 @@ def _train_model_remote(
     device = torch.device("cuda" if cuda_available else "cpu")
     if cuda_available:
         torch.backends.cudnn.benchmark = True
-    scaler = torch.amp.GradScaler("cuda", enabled=cuda_available)
+    amp_module = getattr(torch, "amp", None)
+    if amp_module is None:
+        amp_module = getattr(getattr(torch, "cuda", None), "amp", None)
+    if amp_module is None:
+        class _DummyScaler:
+            def scale(self, loss):
+                return loss
+            def step(self, optimizer):
+                optimizer.step()
+            def update(self):
+                pass
+        from contextlib import nullcontext
+        scaler = _DummyScaler()
+        autocast = lambda: nullcontext()
+    else:
+        scaler = amp_module.GradScaler(enabled=cuda_available)
+        autocast = lambda: amp_module.autocast(device_type="cuda", enabled=cuda_available)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     preds: list[float] = []
@@ -737,7 +767,7 @@ def _train_model_remote(
                     batch_X = batch_X.view(batch_X.size(0), -1)
                 batch_y = batch_y.to(device)
                 optimizer.zero_grad()
-                with torch.amp.autocast("cuda", enabled=cuda_available):
+                with autocast():
                     outputs = model(batch_X).view(-1)
                     loss = criterion(outputs, batch_y) + model.l2_regularization()
                 scaler.scale(loss).backward()
@@ -751,7 +781,7 @@ def _train_model_remote(
                     if model_type == "mlp":
                         val_X = val_X.view(val_X.size(0), -1)
                     val_y = val_y.to(device)
-                    with torch.amp.autocast("cuda", enabled=cuda_available):
+                    with autocast():
                         outputs = model(val_X).view(-1)
                     preds.extend(outputs.cpu().numpy().reshape(-1))
                     labels.extend(val_y.cpu().numpy().reshape(-1))
