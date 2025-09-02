@@ -102,16 +102,6 @@ except ImportError as exc:  # pragma: no cover - fallback when executed directly
     logger.warning("Failed to import TelegramLogger relatively: %s", exc)
     from telegram_logger import TelegramLogger  # type: ignore
 
-if os.getenv("TEST_MODE") == "1":
-    import types
-    import sys
-
-    pybit_mod = types.ModuleType("pybit")
-    ut_mod = types.ModuleType("unified_trading")
-    ut_mod.HTTP = object
-    pybit_mod.unified_trading = ut_mod
-    sys.modules.setdefault("pybit", pybit_mod)
-    sys.modules.setdefault("pybit.unified_trading", ut_mod)
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
 except ImportError as exc:  # pragma: no cover - allow missing telegram package
@@ -123,7 +113,14 @@ except ImportError as exc:  # pragma: no cover - allow missing telegram package
     RetryAfter = BadRequest = Forbidden = _TelegramError
 
 
-from pybit.unified_trading import HTTP
+try:
+    from pybit.unified_trading import HTTP
+except ImportError:  # pragma: no cover - pybit is optional in CI
+    class HTTP:  # type: ignore
+        """Fallback HTTP stub when pybit is unavailable."""
+
+        def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            raise ImportError("pybit is required for HTTP operations")
 
 # Mapping from ccxt/ccxtpro style timeframes to Bybit interval strings
 _BYBIT_INTERVALS = {
