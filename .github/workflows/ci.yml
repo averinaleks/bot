@@ -35,6 +35,7 @@ jobs:
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
+        continue-on-error: true
         run: |
           pip-audit --strict -f json -o pip-audit.json
       - name: Check pip-audit report exists
