@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   dependency-submission:
@@ -16,6 +17,5 @@ jobs:
       - name: Component detection
         uses: advanced-security/component-detection-dependency-submission-action@v0.1.0
         with:
-          token: ${{ secrets.TOKEN }}
           detectorArgs: 'Pip=EnableIfDefaultOff'
           detectorsCategories: 'Pip'
