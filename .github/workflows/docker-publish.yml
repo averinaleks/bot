@@ -30,7 +30,7 @@ jobs:
             image: myapp-gptoss
             artifact: trivy-report-gptoss
     env:
-      DOCKERHUB_USERNAME: ${{ secrets.averinaleks }}
+      DOCKERHUB_USERNAME: ${{ secrets.AVERINALEKS }}
       DOCKERHUB_TOKEN: ${{ secrets.BOT }}
 
     steps:
