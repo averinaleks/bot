@@ -7,6 +7,13 @@ if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
 fi
 repo="${GITHUB_REPOSITORY}"
 
+if [[ -z "${TOKEN:-}" ]]; then
+    echo "TOKEN is not set; export a PAT with repo and security_events scopes" >&2
+    exit 1
+fi
+token="${TOKEN}"
+fail_arg="--fail"
+
 
 for ecosystem in pip github-actions; do
   set +e
