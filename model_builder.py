@@ -214,7 +214,10 @@ def _get_torch_modules():
 
     try:
         import torch
-
+        from torch import nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except ImportError as e:  # pragma: no cover - torch missing
+        raise ImportError("PyTorch is required to use torch-based models") from e
 
     class CNNGRU(nn.Module):
         """Conv1D + GRU variant."""
