@@ -14,10 +14,24 @@ import re
 from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
+import importlib
+
+# Ensure required RL dependency is available before importing heavy modules
+if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
+    raise ImportError("gymnasium package is required")
+
+try:  # prefer gymnasium if available
+    import gymnasium as gym  # type: ignore
+    from gymnasium import spaces  # type: ignore
+except ImportError as e:  # fall back to classic gym
+    try:
+        import gym  # type: ignore
+        from gym import spaces  # type: ignore
+    except ImportError:
+        raise ImportError("gymnasium package is required") from e
 
 if os.getenv("TEST_MODE") == "1":
     import types
-    import sys
 
     ray = types.ModuleType("ray")
 
@@ -43,7 +57,34 @@ if os.getenv("TEST_MODE") == "1":
     ray.init = lambda *a, **k: None
     ray.is_initialized = lambda: False
 else:
-    import ray
+    try:  # pragma: no cover - optional dependency
+        import ray
+    except ImportError:  # provide minimal stub for environments without ray
+        import types
+
+        ray = types.ModuleType("ray")
+
+        class _RayRemoteFunction:
+            def __init__(self, func):
+                self._function = func
+
+            def remote(self, *args, **kwargs):
+                return self._function(*args, **kwargs)
+
+            def options(self, *args, **kwargs):
+                return self
+
+        def _ray_remote(func=None, **_kwargs):
+            if func is None:
+                def wrapper(f):
+                    return _RayRemoteFunction(f)
+                return wrapper
+            return _RayRemoteFunction(func)
+
+        ray.remote = _ray_remote
+        ray.get = lambda x: x
+        ray.init = lambda *a, **k: None
+        ray.is_initialized = lambda: False
 from bot.cache import HistoricalDataCache
 from bot.utils import (
     check_dataframe_empty,
@@ -52,29 +93,6 @@ from bot.utils import (
     logger,
 )
 from dotenv import load_dotenv
-
-try:  # prefer gymnasium if available
-    import gymnasium as gym  # type: ignore
-    from gymnasium import spaces  # type: ignore
-except ImportError as e:  # pragma: no cover - gymnasium missing
-    logger.warning("gymnasium import failed: %s", e)
-    try:  # fall back to classic gym if available
-        import gym  # type: ignore
-        from gym import spaces  # type: ignore
-    except ImportError:
-        logger.warning("gym import failed: %s", e)
-        gym = None  # type: ignore
-
-        class _DummySpaces:  # minimal stubs used in tests
-            @staticmethod
-            def Discrete(_n):
-                return None
-
-            @staticmethod
-            def Box(*_args, **_kwargs):
-                return None
-
-        spaces = _DummySpaces()  # type: ignore
 try:  # pragma: no cover - optional dependency
     from sklearn.preprocessing import StandardScaler
     from sklearn.linear_model import LogisticRegression
