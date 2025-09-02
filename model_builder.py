@@ -232,6 +232,10 @@ def _get_torch_modules():
 
     try:
         import torch
+        from torch import nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except Exception as e:  # pragma: no cover - environment dependency
+        raise RuntimeError("PyTorch is required for model building") from e
 
     class CNNGRU(nn.Module):
         """Conv1D + GRU variant."""
