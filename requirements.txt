@@ -348,7 +348,7 @@ pillow==11.3.0
     # via matplotlib
 pluggy==1.6.0
     # via pytest
-polars==1.32.3
+polars==1.33.0
     # via -r requirements-core.in
 propcache==0.3.2
     # via
