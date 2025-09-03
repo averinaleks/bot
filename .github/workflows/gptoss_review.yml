@@ -35,10 +35,11 @@ jobs:
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:latest \
             --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" \
+            --trust-remote-code \
             --device cpu
       - name: Wait for LLM container
         run: |
-          for i in {1..30}; do
+          for i in {1..60}; do
             if curl -sf http://127.0.0.1:8000/v1/models; then
               exit 0
             fi
