@@ -21,4 +21,4 @@ jobs:
         run: bash scripts/run_dependabot.sh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TOKEN: ${{ secrets.TOKEN != '' && secrets.TOKEN || github.token }}
+          TOKEN: ${{ github.token }}
