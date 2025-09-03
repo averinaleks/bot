@@ -232,6 +232,10 @@ def _get_torch_modules():
 
     try:
         import torch
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except Exception as e:
+        raise ImportError("PyTorch is required for neural network features") from e
 
     class CNNGRU(nn.Module):
         """Conv1D + GRU variant."""
