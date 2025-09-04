@@ -151,16 +151,16 @@ class HistoricalDataCache:
             try:
                 data.to_parquet(buffer, compression="gzip")
             except Exception as exc:  # pragma: no cover - pyarrow missing
-                # Fallback to pickle so the cache works without optional deps
+                # Fallback to JSON so the cache works without optional deps
                 logger.warning(
-                    "Parquet support unavailable, falling back to pickle: %s",
+                    "Parquet support unavailable, falling back to JSON: %s",
                     exc,
                 )
-                buffer = BytesIO()
-                import pickle
-
-                pickle.dump(data, buffer)
+                buffer = StringIO()
+                data.to_json(buffer, orient="split", date_format="iso")
             parquet_bytes = buffer.getvalue()
+            if isinstance(parquet_bytes, str):
+                parquet_bytes = parquet_bytes.encode("utf-8")
             file_size_mb = len(parquet_bytes) / (1024 * 1024)
             if not self._check_memory(file_size_mb):
                 logger.warning(
@@ -234,14 +234,12 @@ class HistoricalDataCache:
                     fmt = "parquet"
                 except Exception as exc:
                     logger.warning(
-                        "Parquet read failed, attempting pickle: %s",
+                        "Parquet read failed, attempting JSON: %s",
                         exc,
                     )
-                    import pickle
-
-                    with open(filename, "rb") as f:
-                        data = pickle.load(f)
-                    fmt = "pickle"
+                    with open(filename, "r", encoding="utf-8") as f:
+                        data = pd.read_json(f, orient="split")
+                    fmt = "json"
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(

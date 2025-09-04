@@ -374,13 +374,10 @@ class TradeManager:
                 self.positions.to_parquet(tmp_state)
             except Exception as exc:  # pragma: no cover - optional deps missing
                 logger.warning(
-                    "Parquet support unavailable, falling back to pickle: %s",
+                    "Parquet support unavailable, falling back to JSON: %s",
                     exc,
                 )
-                import pickle
-
-                with open(tmp_state, "wb") as f:
-                    pickle.dump(self.positions, f)
+                self.positions.to_json(tmp_state, orient="split", date_format="iso")
             with open(tmp_returns, "w", encoding="utf-8") as f:
                 json.dump(self.returns_by_symbol, f)
             os.replace(tmp_state, self.state_file)
@@ -404,10 +401,9 @@ class TradeManager:
                 try:
                     self.positions = pd.read_parquet(self.state_file)
                 except Exception:
-                    import pickle
-
-                    with open(self.state_file, "rb") as f:
-                        self.positions = pickle.load(f)
+                    self.positions = pd.read_json(
+                        self.state_file, orient="split"
+                    )
                 if (
                     "timestamp" in self.positions.index.names
                     and self.positions.index.get_level_values("timestamp").tz is None
