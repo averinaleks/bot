@@ -153,7 +153,7 @@ def validate_host() -> str:
 
     try:
         ip = ipaddress.ip_address(host)
-        if ip.is_unspecified:
+        if str(ip) == "0.0.0.0":
             raise ValueError(f"HOST '{ip}' запрещен")
     except ValueError:
         if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):

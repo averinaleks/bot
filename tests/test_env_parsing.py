@@ -10,8 +10,9 @@ def test_safe_int_invalid(monkeypatch, caplog):
     assert "Invalid X_INT" in caplog.text
 
 
-def test_safe_int_non_positive(monkeypatch, caplog):
-    monkeypatch.setenv("X_INT", "-1")
+@pytest.mark.parametrize("value", ["-1", "0"])
+def test_safe_int_non_positive(value, monkeypatch, caplog):
+    monkeypatch.setenv("X_INT", value)
     with caplog.at_level("WARNING"):
         assert trading_bot.safe_int("X_INT", 7) == 7
     assert "Non-positive X_INT" in caplog.text
@@ -24,11 +25,20 @@ def test_safe_float_invalid(monkeypatch, caplog):
     assert "Invalid X_FLOAT" in caplog.text
 
 
-def test_safe_float_non_positive(monkeypatch, caplog):
-    monkeypatch.setenv("X_FLOAT", "0")
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_safe_float_non_positive(value, monkeypatch, caplog):
+    monkeypatch.setenv("X_FLOAT", value)
     with caplog.at_level("WARNING"):
         assert trading_bot.safe_float("X_FLOAT", 3.5) == 3.5
     assert "Non-positive X_FLOAT" in caplog.text
+
+
+@pytest.mark.parametrize("value", ["inf", "-inf", "nan"])
+def test_safe_float_non_finite(value, monkeypatch, caplog):
+    monkeypatch.setenv("X_FLOAT", value)
+    with caplog.at_level("WARNING"):
+        assert trading_bot.safe_float("X_FLOAT", 3.5) == 3.5
+    assert "Invalid X_FLOAT" in caplog.text
 
 
 @pytest.mark.asyncio
