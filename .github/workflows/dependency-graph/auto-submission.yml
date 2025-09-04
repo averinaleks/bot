@@ -21,6 +21,6 @@ jobs:
       - name: Component detection
         uses: advanced-security/component-detection-dependency-submission-action@v0.1.0
         env:
-          PipReportOverrideBehavior: SourceCodeScan
+          PIP_REPORT_OVERRIDE_BEHAVIOR: SourceCodeScan
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
