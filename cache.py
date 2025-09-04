@@ -148,7 +148,18 @@ class HistoricalDataCache:
         start_time = time.time()
         try:
             buffer = BytesIO()
-            data.to_parquet(buffer, compression="gzip")
+            try:
+                data.to_parquet(buffer, compression="gzip")
+            except Exception as exc:  # pragma: no cover - pyarrow missing
+                # Fallback to pickle so the cache works without optional deps
+                logger.warning(
+                    "Parquet support unavailable, falling back to pickle: %s",
+                    exc,
+                )
+                buffer = BytesIO()
+                import pickle
+
+                pickle.dump(data, buffer)
             parquet_bytes = buffer.getvalue()
             file_size_mb = len(parquet_bytes) / (1024 * 1024)
             if not self._check_memory(file_size_mb):
@@ -218,16 +229,29 @@ class HistoricalDataCache:
                     self._delete_cache_file(filename)
                     return None
                 start_time = time.time()
-                data = pd.read_parquet(filename)
+                try:
+                    data = pd.read_parquet(filename)
+                    fmt = "parquet"
+                except Exception as exc:
+                    logger.warning(
+                        "Parquet read failed, attempting pickle: %s",
+                        exc,
+                    )
+                    import pickle
+
+                    with open(filename, "rb") as f:
+                        data = pickle.load(f)
+                    fmt = "pickle"
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
                     logger.warning(
-                        "Высокая задержка чтения Parquet для %s_%s: %.2f сек",
+                        "Высокая задержка чтения %s для %s_%s: %.2f сек",
+                        fmt,
                         symbol,
                         timeframe,
                         elapsed_time,
                     )
-                logger.info("Данные загружены из кэша (parquet): %s", filename)
+                logger.info("Данные загружены из кэша (%s): %s", fmt, filename)
                 return data
             if os.path.exists(legacy_json):
                 logger.info(
