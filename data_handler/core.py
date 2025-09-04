@@ -85,15 +85,14 @@ class DataHandler:
         pdf["ema30"] = pdf["close"].ewm(span=getattr(self.cfg, "ema30_period", 30), adjust=False).mean()
         self.indicators[symbol] = types.SimpleNamespace(df=pdf)
         if pl is not None:
-            self._ohlcv = pl.from_pandas(pdf[["symbol", "timestamp", "open", "high", "low", "close", "volume"]])
+            subset = pdf[["symbol", "timestamp", "open", "high", "low", "close", "volume"]]
+            self._ohlcv = pl.DataFrame(subset.to_dict("list"))
 
     async def cleanup_old_data(self) -> None:
         while True:
             await asyncio.sleep(getattr(self.cfg, "data_cleanup_interval", 1))
             cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(seconds=getattr(self.cfg, "forget_window", 0))
             if pl is not None and isinstance(self._ohlcv, pl.DataFrame) and self._ohlcv.height > 0:
-                df = self._ohlcv.to_pandas()
-                self._ohlcv = pl.from_pandas(df[df["timestamp"] >= cutoff])
+                self._ohlcv = self._ohlcv.filter(pl.col("timestamp") >= cutoff)
             if pl is not None and isinstance(self._ohlcv_2h, pl.DataFrame) and self._ohlcv_2h.height > 0:
-                df2 = self._ohlcv_2h.to_pandas()
-                self._ohlcv_2h = pl.from_pandas(df2[df2["timestamp"] >= cutoff])
+                self._ohlcv_2h = self._ohlcv_2h.filter(pl.col("timestamp") >= cutoff)

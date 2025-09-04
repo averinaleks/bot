@@ -370,7 +370,17 @@ class TradeManager:
                 return
             tmp_state = f"{self.state_file}.tmp"
             tmp_returns = f"{self.returns_file}.tmp"
-            self.positions.to_parquet(tmp_state)
+            try:
+                self.positions.to_parquet(tmp_state)
+            except Exception as exc:  # pragma: no cover - optional deps missing
+                logger.warning(
+                    "Parquet support unavailable, falling back to pickle: %s",
+                    exc,
+                )
+                import pickle
+
+                with open(tmp_state, "wb") as f:
+                    pickle.dump(self.positions, f)
             with open(tmp_returns, "w", encoding="utf-8") as f:
                 json.dump(self.returns_by_symbol, f)
             os.replace(tmp_state, self.state_file)
@@ -391,7 +401,13 @@ class TradeManager:
     def load_state(self):
         try:
             if os.path.exists(self.state_file):
-                self.positions = pd.read_parquet(self.state_file)
+                try:
+                    self.positions = pd.read_parquet(self.state_file)
+                except Exception:
+                    import pickle
+
+                    with open(self.state_file, "rb") as f:
+                        self.positions = pickle.load(f)
                 if (
                     "timestamp" in self.positions.index.names
                     and self.positions.index.get_level_values("timestamp").tz is None
