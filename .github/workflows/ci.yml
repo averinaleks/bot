@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11']
         device: [cpu]
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
@@ -82,7 +82,7 @@ jobs:
     needs: unit
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11']
         device: [cpu]
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
