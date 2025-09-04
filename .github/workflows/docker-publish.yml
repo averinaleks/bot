@@ -156,7 +156,7 @@ jobs:
 
   healthcheck:
     needs: build
-    if: always()
+    if: ${{ needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
