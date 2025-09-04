@@ -301,7 +301,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.102.0
+openai==1.104.2
     # via -r requirements-core.in
 opentelemetry-api==1.36.0
     # via
