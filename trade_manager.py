@@ -377,7 +377,12 @@ class TradeManager:
                     "Parquet support unavailable, falling back to JSON: %s",
                     exc,
                 )
-                self.positions.to_json(tmp_state, orient="split", date_format="iso")
+                # ``orient='split'`` cannot be round-tripped with MultiIndex in
+                # recent pandas versions. Serialize as records and rebuild the
+                # index on load instead to avoid ``NotImplementedError``.
+                self.positions.drop(columns="symbol", errors="ignore").reset_index().to_json(
+                    tmp_state, orient="records", date_format="iso"
+                )
             with open(tmp_returns, "w", encoding="utf-8") as f:
                 json.dump(self.returns_by_symbol, f)
             os.replace(tmp_state, self.state_file)
@@ -401,9 +406,12 @@ class TradeManager:
                 try:
                     self.positions = pd.read_parquet(self.state_file)
                 except Exception:
-                    self.positions = pd.read_json(
-                        self.state_file, orient="split"
-                    )
+                    df = pd.read_json(self.state_file, orient="records")
+                    if not df.empty:
+                        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+                        self.positions = df.set_index(["symbol", "timestamp"])
+                    else:
+                        self.positions = df
                 if (
                     "timestamp" in self.positions.index.names
                     and self.positions.index.get_level_values("timestamp").tz is None
