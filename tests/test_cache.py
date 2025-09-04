@@ -3,7 +3,7 @@ import os
 import pickle  # nosec B403
 import pandas as pd
 import pytest
-import psutil
+psutil = pytest.importorskip("psutil")
 from bot.cache import HistoricalDataCache
 
 
