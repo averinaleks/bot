@@ -1,13 +1,7 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 ---
-# yamllint disable rule:line-length
 name: trivy
 
-"on":
+'on':
   push:
     branches: ["main"]
   pull_request:
@@ -16,133 +10,37 @@ name: trivy
     - cron: "21 10 * * 2"
 
 permissions:
-  contents: read  # allow actions/checkout
-  packages: read  # allow docker login
-  security-events: write  # upload SARIF results
-  actions: read  # required for upload-sarif
+  contents: read
+  packages: read
+  security-events: write
 
 jobs:
-  build:
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-      packages: read
-    name: Build
-    runs-on: ubuntu-24.04
+  scan:
+    runs-on: ubuntu-latest
     steps:
-      - name: Initial cleanup - Docker
-        continue-on-error: true
-        run: sudo docker system prune -af || true
-      - name: Initial cleanup - Temp
-        run: sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
-      - name: Checkout code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v4
-        with:
-          persist-credentials: false
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # main
-        continue-on-error: true
-        with:
-          docker-images: true
-          swap-storage: true
-      - name: Clean Docker dir
-        run: sudo rm -rf /var/lib/docker/*
-      - name: Prepare build volume
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
         run: |
-          if [ -e /dev/buildvg/buildlv ]; then
-            sudo wipefs -a /dev/buildvg/buildlv || true
-          else
-            echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
-          fi
-            sudo swapoff /mnt/swapfile || true
-            sudo rm -f /mnt/swapfile || true
-            sudo rm -rf /mnt/* || true
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c  # v10
+          docker build -f Dockerfile.ci \
+            -t ${{ github.repository }}:${{ github.sha }} .
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@0.32.0
         with:
-          root-reserve-mb: 1024
-          temp-reserve-mb: 100
-          swap-size-mb: 4096
-          build-mount-path: /mnt
-          pv-loop-path: /root-pv.img
-          tmp-pv-loop-path: /mnt/tmp-pv.img
-      - name: Additional cleanup before build
-        run: |
-          docker image prune -af
-          sudo apt-get clean
-      - name: Build an image from Dockerfile.ci
-        run: |
-          docker build -f Dockerfile.ci -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
-
-      - name: Login to GHCR
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Cleanup before Trivy scan
-        run: |
-          sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
-          sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
-          rm -rf ~/.cache/trivy || true
-
-      - name: Prepare Trivy cache directory
-        run: mkdir -p /mnt/trivy-cache
-
-      - name: Cache Trivy vulnerability database
-        id: trivy-cache
-        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809  # v4
-        with:
-          path: /mnt/trivy-cache
-          key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-trivy-cache-
-
-      - name: Prepare Trivy temp
-        run: mkdir -p /mnt/trivy-tmp
-
-      - name: Run Trivy vulnerability scanner
-        continue-on-error: true
-        env:
-          TMPDIR: /mnt/trivy-tmp
-          TRIVY_CACHE_DIR: /mnt/trivy-cache
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4  # 0.32.0
-        with:
-          cache-dir: /mnt/trivy-cache
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          image-ref: ${{ github.repository }}:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          # ignore-unlikely-affected: true  # enable once Trivy >= v0.66 is available
-          limit-severities-for-sarif: CRITICAL
-          scanners: vuln
-          exit-code: 0
-
-      - name: Show Trivy scan results
-        run: cat trivy-results.sarif
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0  # v3
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-results
           path: trivy-results.sarif
-
-      - name: Save Trivy cache
-        if: steps.trivy-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809  # v4
-        with:
-          path: /mnt/trivy-cache
-          key: ${{ runner.os }}-trivy-cache-${{ github.sha }}
-
-      - name: Cleanup after Trivy scan - Docker
-        continue-on-error: true
-        run: sudo docker system prune -af || true
-      - name: Cleanup after Trivy scan - Temp
-        run: |
-          sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
-          sudo rm -rf /mnt/trivy-tmp || true
