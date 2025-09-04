@@ -98,6 +98,28 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
     assert captured.err.count("second") == 1
 
 
+def test_configure_logging_level_update(monkeypatch, tmp_path):
+    import logging
+
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+    logger = logging.getLogger("TradingBot")
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    utils.configure_logging()
+    assert logger.level == logging.WARNING
+    handlers = list(logger.handlers)
+
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    utils.configure_logging()
+    assert logger.level == logging.DEBUG
+    assert logger.handlers == handlers
+
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+
+
 def test_configure_logging_invalid_level(monkeypatch, tmp_path, caplog):
     import logging
 
@@ -174,6 +196,14 @@ def test_validate_host_accepts_localhost(monkeypatch, caplog):
         host = utils.validate_host()
     assert host == '127.0.0.1'
     assert 'localhost' in caplog.text
+
+
+def test_validate_host_empty_string(monkeypatch, caplog):
+    monkeypatch.setenv('HOST', '')
+    with caplog.at_level('INFO'):
+        host = utils.validate_host()
+    assert host == '127.0.0.1'
+    assert 'HOST не установлен' in caplog.text
 
 
 @pytest.mark.parametrize('host', ['0.0.0.0', '256.0.0.1', 'example.com'])
