@@ -34,7 +34,7 @@ jobs:
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:latest \
-            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}" \
+            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
             --trust-remote-code \
             --device cpu
       - name: Wait for LLM container
@@ -88,7 +88,7 @@ jobs:
         if: steps.generate-diff.outputs.has_diff == 'true'
         id: llm-review
         run: |
-          model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-7B-Instruct' }}"
+          model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}"
           review=""
           if ls diff_part_* 1> /dev/null 2>&1; then
             for part in diff_part_*; do
