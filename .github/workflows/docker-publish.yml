@@ -75,10 +75,19 @@ jobs:
 
       - name: Relocate Docker storage to /mnt
         run: |
-          sudo systemctl stop docker
+          set -euo pipefail
+          if command -v systemctl >/dev/null; then
+            sudo systemctl stop docker
+          else
+            sudo service docker stop
+          fi
           sudo mv /var/lib/docker /mnt/docker
           sudo ln -s /mnt/docker /var/lib/docker
-          sudo systemctl start docker
+          if command -v systemctl >/dev/null; then
+            sudo systemctl start docker
+          else
+            sudo service docker start
+          fi
 
       - name: Login to Docker Hub
         run: echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
