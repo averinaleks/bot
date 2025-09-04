@@ -2,8 +2,9 @@ import asyncio
 import os
 import sys
 
-import pandas as pd
 import pytest
+
+pd = pytest.importorskip("pandas")
 
 
 # Ensure the project root is on sys.path so tests can import modules like ``config``.
