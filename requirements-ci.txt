@@ -27,4 +27,4 @@ hypothesis>=6.138.8
 numpy==2.2.6
 pip-audit==2.9.0
 pybit>=5.11.0
-torch==2.8.0
+torch==2.8.0; python_version<'3.12'
