@@ -206,7 +206,7 @@ def test_validate_host_empty_string(monkeypatch, caplog):
     assert 'HOST не установлен' in caplog.text
 
 
-@pytest.mark.parametrize('host', ['0.0.0.0', '256.0.0.1', 'example.com'])
+@pytest.mark.parametrize('host', ['0.0.0.0', '256.0.0.1', 'example.com'])  # nosec B104
 def test_validate_host_rejects_invalid(host, monkeypatch):
     monkeypatch.setenv('HOST', host)
     with pytest.raises(ValueError):
