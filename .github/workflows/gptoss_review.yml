@@ -90,7 +90,7 @@ jobs:
         run: |
           model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}"
           review=""
-          if ls diff_part_* 1> /dev/null 2>&1; then
+          if compgen -G "diff_part_*" > /dev/null; then
             for part in diff_part_*; do
               payload=$(jq -n --arg diff "$(cat "$part")" --arg model "$model" \
                 '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
