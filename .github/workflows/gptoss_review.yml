@@ -30,6 +30,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
         with:
           fetch-depth: 0
+          ref: refs/pull/${{ env.PR_NUMBER }}/head
       - name: Start vLLM container
         run: |
           docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
@@ -112,7 +113,7 @@ jobs:
           echo "has_content=true" >> "$GITHUB_OUTPUT"
       - name: Comment PR
         if: always() && steps.llm-review.outputs.has_content == 'true'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         with:
           script: |
             const fs = require('fs');
