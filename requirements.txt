@@ -35,7 +35,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.0.0
+backports-asyncio-runner==1.2.0
     # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
@@ -301,7 +301,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.105.0
+openai==1.106.1
     # via -r requirements-core.in
 opentelemetry-api==1.36.0
     # via
