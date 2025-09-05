@@ -35,7 +35,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.0.0
+backports-asyncio-runner==1.2.0
     # via pytest-asyncio
 bcrypt==4.3.0
     # via -r requirements-core.in
@@ -526,7 +526,7 @@ tqdm==4.67.1
     #   pytorch-lightning
     #   shap
     #   transformers
-transformers==4.56.0
+transformers==4.56.1
     # via -r requirements-core.in
 triton==3.4.0
     # via torch
