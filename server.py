@@ -208,9 +208,7 @@ async def lifespan(_: FastAPI):
     )
     if not API_KEYS:
         logging.error(
-            "No API keys provided; set the API_KEYS environment variable with at least one key. host=%s port=%d",
-            host,
-            port,
+            "Credentials not configured; set the API_KEYS environment variable.",
         )
         raise RuntimeError("API_KEYS environment variable is required")
     await model_manager.load_model_async()
@@ -297,7 +295,7 @@ async def check_api_key(request: Request, call_next):
             break
     else:
         logging.warning(
-            "Invalid API key: method=%s url=%s headers=%s",
+            "Unauthorized request: method=%s url=%s headers=%s",
             request.method,
             request.url,
             redacted_headers,
