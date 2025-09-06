@@ -6,6 +6,11 @@ import pytest
 
 from bot import http_client as _http_client
 
+# MLflow spawns a background telemetry thread on import which keeps the
+# process alive after tests finish. Disabling telemetry prevents the thread
+# from starting and avoids hanging the pytest run.
+os.environ.setdefault("MLFLOW_DISABLE_TELEMETRY", "1")
+
 pd = pytest.importorskip("pandas")
 
 
