@@ -5,7 +5,7 @@ permissions:
   contents: write
   pull-requests: write
 
-'on':
+on:
   push:
     branches:
       - main
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Update release draft
         # release-drafter v6.1.0
-        uses: release-drafter/release-drafter@7cf306f56b79636bb76931494ccf29fc893763bd  # yamllint disable-line rule:line-length
+        uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5  # yamllint disable-line rule:line-length
         with:
           config-name: release-drafter.yml
         env:
