@@ -42,7 +42,8 @@ jobs:
       - name: Check for SARIF results
         id: sarif_check
         run: |
-          if [ -s semgrep.sarif ] && [ "$(jq '.runs[].results | length' semgrep.sarif)" -gt 0 ]; then
+          RESULTS=$(jq '[.runs[].results | length] | add // 0' semgrep.sarif)
+          if [ "$RESULTS" -gt 0 ]; then
             echo "upload=true" >> "$GITHUB_OUTPUT"
           else
             echo "upload=false" >> "$GITHUB_OUTPUT"
