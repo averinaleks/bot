@@ -29,6 +29,11 @@ def get_requests_session(
 ) -> Generator[requests.Session, None, None]:
     """Return a :class:`requests.Session` with a default timeout."""
     session = requests.Session()
+    # Avoid respecting proxy-related environment variables which can cause
+    # local connections (e.g. to the mock GPT server in CI) to be routed through
+    # a non-existent proxy and hang until a network timeout occurs.
+    session.trust_env = False
+    session.proxies = {}
     original = session.request
 
     @wraps(original)
