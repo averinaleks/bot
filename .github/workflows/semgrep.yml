@@ -39,7 +39,16 @@ jobs:
           # Use the community "ci" ruleset which does not require an auth token
           config: p/ci
           generateSarif: true
+      - name: Check for SARIF results
+        id: sarif_check
+        run: |
+          if [ -s semgrep.sarif ] && [ "$(jq '.runs[].results | length' semgrep.sarif)" -gt 0 ]; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
+        if: steps.sarif_check.outputs.upload == 'true'
         with:
           sarif_file: semgrep.sarif
