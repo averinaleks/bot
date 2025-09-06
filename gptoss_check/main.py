@@ -7,6 +7,9 @@ import logging
 from typing import Optional
 
 
+logger = logging.getLogger(__name__)
+
+
 def _load_skip_flag(config_path: Path) -> bool:
     """Return True if the check should be skipped based on the config."""
     if not config_path.exists():
@@ -24,9 +27,6 @@ def _load_skip_flag(config_path: Path) -> bool:
             return value in {"1", "true", "yes"}
     # By default run the check when the flag is absent
     return False
-
-
-logger = logging.getLogger(__name__)
 
 
 def main(config_path: Optional[Path] = None) -> None:
