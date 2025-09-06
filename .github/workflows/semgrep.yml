@@ -39,5 +39,7 @@ jobs:
           # Use the community "ci" ruleset which does not require an auth token
           config: p/ci
           generateSarif: true
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
         with:
           sarif_file: semgrep.sarif
