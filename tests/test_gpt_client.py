@@ -89,6 +89,18 @@ async def test_network_error(monkeypatch, func, client_cls):
         raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(client_cls, "stream", fake_stream)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))],
+    )
+    sleep_path = "asyncio.sleep" if asyncio.iscoroutinefunction(func) else "time.sleep"
+    if asyncio.iscoroutinefunction(func):
+        async def no_sleep(*args, **kwargs):  # pragma: no cover - no sleep
+            pass
+        monkeypatch.setattr(sleep_path, no_sleep)
+    else:
+        monkeypatch.setattr(sleep_path, lambda *a, **k: None)
     with pytest.raises(GPTClientNetworkError):
         await run_query(func, "hi")
 
