@@ -27,7 +27,7 @@ class CsrfProtect:
     async def validate_csrf(self, request):
         token = request.headers.get("X-CSRF-Token")
         signed = request.cookies.get("fastapi-csrf-token")
-        if token != signed:
+        if not (token and signed and secrets.compare_digest(token, signed)):
             raise CsrfProtectError("CSRF token mismatch")
 
 
