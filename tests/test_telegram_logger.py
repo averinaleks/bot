@@ -79,6 +79,7 @@ async def test_long_message_split_into_parts(monkeypatch):
 
     chat_id, text, urgent = TelegramLogger._queue.get_nowait()
     await tl._send(text, chat_id, urgent)
+    TelegramLogger._queue.task_done()
 
     await TelegramLogger.shutdown()
 
