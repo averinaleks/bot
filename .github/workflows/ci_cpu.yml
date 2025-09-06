@@ -54,7 +54,7 @@ jobs:
           HTTPServer(('127.0.0.1', 8009), Handler).serve_forever()
           PY
           echo $! > server.pid
-          timeout 30 bash -c 'until curl -sf -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8009/v1/completions >/dev/null; do sleep 0.5; done'
+          timeout 30 bash -c 'until curl --max-time 5 -sf -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8009/v1/completions >/dev/null; do sleep 0.5; done'
       - name: Run flake8
         run: flake8 .
       - name: Run mypy
