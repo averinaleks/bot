@@ -217,8 +217,8 @@ class TelegramLogger(logging.Handler):
                 try:
                     cls._queue.put_nowait((None, "", False))
                     try:
-                        await cls._queue.join()
-                    except RuntimeError:
+                        await asyncio.wait_for(cls._queue.join(), timeout=5)
+                    except (asyncio.TimeoutError, RuntimeError):
                         pass
                 except asyncio.QueueFull:
                     pass
@@ -235,7 +235,7 @@ class TelegramLogger(logging.Handler):
             cls._worker_task = None
 
         if cls._worker_thread is not None:
-            cls._worker_thread.join()
+            cls._worker_thread.join(timeout=5)
             cls._worker_thread = None
 
         cls._queue = None
