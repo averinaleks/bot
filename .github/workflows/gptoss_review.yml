@@ -57,14 +57,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          base_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER \
-            | jq -r .base.sha)
-          if [ -z "$base_sha" ] || [ "$base_sha" = "null" ]; then
-            echo "Error: failed to retrieve base SHA" >&2
+          pull_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER)
+          base_sha=$(echo "$pull_info" | jq -r .base.sha)
+          base_ref=$(echo "$pull_info" | jq -r .base.ref)
+          if [ -z "$base_sha" ] || [ "$base_sha" = "null" ] || \
+             [ -z "$base_ref" ] || [ "$base_ref" = "null" ]; then
+            echo "Error: failed to retrieve base revision information" >&2
             exit 1
           fi
-          git fetch origin $base_sha
+          git fetch origin "$base_ref"
           git diff $base_sha...HEAD -- ':(glob)**/*.py' > diff.patch
           head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
           # crude token count (words) to detect overly large diffs
