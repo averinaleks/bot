@@ -12,9 +12,12 @@ from tests.helpers import get_free_port, service_process
 
 pytestmark = pytest.mark.integration
 
-if sys.platform == "win32":
-    multiprocessing.set_start_method("spawn", force=True)
-ctx = multiprocessing.get_context("spawn")
+
+@pytest.fixture
+def ctx():
+    if sys.platform == "win32":
+        multiprocessing.set_start_method("spawn", force=True)
+    return multiprocessing.get_context("spawn")
 
 # Default host for test services
 host = "127.0.0.1"
@@ -95,7 +98,7 @@ def _run_tm(port: int):
 
 
 @pytest.mark.integration
-def test_services_communicate(monkeypatch):
+def test_services_communicate(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
     dh_port = get_free_port()
     mb_port = get_free_port()
@@ -120,7 +123,7 @@ def test_services_communicate(monkeypatch):
 
 
 @pytest.mark.integration
-def test_service_availability_check(monkeypatch):
+def test_service_availability_check(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
     dh_port = get_free_port()
     mb_port = get_free_port()
@@ -144,7 +147,7 @@ def test_service_availability_check(monkeypatch):
 
 
 @pytest.mark.integration
-def test_check_services_success(monkeypatch):
+def test_check_services_success(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
     dh_port = get_free_port()
     mb_port = get_free_port()
@@ -169,7 +172,7 @@ def test_check_services_success(monkeypatch):
 
 
 @pytest.mark.integration
-def test_check_services_failure(monkeypatch):
+def test_check_services_failure(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
     dh_port = get_free_port()
     mb_port = get_free_port()
@@ -191,7 +194,7 @@ def test_check_services_failure(monkeypatch):
 
 
 @pytest.mark.integration
-def test_check_services_host_only(monkeypatch):
+def test_check_services_host_only(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
     for var in ('DATA_HANDLER_URL', 'MODEL_BUILDER_URL', 'TRADE_MANAGER_URL'):
         monkeypatch.delenv(var, raising=False)

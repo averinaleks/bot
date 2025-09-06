@@ -11,7 +11,10 @@ pytestmark = pytest.mark.integration
 
 TOKEN_HEADERS = {"Authorization": "Bearer test-token"}
 
-ctx = multiprocessing.get_context("spawn")
+
+@pytest.fixture
+def ctx():
+    return multiprocessing.get_context("spawn")
 
 
 def _run_dh(port: int):
@@ -31,7 +34,7 @@ def _run_dh(port: int):
 
 
 @pytest.mark.integration
-def test_data_handler_service_price():
+def test_data_handler_service_price(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_dh, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -56,7 +59,7 @@ def _run_dh_fail(port: int):
 
 
 @pytest.mark.integration
-def test_data_handler_service_price_error():
+def test_data_handler_service_price_error(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_dh_fail, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -100,7 +103,7 @@ def _run_mb(model_dir: str, port: int):
 
 
 @pytest.mark.integration
-def test_model_builder_service_train_predict(tmp_path):
+def test_model_builder_service_train_predict(tmp_path, ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -120,7 +123,7 @@ def test_model_builder_service_train_predict(tmp_path):
 
 
 @pytest.mark.integration
-def test_model_builder_service_train_predict_multi_class(tmp_path):
+def test_model_builder_service_train_predict_multi_class(tmp_path, ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -140,7 +143,7 @@ def test_model_builder_service_train_predict_multi_class(tmp_path):
 
 
 @pytest.mark.integration
-def test_model_builder_service_rejects_single_class_labels(tmp_path):
+def test_model_builder_service_rejects_single_class_labels(tmp_path, ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -188,7 +191,7 @@ def _run_mb_fail(model_file: str, port: int):
 
 
 @pytest.mark.integration
-def test_model_builder_service_load_failure(tmp_path):
+def test_model_builder_service_load_failure(tmp_path, ctx):
     port = get_free_port()
     bad_file = tmp_path / 'model.pkl'
     bad_file.write_text('broken')
@@ -253,7 +256,7 @@ def _run_tm(
 
 
 @pytest.mark.integration
-def test_trade_manager_service_endpoints():
+def test_trade_manager_service_endpoints(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -284,7 +287,7 @@ def test_trade_manager_service_endpoints():
 
 
 @pytest.mark.integration
-def test_trade_manager_service_partial_close():
+def test_trade_manager_service_partial_close(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -324,7 +327,7 @@ def test_trade_manager_service_partial_close():
 
 
 @pytest.mark.integration
-def test_trade_manager_service_price_only():
+def test_trade_manager_service_price_only(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -342,7 +345,7 @@ def test_trade_manager_service_price_only():
 
 
 @pytest.mark.integration
-def test_trade_manager_service_fallback_orders():
+def test_trade_manager_service_fallback_orders(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, False, False))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -361,7 +364,7 @@ def test_trade_manager_service_fallback_orders():
 
 
 @pytest.mark.integration
-def test_trade_manager_service_fallback_failure():
+def test_trade_manager_service_fallback_failure(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port, False, True))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
@@ -375,7 +378,7 @@ def test_trade_manager_service_fallback_failure():
 
 
 @pytest.mark.integration
-def test_trade_manager_ready_route():
+def test_trade_manager_ready_route(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ready') as resp:
