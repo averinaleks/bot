@@ -25,6 +25,8 @@ jobs:
         uses: actions/setup-python@0a48b7bf1eabc3ec69474a3854c4f0a36e029be2 # v5
         with:
           python-version: '3.11'
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Install Bandit
         run: pip install bandit bandit-sarif-formatter
       - name: Run Bandit
