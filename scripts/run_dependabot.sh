@@ -12,28 +12,27 @@ if [[ -z "${TOKEN:-}" ]]; then
     exit 1
 fi
 token="${TOKEN}"
-fail_arg="--fail"
-
 
 for ecosystem in pip github-actions; do
-  set +e
-  response=$(curl ${fail_arg} -S -s -X POST \
+  tmp_response=$(mktemp)
+  http_status=$(curl -S -s -o "${tmp_response}" -w "%{http_code}" -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
     -H "Content-Type: application/json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${repo}/dependabot/updates" \
     -d "{\"package-ecosystem\":\"${ecosystem}\",\"directory\":\"/\"}")
-  code=$?
-  set -e
-  if [[ $code -eq 22 ]]; then
+  if [[ ${http_status} -eq 404 ]]; then
     echo "Dependabot endpoint returned 404 for ${ecosystem}" >&2
-    echo "${response}" >&2
+    cat "${tmp_response}" >&2
+    rm -f "${tmp_response}"
     continue
   fi
-  if [[ $code -ne 0 ]]; then
-    echo "Failed to trigger Dependabot for ${ecosystem}" >&2
-    echo "${response}" >&2
+  if [[ ${http_status} -ge 400 ]]; then
+    echo "Failed to trigger Dependabot for ${ecosystem} (status ${http_status})" >&2
+    cat "${tmp_response}" >&2
+    rm -f "${tmp_response}"
     exit 1
   fi
+  rm -f "${tmp_response}"
 done
