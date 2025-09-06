@@ -65,7 +65,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
+          timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload unit test log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -97,7 +97,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
+          timeout 15m pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload integration test log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
