@@ -5,7 +5,7 @@ permissions:
   contents: write
   pull-requests: write
 
-on:
+'on':
   push:
     branches:
       - main
@@ -18,11 +18,14 @@ on:
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: >
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
       - name: Update release draft
-        uses: release-drafter/release-drafter@7cf306f56b79636bb76931494ccf29fc893763bd # v6.1.0
+        # release-drafter v6.1.0
+        uses: release-drafter/release-drafter@7cf306f56b79636bb76931494ccf29fc893763bd  # yamllint disable-line rule:line-length
         with:
           config-name: release-drafter.yml
         env:
