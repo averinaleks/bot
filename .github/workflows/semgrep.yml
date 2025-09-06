@@ -36,7 +36,8 @@ jobs:
           persist-credentials: false
       - uses: semgrep/ci@v1
         with:
-          config: auto
+          # Use the community "ci" ruleset which does not require an auth token
+          config: p/ci
           generateSarif: true
       - uses: github/codeql-action/upload-sarif@d6c5e1b140009be28958d3837ed3be3fb637d8c0 # v3
         with:
