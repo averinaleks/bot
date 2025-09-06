@@ -42,7 +42,7 @@ jobs:
         run: |
           # The model can take a while to load, especially on fresh runners
           # Allow extra time for the container to become ready
-          for i in {1..600}; do
+          for i in {1..1200}; do
             if curl -sf http://127.0.0.1:8000/v1/models; then
               exit 0
             fi
