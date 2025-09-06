@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
+        with:
+          persist-credentials: false
 
       - name: Build Docker image
         run: |
@@ -27,7 +29,7 @@ jobs:
             -t ${{ github.repository }}:${{ github.sha }} .
 
       - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@v0.33.0
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808 # 0.33.0
         with:
           image-ref: ${{ github.repository }}:${{ github.sha }}
           format: sarif
@@ -37,12 +39,15 @@ jobs:
           exit-code: 0
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Cleanup buildx
+        run: docker buildx prune -af || true
