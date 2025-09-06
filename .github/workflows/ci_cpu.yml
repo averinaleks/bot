@@ -60,7 +60,7 @@ jobs:
       - name: Run mypy
         run: mypy .
       - name: Run pytest
-        run: pytest
+        run: timeout 15m pytest
       - name: Stop mock server
         if: always()
         run: |
