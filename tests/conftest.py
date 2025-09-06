@@ -4,6 +4,8 @@ import sys
 
 import pytest
 
+from bot import http_client as _http_client
+
 pd = pytest.importorskip("pandas")
 
 
@@ -40,3 +42,10 @@ def fast_sleep(monkeypatch):
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _sleep)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _close_shared_http_client():
+    """Ensure the shared async HTTP client is closed after tests."""
+    yield
+    asyncio.run(_http_client.close_async_http_client())
