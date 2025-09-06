@@ -34,14 +34,14 @@ jobs:
       - name: Check for SARIF results
         id: sarif_check
         run: |
-          if [ -s bandit.sarif ] && [ "$(jq '.runs[].results | length' bandit.sarif)" -gt 0 ]; then
+          if [ -s bandit.sarif ] && [ "$(jq '[.runs[].results] | flatten | length' bandit.sarif)" -gt 0 ]; then
             echo "upload=true" >> "$GITHUB_OUTPUT"
           else
             echo "upload=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Upload Bandit results
         uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
-        if: steps.sarif_check.outputs.upload == 'true'
+        if: steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
         with:
           sarif_file: bandit.sarif
 
