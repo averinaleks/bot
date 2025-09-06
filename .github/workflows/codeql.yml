@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  schedule:
+    - cron: '0 0 * * 0'
 
 jobs:
   analyze:
@@ -14,14 +16,22 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: github/codeql-action/init@v3
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: python
           build-mode: none
-      - uses: github/codeql-action/analyze@v3
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
       - name: Cleanup buildx
+        if: ${{ always() }}
         run: docker buildx prune -af || true
