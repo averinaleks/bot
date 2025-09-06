@@ -29,7 +29,7 @@ jobs:
       - name: Run Bandit
         run: bandit -r . -ll -ii -x tests,scripts,gptoss_check -f sarif -o bandit.sarif --exit-zero
       - name: Upload Bandit results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
         with:
           sarif_file: bandit.sarif
 
