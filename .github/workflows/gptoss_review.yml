@@ -41,7 +41,8 @@ jobs:
       - name: Wait for LLM container
         run: |
           # The model can take a while to load, especially on fresh runners
-          for i in {1..300}; do
+          # Allow extra time for the container to become ready
+          for i in {1..600}; do
             if curl -sf http://127.0.0.1:8000/v1/models; then
               exit 0
             fi
