@@ -18,9 +18,11 @@ on:
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      - uses: actions/checkout@v4
       - name: Update release draft
-        uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6
+        uses: release-drafter/release-drafter@7cf306f56b79636bb76931494ccf29fc893763bd # v6.1.0
         with:
           config-name: release-drafter.yml
         env:
