@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
     branches:
       - main
@@ -18,11 +18,7 @@ on:
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v4
       - name: Update release draft
         # release-drafter v6.1.0
         uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5  # yamllint disable-line rule:line-length
