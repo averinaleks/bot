@@ -205,17 +205,23 @@ class TelegramLogger(logging.Handler):
         if cls._stop_event is None:
             return
 
-        if cls._queue is not None and (
-            cls._worker_task is not None or cls._worker_thread is not None
-        ):
-            try:
-                cls._queue.put_nowait((None, "", False))
+        if cls._queue is not None:
+            # Ensure no pending unfinished tasks block shutdown
+            while not cls._queue.empty():
                 try:
-                    await cls._queue.join()
-                except RuntimeError:
+                    cls._queue.get_nowait()
+                    cls._queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            if cls._worker_task is not None or cls._worker_thread is not None:
+                try:
+                    cls._queue.put_nowait((None, "", False))
+                    try:
+                        await cls._queue.join()
+                    except RuntimeError:
+                        pass
+                except asyncio.QueueFull:
                     pass
-            except asyncio.QueueFull:
-                pass
 
         if cls._stop_event is not None:
             cls._stop_event.set()
