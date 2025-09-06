@@ -90,9 +90,14 @@ async def send_telegram_alert(message: str) -> None:
     payload = {"chat_id": chat_id, "text": message}
     for attempt in range(1, max_attempts + 1):
         try:
-            resp = await client.post(url, data=payload, timeout=10)
-            resp.raise_for_status()
-            return
+                try:
+                    resp = await client.post(url, json=payload, timeout=10)
+                except TypeError:
+                    resp = await client.post(url, data=payload, timeout=10)
+                raise_for_status = getattr(resp, "raise_for_status", None)
+                if callable(raise_for_status):
+                    raise_for_status()
+                return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             req_url = getattr(getattr(exc, "request", None), "url", url)
             redacted_url = str(req_url).replace(token, "***")

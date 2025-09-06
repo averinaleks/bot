@@ -50,7 +50,7 @@ def fast_sleep(monkeypatch):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _close_shared_http_client():
+async def _close_shared_http_client():
     """Ensure the shared async HTTP client is closed after tests."""
     yield
-    asyncio.run(_http_client.close_async_http_client())
+    await _http_client.close_async_http_client()
