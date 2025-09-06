@@ -63,7 +63,6 @@ def get_free_port(retries: int = 10, *, reserve: bool = False) -> int | tuple[in
     raise RuntimeError("Could not allocate free port")
 
 
-ctx = multiprocessing.get_context("spawn")
 
 
 @contextmanager
@@ -87,3 +86,6 @@ def service_process(
     finally:
         proc.terminate()
         proc.join(join_timeout)
+        if proc.is_alive():
+            proc.kill()
+            proc.join(join_timeout)
