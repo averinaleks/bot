@@ -19,5 +19,3 @@ jobs:
 
       - name: Run Dependabot
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bash scripts/run_dependabot.sh
