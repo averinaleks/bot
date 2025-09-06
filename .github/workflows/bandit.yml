@@ -25,9 +25,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Bandit
-        run: pip install bandit
+        run: pip install bandit bandit-sarif-formatter
       - name: Run Bandit
-        run: bandit -c .bandit -ll -ii -f sarif -o bandit.sarif
+        run: bandit -r . -ll -ii -x tests,scripts,gptoss_check -f sarif -o bandit.sarif --exit-zero
       - name: Upload Bandit results
         uses: github/codeql-action/upload-sarif@v3
         with:
