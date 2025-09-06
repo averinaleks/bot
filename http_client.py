@@ -54,6 +54,11 @@ def get_httpx_client(
 ) -> Generator[httpx.Client, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
     kwargs.setdefault("timeout", timeout)
+    # For consistency with the asynchronous helpers, avoid inheriting proxy
+    # settings from the environment unless explicitly requested.  This mirrors
+    # the behaviour of :func:`get_async_http_client` and prevents surprising
+    # proxy usage in environments where variables like ``HTTP_PROXY`` are set.
+    kwargs.setdefault("trust_env", False)
     client = httpx.Client(**kwargs)
     try:
         yield client
