@@ -25,6 +25,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -34,7 +35,8 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: python
-          build-mode: none
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
       - name: Cleanup buildx
