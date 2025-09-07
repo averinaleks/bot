@@ -7,7 +7,7 @@ name = "trading-bot-x"
 version = "0.1.1"
 description = "Пример торгового бота на Python."
 readme = "README.md"
-license = "MIT"
+license = { file = "LICENSE" }
 license-files = ["LICENSE"]
 authors = [{ name = "Project Authors" }]
 requires-python = ">=3.10"
