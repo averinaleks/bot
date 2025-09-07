@@ -13,7 +13,7 @@ jobs:
   dependabot:
     # Run this job only for Dependabot PRs. Checking the PR author allows
     # maintainers to re-run the workflow while still filtering to Dependabot.
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
