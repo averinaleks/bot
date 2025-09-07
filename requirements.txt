@@ -411,7 +411,7 @@ python-dotenv==1.1.1
     #   pydantic-settings
 python-telegram-bot==22.3
     # via -r requirements-core.in
-pytorch-lightning==2.5.4
+pytorch-lightning==2.5.5
     # via -r requirements-core.in
 pytz==2025.2
     # via pandas
