@@ -4,6 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    insecure-external-code-execution: allow
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
