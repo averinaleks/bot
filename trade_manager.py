@@ -2065,17 +2065,28 @@ def _resolve_host() -> str:
     """
 
     host_env = os.getenv("HOST")
-    if host_env is None:
+    if not host_env:
         logger.warning(
             "HOST не установлен, используется 127.0.0.1. Укажите HOST для внешнего доступа",
         )
         return "127.0.0.1"
+
+    host_env = host_env.strip()
+    if host_env.lower() == "localhost":
+        return "127.0.0.1"
+
     try:
-        ipaddress.ip_address(host_env)
+        ip = ipaddress.ip_address(host_env)
     except ValueError:
         if not _HOSTNAME_RE.fullmatch(host_env):
             raise InvalidHostError(f"Некорректное значение HOST {host_env}")
-    return host_env
+        raise InvalidHostError(f"Недопустимый хост {host_env}: разрешены только локальные адреса")
+
+    if ip.is_unspecified or ip.compressed != "127.0.0.1":
+        raise InvalidHostError(
+            f"Недопустимый адрес {host_env}: разрешён только 127.0.0.1"
+        )
+    return "127.0.0.1"
 
 
 if __name__ == "__main__":
