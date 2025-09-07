@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
   security-events: write
   actions: read # required for github/codeql-action/upload-sarif
 
@@ -24,25 +23,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-
-      - name: Build Docker image
-        run: |
-          docker buildx build -f Dockerfile.ci \
-            -t ${{ github.repository }}:${{ github.sha }} \
-            --load .
-
       - id: trivy
         name: Run Trivy scan
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         continue-on-error: true
         with:
-          image-ref: ${{ github.repository }}:${{ github.sha }}
+          scan-type: fs
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          scan-type: image
           ignore-unfixed: true
           # Fail the workflow when vulnerabilities of the specified severity are found
           exit-code: 1
@@ -64,5 +53,3 @@ jobs:
         if: ${{ steps.trivy.conclusion == 'failure' }}
         run: exit 1
 
-      - name: Cleanup buildx
-        run: docker buildx prune -af || true
