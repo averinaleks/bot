@@ -526,7 +526,7 @@ tqdm==4.67.1
     #   pytorch-lightning
     #   shap
     #   transformers
-transformers==4.56.0
+transformers==4.56.1
     # via -r requirements-core.in
 triton==3.4.0
     # via torch
