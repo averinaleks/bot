@@ -7,7 +7,7 @@ if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
 fi
 repo="${GITHUB_REPOSITORY}"
 
-token="${TOKEN:-${GITHUB_TOKEN:-}}"
+token="${TOKEN:-}"
 if [[ -z "${token}" ]]; then
     echo "TOKEN is not set; export a PAT with repo and security_events scopes" >&2
     exit 1
