@@ -59,7 +59,7 @@ jobs:
       - name: Run flake8
         run: flake8 .
       - name: Run mypy
-        run: mypy .
+        run: mypy --no-site-packages .
       - name: Run pytest
         run: timeout 15m pytest
       - name: Stop mock server
