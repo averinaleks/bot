@@ -2,6 +2,7 @@ name: CI
 
 permissions:
   contents: read
+  actions: write
 
 # If a job fails with a temporary runner error, rerun the workflow.
 # Self-hosted runners are also supported. When contacting GitHub Support
