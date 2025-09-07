@@ -269,14 +269,24 @@ async def handle_rate_limits(exchange) -> None:
             await asyncio.sleep(wait_time)
 
 
-async def safe_api_call(exchange, method: str, *args, **kwargs):
+async def safe_api_call(
+    exchange,
+    method: str,
+    *args,
+    max_attempts: int = 5,
+    backoff_factor: float = 2,
+    test_mode: bool | None = None,
+    **kwargs,
+):
     """Call a ccxt method with retry, status and retCode verification."""
-    if os.getenv("TEST_MODE"):
+    if test_mode is None:
+        test_mode = bool(os.getenv("TEST_MODE"))
+
+    if test_mode:
         # During unit tests we do not want to spend time in the retry loop.
         return await getattr(exchange, method)(*args, **kwargs)
 
-    delay = 1.0
-    for attempt in range(5):
+    for attempt in range(max_attempts):
         try:
             result = await getattr(exchange, method)(*args, **kwargs)
             await handle_rate_limits(exchange)
@@ -297,10 +307,9 @@ async def safe_api_call(exchange, method: str, *args, **kwargs):
                 logger.error(
                     "Request not authorized. Check server time sync and recv_window"
                 )
-            if attempt == 4:
+            if attempt == max_attempts - 1:
                 raise
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 10)
+            await asyncio.sleep(backoff_factor ** attempt)
 
 
 class BybitSDKAsync:
