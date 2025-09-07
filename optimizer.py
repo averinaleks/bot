@@ -32,11 +32,14 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 import inspect
-if os.getenv("TEST_MODE") == "1":
-    import types
-    import sys
+import types
+import sys
 
-    ray = types.ModuleType("ray")
+
+def _create_ray_stub():
+    """Return a minimal stand-in for Ray when the real package is unavailable."""
+
+    ray_stub = types.ModuleType("ray")
 
     class _RayRemoteFunction:
         def __init__(self, func):
@@ -55,12 +58,21 @@ if os.getenv("TEST_MODE") == "1":
             return wrapper
         return _RayRemoteFunction(func)
 
-    ray.remote = _ray_remote
-    ray.get = lambda x: x
-    ray.init = lambda *a, **k: None
-    ray.is_initialized = lambda: False
+    ray_stub.remote = _ray_remote
+    ray_stub.get = lambda x: x
+    ray_stub.init = lambda *a, **k: None
+    ray_stub.is_initialized = lambda: False
+    ray_stub.ObjectRef = type("ObjectRef", (), {})
+    return ray_stub
+
+
+if os.getenv("TEST_MODE") == "1":
+    ray = _create_ray_stub()
 else:
-    import ray
+    try:  # pragma: no cover - optional dependency
+        import ray  # type: ignore
+    except ImportError:  # pragma: no cover - provide fallback stub
+        ray = _create_ray_stub()
 from bot.utils import (
     logger,
     is_cuda_available,
@@ -229,6 +241,7 @@ class ParameterOptimizer:
         self.last_volatility = {
             symbol: 0.0 for symbol in data_handler.usdt_pairs
         }  # Для отслеживания изменений волатильности
+        self.last_holdout_score = {symbol: None for symbol in data_handler.usdt_pairs}
         self.max_trials = config.get("optuna_trials", 20)
         self.optimizer_method = config.get("optimizer_method", "tpe")
         self.holdout_warning_ratio = config.get("holdout_warning_ratio", 0.3)
@@ -275,6 +288,13 @@ class ParameterOptimizer:
             if empty:
                 logger.warning("Нет данных для оптимизации %s", symbol)
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
+
+            if hasattr(ray, "is_initialized") and not ray.is_initialized():
+                try:  # pragma: no cover - optional ray init
+                    ray.init(ignore_reinit_error=True)
+                except Exception as exc:  # pragma: no cover - log and continue
+                    logger.warning("Ray initialization failed: %s", exc)
+
             volatility = df["close"].pct_change().std() if not df.empty else 0.02
             # Проверка значительного изменения волатильности
             volatility_change = abs(
@@ -429,10 +449,8 @@ class ParameterOptimizer:
                     symbol,
                 )
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
-            self.best_params_by_symbol[symbol] = best_params
-            self.last_optimization[symbol] = time.time()
 
-            # Hold-out evaluation
+            holdout_score = None
             try:
                 start = int(len(df) * 0.8)
                 holdout_df = df.iloc[start:]
@@ -440,6 +458,16 @@ class ParameterOptimizer:
                     holdout_score = ray.get(
                         self._evaluate_params(best_params, symbol, holdout_df)
                     )
+                    prev_score = self.last_holdout_score.get(symbol)
+                    if (
+                        prev_score is not None and holdout_score < prev_score
+                    ):
+                        logger.warning(
+                            "Hold-out score for %s deteriorated from %.3f to %.3f",
+                            symbol,
+                            prev_score,
+                            holdout_score,
+                        )
                     if best_value and holdout_score < best_value * (1 - self.holdout_warning_ratio):
                         logger.warning(
                             "Sharpe ratio on hold-out for %s dropped from %.3f to %.3f",
@@ -457,6 +485,10 @@ class ParameterOptimizer:
                                 logger.exception("Failed to send Telegram warning: %s", exc)
             except (ValueError, RuntimeError, KeyError) as e:
                 logger.exception("Ошибка hold-out проверки для %s: %s", symbol, e)
+
+            self.best_params_by_symbol[symbol] = best_params
+            self.last_holdout_score[symbol] = holdout_score
+            self.last_optimization[symbol] = time.time()
 
             logger.info(
                 "Оптимизация для %s завершена, лучшие параметры: %s",
