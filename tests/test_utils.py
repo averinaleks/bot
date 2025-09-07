@@ -79,11 +79,11 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
 
     utils_mod = importlib.import_module("bot.utils")
     captured = capsys.readouterr()
-    assert "Logging initialized" not in captured.err
+    assert "Logging configured" not in captured.err
 
     utils_mod.configure_logging()
     captured = capsys.readouterr()
-    assert captured.err.count("Logging initialized") == 1
+    assert captured.err.count("Logging configured") == 1
 
     utils_mod.logger.info("first")
     captured = capsys.readouterr()
@@ -91,7 +91,7 @@ def test_logging_not_duplicated_on_reimport(monkeypatch, tmp_path, capsys):
 
     utils_mod = importlib.reload(utils_mod)
     captured = capsys.readouterr()
-    assert "Logging initialized" not in captured.err
+    assert "Logging configured" not in captured.err
 
     utils_mod.logger.info("second")
     captured = capsys.readouterr()
@@ -109,12 +109,12 @@ def test_configure_logging_level_update(monkeypatch, tmp_path):
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
     utils.configure_logging()
     assert logger.level == logging.WARNING
-    handlers = list(logger.handlers)
+    handler_count = len(logger.handlers)
 
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     utils.configure_logging()
     assert logger.level == logging.DEBUG
-    assert logger.handlers == handlers
+    assert len(logger.handlers) == handler_count
 
     for h in logger.handlers[:]:
         logger.removeHandler(h)

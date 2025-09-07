@@ -41,15 +41,16 @@ def configure_logging() -> None:
         os.makedirs(log_dir, exist_ok=True)
 
     if logger.handlers:
-        return
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+            handler.close()
 
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    file_handler = logging.FileHandler(
-        os.path.join(log_dir, "trading_bot.log"), encoding="utf-8"
-    )
+    log_file_path = os.path.join(log_dir, "trading_bot.log")
+    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
@@ -58,9 +59,9 @@ def configure_logging() -> None:
     logger.addHandler(console_handler)
 
     logger.info(
-        "Logging initialized at %s; writing logs to %s",
+        "Logging configured. File: %s, level: %s",
+        log_file_path,
         logging.getLevelName(logger.level),
-        log_dir,
     )
 
 
