@@ -47,6 +47,6 @@ jobs:
         with:
           sarif_file: bandit.sarif
       - name: Fail if Bandit failed
-        if: steps.run_bandit.outcome == 'failure'
+        if: ${{ steps.run_bandit.outcome == 'failure' }}
         run: exit 1
 
