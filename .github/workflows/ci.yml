@@ -43,7 +43,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: pip-audit-report
+          name: pip-audit-report-${{ matrix.python-version }}
           path: /mnt/pip-audit.json
           if-no-files-found: ignore
       - name: Run flake8
@@ -55,7 +55,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flake8-log
+          name: flake8-log-${{ matrix.python-version }}
           path: flake8.log
       - name: Remove test caches
         if: always()
@@ -69,7 +69,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: unit-test-log
+          name: unit-test-log-${{ matrix.python-version }}
           path: pytest.log
           if-no-files-found: ignore
       - name: Cleanup buildx
@@ -102,7 +102,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: integration-test-log
+          name: integration-test-log-${{ matrix.python-version }}
           path: pytest.log
           if-no-files-found: ignore
       - name: Cleanup buildx
