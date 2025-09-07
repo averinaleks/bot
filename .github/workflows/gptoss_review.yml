@@ -61,6 +61,8 @@ jobs:
           echo "LLM container failed to start" >&2
           docker logs gptoss || true
           exit 1
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Generate diff
         id: generate-diff
         if: success()
