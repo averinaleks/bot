@@ -41,7 +41,8 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           scan-type: image
-          exit-code: 0
+          # Fail the workflow when vulnerabilities of the specified severity are found
+          exit-code: 1
 
       - name: Upload Trivy scan results to GitHub Security tab
         if: github.event_name != 'pull_request'
