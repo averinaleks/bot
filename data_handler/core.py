@@ -19,7 +19,13 @@ from .utils import expected_ws_rate
 class DataHandler:
     """Simplified DataHandler focused on functionality used in tests."""
 
-    def __init__(self, cfg, http_client, optimizer, exchange=None):
+    def __init__(
+        self,
+        cfg: Any,
+        http_client: Any,
+        optimizer: Any,
+        exchange: Any = None,
+    ) -> None:
         self.cfg = cfg
         self.exchange = exchange
         self.ws_queue: asyncio.PriorityQueue[Tuple[int, Any]] = asyncio.PriorityQueue()
