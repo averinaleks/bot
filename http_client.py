@@ -10,7 +10,7 @@ from functools import wraps
 from typing import AsyncGenerator, Generator
 
 import httpx
-import requests
+import requests  # type: ignore[import-untyped]
 
 DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30")
 try:

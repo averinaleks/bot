@@ -4,7 +4,7 @@ import sys
 from typing import Iterable
 
 import logging
-import requests
+import requests  # type: ignore[import-untyped]
 
 
 logger = logging.getLogger(__name__)
