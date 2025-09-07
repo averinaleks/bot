@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
+  group: docker-publish-${{ github.ref_name || github.sha }}
   cancel-in-progress: true
 
 jobs:
