@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   dependabot:
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    # Run this job only for Dependabot PRs. Using `github.actor` keeps the check
+    # reliable even if the pull_request payload is missing in the event.
+    if: ${{ github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
