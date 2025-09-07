@@ -38,7 +38,7 @@ jobs:
           docker run -d --rm --name gptoss \
             -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
             -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:v0.5.1 \
+            vllm/vllm-openai:v0.10.1 \
             --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
             --trust-remote-code \
             --device cpu
