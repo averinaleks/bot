@@ -119,18 +119,24 @@ async def send_telegram_alert(message: str) -> None:
 
 
 _TASKS: set[asyncio.Task[None]] = set()
+_TASKS_LOCK = asyncio.Lock()
 
 
 def _task_done(task: asyncio.Task[None]) -> None:
     """Remove completed ``task`` and log any unhandled exception."""
-    _TASKS.discard(task)
+
+    async def _remove() -> None:
+        async with _TASKS_LOCK:
+            _TASKS.discard(task)
+
+    asyncio.create_task(_remove())
     with suppress(asyncio.CancelledError):
         exc = task.exception()
         if exc:
             logger.error("run_async task failed", exc_info=exc)
 
 
-def run_async(coro: Awaitable[None]) -> None:
+def run_async(coro: Awaitable[None], timeout: float | None = None) -> None:
     """Run or schedule ``coro`` depending on event loop state.
 
     When scheduled, keep a reference to the task and log exceptions on
@@ -139,17 +145,38 @@ def run_async(coro: Awaitable[None]) -> None:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        asyncio.run(coro)
+        asyncio.run(asyncio.wait_for(coro, timeout))
     else:
-        task = asyncio.create_task(coro)
-        _TASKS.add(task)
+        task = asyncio.create_task(asyncio.wait_for(coro, timeout))
         task.add_done_callback(_task_done)
 
+        async def _add() -> None:
+            async with _TASKS_LOCK:
+                _TASKS.add(task)
 
-async def shutdown_async_tasks() -> None:
-    """Wait for all scheduled tasks to complete."""
-    if _TASKS:
-        await asyncio.gather(*_TASKS, return_exceptions=True)
+        asyncio.create_task(_add())
+
+
+async def shutdown_async_tasks(timeout: float = 5.0) -> None:
+    """Wait for all scheduled tasks to complete.
+
+    Tasks that do not finish within ``timeout`` seconds are logged and
+    cancelled.
+    """
+    async with _TASKS_LOCK:
+        tasks = set(_TASKS)
+
+    if not tasks:
+        return
+
+    done, pending = await asyncio.wait(tasks, timeout=timeout)
+    if pending:
+        logger.warning("Cancelling pending tasks: %s", [repr(t) for t in pending])
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    async with _TASKS_LOCK:
         _TASKS.clear()
 
 # Threshold for slow trade confirmations
