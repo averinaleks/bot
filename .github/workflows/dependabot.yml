@@ -22,6 +22,46 @@ jobs:
         uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363 # v4.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Check out the source code from the Dependabot pull request.  When
+      # triggering on pull_request_target events, the default checkout
+      # context points at the base branch.  In order to test the
+      # changes introduced by Dependabot we need to explicitly check out
+      # the head of the pull request.  The head ref is safe to use here
+      # because the job is scoped to Dependabot-created pull requests.
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      # Set up a Python environment that matches the main CI.  This
+      # installs the appropriate Python version and device specific
+      # dependencies (CPU by default) so that tests run in a
+      # reproducible manner.  The setup-env action is defined in this
+      # repository under .github/actions/setup-env.
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: '3.11'
+          device: 'cpu'
+
+      # Remove any stale pytest caches prior to running the test suite.
+      # Old cache data can cause test runs to use outdated compiled
+      # artifacts which in turn mask failures or lead to false
+      # positives.  This action is defined locally under
+      # .github/actions/clear-test-caches.
+      - name: Remove test caches
+        uses: ./.github/actions/clear-test-caches
+
+      # Run the unit tests against the Dependabot update.  Integration
+      # tests are excluded here to keep the workflow fast; they run in
+      # the main CI.  If any test fails this step will surface the
+      # error and prevent automatic merging of the pull request.
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          pytest -m "not integration" -o cache_dir=/mnt/pytest_cache -q
+
       - name: Enable auto-merge for Dependabot PRs
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3.0.0
@@ -29,3 +69,4 @@ jobs:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
           token: ${{ secrets.GITHUB_TOKEN }}
+
