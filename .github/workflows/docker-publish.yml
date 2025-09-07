@@ -153,7 +153,7 @@ jobs:
           TRIVY_CACHE_DIR: /mnt/trivy-cache
         with:
           version: v0.65.0
-          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
+          image-ref: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           format: table
           output: ${{ matrix.artifact }}.txt
           scanners: vuln
