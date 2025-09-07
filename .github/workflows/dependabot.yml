@@ -30,7 +30,7 @@ jobs:
       # the head of the pull request.  The head ref is safe to use here
       # because the job is scoped to Dependabot-created pull requests.
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
@@ -40,7 +40,7 @@ jobs:
       # reproducible manner.  The setup-env action is defined in this
       # repository under .github/actions/setup-env.
       - name: Setup Python environment
-        uses: averinaleks/bot/.github/actions/setup-env@9f1e3bdf7b84fe39c8a57c6870dac0af0f1a793d
+        uses: ./.github/actions/setup-env
         with:
           python-version: '3.11'
           device: 'cpu'
@@ -51,7 +51,7 @@ jobs:
       # positives.  This action is defined locally under
       # .github/actions/clear-test-caches.
       - name: Remove test caches
-        uses: averinaleks/bot/.github/actions/clear-test-caches@9f1e3bdf7b84fe39c8a57c6870dac0af0f1a793d
+        uses: ./.github/actions/clear-test-caches
 
       # Run the unit tests against the Dependabot update.  Integration
       # tests are excluded here to keep the workflow fast; they run in
