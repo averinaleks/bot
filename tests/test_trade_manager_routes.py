@@ -145,3 +145,19 @@ def test_resolve_host_rejects_invalid_values(monkeypatch):
     monkeypatch.setenv("HOST", "invalid_host@")
     with pytest.raises(tm.InvalidHostError):
         tm._resolve_host()
+
+
+def test_resolve_host_handles_empty_and_localhost(monkeypatch):
+    tm, _, _ = _setup_module(monkeypatch)
+    monkeypatch.setenv("HOST", "")
+    assert tm._resolve_host() == "127.0.0.1"
+    monkeypatch.setenv("HOST", "localhost")
+    assert tm._resolve_host() == "127.0.0.1"
+
+
+@pytest.mark.parametrize("value", ["0.0.0.0", "127.0.0.2", "8.8.8.8"])
+def test_resolve_host_rejects_public_addresses(monkeypatch, value):
+    tm, _, _ = _setup_module(monkeypatch)
+    monkeypatch.setenv("HOST", value)
+    with pytest.raises(tm.InvalidHostError):
+        tm._resolve_host()
