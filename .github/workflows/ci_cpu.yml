@@ -58,11 +58,29 @@ jobs:
           echo $! > server.pid
           timeout 30 bash -c 'until curl --max-time 5 -sf -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8009/v1/completions >/dev/null; do sleep 0.5; done'
       - name: Run flake8
-        run: flake8 .
+        run: |
+          set -o pipefail
+          flake8 . | tee flake8.log || code=$?
+          exit $code
+      - name: Upload flake8 log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flake8-log
+          path: flake8.log
       - name: Run mypy
         run: mypy --no-site-packages .
       - name: Run pytest
-        run: timeout 15m pytest
+        run: |
+          set -o pipefail
+          timeout 15m pytest | tee pytest.log || code=$?
+          exit $code
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pytest-log
+          path: pytest.log
       - name: Stop mock server
         if: always()
         run: |
