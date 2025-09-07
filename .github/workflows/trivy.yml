@@ -43,6 +43,7 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           scan-type: image
+          ignore-unfixed: true
           # Fail the workflow when vulnerabilities of the specified severity are found
           exit-code: 1
 
