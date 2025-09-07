@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Component detection
-        uses: advanced-security/component-detection-dependency-submission-action@c7cb2bbc9360d8a011e4fac7dc542c689415d62f # c7cb2b
+        uses: advanced-security/component-detection-dependency-submission-action@c7cb2bbc9360d8a011e4fac7dc542c689415d62f
         with:
           detectorArgs: Pip=EnableIfDefaultOff
 
