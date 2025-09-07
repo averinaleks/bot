@@ -33,8 +33,10 @@ jobs:
             -t ${{ github.repository }}:${{ github.sha }} \
             --load .
 
-      - name: Run Trivy scan
+      - id: trivy
+        name: Run Trivy scan
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        continue-on-error: true
         with:
           image-ref: ${{ github.repository }}:${{ github.sha }}
           format: sarif
@@ -45,16 +47,21 @@ jobs:
           exit-code: 1
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: github.event_name != 'pull_request'
+        if: ${{ github.event_name != 'pull_request' && always() }}
         uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Fail if vulnerabilities found
+        if: steps.trivy.outcome == 'failure'
+        run: exit 1
 
       - name: Cleanup buildx
         run: docker buildx prune -af || true
