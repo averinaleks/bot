@@ -39,6 +39,8 @@ jobs:
           # Use the community "ci" ruleset which does not require an auth token
           config: p/ci
           generateSarif: true
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Check for SARIF results
         id: sarif_check
         run: |
