@@ -1,7 +1,7 @@
 name: Dependabot Auto Merge
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, synchronize]
 
 permissions:
@@ -22,17 +22,8 @@ jobs:
         uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363 # v4.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Check out the source code from the Dependabot pull request.  When
-      # triggering on pull_request_target events, the default checkout
-      # context points at the base branch.  In order to test the
-      # changes introduced by Dependabot we need to explicitly check out
-      # the head of the pull request.  The head ref is safe to use here
-      # because the job is scoped to Dependabot-created pull requests.
       - name: Checkout code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
       # Set up a Python environment that matches the main CI.  This
       # installs the appropriate Python version and device specific
