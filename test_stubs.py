@@ -238,44 +238,9 @@ def apply() -> None:
     try:
         import torch  # type: ignore  # pragma: no cover - use real torch if available
     except Exception:
-        torch_mod = cast(ModuleType, types.ModuleType("torch"))
-        nn_mod = types.ModuleType("torch.nn")
-
-        class _NNModule:
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
-
-        class _TensorDataset:
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
-
-        class _DataLoader:
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
-
-        class _Device:
-            def __init__(self, type_: str) -> None:
-                self.type = type_
-
-            def __repr__(self) -> str:  # pragma: no cover - trivial repr
-                return self.type
-
-        def _device(type_: str) -> _Device:  # pragma: no cover - simple factory
-            return _Device(type_)
-
-        nn_mod.Module = _NNModule  # type: ignore[attr-defined]
-        utils_mod = types.ModuleType("torch.utils")
-        data_mod = types.ModuleType("torch.utils.data")
-        setattr(data_mod, "DataLoader", _DataLoader)
-        setattr(data_mod, "TensorDataset", _TensorDataset)
-        setattr(utils_mod, "data", data_mod)
-        torch_mod.nn = nn_mod  # type: ignore[attr-defined]
-        torch_mod.device = _device  # type: ignore[attr-defined]
-        torch_mod.utils = utils_mod  # type: ignore[attr-defined]
-        sys.modules["torch"] = cast(ModuleType, torch_mod)
-        sys.modules["torch.nn"] = cast(ModuleType, nn_mod)
-        sys.modules["torch.utils"] = cast(ModuleType, utils_mod)
-        sys.modules["torch.utils.data"] = cast(ModuleType, data_mod)
+        # If torch is not installed, allow modules to handle its absence
+        # individually. The model builder will fall back to lightweight stubs.
+        pass
 
     # ------------------------------------------------------------------- Flask
     try:  # pragma: no cover - best effort
