@@ -2,6 +2,7 @@ name: CI CPU
 
 permissions:
   contents: read
+  actions: write
 
 on:
   push:
