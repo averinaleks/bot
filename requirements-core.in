@@ -23,7 +23,7 @@ stable-baselines3>=2.3.2
 gymnasium>=0.29.1
 mlflow>=3.2.0
 pytorch-lightning>=2.5.2
-transformers==4.56.0
+transformers==4.56.1
 catalyst==21.5
 fastapi-csrf-protect>=1.0.6
 flask>=3.0.2
@@ -34,7 +34,7 @@ polars>=0.20.16
 httpx>=0.27.0
 cryptography>=42.0.0
 bcrypt>=4.2.0
-openai==1.105.0
+openai==1.106.1
 jsonschema==4.25.1
 pytest-asyncio>=1.1
 
