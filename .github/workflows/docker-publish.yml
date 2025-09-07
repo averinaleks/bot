@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-publish-${{ github.ref_name && github.ref_name != '' && replace(github.ref_name, '[^a-zA-Z0-9_-]', '-') || github.run_id }}
+  group: "docker-publish-${{ github.ref_name && github.ref_name != '' && replace(github.ref_name, '[^a-zA-Z0-9_-]', '-') || github.run_id }}"
   cancel-in-progress: true
 
 jobs:
