@@ -20,7 +20,7 @@ jobs:
        github.event.pull_request.draft == false) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
-       contains(toLower(github.event.comment.body), '/llm-review'))
+       contains(toLower(github.event.comment.body || ''), '/llm-review'))
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: >-
