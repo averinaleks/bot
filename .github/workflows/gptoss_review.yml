@@ -32,8 +32,12 @@ jobs:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
       - name: Start vLLM container
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
         run: |
-          docker run -d --rm --name gptoss -p 127.0.0.1:8000:8000 \
+          docker run -d --rm --name gptoss \
+            -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
+            -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:v0.5.1 \
             --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
             --trust-remote-code \
@@ -43,8 +47,14 @@ jobs:
           # The model can take a while to load, especially on fresh runners
           # Allow extra time for the container to become ready
           for i in {1..1200}; do
-            if curl -sf http://127.0.0.1:8000/v1/models; then
+            if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss && \
+               curl -sf http://127.0.0.1:8000/v1/models; then
               exit 0
+            fi
+            if ! docker ps --filter "name=gptoss" | grep -q gptoss; then
+              echo "LLM container exited" >&2
+              docker logs gptoss || true
+              exit 1
             fi
             sleep 1
           done
