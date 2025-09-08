@@ -11,7 +11,7 @@ from typing import AsyncGenerator, Generator, TYPE_CHECKING
 
 import httpx
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
-    import requests
+    import requests  # type: ignore[import-untyped]
 
 DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30")
 try:
