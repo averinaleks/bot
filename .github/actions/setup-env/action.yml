@@ -39,7 +39,7 @@ runs:
         sudo rm -f /mnt/swapfile
         sudo rm -rf /mnt/*
     - name: Maximize build space
-      uses: easimon/maximize-build-space@v10
+      uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
       with:
         root-reserve-mb: 1024
         temp-reserve-mb: 100
