@@ -46,7 +46,7 @@ jobs:
             --trust-remote-code \
             --device cpu
       - name: Wait for LLM container
-        id: wait-llm
+        id: wait_llm
         continue-on-error: true
         run: |
           # The model can take a while to load, especially on fresh runners
@@ -67,11 +67,11 @@ jobs:
           docker logs gptoss || true
           exit 1
       - name: Install jq
-        if: steps.wait-llm.outcome == 'success'
+        if: steps.wait_llm.outcome == 'success'
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Generate diff
-        id: generate-diff
-        if: steps.wait-llm.outcome == 'success'
+        id: generate_diff
+        if: steps.wait_llm.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -108,8 +108,8 @@ jobs:
             echo "has_diff=false" >> "$GITHUB_OUTPUT"
           fi
       - name: LLM review
-        if: steps.wait-llm.outcome == 'success' && steps.generate-diff.outputs.has_diff == 'true'
-        id: llm-review
+        if: steps.wait_llm.outcome == 'success' && steps.generate_diff.outputs.has_diff == 'true'
+        id: llm_review
         run: |
           model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}"
           review=""
@@ -134,7 +134,7 @@ jobs:
           printf "%s" "$review" > review.md
           echo "has_content=true" >> "$GITHUB_OUTPUT"
       - name: Comment PR
-        if: steps.wait-llm.outcome == 'success' && steps.llm-review.outputs.has_content == 'true'
+        if: steps.wait_llm.outcome == 'success' && steps.llm_review.outputs.has_content == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
         with:
           script: |
