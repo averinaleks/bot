@@ -3,5 +3,6 @@ __pycache__/
 *.log
 pytest_cache/
 .pytest_cache/
+.hypothesis/
 venv/
 .venv/
