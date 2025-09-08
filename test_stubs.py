@@ -164,7 +164,10 @@ def apply() -> None:
 
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
+                self.trust_env = kwargs.get("trust_env", False)
+
+            def close(self) -> None:  # pragma: no cover - simple no-op
+                return None
 
         class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
             ...
