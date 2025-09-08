@@ -67,6 +67,7 @@ jobs:
         with:
           name: flake8-log
           path: flake8.log
+          if-no-files-found: ignore
       - name: Run mypy
         run: mypy --no-site-packages --exclude venv .
       - name: Remove test caches
@@ -83,6 +84,7 @@ jobs:
         with:
           name: pytest-log
           path: pytest.log
+          if-no-files-found: ignore
       - name: Stop mock server
         if: always()
         run: |
