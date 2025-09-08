@@ -30,7 +30,7 @@ jobs:
       - name: Run Bandit
         id: run_bandit
         continue-on-error: true
-        run: bandit -r . -ll -ii -x tests,scripts,gptoss_check -f sarif -o bandit.sarif
+        run: bandit -r . -ll -ii -x ./tests,./scripts,./gptoss_check -f sarif -o bandit.sarif
       - name: Check for SARIF results
         id: sarif_check
         run: |

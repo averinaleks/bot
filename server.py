@@ -79,13 +79,13 @@ class ModelManager:
         cache_dir = os.getenv("MODEL_CACHE_DIR")
 
         try:
-            tokenizer_local = AutoTokenizer.from_pretrained(
+            tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
                 model_name,
                 revision=model_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )  # nosec
-            model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+            )
+            model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
                 model_name,
                 revision=model_revision,
                 trust_remote_code=False,
@@ -96,14 +96,14 @@ class ModelManager:
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
             try:
-                tokenizer_local = AutoTokenizer.from_pretrained(
+                tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
                     model_name,
                     revision=model_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+                )
+                model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
                     model_name,
                     revision=model_revision,
                     trust_remote_code=False,
@@ -131,12 +131,12 @@ class ModelManager:
             return "primary"
 
         try:
-            tokenizer_local = AutoTokenizer.from_pretrained(
+            tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
                 f"{fallback_model}@{fallback_revision}",
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            )  # nosec
-            model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+            )
+            model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
                 fallback_model,
                 revision=fallback_revision,
                 trust_remote_code=False,
@@ -148,14 +148,14 @@ class ModelManager:
                 "Failed to load fallback model '%s': %s", fallback_model, exc
             )
             try:
-                tokenizer_local = AutoTokenizer.from_pretrained(
+                tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
                     fallback_model,
                     revision=fallback_revision,
                     trust_remote_code=False,
                     cache_dir=cache_dir,
                     local_files_only=True,
-                )  # nosec
-                model_local = AutoModelForCausalLM.from_pretrained(  # nosec
+                )
+                model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
                     fallback_model,
                     revision=fallback_revision,
                     trust_remote_code=False,

@@ -299,4 +299,4 @@ if __name__ == '__main__':
     port = safe_int(os.getenv("PORT", "8002"))
     init_exchange()
     app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
-    app.run(host=host, port=port)  # nosec B104  # host validated above
+    app.run(host=host, port=port)  # host validated above

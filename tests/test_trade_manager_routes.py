@@ -155,12 +155,9 @@ def test_resolve_host_handles_empty_and_localhost(monkeypatch):
     assert tm._resolve_host() == "127.0.0.1"
 
 
-# Bandit: B104 is triggered by the "0.0.0.0" value in this test, but it's safe here
-# because we're verifying that the TradeManager rejects binding to public interfaces.
-# Adding "nosec" ensures Bandit ignores this intentional usage.
 @pytest.mark.parametrize(
     "value",
-    ["0.0.0.0", "127.0.0.2", "8.8.8.8"],  # nosec B104
+    ["0.0.0.0", "127.0.0.2", "8.8.8.8"],
 )
 def test_resolve_host_rejects_public_addresses(monkeypatch, value):
     tm, _, _ = _setup_module(monkeypatch)

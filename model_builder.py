@@ -2133,4 +2133,4 @@ if __name__ == "__main__":
     port = int(os.getenv("MODEL_BUILDER_PORT", "8001"))
     _load_model()
     logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
-    api_app.run(host=host, port=port)  # nosec B104  # хост проверен выше
+    api_app.run(host=host, port=port)  # хост проверен выше
