@@ -6,7 +6,7 @@ permissions:
   packages: write
   actions: write
 
-on:
+'on':
   push:
     branches: ["main", "master"]
   schedule:
@@ -150,6 +150,7 @@ jobs:
         run: mkdir -p /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
         if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        id: trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # 0.33.1
         continue-on-error: true
         env:
@@ -163,11 +164,11 @@ jobs:
           scanners: vuln
 
       - name: Show Trivy scan results
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.conclusion == 'success' }}
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.conclusion == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
