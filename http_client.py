@@ -7,10 +7,11 @@ import os
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, TYPE_CHECKING
 
 import httpx
-import requests  # type: ignore[import-untyped]
+if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
+    import requests
 
 DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30")
 try:
@@ -26,8 +27,14 @@ except ValueError:
 @contextmanager
 def get_requests_session(
     timeout: float = DEFAULT_TIMEOUT,
-) -> Generator[requests.Session, None, None]:
-    """Return a :class:`requests.Session` with a default timeout."""
+) -> Generator["requests.Session", None, None]:
+    """Return a :class:`requests.Session` with a default timeout.
+
+    The import is deferred so the module can be used without the optional
+    ``requests`` dependency installed.
+    """
+    import requests  # type: ignore[import-untyped]
+
     session = requests.Session()
     # Avoid respecting proxy-related environment variables which can cause
     # local connections (e.g. to the mock GPT server in CI) to be routed through
