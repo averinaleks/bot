@@ -7,7 +7,10 @@ import numpy as np
 from typing import Iterable
 
 from .core import DataHandler
-from .api import api_app
+try:  # pragma: no cover - optional dependency
+    from .api import api_app
+except Exception:  # pragma: no cover - Flask not installed
+    api_app = None  # type: ignore[assignment]
 from .storage import DEFAULT_PRICE
 from bot import http_client as _http_client
 
