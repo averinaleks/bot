@@ -162,14 +162,43 @@ def apply() -> None:
         def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
             return _HTTPXResponse()
 
+        class _AsyncClient:
+            """Lightweight stand in for :class:`httpx.AsyncClient`."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.trust_env = kwargs.get("trust_env", False)
+
+            async def __aenter__(self) -> "_AsyncClient":  # pragma: no cover - simple
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
+                return None
+
+            async def stream(self, *args: Any, **kwargs: Any):  # pragma: no cover - patched in tests
+                raise NotImplementedError
+
+            def close(self) -> None:  # pragma: no cover - simple no-op
+                return None
+
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
+
+            def request(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
+                return _return_response()
+
+            get = post = request
 
             def close(self) -> None:  # pragma: no cover - simple no-op
                 return None
 
         class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
+            ...
+
+        class _TimeoutException(Exception):  # pragma: no cover - simple subclass
+            ...
+
+        class _ConnectError(Exception):  # pragma: no cover - simple subclass
             ...
 
         _client_mod = types.SimpleNamespace(
@@ -180,8 +209,10 @@ def apply() -> None:
         setattr(httpx_mod, "Response", _HTTPXResponse)
         setattr(httpx_mod, "get", _return_response)
         setattr(httpx_mod, "post", _return_response)
-        setattr(httpx_mod, "AsyncClient", object)
+        setattr(httpx_mod, "AsyncClient", _AsyncClient)
         setattr(httpx_mod, "HTTPError", Exception)
+        setattr(httpx_mod, "TimeoutException", _TimeoutException)
+        setattr(httpx_mod, "ConnectError", _ConnectError)
         setattr(httpx_mod, "Client", _HTTPXClient)
         setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
         setattr(httpx_mod, "_client", _client_mod)
