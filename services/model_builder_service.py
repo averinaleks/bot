@@ -132,4 +132,4 @@ if __name__ == '__main__':
     port = safe_int(os.getenv("PORT", "8000"))
     app.logger.info('Запуск сервиса ModelBuilder на %s:%s', host, port)
     _load_model()
-    app.run(host=host, port=port)  # nosec B104  # host validated above
+    app.run(host=host, port=port)  # host validated above

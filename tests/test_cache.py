@@ -1,6 +1,6 @@
 import gzip
 import os
-import pickle  # nosec B403
+import pickle
 import pandas as pd
 import pytest
 psutil = pytest.importorskip("psutil")
@@ -33,10 +33,10 @@ def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     old_file = tmp_path / f"BTCUSDT_1m{suffix}"
     if suffix.endswith(".gz"):
         with gzip.open(old_file, "wb") as f:
-            f.write(pickle.dumps(df))  # nosec B403
+            f.write(pickle.dumps(df))
     else:
         with open(old_file, "wb") as f:
-            pickle.dump(df, f)  # nosec B403
+            pickle.dump(df, f)
     loaded = cache.load_cached_data("BTCUSDT", "1m")
     assert loaded is None
     assert not old_file.exists()

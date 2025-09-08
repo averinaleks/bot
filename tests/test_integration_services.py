@@ -84,17 +84,17 @@ def _shutdown(*_):
 
 def _run_dh(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    dh_app.run(host=host, port=port)  # nosec B104  # host validated above
+    dh_app.run(host=host, port=port)
 
 
 def _run_mb(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    mb_app.run(host=host, port=port)  # nosec B104  # host validated above
+    mb_app.run(host=host, port=port)
 
 
 def _run_tm(port: int):
     signal.signal(signal.SIGTERM, _shutdown)
-    tm_app.run(host=host, port=port)  # nosec B104  # host validated above
+    tm_app.run(host=host, port=port)
 
 
 @pytest.mark.integration
