@@ -1,10 +1,11 @@
-import asyncio
 import os
 import sys
-
+import asyncio
 import pytest
 
 from bot import http_client as _http_client
+
+pytest_plugins = ("pytest_asyncio",)
 
 # MLflow spawns a background telemetry thread on import which keeps the
 # process alive after tests finish. Disabling telemetry prevents the thread
@@ -50,7 +51,7 @@ def fast_sleep(monkeypatch):
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def _close_shared_http_client():
+def _close_shared_http_client():
     """Ensure the shared async HTTP client is closed after tests."""
     yield
-    await _http_client.close_async_http_client()
+    asyncio.run(_http_client.close_async_http_client())
