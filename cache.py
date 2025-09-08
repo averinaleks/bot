@@ -12,9 +12,18 @@ logger = logging.getLogger("TradingBot")
 def _sanitize_symbol(symbol: str) -> str:
     """Sanitize symbol string using utility helper.
 
-    Import is done lazily to avoid circular dependencies with ``bot.utils``.
+    The import is performed lazily to avoid circular dependencies with
+    ``bot.utils``.  Some callers import this module as ``bot.cache`` while
+    others may import it as the top level ``cache`` module.  A purely
+    relative import fails in the latter case (``ImportError: attempted
+    relative import with no known parent package``).  To support both usage
+    styles we try the relative import first and fall back to an absolute
+    import if necessary.
     """
-    from .utils import sanitize_symbol  # noqa: WPS433 (import inside function)
+    try:  # pragma: no cover - import style depends on caller
+        from .utils import sanitize_symbol  # type: ignore  # noqa: WPS433
+    except ImportError:  # pragma: no cover
+        from utils import sanitize_symbol  # type: ignore  # noqa: WPS433
 
     return sanitize_symbol(symbol)
 
