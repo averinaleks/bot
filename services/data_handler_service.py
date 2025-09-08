@@ -1,12 +1,20 @@
 """Simple reference data handler service fetching real prices from Bybit."""
 from flask import Flask, jsonify
-from flask.typing import ResponseReturnValue
+from typing import Any
+try:  # optional dependency
+    from flask.typing import ResponseReturnValue
+except Exception:  # pragma: no cover - fallback when flask.typing missing
+    ResponseReturnValue = Any  # type: ignore
 import logging
 import threading
 import ccxt
 import os
 from dotenv import load_dotenv
-from werkzeug.exceptions import HTTPException
+try:  # optional dependency
+    from werkzeug.exceptions import HTTPException
+except Exception:  # pragma: no cover - fallback when werkzeug absent
+    class HTTPException(Exception):
+        pass
 
 load_dotenv()
 

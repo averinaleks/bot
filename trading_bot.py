@@ -4,6 +4,7 @@ from pydantic import BaseModel, ValidationError
 
 import atexit
 import asyncio
+import json
 import math
 import os
 import statistics
@@ -443,12 +444,25 @@ async def build_feature_vector(price: float) -> list[float]:
 async def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
     """Return raw model prediction output for the given ``features``."""
     try:
+        payload = json.dumps({"symbol": symbol, "features": features}).encode()
+        headers = {
+            "Content-Type": "application/json",
+            "Content-Length": str(len(payload)),
+        }
         async with httpx.AsyncClient(trust_env=False) as client:
-            resp = await client.post(
-                f"{env['model_builder_url']}/predict",
-                json={"symbol": symbol, "features": features},
-                timeout=5,
-            )
+            try:
+                resp = await client.post(
+                    f"{env['model_builder_url']}/predict",
+                    content=payload,
+                    headers=headers,
+                    timeout=5,
+                )
+            except TypeError:  # pragma: no cover - fallback for stub clients
+                resp = await client.post(
+                    f"{env['model_builder_url']}/predict",
+                    json={"symbol": symbol, "features": features},
+                    timeout=5,
+                )
         if resp.status_code != 200:
             logger.error("Model prediction failed: HTTP %s", resp.status_code)
             return None
@@ -533,10 +547,24 @@ async def _post_trade(
         symbol, side, price, tp, sl, trailing_stop
     )
     url = f"{env['trade_manager_url']}/open_position"
+    body = json.dumps(payload).encode()
+    headers["Content-Type"] = "application/json"
+    headers["Content-Length"] = str(len(body))
     try:
-        resp = await client.post(
-            url, json=payload, timeout=timeout, headers=headers or None
-        )
+        try:
+            resp = await client.post(
+                url,
+                content=body,
+                timeout=timeout,
+                headers=headers or None,
+            )
+        except TypeError:  # pragma: no cover - fallback for stub clients
+            resp = await client.post(
+                url,
+                json=payload,
+                timeout=timeout,
+                headers=headers or None,
+            )
         return _handle_trade_response(resp, symbol, start)
     except httpx.TimeoutException:
         return False, time.time() - start, "request timed out"
