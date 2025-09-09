@@ -71,7 +71,7 @@ CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 
 # Correct price endpoint without trailing whitespace
-@app.route('/price/<symbol>')
+@app.route('/price/<symbol>', methods=['GET'])
 def price(symbol: str) -> ResponseReturnValue:
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
