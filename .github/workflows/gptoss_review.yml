@@ -1,9 +1,9 @@
+# .github/workflows/gptoss_review.yml
 # yamllint disable rule:line-length
----
 name: GPT-OSS Code Review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
@@ -15,155 +15,139 @@ permissions:
 
 jobs:
   review:
+    # Защита: не запускаем на fork без метки "safe-to-test"
     if: >-
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request != null &&
-       github.event.pull_request.draft == false) ||
-      (github.event_name == 'issue_comment' &&
-      github.event.issue != null &&
-      github.event.issue.pull_request != null &&
-      github.event.comment != null &&
-       contains(github.event.comment.body || '', '/llm-review'))
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    concurrency:
-      group: gptoss-review-${{ github.ref }}
-      cancel-in-progress: true
+      ((github.event_name == 'pull_request_target') &&
+       (github.event.pull_request != null) &&
+       (github.event.pull_request.draft == false) &&
+       (github.event.pull_request.head.repo.full_name == github.repository ||
+        contains(github.event.pull_request.labels.*.name, 'safe-to-test')))
+      || (github.event_name == 'issue_comment' &&
+          github.event.issue != null &&
+          github.event.issue.pull_request != null &&
+          github.event.comment != null &&
+          contains(github.event.comment.body || '', '/llm-review'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
-      PR_NUMBER: >-
-        ${{ github.event.pull_request.number ||
-           github.event.issue.number }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
+
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          persist-credentials: false
           fetch-depth: 0
-      - name: Docker info
+          ref: refs/pull/${{ env.PR_NUMBER }}/head
+
+      - name: Start vLLM container (isolated)
         run: |
-          docker version
-          docker info
-      - name: Cache HF models
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: hf-${{ runner.os }}-${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
-      - name: Start vLLM container
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
-        run: |
-          docker pull vllm/vllm-openai@sha256:c62343ee72f094ef574ab3af2717d0c60fec5e0808b238f19ac4c0d22fd152f7
+          set -euo pipefail
           docker run -d --rm --name gptoss \
+            --network none \
             -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
-            -e HF_HOME="/root/.cache/huggingface" \
-            -v $HOME/.cache/huggingface:/root/.cache/huggingface \
             -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai@sha256:c62343ee72f094ef574ab3af2717d0c60fec5e0808b238f19ac4c0d22fd152f7 \
-            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
+            vllm/vllm-openai:v0.10.1 \
+            --model "${MODEL_NAME}" \
             --trust-remote-code \
             --device cpu
-      - name: Wait for LLM container
+
+      - name: Wait for LLM container (with backoff)
         id: wait_llm
         run: |
-          # The model can take a while to load, especially on fresh runners
-          # Allow extra time for the container to become ready
-          for i in {1..1200}; do
-            if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss && \
-               curl -sf http://127.0.0.1:8000/v1/models; then
-              echo "llm_running=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            if ! docker ps --filter "name=gptoss" | grep -q gptoss; then
-              echo "LLM container exited" >&2
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss; then
+              if curl -sS --max-time 2 http://127.0.0.1:8000/v1/models > /dev/null; then
+                echo "ok=1" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            else
+              echo "LLM container exited"
               docker logs gptoss || true
-              echo "llm_running=false" >> "$GITHUB_OUTPUT"
-              exit 0
+              exit 1
             fi
-            sleep 1
+            sleep 5
           done
-          echo "LLM container failed to start" >&2
+          echo "LLM container failed to become ready"
           docker logs gptoss || true
-          echo "llm_running=false" >> "$GITHUB_OUTPUT"
-      - name: Install jq
-        if: steps.wait_llm.outputs.llm_running == 'true'
-        run: sudo apt-get update && sudo apt-get install -y jq
-      - name: Generate diff
-        id: generate_diff
-        if: steps.wait_llm.outputs.llm_running == 'true'
+          exit 1
+
+      - name: Install tools
+        if: steps.wait_llm.outputs.ok == '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq moreutils
+
+      - name: Generate Python diff
+        id: gen_diff
+        if: steps.wait_llm.outputs.ok == '1'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          pull_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER)
-          base_sha=$(echo "$pull_info" | jq -r .base.sha)
-          base_ref=$(echo "$pull_info" | jq -r .base.ref)
-          if [ -z "$base_sha" ] || [ "$base_sha" = "null" ] || \
-             [ -z "$base_ref" ] || [ "$base_ref" = "null" ]; then
-            echo "Error: failed to retrieve base revision information" >&2
-            exit 1
+          set -euo pipefail
+          pull_info=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}")
+          base_sha=$(jq -r .base.sha <<<"$pull_info")
+          base_ref=$(jq -r .base.ref <<<"$pull_info")
+          test -n "$base_sha" && test -n "$base_ref"
+          git fetch --no-tags origin "$base_ref"
+          git diff "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
+          head -c 180000 diff.patch > diff.patch   # truncate
+          tokens=$(wc -w < diff.patch || echo 0)
+          if [ "$tokens" -eq 0 ]; then
+            printf 'has_diff=false\n' >> "$GITHUB_OUTPUT"; exit 0
           fi
-          git fetch origin "$base_ref"
-          git diff $base_sha...HEAD -- ':(glob)**/*.py' > diff.patch
-          head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
-          # crude token count (words) to detect overly large diffs
-          token_limit=6000
-          token_count=$(wc -w < diff.patch)
-          echo "Token count: $token_count"
-          if [ "$token_count" -gt "$token_limit" ]; then
-            echo "Diff too large, regenerating with 20 lines of context"
-            git diff -U20 $base_sha...HEAD -- ':(glob)**/*.py' > diff.patch
-            head -c 200000 diff.patch > diff.trunc && mv diff.trunc diff.patch
-            token_count=$(wc -w < diff.patch)
-            echo "Token count after context reduction: $token_count"
+          if [ "$tokens" -gt 6000 ]; then
+            git diff -U20 "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
+            head -c 180000 diff.patch > diff.patch
           fi
-          if [ "$token_count" -gt "$token_limit" ]; then
-            echo "Diff still large, splitting into chunks"
-            split -b 100000 diff.patch diff_part_
+          if [ ! -s diff.patch ]; then
+            printf 'has_diff=false\n' >> "$GITHUB_OUTPUT"; exit 0
           fi
-          if [ -s diff.patch ]; then
-            echo "has_diff=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_diff=false" >> "$GITHUB_OUTPUT"
-          fi
+          split -b 90000 -a 2 diff.patch part_ || true
+          printf 'has_diff=true\n' >> "$GITHUB_OUTPUT"
+
       - name: LLM review
-        if: steps.wait_llm.outputs.llm_running == 'true' && steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
+        if: steps.gen_diff.outputs.has_diff == 'true'
         run: |
-          model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}"
-          review=""
-          if compgen -G "diff_part_*" > /dev/null; then
-            for part in diff_part_*; do
-              payload=$(jq -n --arg diff "$(cat "$part")" --arg model "$model" \
-                '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
-              part_review=$(curl -s -H "Content-Type: application/json" -d "$payload" \
-                http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
-              review="${review}${part_review}\n"
+          set -euo pipefail
+          review_file="review.md"
+          : > "$review_file"
+          if ls part_* >/dev/null 2>&1; then
+            for p in part_*; do
+              payload=$(jq -nc --arg d "$(cat "$p")" --arg m "$MODEL_NAME" \
+                '{model:$m, messages:[{role:"user", content:"Review the following diff and provide actionable feedback:\n" + $d}], temperature:0}')
+              resp=$(curl -sS --max-time 30 -H "Content-Type: application/json" \
+                -d "$payload" http://127.0.0.1:8000/v1/chat/completions || true)
+              echo "${resp}" | jq -r '.choices[0].message.content // empty' >> "$review_file"
+              echo -e "\n---\n" >> "$review_file"
             done
           else
-            payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" \
-              '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}')
-            review=$(curl -s -H "Content-Type: application/json" -d "$payload" \
-              http://127.0.0.1:8000/v1/chat/completions | jq -r '.choices[0].message.content')
+            payload=$(jq -nc --arg d "$(cat diff.patch)" --arg m "$MODEL_NAME" \
+              '{model:$m, messages:[{role:"user", content:"Review the following diff and provide actionable feedback:\n" + $d}], temperature:0}')
+            resp=$(curl -sS --max-time 30 -H "Content-Type: application/json" \
+              -d "$payload" http://127.0.0.1:8000/v1/chat/completions || true)
+            echo "${resp}" | jq -r '.choices[0].message.content // empty' > "$review_file"
           fi
-          if [ -z "$review" ]; then
+          if [ ! -s "$review_file" ]; then
+            echo "no content from LLM" | sponge "$review_file"
             echo "has_content=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          printf "%s" "$review" > review.md
           echo "has_content=true" >> "$GITHUB_OUTPUT"
+
       - name: Comment PR
-        if: steps.wait_llm.outputs.llm_running == 'true' && steps.llm_review.outputs.has_content == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
+        if: steps.llm_review.outputs.has_content == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const fs = require('fs');
-            const review = fs.readFileSync('review.md', 'utf8');
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: review,
-            });
+            const body = fs.readFileSync('review.md', 'utf8').slice(0, 60000);
+            const pr = parseInt(process.env.PR_NUMBER, 10);
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr, body });
+
       - name: Cleanup
         if: always()
         run: docker rm -f gptoss || true
