@@ -4,6 +4,9 @@ import json as _json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from urllib.parse import unquote
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+import logging
+import json as _json
 
 _current_request: _Request | None = None
 
@@ -94,6 +97,8 @@ class Flask:
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[int | type[BaseException], Callable[..., Any]] = {}
+        self.logger = logging.getLogger(name)
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -102,7 +107,6 @@ class Flask:
             return func
         return decorator
 
-    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
@@ -144,19 +148,16 @@ class Flask:
         if handler is None:
             return Response({"error": "not found"}, status=404)
         _current_request = _Request(json_data, raw, method, path, headers)
+        status = 200
         try:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
         except Exception as exc:
-            err_handler = self._error_handlers.get(500)
-            if err_handler:
-                rv = err_handler(exc)
             else:
                 raise
         finally:
             _current_request = None
-        status = 200
         if isinstance(rv, tuple):
             rv, status = rv
         if isinstance(rv, Response):

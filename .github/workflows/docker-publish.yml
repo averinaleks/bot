@@ -22,6 +22,7 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      TRIVY_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -94,7 +95,7 @@ jobs:
           fi
 
       - name: Login to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: env.TRIVY_ENABLED == 'true'
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3.5.0
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
@@ -128,8 +129,8 @@ jobs:
         with:
           context: .
           file: ${{ matrix.file }}
-          push: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
-          tags: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && format('docker.io/{0}/{1}:latest', env.DOCKERHUB_USERNAME, matrix.image) || format('{0}:latest', matrix.image) }}
+          push: ${{ env.TRIVY_ENABLED == 'true' }}
+          tags: ${{ env.TRIVY_ENABLED == 'true' && format('docker.io/{0}/{1}:latest', env.DOCKERHUB_USERNAME, matrix.image) || format('{0}:latest', matrix.image) }}
           cache-from: type=local,src=${{ github.workspace }}/.buildx-cache
           cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
 
@@ -139,17 +140,17 @@ jobs:
           mv "$GITHUB_WORKSPACE/.buildx-cache-new" "$GITHUB_WORKSPACE/.buildx-cache"
 
       - name: Cleanup before Trivy scan
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: env.TRIVY_ENABLED == 'true'
         run: |
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
           mkdir -p /mnt/trivy-cache
       - name: Prepare Trivy temp
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: env.TRIVY_ENABLED == 'true'
         run: mkdir -p /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: env.TRIVY_ENABLED == 'true'
         id: trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # 0.33.1
         continue-on-error: true
@@ -164,11 +165,11 @@ jobs:
           scanners: vuln
 
       - name: Show Trivy scan results
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.conclusion == 'success' }}
+        if: env.TRIVY_ENABLED == 'true' && steps.trivy.outcome == 'success'
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.conclusion == 'success' }}
+        if: env.TRIVY_ENABLED == 'true' && steps.trivy.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
