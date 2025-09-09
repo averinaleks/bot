@@ -24,6 +24,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libssl-dev \
     libffi-dev \
     libpam0g \
+    libpam-modules \
     libblas-dev \
     liblapack-dev \
     tar \
@@ -86,6 +87,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     coreutils \
     zlib1g \
     libpam0g \
+    libpam-modules \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && /app/venv/bin/python --version \
