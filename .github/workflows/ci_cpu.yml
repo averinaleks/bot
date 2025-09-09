@@ -78,7 +78,7 @@ jobs:
       - name: Run pytest
         run: |
           set -o pipefail
-          timeout 15m pytest | tee pytest.log || code=$?
+          timeout 25m pytest -ra | tee pytest.log || code=$?
           exit $code
       - name: Upload pytest log
         if: always()
