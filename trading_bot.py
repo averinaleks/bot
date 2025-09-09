@@ -242,7 +242,9 @@ async def close_http_client() -> None:
     global HTTP_CLIENT
     await shutdown_async_tasks()
     if HTTP_CLIENT is not None:
-        await HTTP_CLIENT.aclose()
+        close = getattr(HTTP_CLIENT, "aclose", None)
+        if callable(close):
+            await close()
         HTTP_CLIENT = None
 
 

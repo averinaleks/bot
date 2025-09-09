@@ -78,10 +78,12 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
+        self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[Any, Callable[[Any], Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -101,6 +103,12 @@ class Flask:
     def teardown_appcontext(self, func: Callable[[BaseException | None], None]) -> Callable[[BaseException | None], None]:
         self._teardown.append(func)
         return func
+
+    def errorhandler(self, code: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            self._error_handlers[code] = func
+            return func
+        return decorator
 
     def _find_handler(self, path: str) -> Tuple[Callable[..., Any] | None, Dict[str, str]]:
         for rule, func in self._routes:
