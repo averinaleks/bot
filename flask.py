@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import unquote
 import json as _json
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from urllib.parse import unquote
 
 _current_request: _Request | None = None
 
@@ -90,10 +90,10 @@ class Flask:
         self.name = name
         self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
+        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
-        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -102,13 +102,9 @@ class Flask:
             return func
         return decorator
 
-    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a simple error handler for a given HTTP status code."""
-
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
-
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
@@ -147,13 +143,13 @@ class Flask:
         if handler is None:
             return Response({"error": "not found"}, status=404)
         _current_request = _Request(json_data, raw, method, path, headers)
+        status = 200
         try:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
         finally:
             _current_request = None
-        status = 200
         if isinstance(rv, tuple):
             rv, status = rv
         if isinstance(rv, Response):
