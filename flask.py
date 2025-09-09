@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
@@ -30,7 +27,7 @@ class _Request:
         if not force or self._raw is None:
             return None
         try:
-            self._json = json.loads(self._raw.decode())
+            self._json = _json.loads(self._raw.decode())
         except Exception:
             return None
         return self._json
@@ -56,17 +53,17 @@ class Response:
         self._json = None
         if isinstance(data, (dict, list)):
             self._json = data
-            self.data = json.dumps(data).encode()
+            self.data = _json.dumps(data).encode()
         elif isinstance(data, bytes):
             self.data = data
             try:
-                self._json = json.loads(data.decode())
+                self._json = _json.loads(data.decode())
             except Exception:
                 pass
         elif isinstance(data, str):
             self.data = data.encode()
             try:
-                self._json = json.loads(data)
+                self._json = _json.loads(data)
             except Exception:
                 pass
         elif data is None:
@@ -89,10 +86,13 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
+        self.logger = logging.getLogger(name)
+        self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[Union[int, type[BaseException]], Callable[[Any], Any]] = {}
         self._first_done = False
         self._error_handlers: Dict[Any, Callable[[Exception], Any]] = {}
         self.logger = logging.getLogger(name)
@@ -115,9 +115,6 @@ class Flask:
         self._teardown.append(func)
         return func
 
-    def errorhandler(self, code: int | type) -> Callable[[Callable[[Exception], Any]], Callable[[Exception], Any]]:
-        def decorator(func: Callable[[Exception], Any]) -> Callable[[Exception], Any]:
-            self._error_handlers[code] = func
             return func
         return decorator
 
@@ -150,16 +147,6 @@ class Flask:
                 func()
             rv = handler(**kwargs)
         except Exception as exc:
-            err_handler = None
-            for key, func in self._error_handlers.items():
-                if isinstance(key, type) and isinstance(exc, key):
-                    err_handler = func
-                    break
-                if key == getattr(exc, "code", None) or key == type(exc):
-                    err_handler = func
-                    break
-            if err_handler is not None:
-                rv = err_handler(exc)
             else:
                 raise
         finally:
@@ -210,13 +197,13 @@ class Flask:
                 elif content is not None:
                     raw = content
                     try:
-                        jdata = json.loads(content)
+                        jdata = _json.loads(content)
                     except Exception:
                         jdata = None
                 elif data is not None:
                     raw = data if isinstance(data, bytes) else str(data).encode()
                     try:
-                        jdata = json.loads(raw)
+                        jdata = _json.loads(raw)
                     except Exception:
                         jdata = None
                 return app._dispatch(path, jdata, raw, "POST", headers)
@@ -250,7 +237,7 @@ class Flask:
                         raw += self.rfile.read(size)
                         self.rfile.readline()
                 try:
-                    jdata = json.loads(raw) if raw else None
+                    jdata = _json.loads(raw) if raw else None
                 except Exception:
                     jdata = None
                 resp = app._dispatch(self.path, jdata, raw, method, dict(self.headers))
@@ -271,7 +258,7 @@ class Flask:
 
 
 def json_dump_bytes(obj: Any) -> bytes:
-    return json.dumps(obj).encode()
+    return _json.dumps(obj).encode()
 
 
 __all__ = ["Flask", "jsonify", "request", "Response"]
