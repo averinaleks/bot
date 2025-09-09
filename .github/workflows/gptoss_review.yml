@@ -3,7 +3,7 @@
 name: GPT-OSS Code Review
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
@@ -16,7 +16,7 @@ permissions:
 jobs:
   review:
     if: >-
-      (github.event_name == 'pull_request_target' &&
+      (github.event_name == 'pull_request' &&
        github.event.pull_request != null &&
        github.event.pull_request.draft == false) ||
       (github.event_name == 'issue_comment' &&
@@ -24,7 +24,11 @@ jobs:
       github.event.issue.pull_request != null &&
       github.event.comment != null &&
        contains(github.event.comment.body || '', '/llm-review'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: gptoss-review-${{ github.ref }}
+      cancel-in-progress: true
     env:
       PR_NUMBER: >-
         ${{ github.event.pull_request.number ||
@@ -32,22 +36,33 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
+          persist-credentials: false
           fetch-depth: 0
-          ref: refs/pull/${{ env.PR_NUMBER }}/head
+      - name: Docker info
+        run: |
+          docker version
+          docker info
+      - name: Cache HF models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ runner.os }}-${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
       - name: Start vLLM container
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
         run: |
+          docker pull vllm/vllm-openai@sha256:c62343ee72f094ef574ab3af2717d0c60fec5e0808b238f19ac4c0d22fd152f7
           docker run -d --rm --name gptoss \
             -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
+            -e HF_HOME="/root/.cache/huggingface" \
+            -v $HOME/.cache/huggingface:/root/.cache/huggingface \
             -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:v0.10.1 \
+            vllm/vllm-openai@sha256:c62343ee72f094ef574ab3af2717d0c60fec5e0808b238f19ac4c0d22fd152f7 \
             --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
             --trust-remote-code \
             --device cpu
       - name: Wait for LLM container
         id: wait_llm
-        continue-on-error: true
         run: |
           # The model can take a while to load, especially on fresh runners
           # Allow extra time for the container to become ready
