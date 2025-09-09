@@ -86,13 +86,11 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
-        self.logger = logging.getLogger(name)
         self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
-        self._error_handlers: Dict[Union[int, type[BaseException]], Callable[[Any], Any]] = {}
         self._first_done = False
         self._error_handlers: Dict[Any, Callable[[Exception], Any]] = {}
         self.logger = logging.getLogger(name)
