@@ -92,8 +92,6 @@ class Flask:
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
         self._first_done = False
-        self._error_handlers: Dict[Any, Callable[[Exception], Any]] = {}
-        self.logger = logging.getLogger(name)
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:

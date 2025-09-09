@@ -180,9 +180,23 @@ def apply() -> None:
             def close(self) -> None:  # pragma: no cover - simple no-op
                 return None
 
+            async def aclose(self) -> None:  # pragma: no cover - simple no-op
+                return None
+
+        class _CookieJar:
+            def __init__(self) -> None:
+                self._cookies: dict[str, str] = {}
+
+            def set(self, name: str, value: str) -> None:
+                self._cookies[name] = value
+
+            def get(self, name: str, default: str | None = None) -> str | None:
+                return self._cookies.get(name, default)
+
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
+                self.cookies = _CookieJar()
 
             def request(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
                 return _return_response()
