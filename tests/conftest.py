@@ -12,9 +12,6 @@ pytest_plugins = ("pytest_asyncio",)
 # from starting and avoids hanging the pytest run.
 os.environ.setdefault("MLFLOW_DISABLE_TELEMETRY", "1")
 
-pd = pytest.importorskip("pandas")
-
-
 # Ensure the project root is on sys.path so tests can import modules like ``config``.
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -27,7 +24,8 @@ def csrf_secret(monkeypatch):
 
 
 @pytest.fixture
-def sample_ohlcv() -> pd.DataFrame:
+def sample_ohlcv():
+    pd = pytest.importorskip("pandas")
     idx = pd.date_range("2020-01-01", periods=3, freq="1min", tz="UTC")
     # Use a price sequence that first rises then falls to allow the
     # tests to exercise both profitable and losing trades.
