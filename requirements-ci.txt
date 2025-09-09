@@ -3,7 +3,7 @@ aiohttp>=3.9.4
 bcrypt>=4.1.2
 flake8==7.3.0
 pytest==8.4.2
-pytest-asyncio>=0.23
+pytest-asyncio==1.1.0
 tenacity>=8.5,<10
 fastapi==0.116.1
 fastapi-csrf-protect==1.0.6
