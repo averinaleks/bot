@@ -262,22 +262,6 @@ def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
 
 
 @app.middleware("http")
-async def enforce_csrf(request: Request, call_next):
-    if request.method == "POST":
-        try:
-            await csrf_protect.validate_csrf(request)
-        except CsrfProtectError:
-            logging.warning(
-                "CSRF validation failed: method=%s url=%s headers=%s",
-                request.method,
-                request.url,
-                _loggable_headers(request.headers),
-            )
-            raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
-    return await call_next(request)
-
-
-@app.middleware("http")
 async def check_api_key(request: Request, call_next):
     auth = request.headers.get("Authorization")
     redacted_headers = _loggable_headers(request.headers)
@@ -301,6 +285,25 @@ async def check_api_key(request: Request, call_next):
             redacted_headers,
         )
         return Response(status_code=401)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def enforce_csrf(request: Request, call_next):
+    if request.method == "POST":
+        auth = request.headers.get("Authorization")
+        token = auth[7:] if auth and auth.startswith("Bearer ") else None
+        if token and any(hmac.compare_digest(token, key) for key in API_KEYS):
+            try:
+                await csrf_protect.validate_csrf(request)
+            except CsrfProtectError:
+                logging.warning(
+                    "CSRF validation failed: method=%s url=%s headers=%s",
+                    request.method,
+                    request.url,
+                    _loggable_headers(request.headers),
+                )
+                raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     return await call_next(request)
 
 

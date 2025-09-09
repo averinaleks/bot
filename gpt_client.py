@@ -285,6 +285,8 @@ def query_gpt(prompt: str) -> str:
         raise GPTClientNetworkError(
             "GPT OSS API request timed out after maximum retries"
         ) from exc
+    except GPTClientError:
+        raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
@@ -325,11 +327,11 @@ async def query_gpt_async(prompt: str) -> str:
         raise GPTClientNetworkError(
             "GPT OSS API request timed out after maximum retries"
         ) from exc
+    except GPTClientError:
+        raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
-    except GPTClientError:
-        raise
     except Exception as exc:  # pragma: no cover - unexpected errors
         logger.exception("Unexpected error querying GPT OSS API: %s", exc)
         raise GPTClientError("Unexpected error querying GPT OSS API") from exc

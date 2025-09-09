@@ -83,6 +83,7 @@ class Flask:
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
         self._first_done = False
+        self.config: Dict[str, Any] = {}
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -101,6 +102,11 @@ class Flask:
     def teardown_appcontext(self, func: Callable[[BaseException | None], None]) -> Callable[[BaseException | None], None]:
         self._teardown.append(func)
         return func
+
+    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            return func
+        return decorator
 
     def _find_handler(self, path: str) -> Tuple[Callable[..., Any] | None, Dict[str, str]]:
         for rule, func in self._routes:
