@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json as _json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from urllib.parse import unquote
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 import logging
@@ -91,6 +93,7 @@ class Flask:
         self.name = name
         self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
+        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
@@ -104,13 +107,9 @@ class Flask:
             return func
         return decorator
 
-    def errorhandler(self, code: int | type[BaseException]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a simple error handler for a given HTTP status code or exception."""
-
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
-
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
@@ -155,13 +154,6 @@ class Flask:
                 func()
             rv = handler(**kwargs)
         except Exception as exc:
-            error_handler = (
-                self._error_handlers.get(type(exc))
-                or self._error_handlers.get(500)
-            )
-            if error_handler:
-                rv = error_handler(exc)
-                status = 500
             else:
                 raise
         finally:
