@@ -4,6 +4,7 @@ import json as _json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from urllib.parse import unquote
+import json as _json
 
 _current_request: _Request | None = None
 
@@ -94,6 +95,7 @@ class Flask:
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:

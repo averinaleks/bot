@@ -191,8 +191,6 @@ def apply() -> None:
 
             def close(self) -> None:  # pragma: no cover - simple no-op
                 self.is_closed = True
-
-            async def aclose(self) -> None:  # pragma: no cover - simple no-op
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
