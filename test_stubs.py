@@ -189,6 +189,9 @@ def apply() -> None:
 
             post = get
 
+            async def aclose(self) -> None:  # pragma: no cover - simple no-op
+                self.is_closed = True
+
             def close(self) -> None:  # pragma: no cover - simple no-op
                 self.is_closed = True
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
