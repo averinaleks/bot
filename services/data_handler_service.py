@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 try:  # optional dependency
     from werkzeug.exceptions import HTTPException
 except Exception:  # pragma: no cover - fallback when werkzeug absent
-    class HTTPException(Exception):
+    class HTTPException(Exception):  # type: ignore[no-redef]
         pass
 
 load_dotenv()

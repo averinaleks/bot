@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+import json as _json
+import logging
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
@@ -19,7 +20,7 @@ class _Request:
         if not force or self._raw is None:
             return None
         try:
-            self._json = json.loads(self._raw.decode())
+            self._json = _json.loads(self._raw.decode())
         except Exception:
             return None
         return self._json
@@ -45,17 +46,17 @@ class Response:
         self._json = None
         if isinstance(data, (dict, list)):
             self._json = data
-            self.data = json.dumps(data).encode()
+            self.data = _json.dumps(data).encode()
         elif isinstance(data, bytes):
             self.data = data
             try:
-                self._json = json.loads(data.decode())
+                self._json = _json.loads(data.decode())
             except Exception:
                 pass
         elif isinstance(data, str):
             self.data = data.encode()
             try:
-                self._json = json.loads(data)
+                self._json = _json.loads(data)
             except Exception:
                 pass
         elif data is None:
@@ -78,10 +79,13 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
+        self.logger = logging.getLogger(name)
+        self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[Union[int, type[BaseException]], Callable[[Any], Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -101,6 +105,12 @@ class Flask:
     def teardown_appcontext(self, func: Callable[[BaseException | None], None]) -> Callable[[BaseException | None], None]:
         self._teardown.append(func)
         return func
+
+    def errorhandler(self, code_or_exc: Union[int, type[BaseException]]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            self._error_handlers[code_or_exc] = func
+            return func
+        return decorator
 
     def _find_handler(self, path: str) -> Tuple[Callable[..., Any] | None, Dict[str, str]]:
         for rule, func in self._routes:
@@ -123,6 +133,12 @@ class Flask:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
+        except Exception as exc:
+            handler_func = self._error_handlers.get(type(exc)) or self._error_handlers.get(Exception)
+            if handler_func is not None:
+                rv = handler_func(exc)
+            else:
+                raise
         finally:
             _current_request = None
         status = 200
@@ -166,13 +182,13 @@ class Flask:
                 elif content is not None:
                     raw = content
                     try:
-                        jdata = json.loads(content)
+                        jdata = _json.loads(content)
                     except Exception:
                         jdata = None
                 elif data is not None:
                     raw = data if isinstance(data, bytes) else str(data).encode()
                     try:
-                        jdata = json.loads(raw)
+                        jdata = _json.loads(raw)
                     except Exception:
                         jdata = None
                 return app._dispatch(path, jdata, raw)
@@ -206,7 +222,7 @@ class Flask:
                         raw += self.rfile.read(size)
                         self.rfile.readline()
                 try:
-                    jdata = json.loads(raw) if raw else None
+                    jdata = _json.loads(raw) if raw else None
                 except Exception:
                     jdata = None
                 resp = app._dispatch(self.path, jdata, raw)
@@ -227,7 +243,7 @@ class Flask:
 
 
 def json_dump_bytes(obj: Any) -> bytes:
-    return json.dumps(obj).encode()
+    return _json.dumps(obj).encode()
 
 
 __all__ = ["Flask", "jsonify", "request", "Response"]
