@@ -163,7 +163,16 @@ def apply() -> None:
             return _HTTPXResponse()
 
         class _CookieJar(dict):  # pragma: no cover - minimal cookie jar
-            ...
+            """Simplified cookie jar supporting assignment via ``set``.
+
+            The real :mod:`httpx` cookie jar exposes a ``set`` method which is
+            used by tests to store CSRF tokens.  Implementing the method here
+            allows the stub client to mimic that behaviour when the actual
+            dependency is not installed.
+            """
+
+            def set(self, key: str, value: str, **_kwargs: Any) -> None:
+                self[key] = value
 
         class _AsyncClient:
             """Lightweight stand in for :class:`httpx.AsyncClient`."""
