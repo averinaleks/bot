@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
@@ -9,9 +7,19 @@ _current_request: _Request | None = None
 
 
 class _Request:
-    def __init__(self, json_data: Any, raw_data: bytes | None = None) -> None:
+    def __init__(
+        self,
+        json_data: Any,
+        raw_data: bytes | None = None,
+        method: str = "",
+        path: str = "",
+        headers: Optional[Dict[str, str]] | None = None,
+    ) -> None:
         self._json = json_data
         self._raw = raw_data
+        self.method = method
+        self.path = path
+        self.headers: Dict[str, str] = headers or {}
 
     def get_json(self, force: bool = False) -> Any:
         if self._json is not None:
@@ -19,7 +27,7 @@ class _Request:
         if not force or self._raw is None:
             return None
         try:
-            self._json = json.loads(self._raw.decode())
+            self._json = _json.loads(self._raw.decode())
         except Exception:
             return None
         return self._json
@@ -45,17 +53,17 @@ class Response:
         self._json = None
         if isinstance(data, (dict, list)):
             self._json = data
-            self.data = json.dumps(data).encode()
+            self.data = _json.dumps(data).encode()
         elif isinstance(data, bytes):
             self.data = data
             try:
-                self._json = json.loads(data.decode())
+                self._json = _json.loads(data.decode())
             except Exception:
                 pass
         elif isinstance(data, str):
             self.data = data.encode()
             try:
-                self._json = json.loads(data)
+                self._json = _json.loads(data)
             except Exception:
                 pass
         elif data is None:
@@ -78,12 +86,12 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
+        self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
         self._first_done = False
-        self.config: Dict[str, Any] = {}
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -103,8 +111,6 @@ class Flask:
         self._teardown.append(func)
         return func
 
-    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             return func
         return decorator
 
@@ -119,16 +125,26 @@ class Flask:
                     return func, {var: unquote(path[len(prefix):])}
         return None, {}
 
-    def _dispatch(self, path: str, json_data: Any, raw: bytes | None) -> Response:
+    def _dispatch(
+        self,
+        path: str,
+        json_data: Any,
+        raw: bytes | None,
+        method: str = "GET",
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Response:
         global _current_request
         handler, kwargs = self._find_handler(path)
         if handler is None:
             return Response({"error": "not found"}, status=404)
-        _current_request = _Request(json_data, raw)
+        _current_request = _Request(json_data, raw, method, path, headers)
         try:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
+        except Exception as exc:
+            else:
+                raise
         finally:
             _current_request = None
         status = 200
@@ -156,13 +172,18 @@ class Flask:
                         func()
                     app._first_done = True
 
-            def get(self, path: str) -> Response:
+            def get(self, path: str, headers: Optional[Dict[str, str]] = None) -> Response:
                 self._prep_first()
-                return app._dispatch(path, None, None)
+                return app._dispatch(path, None, None, "GET", headers)
 
-            def post(self, path: str, json: Any | None = None,
-                     data: Any | None = None, content: bytes | None = None,
-                     headers: Optional[Dict[str, str]] = None) -> Response:
+            def post(
+                self,
+                path: str,
+                json: Any | None = None,
+                data: Any | None = None,
+                content: bytes | None = None,
+                headers: Optional[Dict[str, str]] = None,
+            ) -> Response:
                 self._prep_first()
                 raw = b""
                 jdata = None
@@ -172,16 +193,16 @@ class Flask:
                 elif content is not None:
                     raw = content
                     try:
-                        jdata = json.loads(content)
+                        jdata = _json.loads(content)
                     except Exception:
                         jdata = None
                 elif data is not None:
                     raw = data if isinstance(data, bytes) else str(data).encode()
                     try:
-                        jdata = json.loads(raw)
+                        jdata = _json.loads(raw)
                     except Exception:
                         jdata = None
-                return app._dispatch(path, jdata, raw)
+                return app._dispatch(path, jdata, raw, "POST", headers)
 
         return _Client()
 
@@ -212,10 +233,10 @@ class Flask:
                         raw += self.rfile.read(size)
                         self.rfile.readline()
                 try:
-                    jdata = json.loads(raw) if raw else None
+                    jdata = _json.loads(raw) if raw else None
                 except Exception:
                     jdata = None
-                resp = app._dispatch(self.path, jdata, raw)
+                resp = app._dispatch(self.path, jdata, raw, method, dict(self.headers))
                 self.send_response(resp.status_code)
                 for k, v in resp.headers.items():
                     self.send_header(k, v)
@@ -233,7 +254,7 @@ class Flask:
 
 
 def json_dump_bytes(obj: Any) -> bytes:
-    return json.dumps(obj).encode()
+    return _json.dumps(obj).encode()
 
 
 __all__ = ["Flask", "jsonify", "request", "Response"]
