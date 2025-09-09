@@ -17,19 +17,16 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        # v2.4.0
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
         if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
-        # v4.0.0
-        uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363
+        uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout code
-        # v4
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
@@ -41,8 +38,7 @@ jobs:
       # Dependabot update checks to fail.
       - name: Setup Python
         if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
-        # v5
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install dependencies
@@ -63,9 +59,8 @@ jobs:
         if: >-
           ${{ steps.metadata.outputs['update-type'] !=
               'version-update:semver-major' }}
-        # v3.0.0
         # yamllint disable-line rule:line-length
-        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
+        uses: peter-evans/enable-pull-request-automerge@v3
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash

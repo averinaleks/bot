@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json as _json
+import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Type
 from urllib.parse import unquote
-import json as _json
 
 _current_request: _Request | None = None
 
@@ -91,11 +91,11 @@ class Flask:
         self.name = name
         self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
-        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
-        self._error_handlers: Dict[int, Callable[..., Any]] = {}
+        self._error_handlers: Dict[int | Type[Exception], Callable[..., Any]] = {}
+        self.logger = logging.getLogger(name)
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -104,7 +104,6 @@ class Flask:
             return func
         return decorator
 
-    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
