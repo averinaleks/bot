@@ -19,7 +19,12 @@ except Exception:  # pragma: no cover - fallback when werkzeug absent
 load_dotenv()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
+# Минимальный shim Flask, используемый в тестах, может не иметь атрибута
+# ``config``. Пропускаем установку лимита, если объекта нет, чтобы импорт
+# модуля не падал и тесты, подменяющие ``flask`` на упрощённую реализацию,
+# проходили корректно.
+if hasattr(app, "config"):
+    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
 _init_lock = threading.Lock()
@@ -96,18 +101,28 @@ def ping() -> ResponseReturnValue:
 def health() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
+if hasattr(app, "errorhandler"):
+    @app.errorhandler(413)
+    def too_large(_) -> ResponseReturnValue:
+        return jsonify({'error': 'payload too large'}), 413
 
-@app.errorhandler(413)
-def too_large(_) -> ResponseReturnValue:
-    return jsonify({'error': 'payload too large'}), 413
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
+        """Log unexpected errors and return a 500 response."""
+        if isinstance(exc, HTTPException):
+            return exc
+        logging.exception("Unhandled error: %s", exc)
+        return jsonify({'error': 'internal server error'}), 500
+else:
+    def too_large(_) -> ResponseReturnValue:
+        return jsonify({'error': 'payload too large'}), 413
 
-@app.errorhandler(Exception)
-def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
-    """Log unexpected errors and return a 500 response."""
-    if isinstance(exc, HTTPException):
-        return exc
-    logging.exception("Unhandled error: %s", exc)
-    return jsonify({'error': 'internal server error'}), 500
+    def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
+        """Log unexpected errors and return a 500 response."""
+        if isinstance(exc, HTTPException):
+            return exc
+        logging.exception("Unhandled error: %s", exc)
+        return jsonify({'error': 'internal server error'}), 500
 
 
 if __name__ == "__main__":
