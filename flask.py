@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json as _json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 from urllib.parse import unquote
 
 _current_request: _Request | None = None
@@ -88,6 +90,7 @@ class Flask:
         self.name = name
         self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
+        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
@@ -100,12 +103,9 @@ class Flask:
         return decorator
 
     def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a simple error handler for a given HTTP status code."""
-
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
-
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
@@ -119,9 +119,6 @@ class Flask:
     def teardown_appcontext(self, func: Callable[[BaseException | None], None]) -> Callable[[BaseException | None], None]:
         self._teardown.append(func)
         return func
-
-            return func
-        return decorator
 
     def _find_handler(self, path: str) -> Tuple[Callable[..., Any] | None, Dict[str, str]]:
         for rule, func in self._routes:
@@ -152,6 +149,9 @@ class Flask:
                 func()
             rv = handler(**kwargs)
         except Exception as exc:
+            err_handler = self._error_handlers.get(500)
+            if err_handler:
+                rv = err_handler(exc)
             else:
                 raise
         finally:
