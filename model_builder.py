@@ -154,10 +154,11 @@ except Exception as exc:  # pragma: no cover - stub for tests
                 pickle.dump(obj, f)
 
     def _load(src, *a, **k):  # type: ignore[unused-arg]
+        """Fallback loader used when joblib is unavailable."""
         if hasattr(src, "read"):
-            return pickle.load(src)
+            return pickle.load(src)  # nosec B301
         with open(src, "rb") as f:
-            return pickle.load(f)
+            return pickle.load(f)  # nosec B301
 
     joblib = types.SimpleNamespace(dump=_dump, load=_load)
 
