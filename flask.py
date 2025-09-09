@@ -91,12 +91,23 @@ class Flask:
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        # Registered error handlers keyed by status code.
+        self._error_handlers: Dict[int, Callable[[Any], Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._routes.append((rule, func))
             return func
+        return decorator
+
+    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Register a simple error handler for a given HTTP status code."""
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            self._error_handlers[code] = func
+            return func
+
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
