@@ -33,6 +33,7 @@ jobs:
           device: ${{ matrix.device }}
       - name: Start mock server
         run: |
+          trap 'if [ -f server.pid ]; then kill $(cat server.pid) || true; fi' EXIT
           python - <<'PY' &
           from http.server import BaseHTTPRequestHandler, HTTPServer
           import json
