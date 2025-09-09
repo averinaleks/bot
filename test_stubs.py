@@ -180,9 +180,12 @@ def apply() -> None:
             def close(self) -> None:  # pragma: no cover - simple no-op
                 return None
 
+            async def aclose(self) -> None:  # pragma: no cover - simple no-op
+
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
+                self.cookies = _CookieJar()
 
             def request(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
                 return _return_response()
