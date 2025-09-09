@@ -162,6 +162,9 @@ def apply() -> None:
         def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
             return _HTTPXResponse()
 
+        class _CookieJar(dict):  # pragma: no cover - minimal cookie jar
+            ...
+
         class _AsyncClient:
             """Lightweight stand in for :class:`httpx.AsyncClient`."""
 
@@ -173,26 +176,21 @@ def apply() -> None:
                 return self
 
             async def __aexit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
+                await self.aclose()
                 return None
 
             async def stream(self, *args: Any, **kwargs: Any):  # pragma: no cover - patched in tests
                 raise NotImplementedError
-
-            def close(self) -> None:  # pragma: no cover - simple no-op
-                self.is_closed = True
-                return None
-
-            async def aclose(self) -> None:  # pragma: no cover - simple no-op
-                self.is_closed = True
-                return None
 
             async def get(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
                 if self.is_closed:
                     raise RuntimeError("Client closed")
                 return _return_response()
 
-        class _CookieJar(dict):  # pragma: no cover - minimal placeholder
-            ...
+            post = get
+
+            def close(self) -> None:  # pragma: no cover - simple no-op
+                self.is_closed = True
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
