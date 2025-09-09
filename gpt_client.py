@@ -286,8 +286,6 @@ def query_gpt(prompt: str) -> str:
             "GPT OSS API request timed out after maximum retries"
         ) from exc
     except GPTClientError:
-        # Propagate errors like ``GPTClientResponseError`` without converting
-        # them to network failures.
         raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)
@@ -330,8 +328,6 @@ async def query_gpt_async(prompt: str) -> str:
             "GPT OSS API request timed out after maximum retries"
         ) from exc
     except GPTClientError:
-        # Preserve explicit client errors such as ``GPTClientResponseError``
-        # instead of coercing them into network failures.
         raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
         logger.exception("Error querying GPT OSS API: %s", exc)

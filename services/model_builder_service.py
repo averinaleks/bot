@@ -6,7 +6,11 @@ belong to a single class.
 """
 
 from flask import Flask, request, jsonify
-from flask.typing import ResponseReturnValue
+from typing import Any
+try:  # optional dependency
+    from flask.typing import ResponseReturnValue
+except Exception:  # pragma: no cover - fallback when flask.typing missing
+    ResponseReturnValue = Any  # type: ignore
 import numpy as np
 import joblib
 import os
@@ -17,7 +21,8 @@ from utils import validate_host, safe_int
 
 load_dotenv()
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
+if hasattr(app, "config"):
+    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 BASE_DIR = Path.cwd().resolve()
 MODEL_FILE = Path(os.getenv('MODEL_FILE', 'model.pkl'))
@@ -120,9 +125,13 @@ def ping() -> ResponseReturnValue:
     return jsonify({'status': 'ok'})
 
 
-@app.errorhandler(413)
-def too_large(_) -> ResponseReturnValue:
-    return jsonify({'error': 'payload too large'}), 413
+if hasattr(app, "errorhandler"):
+    @app.errorhandler(413)
+    def too_large(_) -> ResponseReturnValue:
+        return jsonify({'error': 'payload too large'}), 413
+else:
+    def too_large(_) -> ResponseReturnValue:
+        return jsonify({'error': 'payload too large'}), 413
 
 if __name__ == '__main__':
     from bot.utils import configure_logging
