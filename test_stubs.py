@@ -181,6 +181,10 @@ def apply() -> None:
                 return None
 
             async def aclose(self) -> None:  # pragma: no cover - simple no-op
+                return None
+
+        class _CookieJar:  # pragma: no cover - minimal placeholder
+            ...
 
         class _HTTPXClient:  # pragma: no cover - minimal placeholder
             def __init__(self, *args: Any, **kwargs: Any) -> None:
