@@ -91,8 +91,6 @@ class Flask:
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
-        # Registered error handlers keyed by status code.
-        self._error_handlers: Dict[int, Callable[[Any], Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
