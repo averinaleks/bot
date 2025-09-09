@@ -78,16 +78,33 @@ def jsonify(obj: Any) -> Response:
 class Flask:
     def __init__(self, name: str) -> None:
         self.name = name
+        # Minimal configuration dictionary to mimic Flask's ``app.config``.
+        # Only the keys accessed in tests are supported, so a simple dict is
+        # sufficient.  Having ``config`` available allows code under test to
+        # assign limits like ``MAX_CONTENT_LENGTH`` without raising
+        # ``AttributeError``.
+        self.config: Dict[str, Any] = {}
         self._routes: list[Tuple[str, Callable[..., Any]]] = []
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        # Registered error handlers keyed by status code.
+        self._error_handlers: Dict[int, Callable[[Any], Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._routes.append((rule, func))
             return func
+        return decorator
+
+    def errorhandler(self, code: int) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Register a simple error handler for a given HTTP status code."""
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            self._error_handlers[code] = func
+            return func
+
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
