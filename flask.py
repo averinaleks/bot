@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
+import json as _json
 
 _current_request: _Request | None = None
 
@@ -91,6 +92,7 @@ class Flask:
         self._before_request: list[Callable[[], None]] = []
         self._before_first: list[Callable[[], None]] = []
         self._teardown: list[Callable[[BaseException | None], None]] = []
+        self._error_handlers: Dict[int, Callable[..., Any]] = {}
         self._first_done = False
 
     def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
@@ -120,9 +122,6 @@ class Flask:
         self._teardown.append(func)
         return func
 
-            return func
-        return decorator
-
     def _find_handler(self, path: str) -> Tuple[Callable[..., Any] | None, Dict[str, str]]:
         for rule, func in self._routes:
             if rule == path:
@@ -151,9 +150,8 @@ class Flask:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
-        except Exception as exc:
-            else:
-                raise
+        except Exception:
+            raise
         finally:
             _current_request = None
         status = 200
