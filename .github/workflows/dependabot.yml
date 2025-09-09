@@ -49,7 +49,7 @@ jobs:
         if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-ci.txt
+          python -m pip install -r requirements-ci.txt
 
       # Run the unit tests against the Dependabot update.  Integration
       # tests are excluded here to keep the workflow fast; they run in
