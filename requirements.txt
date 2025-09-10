@@ -35,7 +35,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.2.0 ; python_version < "3.12"
+backports-asyncio-runner==1.2.0 ; python_version < "3.11"
     # via
     #   -r requirements-core.in
     #   pytest-asyncio
