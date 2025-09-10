@@ -104,9 +104,13 @@ class Flask:
             return func
         return decorator
 
+    def errorhandler(self, code: int | Type[Exception]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Register a handler for a given error code or exception type."""
+
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
+
         return decorator
 
     def before_request(self, func: Callable[[], None]) -> Callable[[], None]:
