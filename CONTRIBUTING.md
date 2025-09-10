@@ -4,24 +4,33 @@ Thank you for your interest in contributing to this project!
 
 ## Development workflow
 
-1. Create a virtual environment and install dependencies using the helper
-   script:
+1. Create a virtual environment, install dependencies, and set up the test
+   tooling:
 
     ```bash
+    python -m venv .venv && . .venv/bin/activate
+    pip install -r requirements.txt -r requirements-dev.txt
     ./scripts/install-test-deps.sh
     ```
-   (Use `--gpu` to include GPU packages.) This step is **required** before
-   running the test suite—`pytest` expects these packages to be installed.
-2. Run `python -m flake8` and the test suites before submitting a pull request.
-   The CI workflow runs `flake8` as a dedicated step and will fail if any style
-   errors are reported, so it's best to fix them locally first.
+   (Use `--gpu` with the script to include GPU packages.) This step is
+   **required** before running the test suite—`pytest` expects these packages to
+   be installed.
+2. Run the style checks and test suites before submitting a pull request:
+
+    ```bash
+    pytest -m "not integration"
+    pytest -m integration
+    flake8 . && pip-audit
+    ```
+   The CI workflow runs these checks and will fail if any issues are reported,
+   so it's best to fix them locally first.
 
 ### Running tests
 
 Use the following commands to execute the test suites locally:
 
 ```bash
-pytest                        # unit tests (integration tests skipped)
+pytest -m "not integration"   # unit tests
 pytest -m integration         # integration tests
 ```
 
