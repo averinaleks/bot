@@ -44,7 +44,6 @@ jobs:
         run: |
           set -euo pipefail
           docker run -d --rm --name gptoss \
-            --network none \
             -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
             -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:v0.10.1 \
