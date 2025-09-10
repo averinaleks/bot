@@ -80,7 +80,9 @@ jobs:
           docker logs gptoss || true
           exit 1
 
+      - name: Generate diff
         if: steps.wait_llm.outcome == 'success'
+        id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
