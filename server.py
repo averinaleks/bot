@@ -347,6 +347,19 @@ class CompletionRequest(BaseModel):
     max_tokens: int = Field(16, ge=1, le=512)
 
 
+def _parse_model_json(model_cls: type[BaseModel], data: bytes) -> BaseModel:
+    """Parse *data* into *model_cls* supporting Pydantic v1 and v2.
+
+    Pydantic v2 exposes :meth:`model_validate_json` while v1 uses
+    :meth:`parse_raw`.  Tests run with the lightweight v1 dependency, so this
+    helper allows the server to operate regardless of the installed version.
+    """
+
+    if hasattr(model_cls, "model_validate_json"):
+        return getattr(model_cls, "model_validate_json")(data)  # type: ignore[call-arg]
+    return model_cls.parse_raw(data)
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = bytearray()
@@ -355,7 +368,7 @@ async def chat_completions(request: Request):
         if len(body) > MAX_REQUEST_BYTES:
             raise HTTPException(status_code=413, detail="Request body too large")
     try:
-        req = ChatRequest.model_validate_json(bytes(body))
+        req = _parse_model_json(ChatRequest, bytes(body))
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
@@ -379,7 +392,7 @@ async def completions(request: Request):
         if len(body) > MAX_REQUEST_BYTES:
             raise HTTPException(status_code=413, detail="Request body too large")
     try:
-        req = CompletionRequest.model_validate_json(bytes(body))
+        req = _parse_model_json(CompletionRequest, bytes(body))
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
