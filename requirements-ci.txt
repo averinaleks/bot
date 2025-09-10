@@ -8,6 +8,7 @@ tenacity>=8.5,<10
 fastapi==0.116.1
 fastapi-csrf-protect==1.0.6
 flask>=3.0.3,<4
+pydantic==2.11.7
 # gymnasium and scikit-learn are unavailable on some Python versions
 gymnasium==1.2.0; python_version<'3.12'
 pandas>=2.2.0
@@ -27,3 +28,4 @@ hypothesis>=6.90.0
 numpy==1.26.4
 pip-audit==2.9.0
 pybit>=5.7.0
+
