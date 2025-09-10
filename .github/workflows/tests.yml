@@ -26,14 +26,16 @@ jobs:
           cache-dependency-path: |
             requirements*.txt
             pyproject.toml
-      - name: Upgrade pip/setuptools/wheel
-        run: python -m pip install --upgrade pip setuptools wheel
+      - name: Install pip/setuptools/wheel with fixed versions
+        run: python -m pip install "pip==24.0" "setuptools<72" "wheel<0.44"
       - name: Install deps (core + ci + extras if exist)
         run: |
           set -eux
           test -f requirements.txt && python -m pip install -r requirements.txt || true
           test -f requirements-ci.txt && python -m pip install -r requirements-ci.txt || true
           test -f requirements-extras.txt && python -m pip install -r requirements-extras.txt || true
+      - name: Install torch (cpu)
+        run: python -m pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
       - name: Lint (flake8)
         run: flake8 .
         continue-on-error: true
