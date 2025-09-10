@@ -2,6 +2,7 @@ import os
 import time
 import logging
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 
@@ -24,7 +25,8 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     while time.time() < deadline:
         try:
             with get_httpx_client(timeout=5, trust_env=False) as client:
-                response = client.get(api_url.rstrip("/"))
+                health_url = urljoin(api_url, "/v1/models")
+                response = client.get(health_url)
                 response.raise_for_status()
                 response.close()
             return

@@ -110,6 +110,39 @@ def test_wait_for_api_http_error(monkeypatch):
         check_code.wait_for_api("http://gptoss:8000", timeout=1)
 
 
+def test_wait_for_api_uses_models_endpoint(monkeypatch):
+    """wait_for_api should query /v1/models regardless of API path."""
+
+    called = {}
+
+    class DummyResponse:
+        def close(self):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+    class DummyClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            called["url"] = url
+            return DummyResponse()
+
+    monkeypatch.setattr(check_code, "get_httpx_client", lambda **kw: DummyClient())
+    # Ensure the loop exits immediately
+    monkeypatch.setattr(check_code.time, "time", lambda: 0)
+    monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
+
+    api_url = "http://gptoss:8000/v1/chat/completions"
+    check_code.wait_for_api(api_url, timeout=1)
+    assert called["url"] == "http://gptoss:8000/v1/models"
+
+
 def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
     cfg = tmp_path / "gptoss_check.config"
     cfg.write_text("skip_gptoss_check=true # comment\n", encoding="utf-8")
