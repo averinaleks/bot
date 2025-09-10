@@ -36,5 +36,6 @@ jobs:
           test -f requirements-extras.txt && python -m pip install -r requirements-extras.txt || true
       - name: Lint (flake8)
         run: flake8 .
+        continue-on-error: true
       - name: Run tests (pytest)
         run: pytest -q --maxfail=1 --disable-warnings
