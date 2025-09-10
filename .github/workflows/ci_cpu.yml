@@ -67,7 +67,7 @@ jobs:
       - name: Run flake8
         run: |
           set -o pipefail
-          flake8 --exclude venv . | tee flake8.log || code=$?
+          python -m flake8 --exclude venv . | tee flake8.log || code=$?
           exit $code
       - name: Upload flake8 log
         if: always()
@@ -77,7 +77,7 @@ jobs:
           path: flake8.log
           if-no-files-found: ignore
       - name: Run mypy
-        run: mypy --no-site-packages --exclude venv .
+        run: python -m mypy --no-site-packages --exclude venv .
       - name: Remove test caches
         if: always()
         uses: ./.github/actions/clear-test-caches
