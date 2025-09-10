@@ -111,8 +111,6 @@ class Flask:
     def errorhandler(
         self, code: int | Type[Exception]
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a function to handle an HTTP status code or exception."""
-
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
             return func
