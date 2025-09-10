@@ -208,7 +208,7 @@ async def lifespan(_: FastAPI):
     )
     if not API_KEYS:
         logging.error(
-            "Credentials not configured; set the API_KEYS environment variable.",
+            "API_KEYS is empty; all requests will be rejected. Set the API_KEYS environment variable.",
         )
         raise RuntimeError("API_KEYS environment variable is required")
     await model_manager.load_model_async()
@@ -247,6 +247,17 @@ except ValueError:
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
+_TOKEN_RE = re.compile(r"(?i)(bearer\s+)[^\s,]+")
+_SENSITIVE_RE = re.compile(r"(?i)(token|cookie|x-api-key)=([^;\s]+)")
+
+
+def _sanitize_header_value(value: str) -> str:
+    """Mask sensitive data within a header value."""
+    value = _TOKEN_RE.sub(r"\1***", value)
+    value = _SENSITIVE_RE.sub(lambda m: f"{m.group(1)}=***", value)
+    return value
+
+
 def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
     sensitive = {
         "authorization",
@@ -258,13 +269,24 @@ def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
         "x-csrf-token",
         "x-xsrf-token",
     }
-    return {k: "***" if k.lower() in sensitive else v for k, v in headers.items()}
+    return {
+        k: "***" if k.lower() in sensitive else _sanitize_header_value(v)
+        for k, v in headers.items()
+    }
 
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
-    auth = request.headers.get("Authorization")
     redacted_headers = _loggable_headers(request.headers)
+    if not API_KEYS:
+        logging.warning(
+            "API_KEYS is empty; rejecting request: method=%s url=%s headers=%s",
+            request.method,
+            request.url,
+            redacted_headers,
+        )
+        return Response(status_code=401)
+    auth = request.headers.get("Authorization")
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
             "Unauthorized request: method=%s url=%s headers=%s",
