@@ -60,7 +60,7 @@ cachetools==5.5.2
     #   mlflow-tracing
 catalyst==21.5
     # via -r requirements.txt
-ccxt==4.5.2
+ccxt==4.5.3
     # via -r requirements.txt
 ccxtpro==1.0.1
     # via -r requirements.txt
@@ -296,13 +296,13 @@ matplotlib==3.10.5
     #   -r requirements.txt
     #   mlflow
     #   stable-baselines3
-mlflow==3.3.1
+mlflow==3.3.2
     # via -r requirements.txt
-mlflow-skinny==3.3.1
+mlflow-skinny==3.3.2
     # via
     #   -r requirements.txt
     #   mlflow
-mlflow-tracing==3.3.1
+mlflow-tracing==3.3.2
     # via
     #   -r requirements.txt
     #   mlflow
@@ -496,7 +496,7 @@ python-dotenv==1.1.1
     #   pydantic-settings
 python-telegram-bot==22.3
     # via -r requirements.txt
-pytorch-lightning==2.5.3
+pytorch-lightning==2.5.5
     # via -r requirements.txt
 pytz==2025.2
     # via
