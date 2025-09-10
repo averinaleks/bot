@@ -1,7 +1,7 @@
 ---
 name: Dependabot Auto Merge
 
-on:
+'on':
   pull_request_target:
     types: [opened, reopened, synchronize]
 
@@ -21,6 +21,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
+        # yamllint disable-line rule:line-length
         if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         uses: hmarr/auto-approve-action@v4
         with:
@@ -58,8 +59,8 @@ jobs:
         run: pytest -m "not integration" -q
 
       - name: Enable auto-merge for Dependabot PRs
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # yamllint disable-line rule:line-length
+        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
