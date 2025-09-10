@@ -93,14 +93,14 @@ jobs:
           test -n "$base_sha" && test -n "$base_ref"
           git fetch --no-tags origin "$base_ref"
           git diff "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
-          head -c 180000 diff.patch > diff.patch   # truncate
+          head -c 180000 diff.patch > diff.tmp && mv diff.tmp diff.patch   # truncate
           tokens=$(wc -w < diff.patch || echo 0)
           if [ "$tokens" -eq 0 ]; then
             printf 'has_diff=false\n' >> "$GITHUB_OUTPUT"; exit 0
           fi
           if [ "$tokens" -gt 6000 ]; then
             git diff -U20 "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
-            head -c 180000 diff.patch > diff.patch
+            head -c 180000 diff.patch > diff.tmp && mv diff.tmp diff.patch
           fi
           if [ ! -s diff.patch ]; then
             printf 'has_diff=false\n' >> "$GITHUB_OUTPUT"; exit 0
@@ -146,7 +146,12 @@ jobs:
             const fs = require('fs');
             const body = fs.readFileSync('review.md', 'utf8').slice(0, 60000);
             const pr = parseInt(process.env.PR_NUMBER, 10);
-            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr, body });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              body
+            });
 
       - name: Cleanup
         if: always()
