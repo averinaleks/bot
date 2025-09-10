@@ -13,26 +13,32 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: gptoss-review-${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   review:
-    # Защита: не запускаем на fork без метки "safe-to-test"
-    if: >-
-      ((github.event_name == 'pull_request_target') &&
-       (github.event.pull_request != null) &&
-       (github.event.pull_request.draft == false) &&
-       (github.event.pull_request.head.repo.full_name == github.repository ||
-        contains(github.event.pull_request.labels.*.name, 'safe-to-test')))
-      || (github.event_name == 'issue_comment' &&
-          github.event.issue != null &&
-          github.event.issue.pull_request != null &&
-          github.event.comment != null &&
-          contains(github.event.comment.body || '', '/llm-review'))
+    if: >
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request != null &&
+        github.event.pull_request.draft == false &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
+      || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body || '', '/llm-review')
+      )
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
-      HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -40,44 +46,40 @@ jobs:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
 
-      - name: Start vLLM container (isolated)
+      - name: Start vLLM container
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN || '' }}
         run: |
           set -euo pipefail
           docker run -d --rm --name gptoss \
-            -e HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
+            -e HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}" \
             -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:v0.10.1 \
-            --model "${MODEL_NAME}" \
+            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
             --trust-remote-code \
             --device cpu
 
-      - name: Wait for LLM container (with backoff)
+      - name: Wait for LLM container
         id: wait_llm
+        continue-on-error: true
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
-            if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss; then
-              if curl -sS --max-time 2 http://127.0.0.1:8000/v1/models > /dev/null; then
-                echo "ok=1" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-            else
-              echo "LLM container exited"
+          for i in {1..180}; do
+            if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss && \
+               curl -sSf --retry 3 --retry-delay 1 http://127.0.0.1:8000/v1/models >/dev/null; then
+              exit 0
+            fi
+            if ! docker ps --filter "name=gptoss" | grep -q gptoss; then
+              echo "LLM container exited" >&2
               docker logs gptoss || true
               exit 1
             fi
-            sleep 5
+            sleep 2
           done
-          echo "LLM container failed to become ready"
+          echo "LLM container failed to start" >&2
           docker logs gptoss || true
           exit 1
 
-      - name: Install jq
-        if: steps.wait_llm.outcome == 'success'
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Generate diff
-        id: generate_diff
         if: steps.wait_llm.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ github.token }}
