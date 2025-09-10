@@ -12,7 +12,7 @@ permissions:
 jobs:
   dependabot:
     # Run this job only for Dependabot PRs.
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    if: ${{ github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
@@ -25,11 +25,14 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # Set up a lightweight Python environment and install only the
       # dependencies required to run the unit tests.  This avoids the
