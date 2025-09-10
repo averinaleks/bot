@@ -3,8 +3,8 @@ import os
 import pytest
 
 pytest.importorskip("transformers")
+pytest.importorskip("httpx")
 
-import pytest
 import server
 from contextlib import contextmanager
 from fastapi.testclient import TestClient
