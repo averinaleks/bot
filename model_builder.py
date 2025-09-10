@@ -144,7 +144,7 @@ except Exception as exc:  # pragma: no cover - stub for tests
     logger.warning("joblib import failed: %s", exc)
     import types
 
-    import pickle
+    import pickle  # nosec B403
 
     def _dump(obj, dest, *a, **k):  # type: ignore[unused-arg]
         if hasattr(dest, "write"):

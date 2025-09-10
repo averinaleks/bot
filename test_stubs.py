@@ -295,10 +295,10 @@ def apply() -> None:
     # ------------------------------------------------------------------- torch
     try:
         import torch  # type: ignore  # pragma: no cover - use real torch if available
-    except Exception:
+    except ImportError:
         # If torch is not installed, allow modules to handle its absence
         # individually. The model builder will fall back to lightweight stubs.
-        pass
+        torch = None  # type: ignore[assignment]
 
     # ------------------------------------------------------------------- Flask
     try:  # pragma: no cover - best effort

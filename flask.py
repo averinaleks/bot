@@ -62,14 +62,14 @@ class Response:
             self.data = data
             try:
                 self._json = _json.loads(data.decode())
-            except Exception:
-                pass
+            except (UnicodeDecodeError, ValueError):
+                self._json = None
         elif isinstance(data, str):
             self.data = data.encode()
             try:
                 self._json = _json.loads(data)
-            except Exception:
-                pass
+            except ValueError:
+                self._json = None
         elif data is None:
             self.data = b""
         else:
