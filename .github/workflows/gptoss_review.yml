@@ -98,7 +98,7 @@ jobs:
             echo "has_diff=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          head -c 200000 diff.patch > diff.patch
+          head -c 200000 diff.patch > diff.patch.trunc && mv diff.patch.trunc diff.patch
           echo "has_diff=true" >> "$GITHUB_OUTPUT"
 
       - name: LLM review
