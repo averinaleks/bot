@@ -3,6 +3,9 @@ import logging
 import sys
 import types
 
+import httpx
+import pytest
+
 from gptoss_check.main import _load_skip_flag
 
 _fake_client = types.ModuleType("gpt_client")
@@ -71,6 +74,40 @@ def test_run_without_api(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING):
         check_code.run()
     assert "GPT_OSS_API" in caplog.text
+
+
+def test_wait_for_api_http_error(monkeypatch):
+    class DummyResponse:
+        def close(self):
+            pass
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError(
+                "err", request=httpx.Request("GET", "http://test"), response=httpx.Response(404)
+            )
+
+    class DummyClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            return DummyResponse()
+
+    calls = {"count": 0}
+
+    def fake_time():
+        calls["count"] += 1
+        return 0 if calls["count"] == 1 else 100
+
+    monkeypatch.setattr(check_code, "get_httpx_client", lambda **kw: DummyClient())
+    monkeypatch.setattr(check_code.time, "time", fake_time)
+    monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
+
+    with pytest.raises(RuntimeError):
+        check_code.wait_for_api("http://gptoss:8000", timeout=1)
 
 
 def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
