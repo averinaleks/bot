@@ -4,6 +4,8 @@ This module coordinates order placement, risk management and Telegram
 notifications while interacting with the :class:`ModelBuilder` and exchange.
 """
 
+from bot.utils import TelegramLogger
+
 import asyncio
 import atexit
 import signal
@@ -46,7 +48,6 @@ import inspect
 # Базовые утилиты импортируются всегда
 from bot.utils import (
     logger,
-    TelegramLogger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
     safe_api_call,
