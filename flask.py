@@ -3,6 +3,7 @@ from __future__ import annotations
 import json as _json
 import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from types import TracebackType
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Type
 from urllib.parse import unquote
 
@@ -98,14 +99,14 @@ class Flask:
         self.logger = logging.getLogger(name)
         self._first_done = False
 
-    def route(self, rule: str, methods: Iterable[str] | None = None) -> Callable:
+    def route(
+        self, rule: str, methods: Iterable[str] | None = None
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._routes.append((rule, func))
             return func
-        return decorator
 
-    def errorhandler(self, code: int | Type[Exception]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a handler for a given error code or exception type."""
+        return decorator
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self._error_handlers[code] = func
@@ -154,6 +155,19 @@ class Flask:
             for func in self._before_request:
                 func()
             rv = handler(**kwargs)
+        except Exception as exc:  # pragma: no cover - minimal error handling
+            handler_func: Callable[..., Any] | None = None
+            for key, func in self._error_handlers.items():
+                if isinstance(key, int):
+                    continue
+                if isinstance(exc, key):
+                    handler_func = func
+                    break
+            if handler_func is None:
+                handler_func = self._error_handlers.get(type(exc)) or self._error_handlers.get(Exception)
+            if handler_func is None:
+                raise
+            rv = handler_func(exc)
         finally:
             _current_request = None
         if isinstance(rv, tuple):
@@ -163,14 +177,19 @@ class Flask:
             return rv
         return Response(rv, status=status)
 
-    def test_client(self):
+    def test_client(self) -> Any:
         app = self
 
         class _Client:
             def __enter__(self) -> "_Client":
                 return self
 
-            def __exit__(self, exc_type, exc, tb) -> None:
+            def __exit__(
+                self,
+                exc_type: Type[BaseException] | None,
+                exc: BaseException | None,
+                tb: TracebackType | None,
+            ) -> None:
                 for func in app._teardown:
                     func(None)
 
@@ -218,7 +237,7 @@ class Flask:
         app = self
 
         class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args) -> None:
+            def log_message(self, *args: Any) -> None:
                 pass
 
             def _call(self, method: str) -> None:
@@ -251,8 +270,11 @@ class Flask:
                 self.end_headers()
                 self.wfile.write(resp.data)
 
-            do_GET = lambda self: self._call("GET")  # type: ignore
-            do_POST = lambda self: self._call("POST")  # type: ignore
+            def do_GET(self) -> None:
+                self._call("GET")
+
+            def do_POST(self) -> None:
+                self._call("POST")
 
         httpd = HTTPServer((host, port), Handler)
         try:
