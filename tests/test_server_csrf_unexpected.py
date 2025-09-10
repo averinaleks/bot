@@ -2,6 +2,7 @@ import os
 import pytest
 
 pytest.importorskip("transformers")
+pytest.importorskip("httpx")
 
 os.environ.setdefault("CSRF_SECRET", "testsecret")
 import server
