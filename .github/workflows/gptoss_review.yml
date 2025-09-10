@@ -13,6 +13,10 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: gptoss-review-${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   review:
     # Защита: не запускаем на fork без метки "safe-to-test"
@@ -28,7 +32,10 @@ jobs:
           github.event.comment != null &&
           contains(github.event.comment.body || '', '/llm-review'))
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
