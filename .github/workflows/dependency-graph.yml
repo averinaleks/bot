@@ -23,6 +23,6 @@ jobs:
           python-version: '3.11'
       - name: Component detection
         # yamllint disable-line rule:line-length
-        uses: advanced-security/component-detection-dependency-submission-action@c7cb2bbc9360d8a011e4fac7dc542c689415d62f # v0.1.0
+        uses: advanced-security/component-detection-dependency-submission-action@v0.1.0
         with:
           detectorArgs: 'Pip=EnableIfDefaultOff'
