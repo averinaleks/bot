@@ -136,7 +136,8 @@ jobs:
           context: .
           file: ${{ matrix.file }}
           push: ${{ env.TRIVY_ENABLED == 'true' }}
-          tags: ${{ env.TRIVY_ENABLED == 'true' && format('docker.io/{0}/{1}:latest', env.DOCKERHUB_USERNAME, matrix.image) || format('{0}:latest', matrix.image) }}
+          tags: >-
+            ${{ env.TRIVY_ENABLED == 'true' && format('docker.io/{0}/{1}:latest', env.DOCKERHUB_USERNAME, matrix.image) || format('{0}:latest', matrix.image) }}
           cache-from: type=local,src=${{ github.workspace }}/.buildx-cache
           cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
 
