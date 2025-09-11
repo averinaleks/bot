@@ -1,8 +1,9 @@
 # .github/workflows/gptoss_review.yml
 # yamllint disable rule:line-length
+---
 name: GPT-OSS Code Review
 
-on:
+'on':
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
@@ -41,7 +42,7 @@ jobs:
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
 
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
