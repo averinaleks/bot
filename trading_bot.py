@@ -14,7 +14,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 
-from model_builder_client import schedule_retrain
+from model_builder_client import schedule_retrain, retrain
 
 import httpx
 from dotenv import load_dotenv
@@ -189,6 +189,10 @@ CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 # us to build a small feature vector for the prediction service.
 _PRICE_HISTORY: deque[float] = deque(maxlen=50)
 PRICE_HISTORY_LOCK = asyncio.Lock()
+
+# Track model performance
+_PRED_RESULTS: deque[int] = deque(maxlen=CFG.prediction_history_size)
+_LAST_PREDICTION: int | None = None
 
 
 # Default trading symbol; overridden from configuration at runtime.
@@ -901,6 +905,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
+    global _LAST_PREDICTION
     env = _load_env()
     price = await fetch_price(SYMBOL, env)
     if price is None or price <= 0:
@@ -908,6 +913,17 @@ async def run_once_async() -> None:
         return
     logger.info("Price for %s: %s", SYMBOL, price)
     features = await build_feature_vector(price)
+
+    # Evaluate previous prediction accuracy
+    acc: float | None = None
+    async with PRICE_HISTORY_LOCK:
+        if _LAST_PREDICTION is not None and len(_PRICE_HISTORY) > 1:
+            actual = 1 if _PRICE_HISTORY[-1] > _PRICE_HISTORY[-2] else 0
+            _PRED_RESULTS.append(1 if _LAST_PREDICTION == actual else 0)
+            acc = sum(_PRED_RESULTS) / len(_PRED_RESULTS)
+    if acc is not None and acc < CFG.retrain_threshold:
+        await retrain(env["model_builder_url"], env["data_handler_url"], SYMBOL)
+
     pdata = await get_prediction(SYMBOL, features, env)
     model_signal = pdata.get("signal") if pdata else None
     logger.info("Prediction: %s", model_signal)
@@ -932,6 +948,7 @@ async def run_once_async() -> None:
         )
     elif model_signal:
         logger.info("Trade skipped due to GPT advice")
+    _LAST_PREDICTION = 1 if model_signal == "buy" else 0 if model_signal == "sell" else None
 
 
 
@@ -943,7 +960,12 @@ async def main_async() -> None:
     try:
         await check_services()
         env = _load_env()
-        train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
+        train_task = schedule_retrain(
+            env["model_builder_url"],
+            env["data_handler_url"],
+            TRAIN_INTERVAL,
+            SYMBOL,
+        )
         while True:
             await run_once_async()
             await asyncio.sleep(INTERVAL)
