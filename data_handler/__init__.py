@@ -1,10 +1,6 @@
-
-from typing import Iterable
-
 from collections.abc import Iterable
 
 import numpy as np
-from typing import Iterable
 
 from .core import DataHandler
 try:  # pragma: no cover - optional dependency
