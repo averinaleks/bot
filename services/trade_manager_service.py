@@ -12,10 +12,12 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 import ccxt
+import json
 import os
 from dotenv import load_dotenv
 import logging
 import threading
+from pathlib import Path
 from utils import validate_host, safe_int
 
 load_dotenv()
@@ -40,6 +42,7 @@ def init_exchange() -> None:
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
+    _sync_positions_with_exchange()
 
 
 # Expected API token for simple authentication
@@ -76,6 +79,40 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 CCXT_BAD_REQUEST = getattr(ccxt, 'BadRequest', CCXT_BASE_ERROR)
 
 POSITIONS: list[dict] = []
+POSITIONS_FILE = Path('cache/positions.json')
+
+
+def _load_positions() -> None:
+    """Load positions list from on-disk cache."""
+    global POSITIONS
+    try:
+        with POSITIONS_FILE.open('r', encoding='utf-8') as fh:
+            POSITIONS = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        POSITIONS = []
+
+
+def _save_positions() -> None:
+    """Persist positions list to on-disk cache."""
+    try:
+        POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with POSITIONS_FILE.open('w', encoding='utf-8') as fh:
+            json.dump(POSITIONS, fh)
+    except OSError as exc:  # pragma: no cover - disk errors
+        logging.warning('Failed to save positions cache: %s', exc)
+
+
+def _sync_positions_with_exchange() -> None:
+    """Fetch positions from exchange for verification."""
+    if exchange is None or not hasattr(exchange, 'fetch_positions'):
+        return
+    try:
+        exchange.fetch_positions()
+    except Exception as exc:  # pragma: no cover - network/API issues
+        logging.warning('fetch_positions failed: %s', exc)
+
+
+_load_positions()
 
 
 def _record(
@@ -102,6 +139,7 @@ def _record(
             'entry_price': entry_price,
         }
     )
+    _save_positions()
 
 
 @app.route('/open_position', methods=['POST'])
@@ -257,6 +295,7 @@ def close_position() -> ResponseReturnValue:
             POSITIONS.pop(rec_index)
         else:
             rec['amount'] = remaining
+        _save_positions()
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error closing position: %s', exc)

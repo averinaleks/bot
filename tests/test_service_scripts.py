@@ -3,6 +3,7 @@ import os
 import types
 import httpx
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 
 from tests.helpers import get_free_port, service_process
@@ -206,6 +207,11 @@ def _run_tm(
     fail_after_market: bool = False,
     with_trailing: bool = True,
 ):
+    positions_file = Path('cache/positions.json')
+    try:
+        positions_file.unlink()
+    except FileNotFoundError:
+        pass
     class DummyExchange:
         def __init__(self):
             self.calls = 0
