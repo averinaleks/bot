@@ -148,3 +148,41 @@ async def test_load_from_disk_buffer_loop(tmp_path):
     loop_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await loop_task
+
+
+@pytest.mark.asyncio
+async def test_cleanup_old_data_pandas(monkeypatch, tmp_path):
+    cfg = BotConfig(
+        cache_dir=str(tmp_path),
+        data_cleanup_interval=0,
+        forget_window=10,
+        history_retention=5,
+    )
+    dh = DataHandler(cfg, None, None, exchange=DummyExchange({"BTCUSDT": 1.0}))
+    symbol = "BTCUSDT"
+    now = pd.Timestamp.now(tz="UTC")
+    timestamps = [now - pd.Timedelta(seconds=i) for i in range(14, -1, -1)]
+    idx = pd.MultiIndex.from_product([[symbol], timestamps], names=["symbol", "timestamp"])
+    df = pd.DataFrame({"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}, index=idx)
+    dh._ohlcv = df.copy()
+    dh._ohlcv_2h = df.copy()
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(dh.cleanup_old_data())
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(task, 0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert len(dh._ohlcv) == cfg.history_retention
+    assert len(dh._ohlcv_2h) == cfg.history_retention
+    cutoff = now - pd.Timedelta(seconds=cfg.forget_window)
+    assert dh._ohlcv.index.get_level_values("timestamp").min() >= cutoff
+    assert dh._ohlcv_2h.index.get_level_values("timestamp").min() >= cutoff

@@ -1255,6 +1255,7 @@ class ModelBuilder:
         def _maybe_add(name: str, series: pd.Series, window_key: str | None = None):
             """Add indicator ``name`` if sufficient history is available."""
             if not isinstance(series, pd.Series):
+                logger.debug("Missing indicator %s for %s", name, symbol)
                 return
             if window_key is not None:
                 window = self.config.get(window_key, 0)
