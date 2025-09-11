@@ -146,6 +146,7 @@ def train() -> ResponseReturnValue:
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         import asyncio
+        assert _model_builder is not None
 
         try:
             asyncio.run(_model_builder.retrain_symbol(symbol))
@@ -180,8 +181,10 @@ def train() -> ResponseReturnValue:
         df = df[~bad_rows]
         labels = labels[~bad_rows.to_numpy()]
     features = df.to_numpy(dtype=np.float32)
-    assert not pd.isna(df).any().any()
-    assert np.isfinite(features).all()
+    if pd.isna(df).any().any():
+        return jsonify({"error": "training data contains NaN values"}), 400
+    if not np.isfinite(features).all():
+        return jsonify({"error": "training data contains infinite values"}), 400
     if len(np.unique(labels)) < 2:
         return jsonify({"error": "labels must contain at least two classes"}), 400
     scaler = StandardScaler().fit(features)
@@ -206,6 +209,7 @@ def predict() -> ResponseReturnValue:
     data = request.get_json(force=True)
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
+        assert _model_builder is not None
         features = np.array(data.get("features", []), dtype=np.float32)
         if features.ndim == 1:
             features = features.reshape(1, -1)

@@ -1299,8 +1299,10 @@ class ModelBuilder:
             X = X[~bad_rows.to_numpy()]
             y = y[~bad_rows.to_numpy()]
             X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
-        assert not pd.isna(X_df).any().any()
-        assert np.isfinite(X_df.to_numpy()).all()
+        if pd.isna(X_df).any().any():
+            raise ValueError("Training data contains NaN values")
+        if not np.isfinite(X_df.to_numpy()).all():
+            raise ValueError("Training data contains infinite values")
         train_task = _train_model_remote
         if self.nn_framework in {"pytorch", "lightning"}:
             torch_mods = _get_torch_modules()
@@ -1475,8 +1477,10 @@ class ModelBuilder:
             X = X[~bad_rows.to_numpy()]
             y = y[~bad_rows.to_numpy()]
             X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
-        assert not pd.isna(X_df).any().any()
-        assert np.isfinite(X_df.to_numpy()).all()
+        if pd.isna(X_df).any().any():
+            raise ValueError("Training data contains NaN values")
+        if not np.isfinite(X_df.to_numpy()).all():
+            raise ValueError("Training data contains infinite values")
         existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
@@ -2197,8 +2201,10 @@ def train_route():
         df = df[~bad_rows]
         labels = labels[~bad_rows.to_numpy()]
     features = df.to_numpy(dtype=np.float32)
-    assert not pd.isna(df).any().any()
-    assert np.isfinite(features).all()
+    if pd.isna(df).any().any():
+        raise ValueError("Training data contains NaN values")
+    if not np.isfinite(features).all():
+        raise ValueError("Training data contains infinite values")
     if features.size == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
     if len(np.unique(labels)) < 2:

@@ -14,8 +14,6 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 import ccxt
 import json
 import os
-import time
-from pathlib import Path
 from dotenv import load_dotenv
 import logging
 import threading
