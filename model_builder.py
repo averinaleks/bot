@@ -111,6 +111,7 @@ try:  # pragma: no cover - optional dependency
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import brier_score_loss
     from sklearn.calibration import calibration_curve
+    from sklearn.pipeline import Pipeline
 except Exception as exc:  # pragma: no cover - missing sklearn
     logger.warning("sklearn import failed: %s", exc)
 
@@ -2179,17 +2180,25 @@ def _load_model() -> None:
             _model = None
 
 
-@api_app.route("/train", methods=["POST"])
-def train_route():
-    data = request.get_json(force=True)
-    features = np.array(data.get("features", []), dtype=np.float32)
-    labels = np.array(data.get("labels", []), dtype=np.float32)
-    if features.ndim == 1:
+def prepare_features(raw_features, raw_labels):
+    """Return validated feature and label arrays.
+
+    ``raw_features`` and ``raw_labels`` are converted to ``np.float32`` arrays and
+    reshaped to 2D. Rows containing NaN or infinite values are removed from both
+    features and labels. A ``ValueError`` is raised if invalid values remain after
+    cleaning.
+    """
+
+    features = np.array(raw_features, dtype=np.float32)
+    labels = np.array(raw_labels, dtype=np.float32)
+    if features.ndim == 0:
+        features = np.array([[features]], dtype=np.float32)
+    elif features.ndim == 1:
         features = features.reshape(-1, 1)
     else:
         features = features.reshape(len(features), -1)
     if features.size == 0 or len(features) != len(labels):
-        return jsonify({"error": "invalid training data"}), 400
+        return np.empty((0, 0), dtype=np.float32), np.empty(0, dtype=np.float32)
     df = pd.DataFrame(features)
     mask = pd.isna(df) | ~np.isfinite(df)
     if mask.any().any():
@@ -2205,12 +2214,33 @@ def train_route():
         raise ValueError("Training data contains NaN values")
     if not np.isfinite(features).all():
         raise ValueError("Training data contains infinite values")
+    return features, labels
+
+
+def fit_scaler(features: np.ndarray, labels: np.ndarray):
+    """Fit a ``StandardScaler``+model pipeline on ``features``."""
+
+    pipeline = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            ("model", LogisticRegression(multi_class="auto")),
+        ]
+    )
+    pipeline.fit(features, labels)
+    return pipeline
+
+
+@api_app.route("/train", methods=["POST"])
+def train_route():
+    data = request.get_json(force=True)
+    features, labels = prepare_features(
+        data.get("features", []), data.get("labels", [])
+    )
     if features.size == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
     if len(np.unique(labels)) < 2:
         return jsonify({"error": "labels must contain at least two classes"}), 400
-    model = LogisticRegression(multi_class="auto")
-    model.fit(features, labels)
+    model = fit_scaler(features, labels)
     joblib.dump(model, MODEL_FILE)
     global _model
     _model = model

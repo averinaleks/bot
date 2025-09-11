@@ -57,7 +57,12 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
 from bot import model_builder
-from bot.model_builder import ModelBuilder, _train_model_remote
+from bot.model_builder import (
+    ModelBuilder,
+    _train_model_remote,
+    prepare_features,
+    fit_scaler,
+)
 
 class DummyIndicators:
     def __init__(self, length):
@@ -197,6 +202,28 @@ async def test_training_loop_recovery(monkeypatch, tmp_path):
         await task
 
     assert call["n"] >= 2
+
+
+def test_pipeline_metric_drops_with_shuffled_indices():
+    """Проверяет, что метрика ухудшается при перемешивании индексов."""
+
+    rng = np.random.default_rng(0)
+    X_raw = [[float(i)] for i in range(50)]
+    y_raw = [0.0] * 25 + [1.0] * 25
+    features, labels = prepare_features(X_raw, y_raw)
+    X_train, X_test = features[:40], features[40:]
+    y_train, y_test = labels[:40], labels[40:]
+
+    model = fit_scaler(X_train, y_train)
+    preds = model.predict_proba(X_test)[:, 1]
+    baseline = brier_score_loss(y_test, preds)
+
+    shuffled = rng.permutation(len(y_train))
+    model_shuffled = fit_scaler(X_train, y_train[shuffled])
+    preds_shuffled = model_shuffled.predict_proba(X_test)[:, 1]
+    shuffled_score = brier_score_loss(y_test, preds_shuffled)
+
+    assert shuffled_score > baseline
 
 
 @pytest.mark.asyncio
