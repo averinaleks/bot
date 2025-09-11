@@ -1,6 +1,5 @@
 import asyncio
 import types
-import random
 
 import httpx
 import pytest
@@ -10,8 +9,9 @@ import http_client
 
 @pytest.mark.asyncio
 async def test_request_with_retry_metrics(monkeypatch):
-    # deterministic jitter
-    monkeypatch.setattr(random, "uniform", lambda a, b: 0)
+    async def _no_sleep(delay):
+        return None
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
     calls = {"n": 0}
 
     async def _request(method, url, **kwargs):
@@ -24,7 +24,7 @@ async def test_request_with_retry_metrics(monkeypatch):
     http_client.RETRY_METRICS.clear()
 
     resp = await http_client.request_with_retry(
-        "GET", "http://example", client=client, max_attempts=2, backoff_base=0
+        "GET", "http://example", client=client
     )
     assert resp.status_code == 200
     assert http_client.RETRY_METRICS["http://example"] == 1
