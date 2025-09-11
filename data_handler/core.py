@@ -88,10 +88,6 @@ class DataHandler:
         pdf = df.reset_index()
         if "timestamp" not in pdf.columns:
             pdf.rename(columns={pdf.columns[1]: "timestamp"}, inplace=True)
-
-        span = getattr(self.cfg, "ema30_period", 30)
-        pdf["ema30"] = pdf["close"].ewm(span=span, adjust=False).mean().shift(1)
-
         self.indicators[symbol] = types.SimpleNamespace(df=pdf)
         if getattr(self.cfg, "use_polars", False) and pl is not None:
             subset = pdf[["symbol", "timestamp", "open", "high", "low", "close", "volume"]]
