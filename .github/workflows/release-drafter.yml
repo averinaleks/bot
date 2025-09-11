@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  pull_request_target:
+    branches:
+      - main
     types: [opened, reopened, synchronize, labeled, unlabeled]
   workflow_dispatch:
 
@@ -17,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Update release draft
-        uses: release-drafter/release-drafter@7cf306f56b79636bb76931494ccf29fc893763bd # v6.1.0
+        uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
         env:
