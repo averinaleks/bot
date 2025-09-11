@@ -113,6 +113,11 @@ else:  # scikit-learn fallback used by tests
         return (MODEL_DIR / f"{safe}.pkl").resolve()
 
     def _load_state(symbol: str) -> None:
+        # Only allow models that actually exist in the MODEL_DIR.
+        allowed_symbols = {p.stem for p in MODEL_DIR.glob("*.pkl")}
+        if symbol not in allowed_symbols:
+            app.logger.warning("Refused to load model: %r is not whitelisted", symbol)
+            return
         path = _model_path(symbol)
         if path.exists():
             data = joblib.load(path)
