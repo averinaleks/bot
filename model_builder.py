@@ -1238,6 +1238,21 @@ class ModelBuilder:
             )
             return
         X, y = self.prepare_dataset(features)
+        # Проверка и очистка данных перед обучением
+        X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        mask = pd.isna(X_df) | ~np.isfinite(X_df)
+        if mask.any().any():
+            bad_rows = mask.any(axis=1)
+            logger.warning(
+                "Обнаружены некорректные значения в данных для %s: %s строк",
+                symbol,
+                int(bad_rows.sum()),
+            )
+            X = X[~bad_rows.to_numpy()]
+            y = y[~bad_rows.to_numpy()]
+            X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        assert not pd.isna(X_df).any().any()
+        assert np.isfinite(X_df.to_numpy()).all()
         train_task = _train_model_remote
         if self.nn_framework in {"pytorch", "lightning"}:
             torch_mods = _get_torch_modules()
@@ -1399,6 +1414,21 @@ class ModelBuilder:
             logger.warning("Недостаточно данных для дообучения %s", symbol)
             return
         X, y = self.prepare_dataset(features)
+        # Проверка и очистка данных перед обучением
+        X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        mask = pd.isna(X_df) | ~np.isfinite(X_df)
+        if mask.any().any():
+            bad_rows = mask.any(axis=1)
+            logger.warning(
+                "Обнаружены некорректные значения в данных для %s: %s строк",
+                symbol,
+                int(bad_rows.sum()),
+            )
+            X = X[~bad_rows.to_numpy()]
+            y = y[~bad_rows.to_numpy()]
+            X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        assert not pd.isna(X_df).any().any()
+        assert np.isfinite(X_df.to_numpy()).all()
         existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
@@ -2106,6 +2136,21 @@ def train_route():
         features = features.reshape(-1, 1)
     else:
         features = features.reshape(len(features), -1)
+    if features.size == 0 or len(features) != len(labels):
+        return jsonify({"error": "invalid training data"}), 400
+    df = pd.DataFrame(features)
+    mask = pd.isna(df) | ~np.isfinite(df)
+    if mask.any().any():
+        bad_rows = mask.any(axis=1)
+        logger.warning(
+            "Обнаружены некорректные значения в данных для API: %s строк",
+            int(bad_rows.sum()),
+        )
+        df = df[~bad_rows]
+        labels = labels[~bad_rows.to_numpy()]
+    features = df.to_numpy(dtype=np.float32)
+    assert not pd.isna(df).any().any()
+    assert np.isfinite(features).all()
     if features.size == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
     if len(np.unique(labels)) < 2:
