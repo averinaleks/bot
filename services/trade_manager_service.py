@@ -14,15 +14,19 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 import ccxt
 import json
 import os
+import time
+from pathlib import Path
 from dotenv import load_dotenv
 import logging
 import threading
+from utils import validate_host, safe_int
 
 load_dotenv()
 app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
+logger = logging.getLogger(__name__)
 exchange = None
 _init_lock = threading.Lock()
 
