@@ -39,5 +39,8 @@ jobs:
       - name: Lint (flake8)
         run: flake8 .
         continue-on-error: true
+      - name: Security lint (bandit)
+        run: bandit -r . -ll -x ./tests,./scripts,./gptoss_check
+        continue-on-error: true
       - name: Run tests (pytest)
-        run: pytest -q --maxfail=1 --disable-warnings
+        run: pytest -q --maxfail=1 --disable-warnings --cov=bot --cov-fail-under=0
