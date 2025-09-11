@@ -16,6 +16,7 @@ on:
   workflow_dispatch:
 
 env:
+  DOCKERFILE: Dockerfile.cpu
   GPT_OSS_API: http://127.0.0.1:8009
   GPT_OSS_TIMEOUT: 5
   TEST_MODE: "1"
@@ -103,6 +104,10 @@ jobs:
             rm server.pid
             test ! -f server.pid
           fi
+      - name: Run docker compose
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build --abort-on-container-exit --exit-code-from gptoss_check
+          docker compose -f docker-compose.yml -f docker-compose.cpu.yml down
       - name: Cleanup buildx
         if: always()
         run: docker buildx prune -af || true
