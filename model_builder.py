@@ -12,10 +12,19 @@ import asyncio
 import sys
 import re
 import math
+import json
+import platform
+import subprocess
 from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
 import importlib
+
+MODEL_DIR = Path(os.getenv("MODEL_DIR", ".")).resolve()
+if not MODEL_DIR.exists():
+    raise FileNotFoundError(f"MODEL_DIR {MODEL_DIR} does not exist")
+if not os.access(MODEL_DIR, os.W_OK):
+    raise PermissionError(f"MODEL_DIR {MODEL_DIR} is not writable")
 
 # Ensure required RL dependency is available before importing heavy modules
 if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
@@ -175,6 +184,46 @@ from flask import Flask, request, jsonify
 
 # Framework identifiers used for TensorFlow/Keras
 KERAS_FRAMEWORKS = {"tensorflow", "keras"}
+
+
+def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
+    """Сохранить модель и метаданные в каталог артефактов.
+
+    Модель сохраняется в ``MODEL_DIR/<symbol>/<timestamp>/model.pkl``.
+    Дополнительно создаётся ``meta.json`` с объединёнными метаданными и
+    сведениями об окружении.
+    """
+
+    timestamp = str(int(time.time()))
+    target_dir = MODEL_DIR / symbol / timestamp
+    target_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, target_dir / "model.pkl")
+
+    try:
+        code_version = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True
+        ).strip()
+    except Exception:
+        code_version = "unknown"
+
+    try:
+        pip_freeze = subprocess.check_output(
+            [sys.executable, "-m", "pip", "freeze"], text=True
+        ).splitlines()
+    except Exception:
+        pip_freeze = []
+
+    meta_env = {
+        "code_version": code_version,
+        "python_version": platform.python_version(),
+        "pip_freeze": pip_freeze,
+        "platform": platform.platform(),
+    }
+    meta_all = {**meta_env, **(meta or {})}
+    with open(target_dir / "meta.json", "w", encoding="utf-8") as f:
+        json.dump(meta_all, f, ensure_ascii=False, indent=2)
+
+    return target_dir
 
 if os.getenv("TEST_MODE") == "1":
     import types
