@@ -901,37 +901,41 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
-    env = _load_env()
-    price = await fetch_price(SYMBOL, env)
-    if price is None or price <= 0:
-        logger.warning("Invalid price for %s: %s", SYMBOL, price)
-        return
-    logger.info("Price for %s: %s", SYMBOL, price)
-    features = await build_feature_vector(price)
-    pdata = await get_prediction(SYMBOL, features, env)
-    model_signal = pdata.get("signal") if pdata else None
-    logger.info("Prediction: %s", model_signal)
-    if model_signal and should_trade(model_signal):
-        tp, sl, trailing_stop = _parse_trade_params(
-            pdata.get("tp") if pdata else None,
-            pdata.get("sl") if pdata else None,
-            pdata.get("trailing_stop") if pdata else None,
-        )
-        tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
-        logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
-        client = await get_http_client()
-        await send_trade_async(
-            client,
-            SYMBOL,
-            model_signal,
-            price,
-            env,
-            tp=tp,
-            sl=sl,
-            trailing_stop=trailing_stop,
-        )
-    elif model_signal:
-        logger.info("Trade skipped due to GPT advice")
+    try:
+        env = _load_env()
+        price = await fetch_price(SYMBOL, env)
+        if price is None or price <= 0:
+            logger.warning("Invalid price for %s: %s", SYMBOL, price)
+            return
+        logger.info("Price for %s: %s", SYMBOL, price)
+        features = await build_feature_vector(price)
+        pdata = await get_prediction(SYMBOL, features, env)
+        model_signal = pdata.get("signal") if pdata else None
+        logger.info("Prediction: %s", model_signal)
+        if model_signal and should_trade(model_signal):
+            tp, sl, trailing_stop = _parse_trade_params(
+                pdata.get("tp") if pdata else None,
+                pdata.get("sl") if pdata else None,
+                pdata.get("trailing_stop") if pdata else None,
+            )
+            tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
+            logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
+            client = await get_http_client()
+            await send_trade_async(
+                client,
+                SYMBOL,
+                model_signal,
+                price,
+                env,
+                tp=tp,
+                sl=sl,
+                trailing_stop=trailing_stop,
+            )
+        elif model_signal:
+            logger.info("Trade skipped due to GPT advice")
+    except Exception as exc:  # pragma: no cover - network/async errors
+        logger.exception("run_once_async failed: %s", exc)
+        await send_telegram_alert(f"run_once_async failed: {exc}")
 
 
 
@@ -945,10 +949,23 @@ async def main_async() -> None:
         env = _load_env()
         train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
         while True:
-            await run_once_async()
+            try:
+                await run_once_async()
+            except ServiceUnavailableError as exc:
+                logger.error("Service availability check failed: %s", exc)
+                await send_telegram_alert(
+                    f"Service availability check failed: {exc}"
+                )
+            except Exception as exc:
+                logger.exception("Error in main loop: %s", exc)
+                await send_telegram_alert(f"Error in main loop: {exc}")
             await asyncio.sleep(INTERVAL)
     except ServiceUnavailableError as exc:
         logger.error("Service availability check failed: %s", exc)
+        await send_telegram_alert(f"Service availability check failed: {exc}")
+    except Exception as exc:  # pragma: no cover - unexpected startup errors
+        logger.exception("Unexpected error in main_async: %s", exc)
+        await send_telegram_alert(f"Unexpected error in main_async: {exc}")
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
