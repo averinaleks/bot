@@ -27,7 +27,6 @@ alembic==1.16.4
     # via
     #   -r requirements.txt
     #   mlflow
-    #   optuna
 annotated-types==0.7.0
     # via
     #   -r requirements.txt
@@ -93,10 +92,8 @@ cloudpickle==3.1.1
     #   mlflow-skinny
     #   shap
     #   stable-baselines3
-colorlog==6.9.0
     # via
     #   -r requirements.txt
-    #   optuna
 contourpy==1.3.2
     # via
     #   -r requirements.txt
@@ -335,7 +332,6 @@ numpy==2.2.6
     #   matplotlib
     #   mlflow
     #   numba
-    #   optuna
     #   pandas
     #   patsy
     #   scikit-learn
@@ -368,7 +364,6 @@ opentelemetry-semantic-conventions==0.57b0
     # via
     #   -r requirements.txt
     #   opentelemetry-sdk
-optuna==4.5.0
     # via -r requirements.txt
 packaging==25.0
     # via
@@ -379,7 +374,6 @@ packaging==25.0
     #   matplotlib
     #   mlflow-skinny
     #   mlflow-tracing
-    #   optuna
     #   pytest
     #   pytorch-lightning
     #   ray
@@ -505,7 +499,6 @@ pyyaml==6.0.2
     #   -r requirements.txt
     #   huggingface-hub
     #   mlflow-skinny
-    #   optuna
     #   pytorch-lightning
     #   ray
     #   transformers
@@ -582,12 +575,11 @@ sqlalchemy==2.0.43
     #   -r requirements.txt
     #   alembic
     #   mlflow
-    #   optuna
 sqlparse==0.5.3
     # via
     #   -r requirements.txt
     #   mlflow-skinny
-stable-baselines3==2.7.0
+stable-baselines3==1.7.0
     # via -r requirements.txt
 starlette==0.47.2
     # via
@@ -633,7 +625,6 @@ tqdm==4.67.1
     #   -r requirements.txt
     #   huggingface-hub
     #   openai
-    #   optuna
     #   pytorch-lightning
     #   shap
     #   transformers

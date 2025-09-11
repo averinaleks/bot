@@ -4,3 +4,6 @@ pytest-cov
 requests-mock
 flask
 hypothesis>=6.90.0
+pytest-asyncio
+iniconfig
+tomli

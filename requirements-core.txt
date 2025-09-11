@@ -20,7 +20,6 @@ aiosignal==1.4.0
 alembic==1.16.4
     # via
     #   mlflow
-    #   optuna
 annotated-types==0.7.0
     # via pydantic
 anyio==4.10.0
@@ -70,8 +69,6 @@ cloudpickle==3.1.1
     #   mlflow-skinny
     #   shap
     #   stable-baselines3
-colorlog==6.9.0
-    # via optuna
 contourpy==1.3.3
     # via matplotlib
 cryptography==45.0.6
@@ -241,7 +238,6 @@ numpy==2.2.6
     #   matplotlib
     #   mlflow
     #   numba
-    #   optuna
     #   pandas
     #   patsy
     #   scikit-learn
@@ -267,7 +263,6 @@ opentelemetry-sdk==1.36.0
     #   mlflow-tracing
 opentelemetry-semantic-conventions==0.57b0
     # via opentelemetry-sdk
-optuna==4.5.0
     # via -r requirements-core.in
 packaging==25.0
     # via
@@ -277,7 +272,6 @@ packaging==25.0
     #   matplotlib
     #   mlflow-skinny
     #   mlflow-tracing
-    #   optuna
     #   pytest
     #   pytorch-lightning
     #   ray
@@ -371,7 +365,6 @@ pyyaml==6.0.2
     # via
     #   huggingface-hub
     #   mlflow-skinny
-    #   optuna
     #   pytorch-lightning
     #   ray
     #   transformers
@@ -431,10 +424,9 @@ sqlalchemy==2.0.43
     # via
     #   alembic
     #   mlflow
-    #   optuna
 sqlparse==0.5.3
     # via mlflow-skinny
-stable-baselines3==2.7.0
+stable-baselines3==1.7.0
     # via -r requirements-core.in
 starlette==0.47.3
     # via
@@ -466,7 +458,6 @@ tqdm==4.67.1
     # via
     #   huggingface-hub
     #   openai
-    #   optuna
     #   pytorch-lightning
     #   shap
     #   transformers

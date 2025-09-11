@@ -1780,41 +1780,6 @@ class RLAgent:
             or len(features_df) < 2
         ):
             return
-        bc_dataset = None
-        if self.config.get("rl_use_imitation", False):
-            base_model = self.model_builder.predictive_models.get(symbol)
-            if base_model is not None:
-                lstm_feats = await self.model_builder.prepare_lstm_features(
-                    symbol, indicators
-                )
-                tsteps = self.config.get("lstm_timesteps", 60)
-                if len(lstm_feats) > tsteps:
-                    seqs = np.array(
-                        [
-                            lstm_feats[i : i + tsteps]
-                            for i in range(len(lstm_feats) - tsteps)
-                        ]
-                    )
-                    states = features_df.iloc[tsteps - 1 :].to_numpy(dtype=np.float32)
-                    torch_mods = _get_torch_modules()
-                    torch = torch_mods["torch"]
-                    device = self.model_builder.device
-                    base_model.eval()
-                    with torch.no_grad():
-                        preds = (
-                            base_model(
-                                torch.tensor(seqs, dtype=torch.float32, device=device)
-                            )
-                            .squeeze()
-                            .float()
-                            .cpu()
-                            .numpy()
-                        )
-                    thr = self.config.get("base_probability_threshold", 0.6)
-                    actions = np.where(preds > thr, 1, np.where(preds < 1 - thr, 2, 0))
-                    actions = actions.astype(np.int64)
-                    states = states[: len(actions)]
-                    bc_dataset = (states, actions)
         algo = self.config.get("rl_model", "PPO").upper()
         framework = self.config.get("rl_framework", "stable_baselines3").lower()
         timesteps = self.config.get("rl_timesteps", 10000)
@@ -1855,48 +1820,6 @@ class RLAgent:
                 model = DQN("MlpPolicy", env, verbose=0)
             else:
                 model = PPO("MlpPolicy", env, verbose=0)
-            if bc_dataset is not None:
-                states, actions = bc_dataset
-                torch_mods = _get_torch_modules()
-                torch = torch_mods["torch"]
-                DataLoader = torch_mods["DataLoader"]
-                TensorDataset = torch_mods["TensorDataset"]
-                nn = torch_mods["nn"]
-                dataset = TensorDataset(
-                    torch.tensor(states, dtype=torch.float32),
-                    torch.tensor(actions, dtype=torch.long),
-                )
-                num_workers = min(4, os.cpu_count() or 1)
-                pin_memory = is_cuda_available()
-                loader = DataLoader(
-                    dataset,
-                    batch_size=64,
-                    shuffle=True,
-                    num_workers=num_workers,
-                    pin_memory=pin_memory,
-                )
-                policy = model.policy
-                device = policy.device
-                optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
-                criterion = nn.CrossEntropyLoss()
-                policy.train()
-                for _ in range(5):
-                    for b_states, b_actions in loader:
-                        b_states = b_states.to(device)
-                        b_actions = b_actions.to(device)
-                        if algo == "DQN":
-                            logits = policy.q_net(b_states)
-                        else:
-                            features = policy.extract_features(
-                                b_states, policy.pi_features_extractor
-                            )
-                            latent_pi = policy.mlp_extractor.forward_actor(features)
-                            logits = policy.action_net(latent_pi)
-                        loss = criterion(logits, b_actions)
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
-                policy.eval()
             model.learn(total_timesteps=timesteps)
             self.models[symbol] = model
         logger.info("RL-модель обучена для %s", symbol)
@@ -1918,15 +1841,6 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
-            action, _ = model.predict(obs, deterministic=True)
-        action = int(action.item())
-        mapping = {
-            0: "hold",
-            1: "open_long",
-            2: "open_short",
-            3: "close",
-        }
-        return mapping.get(action, "hold")
 
 
 # ----------------------------------------------------------------------
