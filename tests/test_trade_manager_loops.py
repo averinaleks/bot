@@ -149,6 +149,7 @@ async def test_manage_positions_recovery(monkeypatch):
     ], names=['symbol', 'timestamp'])
     tm.positions = pd.DataFrame({
         'side': ['buy'],
+        'position': [1],
         'size': [1],
         'entry_price': [100],
         'tp_multiplier': [2],
@@ -244,5 +245,26 @@ async def test_process_symbol_data_fresh_error(monkeypatch):
 
     assert call['n'] >= 2
     assert dh.exchange.orders == []
+
+
+@pytest.mark.asyncio
+async def test_open_and_close_short_loop():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    async def fake_size(*a, **k):
+        return 1.0
+
+    async def fake_place(*a, **k):
+        return {"id": "1"}
+
+    tm.calculate_position_size = fake_size
+    tm.place_order = fake_place
+
+    await tm.open_position('BTCUSDT', 'sell', 100, {})
+    await tm.close_position('BTCUSDT', 90, 'Manual')
+
+    assert len(tm.returns_by_symbol['BTCUSDT']) == 1
+    assert tm.returns_by_symbol['BTCUSDT'][0][1] > 0
 
 sys.modules.pop('utils', None)

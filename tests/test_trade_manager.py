@@ -630,6 +630,27 @@ async def test_close_position_updates_returns_and_sharpe_ratio():
     assert sharpe == pytest.approx(expected)
 
 
+@pytest.mark.asyncio
+async def test_open_and_close_short_position():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "sell", 100, {})
+    # verify stop loss for short
+    pos = tm.positions.xs("BTCUSDT", level="symbol").iloc[0]
+    assert pos["position"] == -1
+    assert pos["stop_loss_price"] == pytest.approx(101.0)
+    await tm.close_position("BTCUSDT", 90, "Manual")
+
+    assert len(tm.returns_by_symbol["BTCUSDT"]) == 1
+    assert tm.returns_by_symbol["BTCUSDT"][0][1] > 0
+
+
 class DummyModel:
     def eval(self):
         pass
@@ -730,6 +751,50 @@ async def test_evaluate_signal_handles_sync_async_ema(monkeypatch, async_ema):
     signal = await tm.evaluate_signal("BTCUSDT")
     assert called["ok"]
     assert signal in ("buy", "sell", None)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_signal_considers_gpt(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {"BTCUSDT": DummyModel()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    cfg = BotConfig(
+        lstm_timesteps=2,
+        cache_dir=tempfile.mkdtemp(),
+        transformer_weight=0.4,
+        ema_weight=0.0,
+        gpt_weight=0.6,
+    )
+    tm = TradeManager(cfg, dh, mb, None, None)
+    monkeypatch.setattr(tm, "evaluate_ema_condition", lambda *a, **k: False)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    from bot import trading_bot
+    trading_bot.GPT_ADVICE.signal = "sell"
+    signal = await tm.evaluate_signal("BTCUSDT")
+    trading_bot.GPT_ADVICE.signal = None
+    assert signal == "sell"
 
 
 @pytest.mark.asyncio
@@ -1093,6 +1158,7 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],
@@ -1154,6 +1220,7 @@ async def test_exit_signal_triggers_reverse_trade(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],
@@ -1226,6 +1293,7 @@ async def test_rl_close_action(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],

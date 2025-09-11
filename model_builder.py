@@ -183,9 +183,7 @@ except ImportError as e:  # pragma: no cover - optional dependency
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
 from flask import Flask, request, jsonify
-
-# Framework identifiers used for TensorFlow/Keras
-KERAS_FRAMEWORKS = {"tensorflow", "keras"}
+from models.architectures import create_model, KERAS_FRAMEWORKS
 
 
 def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
@@ -286,17 +284,6 @@ if os.getenv("TEST_MODE") == "1":
     sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
     sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
 
-    catalyst_mod = types.ModuleType("catalyst")
-    dl_mod = types.ModuleType("catalyst.dl")
-
-    class _Runner:
-        def train(self, *a, **k):
-            pass
-
-    dl_mod.Runner = _Runner
-    catalyst_mod.dl = dl_mod
-    sys.modules.setdefault("catalyst", catalyst_mod)
-    sys.modules.setdefault("catalyst.dl", dl_mod)
 try:
     from stable_baselines3 import PPO, DQN
     from stable_baselines3.common.vec_env import DummyVecEnv
@@ -312,7 +299,7 @@ _torch_modules = None
 
 
 def _get_torch_modules():
-    """Lazy import torch and define neural network classes."""
+    """Lazy import torch and related utilities."""
 
     global _torch_modules
     if _torch_modules is not None:
@@ -322,6 +309,18 @@ def _get_torch_modules():
         import torch
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
+        from models.architectures import _torch_architectures
+
+        Net, CNNGRU, TFT = _torch_architectures()
+        _torch_modules = {
+            "torch": torch,
+            "nn": nn,
+            "DataLoader": DataLoader,
+            "TensorDataset": TensorDataset,
+            "Net": Net,
+            "CNNGRU": CNNGRU,
+            "TemporalFusionTransformer": TFT,
+        }
     except Exception:
         import types
         from contextlib import nullcontext
@@ -362,176 +361,23 @@ def _get_torch_modules():
         )
         nn = types.SimpleNamespace(Module=_DummyModule, MSELoss=_noop, BCELoss=_noop)
         DataLoader = TensorDataset = object
+        class _Dummy(nn.Module if hasattr(nn, "Module") else object):
+            def __init__(self, *a, **k):
+                pass
 
-        class Net(_DummyModule):
-            pass
-
-        CNNGRU = TemporalFusionTransformer = Net
+            def l2_regularization(self):
+                return 0.0
 
         _torch_modules = {
             "torch": torch,
             "nn": nn,
             "DataLoader": DataLoader,
             "TensorDataset": TensorDataset,
-            "Net": Net,
-            "CNNGRU": CNNGRU,
-            "TemporalFusionTransformer": TemporalFusionTransformer,
+            "Net": _Dummy,
+            "CNNGRU": _Dummy,
+            "TemporalFusionTransformer": _Dummy,
         }
-        return _torch_modules
 
-    class CNNGRU(nn.Module):
-        """Conv1D + GRU variant."""
-
-        def __init__(
-            self,
-            input_size,
-            hidden_size,
-            num_layers,
-            dropout,
-            conv_channels=32,
-            kernel_size=3,
-            l2_lambda=1e-5,
-            regression=False,
-        ):
-            super().__init__()
-            self.hidden_size = hidden_size
-            self.num_layers = num_layers
-            self.l2_lambda = l2_lambda
-            padding = kernel_size // 2
-            self.conv = nn.Conv1d(
-                input_size, conv_channels, kernel_size=kernel_size, padding=padding
-            )
-            self.relu = nn.ReLU()
-            self.dropout = nn.Dropout(dropout)
-            self.gru = nn.GRU(
-                conv_channels,
-                hidden_size,
-                num_layers,
-                batch_first=True,
-                dropout=dropout,
-            )
-            self.attn = nn.Linear(hidden_size, 1)
-            self.fc = nn.Linear(hidden_size, 1)
-            self.act = nn.Identity() if regression else nn.Sigmoid()
-
-        def forward(self, x):
-            x = x.permute(0, 2, 1)
-            x = self.conv(x)
-            x = self.relu(x)
-            x = self.dropout(x)
-            x = x.permute(0, 2, 1)
-            h0 = torch.zeros(
-                self.num_layers, x.size(0), self.hidden_size, device=x.device
-            )
-            out, _ = self.gru(x, h0)
-            attn_weights = torch.softmax(self.attn(out), dim=1)
-            context = (out * attn_weights).sum(dim=1)
-            context = self.dropout(context)
-            out = self.fc(context)
-            return self.act(out)
-
-        def l2_regularization(self):
-            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
-
-    class Net(nn.Module):
-        """Simple multilayer perceptron."""
-
-        def __init__(
-            self, input_size, hidden_sizes=(128, 64), dropout=0.2, l2_lambda=1e-5, regression=False
-        ):
-            super().__init__()
-            self.l2_lambda = l2_lambda
-            self.fc1 = nn.Linear(input_size, hidden_sizes[0])
-            self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
-            self.fc3 = nn.Linear(hidden_sizes[1], 1)
-            self.relu = nn.ReLU()
-            self.dropout = nn.Dropout(dropout)
-            self.act = nn.Identity() if regression else nn.Sigmoid()
-
-        def forward(self, x):
-            x = self.fc1(x)
-            x = self.relu(x)
-            x = self.dropout(x)
-            x = self.fc2(x)
-            x = self.relu(x)
-            x = self.dropout(x)
-            x = self.fc3(x)
-            return self.act(x)
-
-        def l2_regularization(self):
-            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
-
-    class PositionalEncoding(nn.Module):
-        """Standard sinusoidal positional encoding."""
-
-        def __init__(self, d_model, dropout=0.1, max_len=5000):
-            super().__init__()
-            self.dropout = nn.Dropout(p=dropout)
-            pe = torch.zeros(max_len, d_model)
-            position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-            div_term = torch.exp(
-                torch.arange(0, d_model, 2, dtype=torch.float)
-                * (-(np.log(10000.0) / d_model))
-            )
-            pe[:, 0::2] = torch.sin(position * div_term)
-            pe[:, 1::2] = torch.cos(position * div_term)
-            pe = pe.unsqueeze(0)
-            self.register_buffer("pe", pe)
-
-        def forward(self, x):
-            x = x + self.pe[:, : x.size(1)]
-            return self.dropout(x)
-
-    class TemporalFusionTransformer(nn.Module):
-        """Transformer encoder with positional encoding."""
-
-        def __init__(
-            self,
-            input_size,
-            d_model=64,
-            nhead=4,
-            num_layers=2,
-            dropout=0.1,
-            l2_lambda=1e-5,
-            regression=False,
-        ):
-            super().__init__()
-            self.l2_lambda = l2_lambda
-            self.input_proj = nn.Linear(input_size, d_model)
-            self.pos_encoder = PositionalEncoding(d_model, dropout)
-            encoder_layer = nn.TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=d_model * 4,
-                dropout=dropout,
-                batch_first=True,
-            )
-            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
-            self.dropout = nn.Dropout(dropout)
-            self.fc = nn.Linear(d_model, 1)
-            self.act = nn.Identity() if regression else nn.Sigmoid()
-
-        def forward(self, x):
-            x = self.input_proj(x)
-            x = self.pos_encoder(x)
-            x = self.transformer(x)
-            x = x.mean(dim=1)
-            x = self.dropout(x)
-            x = self.fc(x)
-            return self.act(x)
-
-        def l2_regularization(self):
-            return self.l2_lambda * sum(p.pow(2.0).sum() for p in self.parameters())
-
-    _torch_modules = {
-        "torch": torch,
-        "nn": nn,
-        "DataLoader": DataLoader,
-        "TensorDataset": TensorDataset,
-        "CNNGRU": CNNGRU,
-        "TemporalFusionTransformer": TemporalFusionTransformer,
-        "Net": Net,
-    }
     return _torch_modules
 
 
@@ -599,7 +445,6 @@ def _train_model_keras(
     if framework not in KERAS_FRAMEWORKS:
         raise ValueError("Keras framework required")
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-    import tensorflow as tf
     from tensorflow import keras
 
     seed = 0
@@ -613,29 +458,8 @@ def _train_model_keras(
     except Exception:  # pragma: no cover - torch may be unavailable
         pass
 
-    inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
-    if model_type == "mlp":
-        x = keras.layers.Flatten()(inputs)
-        x = keras.layers.Dense(128, activation="relu")(x)
-        x = keras.layers.Dropout(0.2)(x)
-        x = keras.layers.Dense(64, activation="relu")(x)
-    else:
-        x = keras.layers.Conv1D(32, 3, padding="same", activation="relu")(inputs)
-        x = keras.layers.Dropout(0.2)(x)
-        if model_type == "gru":
-            x = keras.layers.GRU(64, return_sequences=True)(x)
-            attn = keras.layers.Dense(1, activation="softmax")(x)
-            x = keras.layers.Multiply()([x, attn])
-            x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
-        elif model_type in {"tft", "transformer"}:
-            attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-            x = keras.layers.GlobalAveragePooling1D()(attn)
-        else:
-            attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-            x = keras.layers.GlobalAveragePooling1D()(attn)
-    activation = None if prediction_target == "pnl" else "sigmoid"
-    outputs = keras.layers.Dense(1, activation=activation)(x)
-    model = keras.Model(inputs, outputs)
+    input_dim = X.shape[1] * X.shape[2] if model_type == "mlp" else X.shape[2]
+    model = create_model(model_type, framework, input_dim, regression=prediction_target == "pnl")
     if freeze_base_layers:
         _freeze_keras_base_layers(model, model_type, framework)
     loss = "mse" if prediction_target == "pnl" else "binary_crossentropy"
@@ -689,9 +513,6 @@ def _train_model_lightning(
     nn = torch_mods["nn"]
     DataLoader = torch_mods["DataLoader"]
     TensorDataset = torch_mods["TensorDataset"]
-    Net = torch_mods["Net"]
-    CNNGRU = torch_mods["CNNGRU"]
-    TFT = torch_mods["TemporalFusionTransformer"]
 
     seed = 0
     np.random.seed(seed)
@@ -735,15 +556,8 @@ def _train_model_lightning(
         )
 
         pt = prediction_target
-        if model_type == "mlp":
-            input_dim = X.shape[1] * X.shape[2]
-            net = Net(input_dim, regression=pt == "pnl")
-        elif model_type == "gru":
-            net = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
-        elif model_type in {"tft", "transformer"}:
-            net = TFT(X.shape[2], regression=pt == "pnl")
-        else:
-            net = TFT(X.shape[2], regression=pt == "pnl")
+        input_dim = X.shape[1] * X.shape[2] if model_type == "mlp" else X.shape[2]
+        net = create_model(model_type, "pytorch", input_dim, regression=pt == "pnl")
         if freeze_base_layers:
             _freeze_torch_base_layers(net, model_type)
 
@@ -898,9 +712,6 @@ def _train_model_remote(
     nn = torch_mods["nn"]
     DataLoader = torch_mods["DataLoader"]
     TensorDataset = torch_mods["TensorDataset"]
-    Net = torch_mods["Net"]
-    CNNGRU = torch_mods["CNNGRU"]
-    TFT = torch_mods["TemporalFusionTransformer"]
 
     seed = 0
     np.random.seed(seed)
@@ -960,15 +771,8 @@ def _train_model_remote(
         )
 
         pt = prediction_target
-        if model_type == "mlp":
-            input_dim = X.shape[1] * X.shape[2]
-            model = Net(input_dim, regression=pt == "pnl")
-        elif model_type == "gru":
-            model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
-        elif model_type in {"tft", "transformer"}:
-            model = TFT(X.shape[2], regression=pt == "pnl")
-        else:
-            model = TFT(X.shape[2], regression=pt == "pnl")
+        input_dim = X.shape[1] * X.shape[2] if model_type == "mlp" else X.shape[2]
+        model = create_model(model_type, "pytorch", input_dim, regression=pt == "pnl")
         if initial_state is not None:
             model.load_state_dict(initial_state)
         if freeze_base_layers:
@@ -1128,9 +932,6 @@ class ModelBuilder:
                 self.scalers = state.get("scalers", {})
                 if self.nn_framework == "pytorch":
                     torch_mods = _get_torch_modules()
-                    Net = torch_mods["Net"]
-                    CNNGRU = torch_mods["CNNGRU"]
-                    TFT = torch_mods["TemporalFusionTransformer"]
                     for symbol, sd in state.get("lstm_models", {}).items():
                         scaler = self.scalers.get(symbol)
                         input_size = (
@@ -1138,19 +939,18 @@ class ModelBuilder:
                             if scaler
                             else self.config["lstm_timesteps"]
                         )
-                        mt = self.model_type
                         pt = self.config.get("prediction_target", "direction")
-                        if mt == "mlp":
-                            model = Net(
-                                input_size * self.config["lstm_timesteps"],
-                                regression=pt == "pnl",
-                            )
-                        elif mt == "gru":
-                            model = CNNGRU(input_size, 64, 2, 0.2, regression=pt == "pnl")
-                        elif mt in {"tft", "transformer"}:
-                            model = TFT(input_size, regression=pt == "pnl")
-                        else:
-                            model = TFT(input_size, regression=pt == "pnl")
+                        model_input = (
+                            input_size * self.config["lstm_timesteps"]
+                            if self.model_type == "mlp"
+                            else input_size
+                        )
+                        model = create_model(
+                            self.model_type,
+                            self.nn_framework,
+                            model_input,
+                            regression=pt == "pnl",
+                        )
                         model.load_state_dict(sd)
                         model.to(self.device)
                         self.predictive_models[symbol] = model
@@ -1166,36 +966,18 @@ class ModelBuilder:
                                 if scaler
                                 else self.config["lstm_timesteps"]
                             )
-                            if self.model_type == "mlp":
-                                inputs = keras.Input(
-                                    shape=(input_size * self.config["lstm_timesteps"],)
-                                )
-                                x = keras.layers.Dense(128, activation="relu")(inputs)
-                                x = keras.layers.Dropout(0.2)(x)
-                                x = keras.layers.Dense(64, activation="relu")(x)
-                            else:
-                                inputs = keras.Input(
-                                    shape=(self.config["lstm_timesteps"], input_size)
-                                )
-                                x = keras.layers.Conv1D(
-                                    32, 3, padding="same", activation="relu"
-                                )(inputs)
-                                x = keras.layers.Dropout(0.2)(x)
-                                if self.model_type == "gru":
-                                    x = keras.layers.GRU(64, return_sequences=True)(x)
-                                    attn = keras.layers.Dense(1, activation="softmax")(x)
-                                    x = keras.layers.Multiply()([x, attn])
-                                    x = keras.layers.Lambda(
-                                        lambda t: keras.backend.sum(t, axis=1)
-                                    )(x)
-                                elif self.model_type in {"tft", "transformer"}:
-                                    attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                                    x = keras.layers.GlobalAveragePooling1D()(attn)
-                                else:
-                                    attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                                    x = keras.layers.GlobalAveragePooling1D()(attn)
-                            outputs = keras.layers.Dense(1, activation="sigmoid")(x)
-                            model = keras.Model(inputs, outputs)
+                            model_input = (
+                                input_size * self.config["lstm_timesteps"]
+                                if self.model_type == "mlp"
+                                else input_size
+                            )
+                            model = create_model(
+                                self.model_type,
+                                self.nn_framework,
+                                model_input,
+                                regression=self.config.get("prediction_target", "direction")
+                                == "pnl",
+                            )
                             model.set_weights(weights)
                             self.predictive_models[symbol] = model
                     else:
@@ -1255,6 +1037,7 @@ class ModelBuilder:
         def _maybe_add(name: str, series: pd.Series, window_key: str | None = None):
             """Add indicator ``name`` if sufficient history is available."""
             if not isinstance(series, pd.Series):
+                logger.debug("Missing indicator %s for %s", name, symbol)
                 return
             if window_key is not None:
                 window = self.config.get(window_key, 0)
@@ -1405,52 +1188,27 @@ class ModelBuilder:
         logger.debug("_train_model_remote completed for %s", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-            import tensorflow as tf
             from tensorflow import keras
 
-            def build_model():
-                inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
-                if self.model_type == "mlp":
-                    x = keras.layers.Flatten()(inputs)
-                    x = keras.layers.Dense(128, activation="relu")(x)
-                    x = keras.layers.Dropout(0.2)(x)
-                    x = keras.layers.Dense(64, activation="relu")(x)
-                else:
-                    x = keras.layers.Conv1D(32, 3, padding="same", activation="relu")(
-                        inputs
-                    )
-                    x = keras.layers.Dropout(0.2)(x)
-                    if self.model_type == "gru":
-                        x = keras.layers.GRU(64, return_sequences=True)(x)
-                        attn = keras.layers.Dense(1, activation="softmax")(x)
-                        x = keras.layers.Multiply()([x, attn])
-                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
-                    elif self.model_type in {"tft", "transformer"}:
-                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                        x = keras.layers.GlobalAveragePooling1D()(attn)
-                    else:
-                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                        x = keras.layers.GlobalAveragePooling1D()(attn)
-                outputs = keras.layers.Dense(1, activation="sigmoid")(x)
-                return keras.Model(inputs, outputs)
-
-            model = build_model()
+            input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
+            model = create_model(
+                self.model_type,
+                self.nn_framework,
+                input_dim,
+                regression=self.config.get("prediction_target", "direction")
+                == "pnl",
+            )
             model.set_weights(model_state)
         else:
             torch_mods = _get_torch_modules()
-            Net = torch_mods["Net"]
-            CNNGRU = torch_mods["CNNGRU"]
-            TFT = torch_mods["TemporalFusionTransformer"]
-            TFT = torch_mods["TemporalFusionTransformer"]
             pt = self.config.get("prediction_target", "direction")
-            if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2], regression=pt == "pnl")
-            elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
-            elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2], regression=pt == "pnl")
-            else:
-                model = TFT(X.shape[2], regression=pt == "pnl")
+            input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
+            model = create_model(
+                self.model_type,
+                self.nn_framework,
+                input_dim,
+                regression=pt == "pnl",
+            )
             model.load_state_dict(model_state)
             model.to(self.device)
         if self.config.get("prediction_target", "direction") == "pnl":
@@ -1588,51 +1346,27 @@ class ModelBuilder:
         logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-            import tensorflow as tf
             from tensorflow import keras
 
-            def build_model():
-                inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
-                if self.model_type == "mlp":
-                    x = keras.layers.Flatten()(inputs)
-                    x = keras.layers.Dense(128, activation="relu")(x)
-                    x = keras.layers.Dropout(0.2)(x)
-                    x = keras.layers.Dense(64, activation="relu")(x)
-                else:
-                    x = keras.layers.Conv1D(32, 3, padding="same", activation="relu")(
-                        inputs
-                    )
-                    x = keras.layers.Dropout(0.2)(x)
-                    if self.model_type == "gru":
-                        x = keras.layers.GRU(64, return_sequences=True)(x)
-                        attn = keras.layers.Dense(1, activation="softmax")(x)
-                        x = keras.layers.Multiply()([x, attn])
-                        x = keras.layers.Lambda(lambda t: tf.reduce_sum(t, axis=1))(x)
-                    elif self.model_type in {"tft", "transformer"}:
-                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                        x = keras.layers.GlobalAveragePooling1D()(attn)
-                    else:
-                        attn = keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
-                        x = keras.layers.GlobalAveragePooling1D()(attn)
-                outputs = keras.layers.Dense(1, activation="sigmoid")(x)
-                return keras.Model(inputs, outputs)
-
-            model = build_model()
+            input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
+            model = create_model(
+                self.model_type,
+                self.nn_framework,
+                input_dim,
+                regression=self.config.get("prediction_target", "direction")
+                == "pnl",
+            )
             model.set_weights(model_state)
         else:
             torch_mods = _get_torch_modules()
-            Net = torch_mods["Net"]
-            CNNGRU = torch_mods["CNNGRU"]
-            TFT = torch_mods["TemporalFusionTransformer"]
             pt = self.config.get("prediction_target", "direction")
-            if self.model_type == "mlp":
-                model = Net(X.shape[1] * X.shape[2], regression=pt == "pnl")
-            elif self.model_type == "gru":
-                model = CNNGRU(X.shape[2], 64, 2, 0.2, regression=pt == "pnl")
-            elif self.model_type in {"tft", "transformer"}:
-                model = TFT(X.shape[2], regression=pt == "pnl")
-            else:
-                model = TFT(X.shape[2], regression=pt == "pnl")
+            input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
+            model = create_model(
+                self.model_type,
+                self.nn_framework,
+                input_dim,
+                regression=pt == "pnl",
+            )
             model.load_state_dict(model_state)
             model.to(self.device)
         if self.config.get("prediction_target", "direction") == "pnl":
@@ -1943,10 +1677,7 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
-        self.position = 0  # 1 for long position
-        self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
-        # hold, open long, close
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -1966,9 +1697,8 @@ class TradingEnv(gym.Env if gym else object):
         done = False
         reward = 0.0
         prev_position = self.position
-        if action == 1:  # go long
+        if action == 1:  # открыть лонг
             self.position = 1
-        elif action == 2:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -1976,7 +1706,7 @@ class TradingEnv(gym.Env if gym else object):
                 self.df["close"].iloc[self.current_step + 1]
                 - self.df["close"].iloc[self.current_step]
             )
-            active_position = -prev_position if action == 2 else self.position
+            active_position = -prev_position if action == 3 else self.position
             reward = price_diff * active_position
             self.balance += reward
             if self.balance > self.max_balance:
@@ -2078,41 +1808,6 @@ class RLAgent:
             except (ImportError, RuntimeError, ValueError) as e:
                 logger.exception("Ошибка RLlib-обучения %s: %s", symbol, e)
                 raise
-        elif framework == "catalyst":
-            try:
-                from catalyst import dl
-
-                torch_mods = _get_torch_modules()
-                torch = torch_mods["torch"]
-                dataset = torch.utils.data.TensorDataset(
-                    torch.tensor(features_df.values, dtype=torch.float32)
-                )
-                num_workers = min(4, os.cpu_count() or 1)
-                pin_memory = is_cuda_available()
-                loader = torch.utils.data.DataLoader(
-                    dataset,
-                    batch_size=32,
-                    num_workers=num_workers,
-                    pin_memory=pin_memory,
-                )
-
-                model = torch.nn.Linear(features_df.shape[1], 1)
-
-                class Runner(dl.Runner):
-                    def predict_batch(self, batch):
-                        x = batch[0]
-                        return model(x)
-
-                runner = Runner()
-                runner.train(
-                    model=model,
-                    loaders={"train": loader},
-                    num_epochs=max(1, timesteps // 1000),
-                )
-                self.models[symbol] = model
-            except (ImportError, RuntimeError, ValueError) as e:
-                logger.exception("Ошибка Catalyst-обучения %s: %s", symbol, e)
-                raise
         else:
             if not SB3_AVAILABLE:
                 logger.warning(
@@ -2146,16 +1841,6 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
-            action, _ = model.policy.predict(obs, deterministic=True)
-        action = action.item()
-        action = int(action)
-        if action == 1:
-            return "open_long"
-        if action == 2:
-            return "open_short"
-        if action == 3:
-            return "close"
-        return "hold"
 
 
 # ----------------------------------------------------------------------

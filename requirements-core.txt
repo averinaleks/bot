@@ -41,8 +41,6 @@ cachetools==5.5.2
     #   google-auth
     #   mlflow-skinny
     #   mlflow-tracing
-catalyst==21.5
-    # via -r requirements-core.in
 ccxt==4.5.3
     # via -r requirements-core.in
 ccxtpro==1.0.1
@@ -234,7 +232,6 @@ numba==0.61.2
 numpy==2.2.6
     # via
     #   -r requirements-core.in
-    #   catalyst
     #   contourpy
     #   gymnasium
     #   imbalanced-learn
@@ -366,7 +363,6 @@ pytz==2025.2
     # via pandas
 pyyaml==6.0.2
     # via
-    #   catalyst
     #   huggingface-hub
     #   mlflow-skinny
     #   pytorch-lightning
@@ -445,7 +441,6 @@ ta==0.11.0
 tenacity==9.1.2
     # via -r requirements-core.in
 tensorboardx==2.6.4
-    # via catalyst
 threadpoolctl==3.6.0
     # via
     #   imbalanced-learn
@@ -454,7 +449,6 @@ tokenizers==0.21.4
     # via transformers
 torch==2.8.0
     # via
-    #   catalyst
     #   pytorch-lightning
     #   stable-baselines3
     #   torchmetrics
@@ -462,7 +456,6 @@ torchmetrics==1.8.1
     # via pytorch-lightning
 tqdm==4.67.1
     # via
-    #   catalyst
     #   huggingface-hub
     #   openai
     #   pytorch-lightning

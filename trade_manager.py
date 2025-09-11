@@ -248,6 +248,7 @@ class TradeManager:
             columns=[
                 "symbol",
                 "side",
+                "position",
                 "size",
                 "entry_price",
                 "tp_multiplier",
@@ -754,16 +755,18 @@ class TradeManager:
                 return
             # Use an explicit timezone-aware timestamp for the position index
             timestamp = pd.Timestamp.now(tz="UTC")
+            pos_sign = 1 if side == "buy" else -1
             new_position = {
                 "symbol": symbol,
                 "side": side,
+                "position": pos_sign,
                 "size": size,
                 "entry_price": price,
                 "tp_multiplier": tp_mult,
                 "sl_multiplier": sl_mult,
                 "stop_loss_price": stop_loss_price,
-                "highest_price": price if side == "buy" else float("inf"),
-                "lowest_price": price if side == "sell" else 0.0,
+                "highest_price": price if pos_sign == 1 else float("inf"),
+                "lowest_price": price if pos_sign == -1 else 0.0,
                 "breakeven_triggered": False,
             }
             idx = (symbol, timestamp)
@@ -828,7 +831,8 @@ class TradeManager:
                     return
                 position = position_df.iloc[0]
                 pos_idx = position_df.index[0]
-                side = "sell" if position["side"] == "buy" else "buy"
+                pos_sign = position["position"]
+                side = "sell" if pos_sign == 1 else "buy"
                 size = position["size"]
                 entry_price = position["entry_price"]
 
@@ -853,11 +857,7 @@ class TradeManager:
         if not order:
             return
 
-        profit = (
-            (exit_price - entry_price) * size
-            if position["side"] == "buy"
-            else (entry_price - exit_price) * size
-        )
+        profit = (exit_price - entry_price) * size * pos_sign
         profit *= self.leverage
 
         # Re-acquire locks to update state, verifying position still exists
@@ -1175,7 +1175,7 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal and rl_signal != "hold":
+                if rl_signal in ("open_long", "open_short", "close"):
                     logger.info("RL action for %s: %s", symbol, rl_signal)
                     if rl_signal == "close":
                         await self.close_position(symbol, current_price, "RL Signal")
@@ -1615,13 +1615,15 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal and rl_signal != "hold":
+                if rl_signal in ("open_long", "open_short", "close"):
                     logger.info("RL action for %s: %s", symbol, rl_signal)
-            if rl_signal in ("open_long", "open_short", "close"):
-                final = (
-                    "buy" if rl_signal == "open_long" else
-                    "sell" if rl_signal == "open_short" else "close"
-                )
+            final_mapping = {
+                "open_long": "buy",
+                "open_short": "sell",
+                "close": "close",
+            }
+            if rl_signal in final_mapping:
+                final = final_mapping[rl_signal]
                 return (final, float(prediction)) if return_prob else final
 
             ema_signal = None
@@ -1652,6 +1654,19 @@ class TradeManager:
                 scores["buy"] += weights["ema"]
             elif ema_signal == "sell":
                 scores["sell"] += weights["ema"]
+
+            gpt_signal = None
+            try:
+                from bot import trading_bot as tb
+                gpt_signal = tb.GPT_ADVICE.signal
+            except Exception:
+                gpt_signal = None
+            if gpt_signal in ("buy", "sell"):
+                weights["gpt"] = self.config.get("gpt_weight", 0.3)
+                if gpt_signal == "buy":
+                    scores["buy"] += weights["gpt"]
+                else:
+                    scores["sell"] += weights["gpt"]
 
             total_weight = sum(weights.values())
             if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:

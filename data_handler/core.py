@@ -103,3 +103,15 @@ class DataHandler:
                 self._ohlcv = self._ohlcv.filter(pl.col("timestamp") >= cutoff)
             if pl is not None and isinstance(self._ohlcv_2h, pl.DataFrame) and self._ohlcv_2h.height > 0:
                 self._ohlcv_2h = self._ohlcv_2h.filter(pl.col("timestamp") >= cutoff)
+            if isinstance(self._ohlcv, pd.DataFrame) and not self._ohlcv.empty:
+                ts_index = self._ohlcv.index.get_level_values("timestamp")
+                self._ohlcv = self._ohlcv[ts_index >= cutoff]
+                history = getattr(self.cfg, "history_retention", 0)
+                if history > 0 and len(self._ohlcv) > history:
+                    self._ohlcv = self._ohlcv.groupby(level="symbol").tail(history)
+            if isinstance(self._ohlcv_2h, pd.DataFrame) and not self._ohlcv_2h.empty:
+                ts_index = self._ohlcv_2h.index.get_level_values("timestamp")
+                self._ohlcv_2h = self._ohlcv_2h[ts_index >= cutoff]
+                history = getattr(self.cfg, "history_retention", 0)
+                if history > 0 and len(self._ohlcv_2h) > history:
+                    self._ohlcv_2h = self._ohlcv_2h.groupby(level="symbol").tail(history)
