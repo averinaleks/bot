@@ -928,24 +928,6 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
-    env = _load_env()
-    price = await fetch_price(SYMBOL, env)
-    if price is None or price <= 0:
-        return
-    features = await build_feature_vector(price)
-    pdata = await get_prediction(SYMBOL, features, env)
-    if not pdata:
-        return
-    signal = pdata.get("signal")
-    if not isinstance(signal, str):
-        return
-    logger.info("Prediction: %s", signal)
-    if not should_trade(signal):
-        return
-    tp, sl, trailing_stop = _parse_trade_params(
-        pdata.get("tp"), pdata.get("sl"), pdata.get("trailing_stop")
-    )
-    tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
     async with httpx.AsyncClient(trust_env=False) as client:
         await send_trade_async(
             client,
