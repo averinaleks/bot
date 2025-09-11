@@ -257,6 +257,7 @@ class TradeManager:
                 "lowest_price",
                 "breakeven_triggered",
                 "last_checked_ts",
+                "last_trailing_ts",
             ],
             index=pd.MultiIndex.from_arrays(
                 [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
@@ -453,6 +454,8 @@ class TradeManager:
                 ):
                     self.positions = self.positions.tz_localize("UTC", level="timestamp")
                 self._sort_positions()
+                if "last_trailing_ts" not in self.positions.columns:
+                    self.positions["last_trailing_ts"] = pd.NaT
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "r", encoding="utf-8") as f:
                     self.returns_by_symbol = json.load(f)
@@ -882,6 +885,7 @@ class TradeManager:
 
     async def check_trailing_stop(self, symbol: str, current_price: float):
         should_close = False
+        exit_price = current_price
         async with self.position_lock:
             try:
                 self._sort_positions()
@@ -905,6 +909,10 @@ class TradeManager:
                 trailing_stop_distance = atr * self.config.get(
                     "trailing_stop_multiplier", 1.0
                 )
+                tick_size = 0.0
+                if hasattr(self.data_handler, "get_tick_size"):
+                    ts = self.data_handler.get_tick_size(symbol)
+                    tick_size = await ts if inspect.isawaitable(ts) else ts
 
                 profit_pct = (
                     (current_price - position["entry_price"])
@@ -940,12 +948,6 @@ class TradeManager:
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "size"
                     ] = remaining_size
-                    tick_size = 0.0
-                    if hasattr(self.data_handler, "get_tick_size"):
-                        ts = self.data_handler.get_tick_size(symbol)
-                        tick_size = (
-                            await ts if inspect.isawaitable(ts) else ts
-                        )
                     breakeven_sl = position["entry_price"] + (
                         tick_size if position["side"] == "buy" else -tick_size
                     )
@@ -961,25 +963,58 @@ class TradeManager:
                         f"🏁 {symbol} moved to breakeven, partial profits taken"
                     )
 
+                idx = pd.IndexSlice[symbol, :]
+                ohlcv = self.data_handler.ohlcv
+                if (
+                    "symbol" in ohlcv.index.names
+                    and symbol in ohlcv.index.get_level_values("symbol")
+                ):
+                    df = ohlcv.xs(symbol, level="symbol", drop_level=False)
+                    current_ts = df.index.get_level_values("timestamp")[-1]
+                    last_trailing = position.get("last_trailing_ts")
+                    if pd.isna(last_trailing) or current_ts > last_trailing:
+                        close_price = df["close"].iloc[-1]
+                        if position["side"] == "buy":
+                            new_highest = max(position["highest_price"], close_price)
+                            self.positions.loc[idx, "highest_price"] = new_highest
+                        else:
+                            new_lowest = min(position["lowest_price"], close_price)
+                            self.positions.loc[idx, "lowest_price"] = new_lowest
+                        self.positions.loc[idx, "last_trailing_ts"] = current_ts
+                        self.positions_changed = True
+                        self.save_state()
+                        position = self.positions.xs(symbol, level="symbol").iloc[0]
+
                 if position["side"] == "buy":
-                    new_highest = max(position["highest_price"], current_price)
-                    self.positions.loc[
-                        pd.IndexSlice[symbol, :], "highest_price"
-                    ] = new_highest
-                    trailing_stop_price = new_highest - trailing_stop_distance
+                    trailing_stop_price = (
+                        position["highest_price"] - trailing_stop_distance
+                    )
                     if current_price <= trailing_stop_price:
                         should_close = True
+                        if trailing_stop_price - current_price > tick_size:
+                            logger.debug(
+                                "Price skipped trailing stop for %s: stop=%.2f, price=%.2f",
+                                symbol,
+                                trailing_stop_price,
+                                current_price,
+                            )
+                        exit_price = current_price
                 else:
-                    new_lowest = min(position["lowest_price"], current_price)
-                    self.positions.loc[
-                        pd.IndexSlice[symbol, :], "lowest_price"
-                    ] = new_lowest
-                    trailing_stop_price = new_lowest + trailing_stop_distance
+                    trailing_stop_price = (
+                        position["lowest_price"] + trailing_stop_distance
+                    )
                     if current_price >= trailing_stop_price:
                         should_close = True
-                self.positions.loc[
-                    pd.IndexSlice[symbol, :], "last_checked_ts"
-                ] = pd.Timestamp.now(tz="UTC")
+                        if current_price - trailing_stop_price > tick_size:
+                            logger.debug(
+                                "Price skipped trailing stop for %s: stop=%.2f, price=%.2f",
+                                symbol,
+                                trailing_stop_price,
+                                current_price,
+                            )
+                        exit_price = current_price
+
+                self.positions.loc[idx, "last_checked_ts"] = pd.Timestamp.now(tz="UTC")
             except (KeyError, ValueError) as e:
                 logger.exception(
                     "Failed trailing stop check for %s (%s): %s",
@@ -989,7 +1024,7 @@ class TradeManager:
                 )
                 raise
         if should_close:
-            await self.close_position(symbol, current_price, "Trailing Stop")
+            await self.close_position(symbol, exit_price, "Trailing Stop")
 
     async def check_stop_loss_take_profit(self, symbol: str, current_price: float):
         close_reason = None
