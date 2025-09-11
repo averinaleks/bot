@@ -927,7 +927,57 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 
 async def run_once_async() -> None:
-    """Execute a single trading cycle."""
+    """Execute a single trading cycle.
+
+    The cycle is:
+    * Fetch the latest price for ``SYMBOL``.
+    * Build a feature vector and obtain a model prediction.
+    * Resolve TP/SL/trailing-stop values from prediction, environment or
+      config defaults.
+    * If trading is enabled and GPT advice allows it, forward the trade to the
+    trade manager.
+    """
+
+    env = _load_env()
+
+    if not await get_trading_enabled():
+        logger.info("Trading disabled")
+        return
+
+    price = await fetch_price(SYMBOL, env)
+    if price is None:
+        return
+
+    features = await build_feature_vector(price)
+    prediction = await get_prediction(SYMBOL, features, env)
+    if not prediction:
+        return
+
+    signal = prediction.get("signal")
+    if not signal:
+        return
+
+    logger.info("Prediction: %s", signal)
+
+    if not should_trade(signal):
+        return
+
+    tp, sl, trailing_stop = _parse_trade_params(
+        prediction.get("tp"), prediction.get("sl"), prediction.get("trailing_stop")
+    )
+    tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
+
+    client = await get_http_client()
+    await send_trade_async(
+        client,
+        SYMBOL,
+        signal,
+        price,
+        env,
+        tp=tp,
+        sl=sl,
+        trailing_stop=trailing_stop,
+    )
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
     train_task = None
