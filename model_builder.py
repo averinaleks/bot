@@ -11,6 +11,7 @@ import time
 import asyncio
 import sys
 import re
+import math
 from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
@@ -631,6 +632,10 @@ def _train_model_lightning(
     TFT = torch_mods["TemporalFusionTransformer"]
     import pytorch_lightning as pl
 
+    max_batch_size = 32
+    actual_batch_size = min(batch_size, max_batch_size)
+    accumulation_steps = math.ceil(batch_size / actual_batch_size)
+
     device = torch.device("cuda" if is_cuda_available() else "cpu")
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
@@ -647,14 +652,14 @@ def _train_model_lightning(
         val_ds = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
         train_loader = DataLoader(
             train_ds,
-            batch_size=batch_size,
+            batch_size=actual_batch_size,
             shuffle=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
         )
         val_loader = DataLoader(
             val_ds,
-            batch_size=batch_size,
+            batch_size=actual_batch_size,
             shuffle=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
@@ -710,14 +715,57 @@ def _train_model_lightning(
             patience=early_stopping_patience,
             mode="min",
         )
+
+        class CudaMemoryCallback(pl.callbacks.Callback):
+            def on_train_epoch_end(self, trainer, pl_module):
+                if hasattr(torch, "cuda") and getattr(torch.cuda, "is_available", lambda: False)():
+                    mem = getattr(torch.cuda, "memory_reserved", lambda: 0)()
+                    logger.info("CUDA memory reserved: %s", mem)
+
+        callbacks = [early_stop, CudaMemoryCallback()]
         trainer = pl.Trainer(
             max_epochs=epochs,
             logger=False,
             enable_checkpointing=False,
             devices=1 if is_cuda_available() else None,
-            callbacks=[early_stop],
+            callbacks=callbacks,
+            accumulate_grad_batches=accumulation_steps,
         )
-        trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        try:
+            trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        except Exception as exc:
+            oom_error = getattr(torch.cuda, "OutOfMemoryError", ())
+            if isinstance(exc, oom_error):
+                logger.warning("CUDA out of memory, falling back to CPU")
+                if hasattr(torch.cuda, "empty_cache"):
+                    torch.cuda.empty_cache()
+                device = torch.device("cpu")
+                train_loader = DataLoader(
+                    train_ds,
+                    batch_size=actual_batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=False,
+                )
+                val_loader = DataLoader(
+                    val_ds,
+                    batch_size=actual_batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=False,
+                )
+                trainer = pl.Trainer(
+                    max_epochs=epochs,
+                    logger=False,
+                    enable_checkpointing=False,
+                    devices=None,
+                    callbacks=callbacks,
+                    accumulate_grad_batches=accumulation_steps,
+                )
+                wrapper.to(device)
+                trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+            else:
+                raise
         wrapper.eval()
 
         with torch.no_grad():
@@ -1238,6 +1286,21 @@ class ModelBuilder:
             )
             return
         X, y = self.prepare_dataset(features)
+        # Проверка и очистка данных перед обучением
+        X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        mask = pd.isna(X_df) | ~np.isfinite(X_df)
+        if mask.any().any():
+            bad_rows = mask.any(axis=1)
+            logger.warning(
+                "Обнаружены некорректные значения в данных для %s: %s строк",
+                symbol,
+                int(bad_rows.sum()),
+            )
+            X = X[~bad_rows.to_numpy()]
+            y = y[~bad_rows.to_numpy()]
+            X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        assert not pd.isna(X_df).any().any()
+        assert np.isfinite(X_df.to_numpy()).all()
         train_task = _train_model_remote
         if self.nn_framework in {"pytorch", "lightning"}:
             torch_mods = _get_torch_modules()
@@ -1399,6 +1462,21 @@ class ModelBuilder:
             logger.warning("Недостаточно данных для дообучения %s", symbol)
             return
         X, y = self.prepare_dataset(features)
+        # Проверка и очистка данных перед обучением
+        X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        mask = pd.isna(X_df) | ~np.isfinite(X_df)
+        if mask.any().any():
+            bad_rows = mask.any(axis=1)
+            logger.warning(
+                "Обнаружены некорректные значения в данных для %s: %s строк",
+                symbol,
+                int(bad_rows.sum()),
+            )
+            X = X[~bad_rows.to_numpy()]
+            y = y[~bad_rows.to_numpy()]
+            X_df = pd.DataFrame(X.reshape(X.shape[0], -1))
+        assert not pd.isna(X_df).any().any()
+        assert np.isfinite(X_df.to_numpy()).all()
         existing = self.predictive_models.get(symbol)
         init_state = None
         if existing is not None:
@@ -2106,6 +2184,21 @@ def train_route():
         features = features.reshape(-1, 1)
     else:
         features = features.reshape(len(features), -1)
+    if features.size == 0 or len(features) != len(labels):
+        return jsonify({"error": "invalid training data"}), 400
+    df = pd.DataFrame(features)
+    mask = pd.isna(df) | ~np.isfinite(df)
+    if mask.any().any():
+        bad_rows = mask.any(axis=1)
+        logger.warning(
+            "Обнаружены некорректные значения в данных для API: %s строк",
+            int(bad_rows.sum()),
+        )
+        df = df[~bad_rows]
+        labels = labels[~bad_rows.to_numpy()]
+    features = df.to_numpy(dtype=np.float32)
+    assert not pd.isna(df).any().any()
+    assert np.isfinite(features).all()
     if features.size == 0 or len(features) != len(labels):
         return jsonify({"error": "invalid training data"}), 400
     if len(np.unique(labels)) < 2:
