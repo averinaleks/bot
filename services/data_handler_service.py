@@ -9,6 +9,7 @@ import logging
 import threading
 import ccxt
 import os
+import tempfile
 from dotenv import load_dotenv
 try:  # optional dependency
     import pandas as pd
@@ -36,7 +37,10 @@ if hasattr(app, "config"):
 
 exchange = None
 history_cache = (
-    HistoricalDataCache(os.getenv("CACHE_DIR", "/tmp/cache"))
+    HistoricalDataCache(
+        os.getenv("CACHE_DIR")
+        or os.path.join(tempfile.gettempdir(), "cache")
+    )
     if HistoricalDataCache
     else None
 )

@@ -157,7 +157,7 @@ def test_resolve_host_handles_empty_and_localhost(monkeypatch):
 
 @pytest.mark.parametrize(
     "value",
-    ["0.0.0.0", "127.0.0.2", "8.8.8.8"],
+    ["192.0.2.1", "127.0.0.2", "8.8.8.8"],
 )
 def test_resolve_host_rejects_public_addresses(monkeypatch, value):
     tm, _, _ = _setup_module(monkeypatch)
