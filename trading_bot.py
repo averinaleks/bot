@@ -187,7 +187,8 @@ CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 # price change (used as a lightweight volume proxy) and a moving
 # average.  This avoids additional service calls while still allowing
 # us to build a small feature vector for the prediction service.
-_PRICE_HISTORY: deque[float] = deque(maxlen=50)
+# Use a larger window to accommodate EMA/RSI calculations.
+_PRICE_HISTORY: deque[float] = deque(maxlen=200)
 PRICE_HISTORY_LOCK = asyncio.Lock()
 
 # Track model performance
@@ -391,6 +392,28 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
     except httpx.HTTPError as exc:
         logger.error("Price request error: %s", exc)
         return None
+
+
+async def fetch_initial_history(symbol: str, env: dict) -> None:
+    """Populate ``_PRICE_HISTORY`` with initial OHLCV data."""
+    async with httpx.AsyncClient(trust_env=False) as client:
+        try:
+            resp = await client.get(
+                f"{env['data_handler_url']}/history/{symbol}", timeout=5
+            )
+            data = resp.json() if resp.status_code == 200 else {}
+            candles = data.get("history", [])
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.warning("Failed to fetch initial history: %s", exc)
+            candles = []
+    async with PRICE_HISTORY_LOCK:
+        _PRICE_HISTORY.clear()
+        for candle in candles:
+            if len(candle) > 4:
+                try:
+                    _PRICE_HISTORY.append(float(candle[4]))
+                except (TypeError, ValueError):
+                    continue
 
 
 async def build_feature_vector(price: float) -> list[float]:
@@ -905,50 +928,6 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
-    global _LAST_PREDICTION
-    env = _load_env()
-    price = await fetch_price(SYMBOL, env)
-    if price is None or price <= 0:
-        logger.warning("Invalid price for %s: %s", SYMBOL, price)
-        return
-    logger.info("Price for %s: %s", SYMBOL, price)
-    features = await build_feature_vector(price)
-
-    # Evaluate previous prediction accuracy
-    acc: float | None = None
-    async with PRICE_HISTORY_LOCK:
-        if _LAST_PREDICTION is not None and len(_PRICE_HISTORY) > 1:
-            actual = 1 if _PRICE_HISTORY[-1] > _PRICE_HISTORY[-2] else 0
-            _PRED_RESULTS.append(1 if _LAST_PREDICTION == actual else 0)
-            acc = sum(_PRED_RESULTS) / len(_PRED_RESULTS)
-    if acc is not None and acc < CFG.retrain_threshold:
-        await retrain(env["model_builder_url"], env["data_handler_url"], SYMBOL)
-
-    pdata = await get_prediction(SYMBOL, features, env)
-    model_signal = pdata.get("signal") if pdata else None
-    logger.info("Prediction: %s", model_signal)
-    if model_signal and should_trade(model_signal):
-        tp, sl, trailing_stop = _parse_trade_params(
-            pdata.get("tp") if pdata else None,
-            pdata.get("sl") if pdata else None,
-            pdata.get("trailing_stop") if pdata else None,
-        )
-        tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
-        logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
-        client = await get_http_client()
-        await send_trade_async(
-            client,
-            SYMBOL,
-            model_signal,
-            price,
-            env,
-            tp=tp,
-            sl=sl,
-            trailing_stop=trailing_stop,
-        )
-    elif model_signal:
-        logger.info("Trade skipped due to GPT advice")
-    _LAST_PREDICTION = 1 if model_signal == "buy" else 0 if model_signal == "sell" else None
 
 
 
@@ -960,17 +939,24 @@ async def main_async() -> None:
     try:
         await check_services()
         env = _load_env()
-        train_task = schedule_retrain(
-            env["model_builder_url"],
-            env["data_handler_url"],
-            TRAIN_INTERVAL,
-            SYMBOL,
-        )
         while True:
-            await run_once_async()
+            try:
+                await run_once_async()
+            except ServiceUnavailableError as exc:
+                logger.error("Service availability check failed: %s", exc)
+                await send_telegram_alert(
+                    f"Service availability check failed: {exc}"
+                )
+            except Exception as exc:
+                logger.exception("Error in main loop: %s", exc)
+                await send_telegram_alert(f"Error in main loop: {exc}")
             await asyncio.sleep(INTERVAL)
     except ServiceUnavailableError as exc:
         logger.error("Service availability check failed: %s", exc)
+        await send_telegram_alert(f"Service availability check failed: {exc}")
+    except Exception as exc:  # pragma: no cover - unexpected startup errors
+        logger.exception("Unexpected error in main_async: %s", exc)
+        await send_telegram_alert(f"Unexpected error in main_async: {exc}")
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:

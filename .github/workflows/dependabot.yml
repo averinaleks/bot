@@ -17,13 +17,13 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # v2.4.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
         # yamllint disable-line rule:line-length
         if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
-        uses: hmarr/auto-approve-action@v4
+        uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363 # v4.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
@@ -61,7 +61,7 @@ jobs:
       - name: Enable auto-merge for Dependabot PRs
         # yamllint disable-line rule:line-length
         if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
-        uses: peter-evans/enable-pull-request-automerge@v3
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3.0.0
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash

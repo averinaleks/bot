@@ -12,11 +12,11 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 import ccxt
+import json
 import os
 from dotenv import load_dotenv
 import logging
 import threading
-from utils import validate_host, safe_int
 
 load_dotenv()
 app = Flask(__name__)
@@ -40,6 +40,7 @@ def init_exchange() -> None:
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
+    _sync_positions_with_exchange()
 
 
 # Expected API token for simple authentication
@@ -76,6 +77,40 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 CCXT_BAD_REQUEST = getattr(ccxt, 'BadRequest', CCXT_BASE_ERROR)
 
 POSITIONS: list[dict] = []
+POSITIONS_FILE = Path('cache/positions.json')
+
+
+def _load_positions() -> None:
+    """Load positions list from on-disk cache."""
+    global POSITIONS
+    try:
+        with POSITIONS_FILE.open('r', encoding='utf-8') as fh:
+            POSITIONS = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        POSITIONS = []
+
+
+def _save_positions() -> None:
+    """Persist positions list to on-disk cache."""
+    try:
+        POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with POSITIONS_FILE.open('w', encoding='utf-8') as fh:
+            json.dump(POSITIONS, fh)
+    except OSError as exc:  # pragma: no cover - disk errors
+        logging.warning('Failed to save positions cache: %s', exc)
+
+
+def _sync_positions_with_exchange() -> None:
+    """Fetch positions from exchange for verification."""
+    if exchange is None or not hasattr(exchange, 'fetch_positions'):
+        return
+    try:
+        exchange.fetch_positions()
+    except Exception as exc:  # pragma: no cover - network/API issues
+        logging.warning('fetch_positions failed: %s', exc)
+
+
+_load_positions()
 
 
 def _record(
@@ -102,6 +137,7 @@ def _record(
             'entry_price': entry_price,
         }
     )
+    _save_positions()
 
 
 @app.route('/open_position', methods=['POST'])
@@ -150,28 +186,51 @@ def open_position() -> ResponseReturnValue:
             opp_side = 'sell' if side == 'buy' else 'buy'
             if sl is not None:
                 stop_order = None
-                try:
-                    stop_order = exchange.create_order(
-                        symbol, 'stop', opp_side, amount, sl
-                    )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('stop order failed: %s', exc)
+                delay = 1.0
+                for attempt in range(3):
                     try:
                         stop_order = exchange.create_order(
-                            symbol, 'stop_market', opp_side, amount, sl
+                            symbol, 'stop', opp_side, amount, sl
                         )
                     except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('stop_market order failed: %s', exc)
-                        stop_order = None
+                        app.logger.debug('stop order failed: %s', exc)
+                        try:
+                            stop_order = exchange.create_order(
+                                symbol, 'stop_market', opp_side, amount, sl
+                            )
+                        except CCXT_BASE_ERROR as exc:
+                            app.logger.debug('stop_market order failed: %s', exc)
+                            stop_order = None
+                    if stop_order and stop_order.get('id') is not None:
+                        break
+                    if attempt < 2:
+                        time.sleep(delay)
+                        delay *= 2
+                if not stop_order or stop_order.get('id') is None:
+                    warn_msg = f"не удалось создать stop loss ордер для {symbol}"
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
                 orders.append(stop_order)
             if tp is not None:
-                try:
-                    tp_order = exchange.create_order(
-                        symbol, 'limit', opp_side, amount, tp
-                    )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('take profit order failed: %s', exc)
-                    tp_order = None
+                tp_order = None
+                delay = 1.0
+                for attempt in range(3):
+                    try:
+                        tp_order = exchange.create_order(
+                            symbol, 'limit', opp_side, amount, tp
+                        )
+                    except CCXT_BASE_ERROR as exc:
+                        app.logger.debug('take profit order failed: %s', exc)
+                        tp_order = None
+                    if tp_order and tp_order.get('id') is not None:
+                        break
+                    if attempt < 2:
+                        time.sleep(delay)
+                        delay *= 2
+                if not tp_order or tp_order.get('id') is None:
+                    warn_msg = f"не удалось создать take profit ордер для {symbol}"
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
                 orders.append(tp_order)
             if trailing_stop is not None and price > 0:
                 tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
@@ -257,6 +316,7 @@ def close_position() -> ResponseReturnValue:
             POSITIONS.pop(rec_index)
         else:
             rec['amount'] = remaining
+        _save_positions()
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error closing position: %s', exc)

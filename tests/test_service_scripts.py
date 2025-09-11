@@ -3,6 +3,7 @@ import os
 import types
 import httpx
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 
 from tests.helpers import get_free_port, service_process
@@ -41,6 +42,18 @@ def test_data_handler_service_price(ctx):
         resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
         assert resp.status_code == 200
         assert resp.json()['price'] == 42.0
+
+
+@pytest.mark.integration
+def test_data_handler_service_history(ctx):
+    port = get_free_port()
+    p = ctx.Process(target=_run_dh, args=(port,))
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/history/BTCUSDT', timeout=5, trust_env=False
+        )
+        assert resp.status_code == 200
+        assert resp.json()['history'] == [[1, 1, 1, 1, 1, 1]]
 
 
 def _run_dh_fail(port: int):
@@ -206,6 +219,11 @@ def _run_tm(
     fail_after_market: bool = False,
     with_trailing: bool = True,
 ):
+    positions_file = Path('cache/positions.json')
+    try:
+        positions_file.unlink()
+    except FileNotFoundError:
+        pass
     class DummyExchange:
         def __init__(self):
             self.calls = 0
