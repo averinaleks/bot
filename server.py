@@ -70,9 +70,9 @@ class ModelManager:
         fallback_revision = os.getenv(
             "GPT_MODEL_FALLBACK_REVISION", "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
         )
-        if not re.fullmatch(r"[0-9a-f]{40}", model_revision):
+        if not re.fullmatch(r"[0-9a-f]{40}", model_revision, re.IGNORECASE):
             raise ValueError("GPT_MODEL_REVISION must be a 40-character SHA commit")
-        if not re.fullmatch(r"[0-9a-f]{40}", fallback_revision):
+        if not re.fullmatch(r"[0-9a-f]{40}", fallback_revision, re.IGNORECASE):
             raise ValueError(
                 "GPT_MODEL_FALLBACK_REVISION must be a 40-character SHA commit"
             )
@@ -132,7 +132,8 @@ class ModelManager:
 
         try:
             tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
-                f"{fallback_model}@{fallback_revision}",
+                fallback_model,
+                revision=fallback_revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
             )
