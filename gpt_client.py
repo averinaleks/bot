@@ -9,7 +9,7 @@ import logging
 import os
 import json
 import socket
-from dataclasses import dataclass
+from enum import Enum
 from urllib.parse import urlparse
 from ipaddress import ip_address
 import asyncio
@@ -20,6 +20,7 @@ from typing import Any, Coroutine
 import httpx
 
 import sys
+from pydantic import BaseModel, Field, ValidationError
 
 if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
     del sys.modules["tenacity"]
@@ -51,13 +52,20 @@ class GPTClientResponseError(GPTClientError):
     """Raised when the GPT OSS API returns an unexpected structure."""
 
 
-@dataclass
-class Signal:
+class SignalAction(str, Enum):
+    """Possible trading actions."""
+
+    buy = "buy"
+    sell = "sell"
+    hold = "hold"
+
+
+class Signal(BaseModel):
     """Parsed trading signal from GPT output."""
 
-    signal: str | None = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
+    signal: SignalAction = SignalAction.hold
+    tp_mult: float | None = Field(default=None, ge=0, le=10)
+    sl_mult: float | None = Field(default=None, ge=0, le=10)
 
 
 def _truncate_prompt(prompt: str) -> str:
@@ -363,37 +371,15 @@ async def query_gpt_json_async(prompt: str) -> dict:
 
 
 def parse_signal(payload: str) -> Signal:
-    """Parse *payload* JSON into a :class:`Signal` with range validation.
+    """Parse *payload* JSON into a :class:`Signal` instance.
 
-    ``tp_mult`` and ``sl_mult`` are optional numeric values between 0 and 10.
-    ``signal`` is returned as-is if present.
+    On any parsing or validation error a default ``hold`` signal is returned and
+    a warning is logged.
     """
 
     try:
         data = json.loads(payload)
-    except ValueError as exc:  # pragma: no cover - invalid json
-        raise GPTClientJSONError("Invalid JSON payload") from exc
-    if not isinstance(data, dict):
-        raise GPTClientJSONError("Signal payload must be a JSON object")
-
-    signal = data.get("signal")
-    tp_mult = data.get("tp_mult")
-    sl_mult = data.get("sl_mult")
-
-    def _validate_mult(name: str, value: Any) -> float | None:
-        if value is None:
-            return None
-        if not isinstance(value, (int, float)):
-            raise GPTClientResponseError(f"{name} must be a number")
-        value = float(value)
-        if not (0 <= value <= 10):
-            raise GPTClientResponseError(f"{name} out of range")
-        return value
-
-    tp_mult_f = _validate_mult("tp_mult", tp_mult)
-    sl_mult_f = _validate_mult("sl_mult", sl_mult)
-
-    if signal is not None and not isinstance(signal, str):
-        raise GPTClientResponseError("signal must be a string")
-
-    return Signal(signal=signal, tp_mult=tp_mult_f, sl_mult=sl_mult_f)
+        return Signal.model_validate(data)
+    except (ValueError, ValidationError, TypeError) as exc:  # pragma: no cover - invalid input
+        logger.warning("Failed to parse signal: %s", exc)
+        return Signal()
