@@ -164,7 +164,7 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
     tm._cleanup_registered = True
 
     def _handler(*_args):
-        logger.info("Stopping TradeManager")
+        logger.info("Остановка TradeManager")
         tm.shutdown()
         try:
             asyncio.run(TelegramLogger.shutdown())
@@ -426,15 +426,15 @@ class TradeManager:
             os.replace(tmp_returns, self.returns_file)
             self.last_save_time = time.time()
             self.positions_changed = False
-            logger.info("TradeManager state saved")
+            logger.info("Состояние TradeManager сохранено")
         except (OSError, ValueError) as e:
-            logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
+            logger.exception("Не удалось сохранить состояние (%s): %s", type(e).__name__, e)
             for path in (locals().get("tmp_state"), locals().get("tmp_returns")):
                 try:
                     if path and os.path.exists(path):
                         os.remove(path)
                 except OSError as cleanup_err:
-                    logger.exception("Failed to remove temp file %s: %s", path, cleanup_err)
+                    logger.exception("Не удалось удалить временный файл %s: %s", path, cleanup_err)
             raise
 
     def load_state(self):
@@ -467,9 +467,9 @@ class TradeManager:
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "r", encoding="utf-8") as f:
                     self.returns_by_symbol = json.load(f)
-                logger.info("TradeManager state loaded")
+                logger.info("Состояние TradeManager загружено")
         except (OSError, ValueError, json.JSONDecodeError) as e:
-            logger.exception("Failed to load state (%s): %s", type(e).__name__, e)
+            logger.exception("Не удалось загрузить состояние (%s): %s", type(e).__name__, e)
             raise
 
     def _sort_positions(self) -> None:
@@ -548,7 +548,7 @@ class TradeManager:
                 if isinstance(order, dict):
                     ret_code = order.get("retCode") or order.get("ret_code")
                     if ret_code is not None and ret_code != 0:
-                        logger.error("Order not confirmed: %s", order)
+                        logger.error("Ордер не подтверждён: %s", order)
                         await self.telegram_logger.send_telegram_message(
                             f"❌ Order not confirmed {symbol}: retCode {ret_code}"
                         )
@@ -557,7 +557,10 @@ class TradeManager:
                 return order
             except (httpx.HTTPError, RuntimeError) as e:
                 logger.exception(
-                    "Failed to place order for %s (%s): %s", symbol, type(e).__name__, e
+                    "Не удалось разместить ордер для %s (%s): %s",
+                    symbol,
+                    type(e).__name__,
+                    e,
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"❌ Order error {symbol}: {e}"
@@ -589,7 +592,7 @@ class TradeManager:
                 balance_key = sym.split("/")[1] if "/" in sym else "USDT"
             equity = float(account.get("total", {}).get(balance_key, 0))
             if equity <= 0:
-                logger.warning("Insufficient balance for %s", symbol)
+                logger.warning("Недостаточный баланс для %s", symbol)
                 await self.telegram_logger.send_telegram_message(
                     f"⚠️ Insufficient balance for {symbol}: equity={equity}"
                 )
@@ -611,7 +614,7 @@ class TradeManager:
             risk_amount = equity * risk_per_trade
             stop_loss_distance = atr * sl_multiplier
             if stop_loss_distance <= 0:
-                logger.warning("Invalid stop_loss_distance for %s", symbol)
+                logger.warning("Некорректный stop_loss_distance для %s", symbol)
                 return 0.0
             position_size = risk_amount / (stop_loss_distance * self.leverage)
             position_size = min(
@@ -628,7 +631,7 @@ class TradeManager:
             return position_size
         except (httpx.HTTPError, KeyError, ValueError, RuntimeError) as e:
             logger.exception(
-                "Failed to calculate position size for %s (%s): %s",
+                "Не удалось вычислить размер позиции для %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -658,24 +661,24 @@ class TradeManager:
                 self._sort_positions()
                 if len(self.positions) >= self.max_positions:
                     logger.warning(
-                        "Maximum number of positions reached: %s",
+                        "Достигнуто максимальное число позиций: %s",
                         self.max_positions,
                     )
                     return
                 if side not in {"buy", "sell"}:
-                    logger.warning("Invalid side %s for %s", side, symbol)
+                    logger.warning("Некорректная сторона %s для %s", side, symbol)
                     return
                 if self._has_position(symbol):
-                    logger.warning("Position for %s already open", symbol)
+                    logger.warning("Позиция по %s уже открыта", symbol)
                     return
 
             if not await self.data_handler.is_data_fresh(symbol):
-                logger.warning("Stale data for %s, skipping trade", symbol)
+                logger.warning("Устаревшие данные для %s, пропуск сделки", symbol)
                 return
             atr = await self.data_handler.get_atr(symbol)
             if atr <= 0:
                 logger.warning(
-                    "ATR data missing for %s, retrying later",
+                    "Данные ATR отсутствуют для %s, повтор позже",
                     symbol,
                 )
                 return
@@ -683,7 +686,7 @@ class TradeManager:
             tp_mult = params.get("tp_multiplier", self.config["tp_multiplier"])
             size = await self.calculate_position_size(symbol, price, atr, sl_mult)
             if size <= 0:
-                logger.warning("Position size too small for %s", symbol)
+                logger.warning("Размер позиции слишком мал для %s", symbol)
                 return
             stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
                 side, price, atr, sl_mult, tp_mult
@@ -773,13 +776,13 @@ class TradeManager:
             async with self.position_lock:
                 if self._has_position(symbol):
                     logger.warning(
-                        "Position for %s already open after order placed",
+                        "Позиция по %s уже открыта после размещения ордера",
                         symbol,
                     )
                     return
                 if len(self.positions) >= self.max_positions:
                     logger.warning(
-                        "Maximum number of positions reached after order placed: %s",
+                        "Достигнуто максимальное число позиций после размещения ордера: %s",
                         self.max_positions,
                     )
                     return
@@ -803,7 +806,10 @@ class TradeManager:
             )
         except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
             logger.exception(
-                "Failed to open position for %s (%s): %s", symbol, type(e).__name__, e
+                "Не удалось открыть позицию для %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
             )
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to open position {symbol}: {e}"
@@ -827,7 +833,7 @@ class TradeManager:
                 else:
                     position_df = pd.DataFrame()
                 if position_df.empty:
-                    logger.warning("Position for %s not found", symbol)
+                    logger.warning("Позиция по %s не найдена", symbol)
                     return
                 position = position_df.iloc[0]
                 pos_idx = position_df.index[0]
@@ -847,7 +853,10 @@ class TradeManager:
             )
         except (httpx.HTTPError, RuntimeError) as e:  # pragma: no cover - network issues
             logger.exception(
-                "Failed to close position for %s (%s): %s", symbol, type(e).__name__, e
+                "Не удалось закрыть позицию для %s (%s): %s",
+                symbol,
+                type(e).__name__,
+                e,
             )
             await self.telegram_logger.send_telegram_message(
                 f"❌ Failed to close position {symbol}: {e}"
@@ -906,12 +915,12 @@ class TradeManager:
                 else:
                     position_df = pd.DataFrame()
                 if position_df.empty:
-                    logger.debug("Position for %s not found", symbol)
+                    logger.debug("Позиция по %s не найдена", symbol)
                     return
                 position = position_df.iloc[0]
                 atr = await self.data_handler.get_atr(symbol)
                 if atr <= 0:
-                    logger.debug("ATR data missing for %s, retrying later", symbol)
+                    logger.debug("Данные ATR отсутствуют для %s, повтор позже", symbol)
                     return
                 trailing_stop_distance = atr * self.config.get(
                     "trailing_stop_multiplier", 1.0
@@ -1116,7 +1125,7 @@ class TradeManager:
                 return
             model = self.model_builder.predictive_models.get(symbol)
             if not model:
-                logger.debug("Model for %s not found", symbol)
+                logger.debug("Модель для %s не найдена", symbol)
                 return
             async with self.position_lock:
                 self._sort_positions()
@@ -1145,7 +1154,7 @@ class TradeManager:
                     )
                 except (RuntimeError, ValueError) as exc:
                     logger.debug(
-                        "Failed to prepare features for %s (%s): %s",
+                        "Не удалось подготовить признаки для %s (%s): %s",
                         symbol,
                         type(exc).__name__,
                         exc,
@@ -1175,8 +1184,6 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal in ("open_long", "open_short", "close"):
-                    logger.info("RL action for %s: %s", symbol, rl_signal)
                     if rl_signal == "close":
                         await self.close_position(symbol, current_price, "RL Signal")
                         return
@@ -1193,9 +1200,15 @@ class TradeManager:
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
+            logger.info(
+                "Пороги модели для %s: long=%.2f, short=%.2f",
+                symbol,
+                long_threshold,
+                short_threshold,
+            )
             if position["side"] == "buy" and prediction < short_threshold:
                 logger.info(
-                    "Model exit long signal for %s: pred=%.4f, threshold=%.2f",
+                    "Сигнал выхода из лонга по модели для %s: пред=%.4f, порог=%.2f",
                     symbol,
                     prediction,
                     short_threshold,
@@ -1212,7 +1225,7 @@ class TradeManager:
                             await self.open_position(symbol, opposite, current_price, params)
             elif position["side"] == "sell" and prediction > long_threshold:
                 logger.info(
-                    "Model exit short signal for %s: pred=%.4f, threshold=%.2f",
+                    "Сигнал выхода из шорта по модели для %s: пред=%.4f, порог=%.2f",
                     symbol,
                     prediction,
                     long_threshold,
@@ -1229,7 +1242,7 @@ class TradeManager:
                             await self.open_position(symbol, opposite, current_price, params)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
             logger.exception(
-                "Failed to check model signal for %s (%s): %s",
+                "Не удалось проверить сигнал модели для %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1445,13 +1458,13 @@ class TradeManager:
             if (signal == "buy" and current_price <= ema30.iloc[-1]) or (
                 signal == "sell" and current_price >= ema30.iloc[-1]
             ):
-                logger.debug("Price not consolidated for %s, signal=%s", symbol, signal)
+                logger.debug("Цена не консолидирована для %s, сигнал=%s", symbol, signal)
                 return False
-            logger.info("EMA conditions satisfied for %s, signal=%s", symbol, signal)
+            logger.info("Условия EMA выполнены для %s, сигнал=%s", symbol, signal)
             return True
         except (KeyError, ValueError) as e:
             logger.exception(
-                "Failed to check EMA conditions for %s (%s): %s",
+                "Не удалось проверить условия EMA для %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1476,7 +1489,7 @@ class TradeManager:
                 )
             except (RuntimeError, ValueError) as exc:
                 logger.debug(
-                    "Failed to prepare features for %s (%s): %s",
+                    "Не удалось подготовить признаки для %s (%s): %s",
                     symbol,
                     type(exc).__name__,
                     exc,
@@ -1542,7 +1555,7 @@ class TradeManager:
             else:
                 df = None
             if not await self.data_handler.is_data_fresh(symbol):
-                logger.debug("Stale data for %s, skipping signal", symbol)
+                logger.debug("Устаревшие данные для %s, пропуск сигнала", symbol)
                 return None
             if df is not None and not df.empty:
                 volatility = df["close"].pct_change().std()
@@ -1556,7 +1569,7 @@ class TradeManager:
                     )
                 except (RuntimeError, ValueError) as exc:
                     logger.debug(
-                        "Failed to prepare features for %s (%s): %s",
+                        "Не удалось подготовить признаки для %s (%s): %s",
                         symbol,
                         type(exc).__name__,
                         exc,
@@ -1570,7 +1583,7 @@ class TradeManager:
                 )
                 return None
             if not model:
-                logger.debug("Model for %s not yet trained", symbol)
+                logger.debug("Модель для %s ещё не обучена", symbol)
                 if not await self._maybe_retrain_symbol(symbol, features):
                     return None
                 model = self.model_builder.predictive_models.get(symbol)
@@ -1615,15 +1628,6 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal in ("open_long", "open_short", "close"):
-                    logger.info("RL action for %s: %s", symbol, rl_signal)
-            final_mapping = {
-                "open_long": "buy",
-                "open_short": "sell",
-                "close": "close",
-            }
-            if rl_signal in final_mapping:
-                final = final_mapping[rl_signal]
                 return (final, float(prediction)) if return_prob else final
 
             ema_signal = None
@@ -1767,7 +1771,7 @@ class TradeManager:
             results = await asyncio.gather(*self.tasks, return_exceptions=True)
             for task, result in zip(self.tasks, results):
                 if isinstance(result, Exception):
-                    logger.error("Task %s failed: %s", task.get_name(), result)
+                    logger.error("Задача %s завершилась с ошибкой: %s", task.get_name(), result)
                     await self.telegram_logger.send_telegram_message(
                         f"❌ Task {task.get_name()} failed: {result}"
                     )
@@ -1804,7 +1808,7 @@ class TradeManager:
             try:
                 fut.result()
             except (RuntimeError, ValueError) as e:
-                logger.exception("Error awaiting stop (%s): %s", type(e).__name__, e)
+                logger.exception("Ошибка при ожидании остановки (%s): %s", type(e).__name__, e)
         else:
             try:
                 asyncio.run(self.stop())
@@ -1815,13 +1819,13 @@ class TradeManager:
             if IS_TEST_MODE or getattr(ray, "is_initialized", lambda: False)():
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
-            logger.exception("Ray shutdown failed (%s): %s", type(exc).__name__, exc)
+            logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
 
     async def process_symbol(self, symbol: str):
         if self.http_client is None:
             self.http_client = await get_http_client()
         while symbol not in self.model_builder.predictive_models:
-            logger.debug("Waiting for model for %s", symbol)
+            logger.debug("Ожидание модели для %s", symbol)
             await asyncio.sleep(30)
         while True:
             try:
@@ -1889,7 +1893,7 @@ except AttributeError:  # pragma: no cover - older Flask versions
     try:
         from a2wsgi import WSGIMiddleware  # type: ignore
     except ImportError as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
-        logger.exception("a2wsgi import failed (%s): %s", type(exc).__name__, exc)
+        logger.exception("Не удалось импортировать a2wsgi (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware
 
     asgi_app = WSGIMiddleware(api_app)
@@ -1907,10 +1911,10 @@ async def create_trade_manager() -> TradeManager | None:
     """Instantiate the TradeManager using config.json."""
     global trade_manager
     if trade_manager is None:
-        logger.info("Loading configuration from config.json")
+        logger.info("Загрузка конфигурации из config.json")
         try:
             cfg = load_config("config.json")
-            logger.info("Configuration loaded successfully")
+            logger.info("Конфигурация успешно загружена")
         except (OSError, json.JSONDecodeError) as exc:
             logger.exception(
                 "Failed to load configuration (%s): %s", type(exc).__name__, exc
@@ -1918,7 +1922,7 @@ async def create_trade_manager() -> TradeManager | None:
             raise
         if not ray.is_initialized():
             logger.info(
-                "Initializing Ray with num_cpus=%s, num_gpus=1", cfg["ray_num_cpus"]
+                "Инициализация Ray: num_cpus=%s, num_gpus=1", cfg["ray_num_cpus"]
             )
             try:
                 ray.init(
@@ -1926,7 +1930,7 @@ async def create_trade_manager() -> TradeManager | None:
                     num_gpus=1,
                     ignore_reinit_error=True,
                 )
-                logger.info("Ray initialized successfully")
+                logger.info("Ray успешно инициализирован")
             except RuntimeError as exc:
                 logger.exception(
                     "Ray initialization failed (%s): %s", type(exc).__name__, exc
@@ -1941,7 +1945,7 @@ async def create_trade_manager() -> TradeManager | None:
                 telegram_bot = Bot(token)
                 try:
                     await telegram_bot.delete_webhook(drop_pending_updates=True)
-                    logger.info("Deleted existing Telegram webhook")
+                    logger.info("Удалён существующий Telegram webhook")
                 except httpx.HTTPError as exc:  # pragma: no cover - delete_webhook errors
                     logger.exception(
                         "Failed to delete Telegram webhook (%s): %s",
@@ -1950,43 +1954,49 @@ async def create_trade_manager() -> TradeManager | None:
                     )
             except (RuntimeError, httpx.HTTPError) as exc:  # pragma: no cover - import/runtime errors
                 logger.exception(
-                    "Failed to create Telegram Bot (%s): %s", type(exc).__name__, exc
+                    "Не удалось создать Telegram Bot (%s): %s",
+                    type(exc).__name__,
+                    exc,
                 )
                 raise
         from bot.data_handler import DataHandler
         from bot.model_builder import ModelBuilder
 
-        logger.info("Creating DataHandler")
+        logger.info("Создание DataHandler")
         try:
             dh = DataHandler(cfg, telegram_bot, chat_id)
-            logger.info("DataHandler created successfully")
+            logger.info("DataHandler успешно создан")
         except RuntimeError as exc:
             logger.exception(
-                "Failed to create DataHandler (%s): %s", type(exc).__name__, exc
+                "Не удалось создать DataHandler (%s): %s",
+                type(exc).__name__,
+                exc,
             )
             raise
 
-        logger.info("Creating ModelBuilder")
+        logger.info("Создание ModelBuilder")
         try:
             mb = ModelBuilder(cfg, dh, None)
             dh.feature_callback = mb.precompute_features
-            logger.info("ModelBuilder created successfully")
+            logger.info("ModelBuilder успешно создан")
             asyncio.create_task(mb.train())
             asyncio.create_task(mb.backtest_loop())
             await dh.load_initial()
             asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
         except RuntimeError as exc:
-            logger.error("Initial data load failed: %s", exc)
+            logger.error("Не удалось загрузить исходные данные: %s", exc)
             await dh.stop()
             return None
         except (ValueError, ImportError) as exc:
             logger.exception(
-                "Failed to create ModelBuilder (%s): %s", type(exc).__name__, exc
+                "Не удалось создать ModelBuilder (%s): %s",
+                type(exc).__name__,
+                exc,
             )
             raise
 
         trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
-        logger.info("TradeManager instance created")
+        logger.info("Экземпляр TradeManager создан")
         if telegram_bot:
             from bot.utils import TelegramUpdateListener
 
@@ -2006,7 +2016,7 @@ async def create_trade_manager() -> TradeManager | None:
                             chat_id=msg.chat_id, text="Trading enabled"
                         )
                     except Exception as exc:
-                        logger.error("Failed to send Telegram message: %s", exc)
+                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
                 elif text.startswith("/stop"):
                     await tb.set_trading_enabled(False)
                     try:
@@ -2014,7 +2024,7 @@ async def create_trade_manager() -> TradeManager | None:
                             chat_id=msg.chat_id, text="Trading disabled"
                         )
                     except Exception as exc:
-                        logger.error("Failed to send Telegram message: %s", exc)
+                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
                 elif text.startswith("/status"):
                     status = "enabled" if await tb.get_trading_enabled() else "disabled"
                     positions = []
@@ -2025,14 +2035,14 @@ async def create_trade_manager() -> TradeManager | None:
                                 await res if inspect.isawaitable(res) else res
                             ) or []
                         except Exception as exc:  # pragma: no cover - log and ignore
-                            logger.error("Failed to get open positions: %s", exc)
+                            logger.error("Не удалось получить открытые позиции: %s", exc)
                     message = f"Trading {status}"
                     if positions:
                         message += "\n" + "\n".join(str(p) for p in positions)
                     try:
                         await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
                     except Exception as exc:
-                        logger.error("Failed to send Telegram message: %s", exc)
+                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
 
             threading.Thread(
                 target=lambda: asyncio.run(listener.listen(handle_command)),

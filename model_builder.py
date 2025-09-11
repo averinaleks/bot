@@ -123,7 +123,7 @@ try:  # pragma: no cover - optional dependency
     from sklearn.calibration import calibration_curve
     from sklearn.pipeline import Pipeline
 except Exception as exc:  # pragma: no cover - missing sklearn
-    logger.warning("sklearn import failed: %s", exc)
+    logger.warning("Не удалось импортировать sklearn: %s", exc)
 
     class StandardScaler:  # type: ignore
         def fit(self, X, y=None):
@@ -153,7 +153,7 @@ except Exception as exc:  # pragma: no cover - missing sklearn
 try:  # pragma: no cover - optional dependency
     import joblib  # type: ignore
 except Exception as exc:  # pragma: no cover - stub for tests
-    logger.warning("joblib import failed: %s", exc)
+    logger.warning("Не удалось импортировать joblib: %s", exc)
     import types
 
     import pickle  # nosec B403
@@ -178,7 +178,7 @@ try:
     import mlflow
 except ImportError as e:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
-    logger.warning("mlflow import failed: %s", e)
+    logger.warning("Не удалось импортировать mlflow: %s", e)
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
@@ -292,7 +292,7 @@ try:
 except ImportError as e:  # pragma: no cover - optional dependency
     PPO = DQN = DummyVecEnv = None  # type: ignore
     SB3_AVAILABLE = False
-    logger.warning("stable_baselines3 import failed: %s", e)
+    logger.warning("Не удалось импортировать stable_baselines3: %s", e)
 
 
 _torch_modules = None
@@ -603,7 +603,7 @@ def _train_model_lightning(
             def on_train_epoch_end(self, trainer, pl_module):
                 if hasattr(torch, "cuda") and getattr(torch.cuda, "is_available", lambda: False)():
                     mem = getattr(torch.cuda, "memory_reserved", lambda: 0)()
-                    logger.info("CUDA memory reserved: %s", mem)
+                    logger.info("Зарезервировано памяти CUDA: %s", mem)
 
         callbacks = [early_stop, CudaMemoryCallback()]
         trainer = pl.Trainer(
@@ -619,7 +619,7 @@ def _train_model_lightning(
         except Exception as exc:
             oom_error = getattr(torch.cuda, "OutOfMemoryError", ())
             if isinstance(exc, oom_error):
-                logger.warning("CUDA out of memory, falling back to CPU")
+                logger.warning("Недостаточно памяти CUDA, переключение на CPU")
                 if hasattr(torch.cuda, "empty_cache"):
                     torch.cuda.empty_cache()
                 device = torch.device("cpu")
@@ -866,7 +866,7 @@ class ModelBuilder:
         self.shap_cache_duration = config.get("shap_cache_duration", 86400)
         self.last_backtest_time = 0
         self.backtest_results = {}
-        logger.info("ModelBuilder initialization complete")
+        logger.info("Инициализация ModelBuilder завершена")
 
     def compute_prediction_metrics(self, symbol: str):
         """Return accuracy and Brier score over recent predictions."""
@@ -1052,7 +1052,7 @@ class ModelBuilder:
                     return
             aligned = _align(series)
             if np.isnan(aligned).any():
-                logger.debug("Skipping %s for %s due to NaNs", name, symbol)
+                logger.debug("Пропуск %s для %s из-за NaN", name, symbol)
                 return
             features_df[name] = aligned
 
@@ -1169,7 +1169,7 @@ class ModelBuilder:
             train_task = _train_model_remote.options(
                 num_gpus=1 if is_cuda_available() else 0
             )
-        logger.debug("Dispatching _train_model_remote for %s", symbol)
+        logger.debug("Запуск _train_model_remote для %s", symbol)
         model_state, val_preds, val_labels = ray.get(
             train_task.remote(
                 X,
@@ -1185,7 +1185,7 @@ class ModelBuilder:
                 self.config.get("prediction_target", "direction"),
             )
         )
-        logger.debug("_train_model_remote completed for %s", symbol)
+        logger.debug("Выполнение _train_model_remote завершено для %s", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             from tensorflow import keras
@@ -1327,7 +1327,7 @@ class ModelBuilder:
             train_task = _train_model_remote.options(
                 num_gpus=1 if is_cuda_available() else 0
             )
-        logger.debug("Dispatching _train_model_remote for %s (fine-tune)", symbol)
+        logger.debug("Запуск _train_model_remote для %s (дообучение)", symbol)
         model_state, val_preds, val_labels = ray.get(
             train_task.remote(
                 X,
@@ -1343,7 +1343,7 @@ class ModelBuilder:
                 self.config.get("prediction_target", "direction"),
             )
         )
-        logger.debug("_train_model_remote completed for %s (fine-tune)", symbol)
+        logger.debug("Выполнение _train_model_remote завершено для %s (дообучение)", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             from tensorflow import keras
@@ -1470,6 +1470,12 @@ class ModelBuilder:
         hist.append((float(prediction), None))
         self.compute_prediction_metrics(symbol)
         if len(hist) < 10:
+            logger.info(
+                "Пороги для %s: long=%.2f, short=%.2f",
+                symbol,
+                base_long,
+                base_short,
+            )
             return base_long, base_short
         mean_pred = float(np.mean(hist))
         std_pred = float(np.std(hist))
@@ -1489,6 +1495,9 @@ class ModelBuilder:
         adj = sharpe * 0.05 - vol_change * 0.05
         long_thr = np.clip(mean_pred + std_pred / 2 + adj, base_long, 0.9)
         short_thr = np.clip(mean_pred - std_pred / 2 - adj, 0.1, base_short)
+        logger.info(
+            "Пороги для %s: long=%.2f, short=%.2f", symbol, long_thr, short_thr
+        )
         return long_thr, short_thr
 
     async def compute_shap_values(self, symbol, model, X):
@@ -1498,7 +1507,7 @@ class ModelBuilder:
                 try:
                     import shap  # type: ignore
                 except ImportError as e:  # pragma: no cover - optional dependency
-                    logger.warning("shap import failed: %s", e)
+                    logger.warning("Не удалось импортировать shap: %s", e)
                     return
             if self.nn_framework != "pytorch":
                 return
@@ -1664,7 +1673,7 @@ class ModelBuilder:
             except asyncio.CancelledError:
                 raise
             except (RuntimeError, ValueError, KeyError) as e:
-                logger.exception("Backtest loop error: %s", e)
+                logger.exception("Ошибка цикла бектеста: %s", e)
                 await asyncio.sleep(1)
 
 
@@ -1859,7 +1868,7 @@ def _load_model() -> None:
         try:
             _model = joblib.load(MODEL_FILE)
         except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
-            logger.exception("Failed to load model: %s", e)
+            logger.exception("Не удалось загрузить модель: %s", e)
             _model = None
 
 
