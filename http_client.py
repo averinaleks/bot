@@ -7,7 +7,9 @@ import os
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from typing import AsyncGenerator, Generator, TYPE_CHECKING
+from collections import defaultdict
+from typing import AsyncGenerator, Generator, TYPE_CHECKING, Any, Dict, Tuple
+import random
 
 import httpx
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
@@ -80,6 +82,10 @@ def get_httpx_client(
 _ASYNC_CLIENT: httpx.AsyncClient | None = None
 _ASYNC_CLIENT_LOCK = asyncio.Lock()
 
+# In-memory caches and metrics for HTTP requests
+REFERENCE_CACHE: Dict[str, Tuple[int, httpx.Headers, bytes]] = {}
+RETRY_METRICS: defaultdict[str, int] = defaultdict(int)
+
 
 async def get_async_http_client(
     timeout: float = DEFAULT_TIMEOUT, **kwargs
@@ -127,3 +133,52 @@ async def async_http_client(
         close = getattr(client, "aclose", None)
         if callable(close):
             await close()
+
+
+async def request_with_retry(
+    method: str,
+    url: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+    max_attempts: int = 5,
+    backoff_base: float = 0.5,
+    jitter: float = 0.1,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Perform an HTTP request with retries and caching for reference data."""
+
+    cacheable = any(key in url for key in ("limits", "symbols"))
+    if cacheable and url in REFERENCE_CACHE:
+        status, headers, content = REFERENCE_CACHE[url]
+        request = httpx.Request(method, url)
+        return httpx.Response(status, headers=headers, content=content, request=request)
+
+    if client is None:
+        client = await get_async_http_client()
+
+    last_exc: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            resp = await client.request(method, url, **kwargs)
+            status_code = resp.status_code
+            if status_code not in (429,) and status_code < 500:
+                if cacheable:
+                    content = await resp.aread()
+                    REFERENCE_CACHE[url] = (status_code, resp.headers, content)
+                    resp._content = content  # type: ignore[attr-defined]
+                return resp
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            resp = None
+
+        if attempt == max_attempts - 1:
+            if last_exc is not None:
+                raise last_exc
+            if resp is not None:
+                return resp
+            raise RuntimeError("HTTP request failed without response")
+
+        RETRY_METRICS[url] += 1
+        delay = backoff_base * (2 ** attempt) + random.uniform(0, jitter)
+        await asyncio.sleep(delay)
+
