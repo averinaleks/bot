@@ -730,6 +730,8 @@ def test_run_once_skips_on_gpt(monkeypatch):
         },
     )
 
+    monkeypatch.setattr(trading_bot.CFG, "gpt_weight", 1.0)
+    monkeypatch.setattr(trading_bot.CFG, "ema_weight", 0.0)
     trading_bot.GPT_ADVICE.signal = "sell"
     asyncio.run(trading_bot.run_once_async())
     trading_bot.GPT_ADVICE.signal = None

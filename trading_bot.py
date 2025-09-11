@@ -1,6 +1,7 @@
 """Main entry point for the trading bot."""
 
 from pydantic import BaseModel, ValidationError
+from typing import Literal
 
 import atexit
 import asyncio
@@ -11,7 +12,6 @@ import statistics
 import time
 from collections import deque
 from contextlib import suppress
-from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 
 from model_builder_client import schedule_retrain, retrain
@@ -30,7 +30,7 @@ CFG = BotConfig()
 class GPTAdviceModel(BaseModel):
     """Model for parsing GPT advice responses."""
 
-    signal: float | None = None
+    signal: Literal["buy", "sell", "hold"] | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
 
@@ -198,6 +198,17 @@ _LAST_PREDICTION: int | None = None
 
 # Default trading symbol; overridden from configuration at runtime.
 SYMBOL = "BTCUSDT"
+
+
+def _compute_ema(prices: list[float], period: int = 10) -> float:
+    """Return exponential moving average for ``prices``."""
+    if not prices:
+        return 0.0
+    alpha = 2 / (period + 1)
+    ema = prices[0]
+    for price in prices[1:]:
+        ema = alpha * price + (1 - alpha) * ema
+    return ema
 INTERVAL = safe_float("INTERVAL", 5.0)
 # How often to retrain the reference model (seconds)
 TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
@@ -841,26 +852,73 @@ def _resolve_trade_params(
 
 
 def should_trade(model_signal: str) -> bool:
-    """Return ``True`` if trade should proceed based on GPT advice."""
+    """Return ``True`` if weighted signals favor ``model_signal``."""
 
     gpt_signal = GPT_ADVICE.signal
-    if gpt_signal and gpt_signal != model_signal:
+    if gpt_signal and gpt_signal not in {"buy", "sell", "hold"}:
+        logger.info("Invalid GPT advice %s", gpt_signal)
+        return False
+
+    prices = list(_PRICE_HISTORY)
+    ema_signal = None
+    if prices:
+        ema = _compute_ema(prices)
+        if prices[-1] > ema:
+            ema_signal = "buy"
+        elif prices[-1] < ema:
+            ema_signal = "sell"
+
+    weights = {
+        "model": CFG.transformer_weight,
+        "ema": CFG.ema_weight,
+    }
+    scores = {"buy": 0.0, "sell": 0.0}
+    if model_signal == "buy":
+        scores["buy"] += weights["model"]
+    else:
+        scores["sell"] += weights["model"]
+    if ema_signal == "buy":
+        scores["buy"] += weights["ema"]
+    elif ema_signal == "sell":
+        scores["sell"] += weights["ema"]
+    if gpt_signal in ("buy", "sell"):
+        weights["gpt"] = CFG.gpt_weight
+        if gpt_signal == "buy":
+            scores["buy"] += weights["gpt"]
+        else:
+            scores["sell"] += weights["gpt"]
+
+    total_weight = sum(weights.values())
+    final = None
+    if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
+        final = "buy"
+    elif scores["sell"] > scores["buy"] and scores["sell"] >= total_weight / 2:
+        final = "sell"
+
+    if final and final != model_signal:
         logger.info(
-            "GPT advice %s conflicts with model signal %s", gpt_signal, model_signal
+            "Weighted advice %s conflicts with model signal %s", final, model_signal
         )
         return False
-    return True
+    return final == model_signal
 
 
 async def refresh_gpt_advice() -> None:
     """Fetch GPT analysis and update ``GPT_ADVICE``."""
     try:
-        strategy_code = (
-            Path(__file__).with_name("strategy_optimizer.py").read_text(encoding="utf-8")
+        env = _load_env()
+        price = await fetch_price(SYMBOL, env)
+        if price is None:
+            return
+        features = await build_feature_vector(price)
+        rsi = features[-1]
+        ema = _compute_ema(list(_PRICE_HISTORY))
+        prompt = (
+            "На основании рыночных данных:\n"
+            f"price={price}, EMA={ema}, RSI={rsi}.\n"
+            "Дай JSON {\"signal\": 'buy'|'sell'|'hold', \"tp_mult\": float, \"sl_mult\": float}."
         )
-        gpt_result = await query_gpt_json_async(
-            "Что ты видишь в этом коде:\n" + strategy_code
-        )
+        gpt_result = await query_gpt_json_async(prompt)
         advice = GPTAdviceModel.model_validate(gpt_result)
         global GPT_ADVICE
         GPT_ADVICE = advice
@@ -870,6 +928,12 @@ async def refresh_gpt_advice() -> None:
     except ValidationError as exc:
         await send_telegram_alert(f"Invalid GPT advice schema: {exc}")
         raise
+
+
+async def _gpt_advice_loop() -> None:
+    while True:
+        await refresh_gpt_advice()
+        await asyncio.sleep(3600)
 
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
@@ -982,9 +1046,11 @@ async def main_async() -> None:
     """Run the trading bot until interrupted."""
     train_task = None
     monitor_task = None
+    gpt_task = None
     try:
         await check_services()
         env = _load_env()
+        gpt_task = asyncio.create_task(_gpt_advice_loop())
         while True:
             try:
                 await run_once_async()
@@ -1014,6 +1080,10 @@ async def main_async() -> None:
             train_task.cancel()
             with suppress(asyncio.CancelledError):
                 await train_task
+        if gpt_task:
+            gpt_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await gpt_task
 
 
 def main() -> None:
