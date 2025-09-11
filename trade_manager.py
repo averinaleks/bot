@@ -1175,7 +1175,7 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal and rl_signal != "hold":
+                if rl_signal in ("open_long", "open_short", "close"):
                     logger.info("RL action for %s: %s", symbol, rl_signal)
                     if rl_signal == "close":
                         await self.close_position(symbol, current_price, "RL Signal")
@@ -1615,13 +1615,15 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal and rl_signal != "hold":
+                if rl_signal in ("open_long", "open_short", "close"):
                     logger.info("RL action for %s: %s", symbol, rl_signal)
-            if rl_signal in ("open_long", "open_short", "close"):
-                final = (
-                    "buy" if rl_signal == "open_long" else
-                    "sell" if rl_signal == "open_short" else "close"
-                )
+            final_mapping = {
+                "open_long": "buy",
+                "open_short": "sell",
+                "close": "close",
+            }
+            if rl_signal in final_mapping:
+                final = final_mapping[rl_signal]
                 return (final, float(prediction)) if return_prob else final
 
             ema_signal = None

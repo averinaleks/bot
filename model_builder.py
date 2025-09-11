@@ -1943,9 +1943,6 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
-        self.position = 0  # 1 for long, -1 for short
-        self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
-        # hold, open long, open short, close
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -1966,11 +1963,8 @@ class TradingEnv(gym.Env if gym else object):
         done = False
         reward = 0.0
         prev_position = self.position
-        if action == 1:  # go long
+        if action == 1:  # открыть лонг
             self.position = 1
-        elif action == 2:  # go short
-            self.position = -1
-        elif action == 3:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -2226,15 +2220,14 @@ class RLAgent:
                 )
                 return None
             action, _ = model.predict(obs, deterministic=True)
-        action = action.item()
-        action = int(action)
-        if action == 1:
-            return "open_long"
-        if action == 2:
-            return "open_short"
-        if action == 3:
-            return "close"
-        return "hold"
+        action = int(action.item())
+        mapping = {
+            0: "hold",
+            1: "open_long",
+            2: "open_short",
+            3: "close",
+        }
+        return mapping.get(action, "hold")
 
 
 # ----------------------------------------------------------------------
