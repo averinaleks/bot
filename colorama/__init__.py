@@ -38,4 +38,14 @@ def init(*args, **kwargs):  # pragma: no cover - trivial
     return None
 
 
-__all__ = ["Fore", "Style", "AnsiToWin32", "init", "__version__"]
+def deinit(*args, **kwargs):  # pragma: no cover - trivial
+    """Dummy ``deinit`` for compatibility with the real package."""
+    return None
+
+
+def reinit(*args, **kwargs):  # pragma: no cover - trivial
+    """Dummy ``reinit`` for compatibility with the real package."""
+    return None
+
+
+__all__ = ["Fore", "Style", "AnsiToWin32", "init", "deinit", "reinit", "__version__"]
