@@ -28,6 +28,7 @@ def _simulate_trades(
     base_thr: float,
     sl_mult: float,
     tp_mult: float,
+    trading_fee: float,
     max_positions: int,
     n_symbols: int,
 ):
@@ -70,6 +71,7 @@ def _simulate_trades(
                     returns[count] = (
                         (positions_tp[pos_idx] - positions_entry[pos_idx])
                         / positions_entry[pos_idx]
+                        - 2 * trading_fee
                     )
                     count += 1
                     positions_symbol[pos_idx] = -1
@@ -77,6 +79,7 @@ def _simulate_trades(
                     returns[count] = (
                         (positions_sl[pos_idx] - positions_entry[pos_idx])
                         / positions_entry[pos_idx]
+                        - 2 * trading_fee
                     )
                     count += 1
                     positions_symbol[pos_idx] = -1
@@ -85,6 +88,7 @@ def _simulate_trades(
                     returns[count] = (
                         (positions_entry[pos_idx] - positions_tp[pos_idx])
                         / positions_entry[pos_idx]
+                        - 2 * trading_fee
                     )
                     count += 1
                     positions_symbol[pos_idx] = -1
@@ -92,6 +96,7 @@ def _simulate_trades(
                     returns[count] = (
                         (positions_entry[pos_idx] - positions_sl[pos_idx])
                         / positions_entry[pos_idx]
+                        - 2 * trading_fee
                     )
                     count += 1
                     positions_symbol[pos_idx] = -1
@@ -133,9 +138,9 @@ def _simulate_trades(
             side = positions_side[j]
             last = last_close[sym]
             if side == 1:
-                returns[count] = (last - entry) / entry
+                returns[count] = (last - entry) / entry - 2 * trading_fee
             else:
-                returns[count] = (entry - last) / entry
+                returns[count] = (entry - last) / entry - 2 * trading_fee
             count += 1
 
     return returns[:count]
@@ -217,6 +222,7 @@ def portfolio_backtest(
         base_thr = params.get("base_probability_threshold", 0.6)
         sl_mult = params.get("sl_multiplier", 1.0)
         tp_mult = params.get("tp_multiplier", 2.0)
+        trading_fee = params.get("trading_fee", 0.0)
 
         # Convert columns to numpy arrays for numba function
         symbol_codes, uniques = pd.factorize(combined["symbol"])
@@ -232,6 +238,7 @@ def portfolio_backtest(
             float(base_thr),
             float(sl_mult),
             float(tp_mult),
+            float(trading_fee),
             int(max_positions),
             int(len(uniques)),
         )

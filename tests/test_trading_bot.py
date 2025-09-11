@@ -736,6 +736,12 @@ def test_run_once_skips_on_gpt(monkeypatch):
     assert not sent
 
 
+def test_should_trade_invalid_gpt_signal():
+    trading_bot.GPT_ADVICE.signal = "maybe"
+    assert not trading_bot.should_trade("buy")
+    trading_bot.GPT_ADVICE.signal = None
+
+
 def test_run_once_env_fallback(monkeypatch):
     sent = {}
     async def fake_fetch_price2(*a, **k):

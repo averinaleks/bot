@@ -419,3 +419,27 @@ async def test_query_gpt_json_async(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     result = await query_gpt_json_async("hi")
     assert result["signal"] == "buy"
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_no_env_leak(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    captured: dict[str, bool | None] = {}
+
+    class DummyClient:
+        def __init__(self, *a, **kw):
+            captured["trust_env"] = kw.get("trust_env")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def stream(self, *args, **kwargs):
+            content = json.dumps({"choices": [{"text": '{"signal": "buy"}'}]}).encode()
+            return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+    await query_gpt_json_async("hi")
+    assert captured.get("trust_env") is False
