@@ -67,7 +67,8 @@ jobs:
         if: >-
           ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v3.0.0
-        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d  # yamllint disable-line rule:line-length
+        # yamllint disable-line rule:line-length
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
