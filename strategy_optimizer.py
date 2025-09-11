@@ -54,6 +54,44 @@ from bot.config import BotConfig
 from bot.portfolio_backtest import portfolio_backtest
 
 
+def walk_forward_splits(n: int, n_splits: int, min_train: int, horizon: int):
+    """Generate indices for walk-forward validation.
+
+    Parameters
+    ----------
+    n: int
+        Total number of samples.
+    n_splits: int
+        Number of walk-forward splits.
+    min_train: int
+        Minimum size of the initial training window.
+    horizon: int
+        Size of the test window.
+
+    Yields
+    ------
+    tuple[np.ndarray, np.ndarray]
+        Arrays of train and test indices for each split.
+    """
+    if min_train <= 0 or horizon <= 0:
+        raise ValueError("min_train and horizon must be positive")
+    if min_train + horizon > n:
+        raise ValueError("Not enough data for the first split")
+
+    step = (n - min_train - horizon) // max(1, n_splits - 1)
+    step = max(1, step)
+
+    for i in range(n_splits):
+        train_end = min_train + step * i
+        test_start = train_end
+        test_end = test_start + horizon
+        if test_end > n:
+            break
+        train_idx = np.arange(train_end)
+        test_idx = np.arange(test_start, test_end)
+        yield train_idx, test_idx
+
+
 @ray.remote
 def _portfolio_backtest_remote(
     df_dict: dict[str, pd.DataFrame],
@@ -81,6 +119,8 @@ class StrategyOptimizer:
         self.max_trials = config.get("optuna_trials", 20)
         self.n_splits = config.get("n_splits", 3)
         self.metric = config.get("portfolio_metric", "sharpe")
+        self.min_train = config.get("wf_min_train", 100)
+        self.horizon = config.get("wf_horizon", 50)
 
     async def optimize(self) -> dict:
         """Optimize parameters for the portfolio."""
@@ -97,6 +137,36 @@ class StrategyOptimizer:
         if not df_dict:
             logger.warning("Нет данных для оптимизации стратегии")
             return self.config.asdict()
+
+        n = min(len(df) for df in df_dict.values())
+        min_train = max(1, min(self.min_train, n - 1))
+        horizon = max(1, min(self.horizon, n - min_train))
+
+        async def evaluate_params(params: dict) -> float:
+            metrics: list[float] = []
+            for i, (_train_idx, test_idx) in enumerate(
+                walk_forward_splits(n, self.n_splits, min_train, horizon)
+            ):
+                test_df_dict = {
+                    symbol: df.iloc[test_idx]
+                    for symbol, df in df_dict.items()
+                }
+                result = _portfolio_backtest_remote.remote(
+                    test_df_dict,
+                    params,
+                    self.config["timeframe"],
+                    self.metric,
+                    self.config.get("max_positions", 5),
+                )
+                if ray.is_initialized():
+                    value = await asyncio.to_thread(ray.get, result)
+                else:
+                    value = result
+                logger.info(
+                    "WF split %d: metric=%.4f params=%s", i + 1, value, params
+                )
+                metrics.append(value)
+            return float(np.mean(metrics)) if metrics else float("-inf")
 
         if optuna is None:
             logger.warning(
@@ -122,26 +192,13 @@ class StrategyOptimizer:
                     "ema100_period": ema100,
                     "ema200_period": ema200,
                 }
-                result = _portfolio_backtest_remote.remote(
-                    df_dict,
-                    params,
-                    self.config["timeframe"],
-                    self.metric,
-                    self.config.get("max_positions", 5),
-                )
-                if ray.is_initialized():
-                    value = await asyncio.to_thread(ray.get, result)
-                else:
-                    value = result
+                value = await evaluate_params(params)
                 if value > best_value:
                     best_value = value
                     best_params = params
             return best_params
 
         study = optuna.create_study(direction="maximize")
-        obj_refs: list = []
-        results: list[float] = []
-        trials = []
         for _ in range(self.max_trials):
             trial = study.ask()
             params = {
@@ -162,23 +219,7 @@ class StrategyOptimizer:
                 "risk_vol_min": trial.suggest_float("risk_vol_min", 0.1, 1.0),
                 "risk_vol_max": trial.suggest_float("risk_vol_max", 1.0, 3.0),
             }
-            result = _portfolio_backtest_remote.remote(
-                df_dict,
-                params,
-                self.config["timeframe"],
-                self.metric,
-                self.config.get("max_positions", 5),
-            )
-            if ray.is_initialized():
-                obj_refs.append(result)
-            else:
-                results.append(result)
-            trials.append((trial, params))
-
-        if ray.is_initialized():
-            results = await asyncio.to_thread(ray.get, obj_refs)
-
-        for (trial, _), value in zip(trials, results):
+            value = await evaluate_params(params)
             study.tell(trial, value)
 
         best_params = {**self.config.asdict(), **study.best_params}
