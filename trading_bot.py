@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
-from bot.gpt_client import GPTClientError, query_gpt_json_async
+from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 from bot.utils import logger, suppress_tf_logs
 
 CFG = BotConfig()
@@ -865,6 +865,9 @@ async def refresh_gpt_advice() -> None:
         global GPT_ADVICE
         GPT_ADVICE = advice
         logger.info("GPT analysis: %s", advice.model_dump())
+    except GPTClientJSONError as exc:
+        await send_telegram_alert(f"Некорректный JSON от GPT: {exc}")
+        logger.debug("GPT analysis failed: %s", exc)
     except GPTClientError as exc:  # pragma: no cover - non-critical
         logger.debug("GPT analysis failed: %s", exc)
     except ValidationError as exc:

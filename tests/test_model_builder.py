@@ -490,3 +490,123 @@ def test_train_model_remote_freezes_layers():
     new_model.load_state_dict(state)
     assert torch.allclose(new_model.conv.weight, init_state["conv.weight"])
 
+
+@pytest.mark.asyncio
+async def test_adjust_thresholds_not_enough_history(tmp_path):
+    cfg = BotConfig(
+        cache_dir=str(tmp_path),
+        prediction_history_size=5,
+        base_probability_threshold=0.6,
+    )
+    dh = types.SimpleNamespace(ohlcv=pd.DataFrame({"close": []}), usdt_pairs=["BTCUSDT"])
+
+    class TM:
+        last_volatility = {}
+
+        async def get_loss_streak(self, _):
+            return 0
+
+        async def get_win_streak(self, _):
+            return 0
+
+        async def get_sharpe_ratio(self, _):
+            return 0.0
+
+    mb = ModelBuilder(cfg, dh, TM())
+    long_thr, short_thr = await mb.adjust_thresholds("BTCUSDT", 0.55)
+    assert long_thr == pytest.approx(0.6)
+    assert short_thr == pytest.approx(0.4)
+
+
+class _DummyTL:
+    async def send_telegram_message(self, *args, **kwargs):
+        pass
+
+
+class _DummyDH:
+    def __init__(self):
+        self.usdt_pairs = []
+        self.telegram_logger = _DummyTL()
+
+
+class _DummyTM:
+    pass
+
+
+class _DummyExplainer:
+    def __init__(self, model, data):
+        pass
+
+    def shap_values(self, data):
+        return [np.zeros(data.shape)]
+
+
+@pytest.mark.asyncio
+async def test_compute_shap_values_creates_cache(tmp_path, monkeypatch):
+    cfg = BotConfig(
+        cache_dir=str(tmp_path),
+        model_type="tft",
+        nn_framework="pytorch",
+        min_data_length=1,
+        lstm_timesteps=1,
+    )
+    mb = ModelBuilder(cfg, _DummyDH(), _DummyTM())
+
+    class DummyLinear:
+        def __init__(self, *a, **k):
+            self.training = False
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            self.training = False
+
+        def train(self):
+            self.training = True
+
+        def parameters(self):
+            return iter([types.SimpleNamespace(device="cpu")])
+
+    class DummyTorch:
+        class nn:
+            Linear = DummyLinear
+
+        @staticmethod
+        def tensor(x, dtype=None, device=None):
+            class DummyTensor:
+                def __init__(self, arr):
+                    self.arr = np.array(arr)
+
+                def to(self, device):
+                    return self
+
+                def view(self, *args):
+                    self.arr = self.arr.reshape(*args)
+                    return self
+
+                def size(self, dim):
+                    return self.arr.shape[dim]
+
+                @property
+                def shape(self):
+                    return self.arr.shape
+
+            return DummyTensor(x)
+
+        float32 = np.float32
+
+    monkeypatch.setattr(
+        model_builder,
+        "_get_torch_modules",
+        lambda: {"torch": DummyTorch()},
+    )
+
+    shap_stub = types.SimpleNamespace(GradientExplainer=_DummyExplainer)
+    monkeypatch.setattr(model_builder, "shap", shap_stub)
+
+    model = DummyTorch.nn.Linear(1, 1)
+    X = np.random.rand(5, 1, 1).astype(np.float32)
+    await mb.compute_shap_values("BTCUSDT", model, X)
+    assert (tmp_path / "shap" / "shap_BTCUSDT.pkl").exists()
+
