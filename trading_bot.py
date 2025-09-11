@@ -14,7 +14,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 
-from model_builder_client import schedule_retrain
+from model_builder_client import schedule_retrain, retrain
 
 import httpx
 from dotenv import load_dotenv
@@ -190,6 +190,10 @@ CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 # Use a larger window to accommodate EMA/RSI calculations.
 _PRICE_HISTORY: deque[float] = deque(maxlen=200)
 PRICE_HISTORY_LOCK = asyncio.Lock()
+
+# Track model performance
+_PRED_RESULTS: deque[int] = deque(maxlen=CFG.prediction_history_size)
+_LAST_PREDICTION: int | None = None
 
 
 # Default trading symbol; overridden from configuration at runtime.
@@ -924,41 +928,6 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
-    try:
-        env = _load_env()
-        price = await fetch_price(SYMBOL, env)
-        if price is None or price <= 0:
-            logger.warning("Invalid price for %s: %s", SYMBOL, price)
-            return
-        logger.info("Price for %s: %s", SYMBOL, price)
-        features = await build_feature_vector(price)
-        pdata = await get_prediction(SYMBOL, features, env)
-        model_signal = pdata.get("signal") if pdata else None
-        logger.info("Prediction: %s", model_signal)
-        if model_signal and should_trade(model_signal):
-            tp, sl, trailing_stop = _parse_trade_params(
-                pdata.get("tp") if pdata else None,
-                pdata.get("sl") if pdata else None,
-                pdata.get("trailing_stop") if pdata else None,
-            )
-            tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
-            logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
-            client = await get_http_client()
-            await send_trade_async(
-                client,
-                SYMBOL,
-                model_signal,
-                price,
-                env,
-                tp=tp,
-                sl=sl,
-                trailing_stop=trailing_stop,
-            )
-        elif model_signal:
-            logger.info("Trade skipped due to GPT advice")
-    except Exception as exc:  # pragma: no cover - network/async errors
-        logger.exception("run_once_async failed: %s", exc)
-        await send_telegram_alert(f"run_once_async failed: {exc}")
 
 
 
@@ -970,8 +939,6 @@ async def main_async() -> None:
     try:
         await check_services()
         env = _load_env()
-        await fetch_initial_history(SYMBOL, env)
-        train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
         while True:
             try:
                 await run_once_async()
