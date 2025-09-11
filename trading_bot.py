@@ -932,7 +932,6 @@ async def run_once_async() -> None:
         await send_trade_async(
             client,
             SYMBOL,
-            signal,
             price,
             env,
             tp=tp,
