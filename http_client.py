@@ -11,6 +11,9 @@ from collections import defaultdict
 from typing import AsyncGenerator, Generator, TYPE_CHECKING, Any, Dict, Tuple
 import random
 
+# Use system-level randomness for jitter to avoid predictable retry delays
+_RNG = random.SystemRandom()
+
 import httpx
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     import requests  # type: ignore[import-untyped]
@@ -179,6 +182,6 @@ async def request_with_retry(
             raise RuntimeError("HTTP request failed without response")
 
         RETRY_METRICS[url] += 1
-        delay = backoff_base * (2 ** attempt) + random.uniform(0, jitter)
+        delay = backoff_base * (2 ** attempt) + _RNG.uniform(0, jitter)
         await asyncio.sleep(delay)
 
