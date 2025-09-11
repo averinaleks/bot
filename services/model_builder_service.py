@@ -181,8 +181,10 @@ def train() -> ResponseReturnValue:
         df = df[~bad_rows]
         labels = labels[~bad_rows.to_numpy()]
     features = df.to_numpy(dtype=np.float32)
-    assert not pd.isna(df).any().any()
-    assert np.isfinite(features).all()
+    if pd.isna(df).any().any():
+        return jsonify({"error": "training data contains NaN values"}), 400
+    if not np.isfinite(features).all():
+        return jsonify({"error": "training data contains infinite values"}), 400
     if len(np.unique(labels)) < 2:
         return jsonify({"error": "labels must contain at least two classes"}), 400
     scaler = StandardScaler().fit(features)

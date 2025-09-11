@@ -184,8 +184,10 @@ def history(symbol: str) -> ResponseReturnValue:
                         ],
                     )
                     history_cache.save_cached_data(symbol, timeframe, df)
-                except Exception:
-                    pass
+                except Exception as exc:  # pragma: no cover - logging best effort
+                    logging.exception(
+                        "Failed to cache history for %s on %s: %s", symbol, timeframe, exc
+                    )
         return jsonify({'history': ohlcv})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception("Network error fetching history for '%s': %s", symbol, exc)
