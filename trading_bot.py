@@ -928,16 +928,6 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
-    async with httpx.AsyncClient(trust_env=False) as client:
-        await send_trade_async(
-            client,
-            SYMBOL,
-            price,
-            env,
-            tp=tp,
-            sl=sl,
-            trailing_stop=trailing_stop,
-        )
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
     train_task = None
