@@ -733,6 +733,50 @@ async def test_evaluate_signal_handles_sync_async_ema(monkeypatch, async_ema):
 
 
 @pytest.mark.asyncio
+async def test_evaluate_signal_considers_gpt(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.device = "cpu"
+            self.predictive_models = {"BTCUSDT": DummyModel()}
+            self.calibrators = {}
+            self.feature_cache = {"BTCUSDT": np.ones((2, 1), dtype=np.float32)}
+
+        def get_cached_features(self, symbol):
+            return self.feature_cache.get(symbol)
+
+        async def prepare_lstm_features(self, symbol, indicators):
+            raise AssertionError("prepare_lstm_features should not be called")
+
+        async def adjust_thresholds(self, symbol, prediction):
+            return 0.7, 0.3
+
+    mb = MB()
+    cfg = BotConfig(
+        lstm_timesteps=2,
+        cache_dir=tempfile.mkdtemp(),
+        transformer_weight=0.4,
+        ema_weight=0.0,
+        gpt_weight=0.6,
+    )
+    tm = TradeManager(cfg, dh, mb, None, None)
+    monkeypatch.setattr(tm, "evaluate_ema_condition", lambda *a, **k: False)
+
+    torch = sys.modules["torch"]
+    torch.tensor = lambda *a, **k: a[0]
+    torch.float32 = np.float32
+    torch.no_grad = contextlib.nullcontext
+    torch.amp = types.SimpleNamespace(autocast=lambda *_: contextlib.nullcontext())
+
+    from bot import trading_bot
+    trading_bot.GPT_ADVICE.signal = "sell"
+    signal = await tm.evaluate_signal("BTCUSDT")
+    trading_bot.GPT_ADVICE.signal = None
+    assert signal == "sell"
+
+
+@pytest.mark.asyncio
 async def test_evaluate_signal_retrains_when_model_missing(monkeypatch):
     dh = DummyDataHandler()
 

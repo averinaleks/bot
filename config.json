@@ -103,6 +103,7 @@
     "order_retry_delay": 1.0,
     "transformer_weight": 0.5,
     "ema_weight": 0.2,
+    "gpt_weight": 0.3,
     "early_stopping_patience": 3,
     "reversal_margin": 0.05,
     "prediction_target": "direction",

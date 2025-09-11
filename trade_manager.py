@@ -1653,6 +1653,19 @@ class TradeManager:
             elif ema_signal == "sell":
                 scores["sell"] += weights["ema"]
 
+            gpt_signal = None
+            try:
+                from bot import trading_bot as tb
+                gpt_signal = tb.GPT_ADVICE.signal
+            except Exception:
+                gpt_signal = None
+            if gpt_signal in ("buy", "sell"):
+                weights["gpt"] = self.config.get("gpt_weight", 0.3)
+                if gpt_signal == "buy":
+                    scores["buy"] += weights["gpt"]
+                else:
+                    scores["sell"] += weights["gpt"]
+
             total_weight = sum(weights.values())
             if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
                 final = "buy"
