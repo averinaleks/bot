@@ -117,10 +117,6 @@ def open_position() -> ResponseReturnValue:
     tp = float(tp) if tp is not None else None
     sl = float(sl) if sl is not None else None
     trailing_stop = float(trailing_stop) if trailing_stop is not None else None
-    if amount <= 0:
-        risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
-        if risk_usd > 0 and price > 0:
-            amount = risk_usd / price
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     if not symbol or amount <= 0:

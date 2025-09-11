@@ -157,7 +157,7 @@ async def test_send_trade_timeout_env(monkeypatch):
     monkeypatch.setattr(trading_bot, 'HTTP_CLIENT', dummy)
     monkeypatch.setenv('TRADE_MANAGER_TIMEOUT', '9')
     ok, err = await trading_bot.send_trade_async(
-        dummy, 'BTCUSDT', 'buy', 100.0, {'trade_manager_url': 'http://tm'}
+        dummy, 'BTCUSDT', 'buy', 100.0, 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert called['timeout'] == 9.0
     assert ok is True and err is None
@@ -167,7 +167,7 @@ async def test_send_trade_timeout_env(monkeypatch):
 def test_build_trade_payload_invalid_side(side):
     with pytest.raises(ValueError, match="'buy' or 'sell'"):
         trading_bot._build_trade_payload(
-            "BTCUSDT", side, 1.0, None, None, None
+            "BTCUSDT", side, 1.0, 1.0, None, None, None
         )
 
 
@@ -242,7 +242,7 @@ async def test_send_trade_latency_alert(monkeypatch, fast_sleep):
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     trading_bot.CONFIRMATION_TIMEOUT = 0.0
     await trading_bot.send_trade_async(
-        dummy, 'BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'}
+        dummy, 'BTCUSDT', 'buy', 1.0, 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert called
 
@@ -269,7 +269,7 @@ async def test_send_trade_http_error_alert(monkeypatch):
 
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     await trading_bot.send_trade_async(
-        dummy, 'BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'}
+        dummy, 'BTCUSDT', 'sell', 1.0, 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert called
 
@@ -290,7 +290,7 @@ async def test_send_trade_exception_alert(monkeypatch):
 
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     await trading_bot.send_trade_async(
-        dummy, 'BTCUSDT', 'sell', 1.0, {'trade_manager_url': 'http://tm'}
+        dummy, 'BTCUSDT', 'sell', 1.0, 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert called
 
@@ -427,6 +427,7 @@ async def test_send_trade_forwards_params(monkeypatch):
         'BTCUSDT',
         'buy',
         1.0,
+        1.0,
         {'trade_manager_url': 'http://tm'},
         tp=10,
         sl=5,
@@ -460,7 +461,7 @@ async def test_send_trade_reports_error_field(monkeypatch):
 
     monkeypatch.setattr(trading_bot, 'send_telegram_alert', fake_alert)
     ok, err = await trading_bot.send_trade_async(
-        dummy, 'BTCUSDT', 'buy', 1.0, {'trade_manager_url': 'http://tm'}
+        dummy, 'BTCUSDT', 'buy', 1.0, 1.0, {'trade_manager_url': 'http://tm'}
     )
     assert not ok
     assert err

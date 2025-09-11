@@ -7,6 +7,7 @@ import asyncio
 import json
 import math
 import os
+import random
 import statistics
 import time
 from collections import deque
@@ -75,6 +76,12 @@ def safe_int(env_var: str, default: int) -> int:
 def safe_float(env_var: str, default: float) -> float:
     """Return float value of ``env_var`` or ``default`` on failure or non-positive value."""
     return safe_number(env_var, default, float)
+
+
+def _calculate_amount(price: float) -> float:
+    """Compute trade amount using risk config and ``price``."""
+    risk = random.uniform(CFG.min_risk_per_trade, CFG.max_risk_per_trade)
+    return risk / price if price > 0 else 0.0
 
 
 async def send_telegram_alert(message: str) -> None:
@@ -482,6 +489,7 @@ def _build_trade_payload(
     symbol: str,
     side: str,
     price: float,
+    amount: float,
     tp: float | None,
     sl: float | None,
     trailing_stop: float | None,
@@ -491,7 +499,7 @@ def _build_trade_payload(
     if side not in {"buy", "sell"}:
         raise ValueError("side must be 'buy' or 'sell'")
 
-    payload = {"symbol": symbol, "side": side, "price": price}
+    payload = {"symbol": symbol, "side": side, "price": price, "amount": amount}
     if tp is not None:
         payload["tp"] = tp
     if sl is not None:
@@ -537,6 +545,7 @@ async def _post_trade(
     symbol: str,
     side: str,
     price: float,
+    amount: float,
     env: dict,
     tp: float | None,
     sl: float | None,
@@ -546,7 +555,7 @@ async def _post_trade(
 
     start = time.time()
     payload, headers, timeout = _build_trade_payload(
-        symbol, side, price, tp, sl, trailing_stop
+        symbol, side, price, amount, tp, sl, trailing_stop
     )
     url = f"{env['trade_manager_url']}/open_position"
     body = json.dumps(payload).encode()
@@ -581,6 +590,7 @@ async def send_trade_async(
     symbol: str,
     side: str,
     price: float,
+    amount: float,
     env: dict,
     tp: float | None = None,
     sl: float | None = None,
@@ -595,7 +605,7 @@ async def send_trade_async(
 
     for attempt in range(1, max_attempts + 1):
         ok, elapsed, error = await _post_trade(
-            client, symbol, side, price, env, tp, sl, trailing_stop
+            client, symbol, side, price, amount, env, tp, sl, trailing_stop
         )
         if ok:
             if elapsed > CONFIRMATION_TIMEOUT:
@@ -885,11 +895,13 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
                 pdata.get("tp"), pdata.get("sl"), pdata.get("trailing_stop")
             )
             tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
+            amount = _calculate_amount(price)
             await send_trade_async(
                 client,
                 symbol,
                 signal,
                 price,
+                amount,
                 env,
                 tp=tp,
                 sl=sl,
@@ -920,11 +932,13 @@ async def run_once_async() -> None:
         tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
         logger.info("Sending trade: %s %s @ %s", SYMBOL, model_signal, price)
         client = await get_http_client()
+        amount = _calculate_amount(price)
         await send_trade_async(
             client,
             SYMBOL,
             model_signal,
             price,
+            amount,
             env,
             tp=tp,
             sl=sl,

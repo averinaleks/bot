@@ -61,7 +61,7 @@ async def test_send_trade_timeout_invalid_env(monkeypatch):
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
     monkeypatch.setenv("TRADE_MANAGER_TIMEOUT", "oops")
     await trading_bot.send_trade_async(
-        dummy, "BTCUSDT", "buy", 1.0, {"trade_manager_url": "http://tm"}
+        dummy, "BTCUSDT", "buy", 1.0, 1.0, {"trade_manager_url": "http://tm"}
     )
     assert called["timeout"] == 5.0
 

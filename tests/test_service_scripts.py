@@ -246,7 +246,6 @@ def _run_tm(
     env = {
         'HOST': '127.0.0.1',
         'TRADE_MANAGER_TOKEN': 'test-token',
-        'TRADE_RISK_USD': os.environ.get('TRADE_RISK_USD', '10'),
         'TEST_MODE': '1',
     }
     with patch.dict(os.environ, env):

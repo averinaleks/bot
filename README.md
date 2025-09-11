@@ -132,8 +132,6 @@ GPU-зависимости вынесены в отдельный файл `requ
       `environment:` в `docker-compose.yml`. `DataHandler` и `TradeManager`
       проверяют эти переменные при запуске и выводят предупреждение, если они
       отсутствуют. В этом случае Telegram уведомления отправляться не будут.
-    - `TRADE_RISK_USD` — величина риска в долларах для расчёта размера позиции,
-      если `/open_position` получает только `price`.
     - `GPT_MODEL` — имя модели (по умолчанию `openai/gpt-oss-20b`).
       Модель загружается лениво при запуске сервера, поэтому первые запросы к API
       могут получать код `503`, пока загрузка не завершена.
@@ -380,8 +378,7 @@ service supports multi-class problems via
 contain only a single class.
 `trade_manager_service.py` opens and closes positions on Bybit via
 `/open_position` and `/close_position` and also provides `/positions`, `/ping`
-and `/ready` routes. The `/open_position` endpoint accepts either `amount` or
-`price`, calculating the size from `TRADE_RISK_USD` when only a price is given.
+and `/ready` routes. The `/open_position` endpoint требует явный `amount`.
 
 `trade_manager_service.py` uses a simple token-based authentication. Set the
 `TRADE_MANAGER_TOKEN` environment variable on the service and supply the same
