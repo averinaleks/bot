@@ -248,6 +248,7 @@ class TradeManager:
             columns=[
                 "symbol",
                 "side",
+                "position",
                 "size",
                 "entry_price",
                 "tp_multiplier",
@@ -754,16 +755,18 @@ class TradeManager:
                 return
             # Use an explicit timezone-aware timestamp for the position index
             timestamp = pd.Timestamp.now(tz="UTC")
+            pos_sign = 1 if side == "buy" else -1
             new_position = {
                 "symbol": symbol,
                 "side": side,
+                "position": pos_sign,
                 "size": size,
                 "entry_price": price,
                 "tp_multiplier": tp_mult,
                 "sl_multiplier": sl_mult,
                 "stop_loss_price": stop_loss_price,
-                "highest_price": price if side == "buy" else float("inf"),
-                "lowest_price": price if side == "sell" else 0.0,
+                "highest_price": price if pos_sign == 1 else float("inf"),
+                "lowest_price": price if pos_sign == -1 else 0.0,
                 "breakeven_triggered": False,
             }
             idx = (symbol, timestamp)
@@ -828,7 +831,8 @@ class TradeManager:
                     return
                 position = position_df.iloc[0]
                 pos_idx = position_df.index[0]
-                side = "sell" if position["side"] == "buy" else "buy"
+                pos_sign = position["position"]
+                side = "sell" if pos_sign == 1 else "buy"
                 size = position["size"]
                 entry_price = position["entry_price"]
 
@@ -853,11 +857,7 @@ class TradeManager:
         if not order:
             return
 
-        profit = (
-            (exit_price - entry_price) * size
-            if position["side"] == "buy"
-            else (entry_price - exit_price) * size
-        )
+        profit = (exit_price - entry_price) * size * pos_sign
         profit *= self.leverage
 
         # Re-acquire locks to update state, verifying position still exists

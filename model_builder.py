@@ -1943,9 +1943,6 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
-        self.position = 0  # 1 для лонга, -1 для шорта
-        self.drawdown_penalty = self.config.get("drawdown_penalty", 0.0)
-        # 0=hold, 1=open long, 2=open short, 3=close
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -1968,9 +1965,6 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # открыть лонг
             self.position = 1
-        elif action == 2:  # открыть шорт
-            self.position = -1
-        elif action == 3:  # закрыть позицию
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
