@@ -16,6 +16,7 @@ from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
 import importlib
+import random
 
 # Ensure required RL dependency is available before importing heavy modules
 if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
@@ -551,6 +552,17 @@ def _train_model_keras(
     import tensorflow as tf
     from tensorflow import keras
 
+    seed = 0
+    np.random.seed(seed)
+    random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+        if os.getenv("TRANSFORMERS_OFFLINE"):
+            torch.use_deterministic_algorithms(True)
+    except Exception:  # pragma: no cover - torch may be unavailable
+        pass
+
     inputs = keras.Input(shape=(X.shape[1], X.shape[2]))
     if model_type == "mlp":
         x = keras.layers.Flatten()(inputs)
@@ -630,6 +642,13 @@ def _train_model_lightning(
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
     TFT = torch_mods["TemporalFusionTransformer"]
+
+    seed = 0
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if os.getenv("TRANSFORMERS_OFFLINE"):
+        torch.use_deterministic_algorithms(True)
     import pytorch_lightning as pl
 
     max_batch_size = 32
@@ -832,6 +851,13 @@ def _train_model_remote(
     Net = torch_mods["Net"]
     CNNGRU = torch_mods["CNNGRU"]
     TFT = torch_mods["TemporalFusionTransformer"]
+
+    seed = 0
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if os.getenv("TRANSFORMERS_OFFLINE"):
+        torch.use_deterministic_algorithms(True)
 
     cuda_available = is_cuda_available()
     device = torch.device("cuda" if cuda_available else "cpu")
