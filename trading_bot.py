@@ -187,7 +187,8 @@ CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 # price change (used as a lightweight volume proxy) and a moving
 # average.  This avoids additional service calls while still allowing
 # us to build a small feature vector for the prediction service.
-_PRICE_HISTORY: deque[float] = deque(maxlen=50)
+# Use a larger window to accommodate EMA/RSI calculations.
+_PRICE_HISTORY: deque[float] = deque(maxlen=200)
 PRICE_HISTORY_LOCK = asyncio.Lock()
 
 
@@ -387,6 +388,28 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
     except httpx.HTTPError as exc:
         logger.error("Price request error: %s", exc)
         return None
+
+
+async def fetch_initial_history(symbol: str, env: dict) -> None:
+    """Populate ``_PRICE_HISTORY`` with initial OHLCV data."""
+    async with httpx.AsyncClient(trust_env=False) as client:
+        try:
+            resp = await client.get(
+                f"{env['data_handler_url']}/history/{symbol}", timeout=5
+            )
+            data = resp.json() if resp.status_code == 200 else {}
+            candles = data.get("history", [])
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.warning("Failed to fetch initial history: %s", exc)
+            candles = []
+    async with PRICE_HISTORY_LOCK:
+        _PRICE_HISTORY.clear()
+        for candle in candles:
+            if len(candle) > 4:
+                try:
+                    _PRICE_HISTORY.append(float(candle[4]))
+                except (TypeError, ValueError):
+                    continue
 
 
 async def build_feature_vector(price: float) -> list[float]:
@@ -943,6 +966,7 @@ async def main_async() -> None:
     try:
         await check_services()
         env = _load_env()
+        await fetch_initial_history(SYMBOL, env)
         train_task = schedule_retrain(env["model_builder_url"], TRAIN_INTERVAL)
         while True:
             await run_once_async()
