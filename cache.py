@@ -5,6 +5,7 @@ import shutil
 import time
 from io import BytesIO, StringIO
 import logging
+from bot.data_handler.utils import ensure_utc
 
 logger = logging.getLogger("TradingBot")
 
@@ -263,6 +264,11 @@ class HistoricalDataCache:
                         elapsed_time,
                     )
                 logger.info("Данные загружены из кэша (%s): %s", fmt, filename)
+                if isinstance(data, pd.DataFrame):
+                    if "timestamp" in data.columns:
+                        data["timestamp"] = ensure_utc(data["timestamp"])
+                    elif isinstance(data.index, pd.DatetimeIndex):
+                        data.index = ensure_utc(data.index)
                 return data
             if os.path.exists(legacy_json):
                 logger.info(
@@ -274,6 +280,11 @@ class HistoricalDataCache:
                     payload = json.load(f)
                 data_json = payload.get("data")
                 data = pd.read_json(StringIO(data_json), orient="split")
+                if isinstance(data, pd.DataFrame):
+                    if "timestamp" in data.columns:
+                        data["timestamp"] = ensure_utc(data["timestamp"])
+                    elif isinstance(data.index, pd.DatetimeIndex):
+                        data.index = ensure_utc(data.index)
                 if not isinstance(data, pd.DataFrame):
                     logger.error(
                         "Неверный тип данных в старом кэше %s_%s: %s",
