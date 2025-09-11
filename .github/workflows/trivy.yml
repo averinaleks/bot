@@ -1,7 +1,7 @@
 ---
 name: trivy
 
-on:
+'on':
   push:
     branches: ["main"]
   pull_request:
@@ -12,20 +12,22 @@ on:
 permissions:
   contents: read
   security-events: write
-  actions: read # required for github/codeql-action/upload-sarif
+  actions: read  # required for github/codeql-action/upload-sarif
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        # v4
         with:
           persist-credentials: false
 
       - id: trivy
         name: Run Trivy scan
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        # 0.33.1
         continue-on-error: true
         with:
           scan-type: fs
@@ -33,18 +35,20 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          # Fail the workflow when vulnerabilities of the specified severity are found
+          # Fail workflow when vulnerabilities of specified severity are found
           exit-code: 1
 
       - name: Upload Trivy scan results to GitHub Security tab
         if: ${{ github.event_name != 'pull_request' && always() }}
-        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b # v3
+        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b  # yamllint disable-line rule:line-length
+        # v3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
         with:
           name: trivy-results
           path: trivy-results.sarif
@@ -52,4 +56,3 @@ jobs:
       - name: Fail if vulnerabilities found
         if: ${{ steps.trivy.conclusion == 'failure' }}
         run: exit 1
-
