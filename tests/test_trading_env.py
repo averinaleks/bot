@@ -21,7 +21,7 @@ def test_step_rewards(sample_ohlcv):
     env.reset()
     _, r1, _, _ = env.step(1)
     assert r1 == 1.0
-    _, r2, done, _ = env.step(2)
+    _, r2, done, _ = env.step(3)
     assert r2 == 1.0
     assert done
     assert env.balance == 2.0

@@ -168,6 +168,7 @@ class BotConfig:
     reversal_margin: float = _get_default("reversal_margin", 0.05)
     transformer_weight: float = _get_default("transformer_weight", 0.5)
     ema_weight: float = _get_default("ema_weight", 0.2)
+    gpt_weight: float = _get_default("gpt_weight", 0.3)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
     balance_key: Optional[str] = _get_default("balance_key", None)
     enable_notifications: bool = _get_default("enable_notifications", True)
