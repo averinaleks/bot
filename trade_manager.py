@@ -137,16 +137,29 @@ def _predict_model(model, tensor) -> np.ndarray:
     with torch.no_grad(), torch.amp.autocast(device_type):
         return model(tensor).squeeze().float().cpu().numpy()
 
-
 @ray.remote(num_cpus=1, num_gpus=1 if is_cuda_available() else 0)
-def _predict_model_proc(model, tensor) -> np.ndarray:
-    """Execute ``_predict_model`` in a separate process."""
-    return _predict_model(model, tensor)
+class _PredictModelActor:
+    """Ray actor wrapping the model for thread-safe predictions."""
+
+    def __init__(self, model):
+        self.model = model
+
+    def predict(self, tensor) -> np.ndarray:  # pragma: no cover - executed in Ray
+        return _predict_model(self.model, tensor)
+
+
+_MODEL_ACTORS: Dict[int, "ray.actor.ActorHandle"] = {}
 
 
 async def _predict_async(model, tensor) -> np.ndarray:
     """Asynchronously run the prediction process and return the result."""
-    obj_ref = _predict_model_proc.remote(model, tensor)
+    if not getattr(ray, "is_initialized", lambda: False)():
+        return await asyncio.to_thread(_predict_model, model, tensor)
+    actor = _MODEL_ACTORS.get(id(model))
+    if actor is None:
+        actor = _PredictModelActor.remote(model)
+        _MODEL_ACTORS[id(model)] = actor
+    obj_ref = actor.predict.remote(tensor)
     return await asyncio.to_thread(ray.get, obj_ref)
 
 
@@ -1690,10 +1703,14 @@ class TradeManager:
                 )
             else:
                 open_symbols = set()
-        for symbol in self.data_handler.usdt_pairs:
-            if symbol in open_symbols:
-                continue
-            result = await self.evaluate_signal(symbol, return_prob=True)
+        pending_symbols = [
+            s for s in self.data_handler.usdt_pairs if s not in open_symbols
+        ]
+        coros = [
+            self.evaluate_signal(symbol, return_prob=True) for symbol in pending_symbols
+        ]
+        results = await asyncio.gather(*coros)
+        for symbol, result in zip(pending_symbols, results):
             if not result:
                 continue
             signal, prob = result
@@ -1713,7 +1730,9 @@ class TradeManager:
             price = df["close"].iloc[-1]
             atr = await self.data_handler.get_atr(symbol)
             score = float(prob) * float(atr)
-            signals.append({"symbol": symbol, "signal": signal, "score": score, "price": price})
+            signals.append(
+                {"symbol": symbol, "signal": signal, "score": score, "price": price}
+            )
         signals.sort(key=lambda s: s["score"], reverse=True)
         return signals
 

@@ -245,4 +245,37 @@ async def test_process_symbol_data_fresh_error(monkeypatch):
     assert call['n'] >= 2
     assert dh.exchange.orders == []
 
+
+@pytest.mark.asyncio
+async def test_gather_pending_signals_parallel(monkeypatch):
+    class MultiDummyDataHandler(DummyDataHandler):
+        def __init__(self):
+            super().__init__()
+            self.usdt_pairs = ["AAAUSDT", "BBBUSDT"]
+            idx = pd.MultiIndex.from_tuples(
+                [
+                    ("AAAUSDT", pd.Timestamp("2020-01-01")),
+                    ("BBBUSDT", pd.Timestamp("2020-01-01")),
+                ],
+                names=["symbol", "timestamp"],
+            )
+            self.ohlcv = pd.DataFrame({"close": [100, 100], "atr": [1.0, 1.0]}, index=idx)
+
+    dh = MultiDummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    async def delayed_eval(symbol, return_prob=True):
+        await asyncio.sleep(0.05)
+        return ("buy", 0.5)
+
+    monkeypatch.setattr(tm, "evaluate_signal", delayed_eval)
+
+    start = asyncio.get_event_loop().time()
+    signals = await tm.gather_pending_signals()
+    duration = asyncio.get_event_loop().time() - start
+
+    assert len(signals) == 2
+    # sequential execution would take ~0.1s, ensure gather runs in parallel
+    assert duration < 0.09
+
 sys.modules.pop('utils', None)
