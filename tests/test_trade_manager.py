@@ -630,6 +630,27 @@ async def test_close_position_updates_returns_and_sharpe_ratio():
     assert sharpe == pytest.approx(expected)
 
 
+@pytest.mark.asyncio
+async def test_open_and_close_short_position():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm.compute_risk_per_trade = fake_compute
+
+    await tm.open_position("BTCUSDT", "sell", 100, {})
+    # verify stop loss for short
+    pos = tm.positions.xs("BTCUSDT", level="symbol").iloc[0]
+    assert pos["position"] == -1
+    assert pos["stop_loss_price"] == pytest.approx(101.0)
+    await tm.close_position("BTCUSDT", 90, "Manual")
+
+    assert len(tm.returns_by_symbol["BTCUSDT"]) == 1
+    assert tm.returns_by_symbol["BTCUSDT"][0][1] > 0
+
+
 class DummyModel:
     def eval(self):
         pass
@@ -1093,6 +1114,7 @@ async def test_check_exit_signal_uses_cached_features(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],
@@ -1154,6 +1176,7 @@ async def test_exit_signal_triggers_reverse_trade(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],
@@ -1226,6 +1249,7 @@ async def test_rl_close_action(monkeypatch):
     ], names=["symbol", "timestamp"])
     tm.positions = pd.DataFrame({
         "side": ["buy"],
+        "position": [1],
         "size": [1],
         "entry_price": [100],
         "tp_multiplier": [2],
