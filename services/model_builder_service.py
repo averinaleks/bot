@@ -12,6 +12,7 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 import numpy as np
+import pandas as pd
 import joblib
 import os
 from pathlib import Path
@@ -73,6 +74,21 @@ def train() -> ResponseReturnValue:
         features = features.reshape(-1, 1)
     else:
         features = features.reshape(len(features), -1)
+    if features.size == 0 or len(features) != len(labels):
+        return jsonify({'error': 'invalid training data'}), 400
+    df = pd.DataFrame(features)
+    mask = pd.isna(df) | ~np.isfinite(df)
+    if mask.any().any():
+        bad_rows = mask.any(axis=1)
+        app.logger.warning(
+            'Обнаружены некорректные значения в данных: %s строк',
+            int(bad_rows.sum()),
+        )
+        df = df[~bad_rows]
+        labels = labels[~bad_rows.to_numpy()]
+    features = df.to_numpy(dtype=np.float32)
+    assert not pd.isna(df).any().any()
+    assert np.isfinite(features).all()
     if features.size == 0 or len(features) != len(labels):
         return jsonify({'error': 'invalid training data'}), 400
     # Ensure training labels contain at least two classes
