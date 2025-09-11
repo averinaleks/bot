@@ -35,6 +35,9 @@ jobs:
           device: ${{ matrix.device }}
       - name: Install development requirements
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff bot tests --output-format=github
+      - run: mypy bot
+      - run: bandit -r bot -x tests -ll
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
