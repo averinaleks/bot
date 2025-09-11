@@ -16,7 +16,25 @@ import joblib
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import pandas as pd
 from sklearn.linear_model import LogisticRegression
+try:  # optional dependency
+    from sklearn.preprocessing import StandardScaler
+except Exception:  # pragma: no cover - fallback when sklearn missing
+    class StandardScaler:  # type: ignore
+        def fit(self, X):
+            self.mean_ = np.mean(X, axis=0)
+            self.scale_ = np.std(X, axis=0)
+            return self
+
+        def transform(self, X):
+            scale = np.where(self.scale_ == 0, 1, self.scale_)
+            return (X - self.mean_) / scale
+
+        def fit_transform(self, X):
+            self.fit(X)
+            return self.transform(X)
+
 from utils import validate_host, safe_int
 
 load_dotenv()
@@ -27,6 +45,14 @@ if hasattr(app, "config"):
 BASE_DIR = Path.cwd().resolve()
 MODEL_FILE = Path(os.getenv('MODEL_FILE', 'model.pkl'))
 _model = None
+_scaler = None
+
+
+def _compute_ema(prices: list[float], span: int = 3) -> np.ndarray:
+    """Calculate EMA and shift to avoid look-ahead bias."""
+    series = pd.Series(prices, dtype=float)
+    ema = series.ewm(span=span, adjust=False).mean().shift(1)
+    return ema.to_numpy(dtype=np.float32)
 
 
 def _validate_model_path(path: Path) -> Path:
@@ -63,22 +89,28 @@ else:  # pragma: no cover - Flask 3 removed before_first_request
 @app.route('/train', methods=['POST'])
 def train() -> ResponseReturnValue:
     data = request.get_json(force=True)
-    # ``features`` may contain multiple attributes such as price, volume and
-    # technical indicators.  Ensure the array is always two-dimensional so the
-    # logistic regression treats each row as one observation with ``n``
-    # features.
-    features = np.array(data.get('features', []), dtype=np.float32)
+    prices = data.get('prices')
+    if prices is not None:
+        features = _compute_ema(prices).reshape(-1, 1)
+    else:
+        features = np.array(data.get('features', []), dtype=np.float32)
     labels = np.array(data.get('labels', []), dtype=np.float32)
     if features.ndim == 1:
         features = features.reshape(-1, 1)
     else:
         features = features.reshape(len(features), -1)
+    mask = ~np.isnan(features).any(axis=1)
+    features = features[mask]
+    labels = labels[mask]
     if features.size == 0 or len(features) != len(labels):
         return jsonify({'error': 'invalid training data'}), 400
     # Ensure training labels contain at least two classes
     if len(np.unique(labels)) < 2:
         return jsonify({'error': 'labels must contain at least two classes'}), 400
     model = LogisticRegression(multi_class="auto")
+    global _scaler
+    _scaler = StandardScaler().fit(features)
+    features = _scaler.transform(features)
     model.fit(features, labels)
     try:
         model_path = _validate_model_path(MODEL_FILE)
@@ -110,6 +142,8 @@ def predict() -> ResponseReturnValue:
         features = features.reshape(1, -1)
     else:
         features = features.reshape(1, -1)
+    if _scaler is not None:
+        features = _scaler.transform(features)
     if _model is None:
         price = float(features[0, 0]) if features.size else 0.0
         signal = 'buy' if price > 0 else None
