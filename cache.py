@@ -101,7 +101,11 @@ class HistoricalDataCache:
             file_size_mb = 0
         try:
             os.remove(path)
-            self.current_cache_size_mb -= file_size_mb
+            # Guard against negative cache sizes in case accounting drifts
+            self.current_cache_size_mb = max(
+                self.current_cache_size_mb - file_size_mb,
+                0,
+            )
         except OSError as e:  # pragma: no cover - unexpected deletion failure
             logger.error("Ошибка удаления файла кэша %s: %s", path, e)
 

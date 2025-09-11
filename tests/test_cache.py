@@ -86,3 +86,14 @@ def test_calculate_cache_size_skips_deleted_files(tmp_path, monkeypatch):
     monkeypatch.setattr(os.path, "getsize", fake_getsize)
     cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     assert cache.current_cache_size_mb == 0
+
+
+def test_delete_cache_file_never_negative(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
+    # simulate accounting mismatch by starting with tiny size
+    cache.current_cache_size_mb = 0.001
+    file_path = tmp_path / "dummy.parquet"
+    file_path.write_bytes(b"data")
+    cache._delete_cache_file(str(file_path))
+    assert cache.current_cache_size_mb >= 0
