@@ -15,18 +15,30 @@ import random
 _RNG = random.SystemRandom()
 
 import httpx
+try:  # pragma: no cover - optional dependency handling
+    from tenacity import retry, wait_exponential_jitter, stop_after_attempt
+except (ImportError, AttributeError):  # pragma: no cover - fallback for stub
+    from tenacity import retry, wait_exponential, stop_after_attempt
+
+    def wait_exponential_jitter(min: float, max: float):
+        base = wait_exponential(multiplier=1, min=min, max=max)
+
+        def _wait(attempt: int) -> float:
+            return base(attempt) + _RNG.uniform(0, 1)
+
+        return _wait
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     import requests  # type: ignore[import-untyped]
 
-DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "30")
+DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "10")
 try:
     DEFAULT_TIMEOUT = float(DEFAULT_TIMEOUT_STR)
 except ValueError:
     logging.warning(
-        "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout 30s",
+        "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout 10s",
         DEFAULT_TIMEOUT_STR,
     )
-    DEFAULT_TIMEOUT = 30.0
+    DEFAULT_TIMEOUT = 10.0
 
 
 @contextmanager
@@ -91,7 +103,7 @@ RETRY_METRICS: defaultdict[str, int] = defaultdict(int)
 
 
 async def get_async_http_client(
-    timeout: float = DEFAULT_TIMEOUT, **kwargs
+    timeout: float = 10.0, **kwargs
 ) -> httpx.AsyncClient:
     """Return a shared :class:`httpx.AsyncClient` instance."""
     global _ASYNC_CLIENT
@@ -121,7 +133,7 @@ async def close_async_http_client() -> None:
 
 @asynccontextmanager
 async def async_http_client(
-    timeout: float = DEFAULT_TIMEOUT, **kwargs
+    timeout: float = 10.0, **kwargs
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     """Context manager providing a temporary :class:`httpx.AsyncClient`."""
     kwargs.setdefault("timeout", timeout)
@@ -138,14 +150,30 @@ async def async_http_client(
             await close()
 
 
+@retry(
+    wait=wait_exponential_jitter(1, 8),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+async def _send_request(
+    method: str, url: str, *, client: httpx.AsyncClient, **kwargs: Any
+) -> httpx.Response:
+    try:
+        resp = await client.request(method, url, **kwargs)
+        if resp.status_code in (429,) or resp.status_code >= 500:
+            resp.raise_for_status()
+        return resp
+    except Exception:
+        RETRY_METRICS[url] += 1
+        logging.exception("Async HTTP request failed")
+        raise
+
+
 async def request_with_retry(
     method: str,
     url: str,
     *,
     client: httpx.AsyncClient | None = None,
-    max_attempts: int = 5,
-    backoff_base: float = 0.5,
-    jitter: float = 0.1,
     **kwargs: Any,
 ) -> httpx.Response:
     """Perform an HTTP request with retries and caching for reference data."""
@@ -159,29 +187,11 @@ async def request_with_retry(
     if client is None:
         client = await get_async_http_client()
 
-    last_exc: Exception | None = None
-    for attempt in range(max_attempts):
-        try:
-            resp = await client.request(method, url, **kwargs)
-            status_code = resp.status_code
-            if status_code not in (429,) and status_code < 500:
-                if cacheable:
-                    content = await resp.aread()
-                    REFERENCE_CACHE[url] = (status_code, resp.headers, content)
-                    resp._content = content  # type: ignore[attr-defined]
-                return resp
-        except httpx.HTTPError as exc:
-            last_exc = exc
-            resp = None
+    resp = await _send_request(method, url, client=client, **kwargs)
 
-        if attempt == max_attempts - 1:
-            if last_exc is not None:
-                raise last_exc
-            if resp is not None:
-                return resp
-            raise RuntimeError("HTTP request failed without response")
-
-        RETRY_METRICS[url] += 1
-        delay = backoff_base * (2 ** attempt) + _RNG.uniform(0, jitter)
-        await asyncio.sleep(delay)
+    if cacheable:
+        content = await resp.aread()
+        REFERENCE_CACHE[url] = (resp.status_code, resp.headers, content)
+        resp._content = content  # type: ignore[attr-defined]
+    return resp
 
