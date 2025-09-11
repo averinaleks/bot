@@ -11,6 +11,7 @@ import time
 import asyncio
 import sys
 import re
+import math
 from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
@@ -631,6 +632,10 @@ def _train_model_lightning(
     TFT = torch_mods["TemporalFusionTransformer"]
     import pytorch_lightning as pl
 
+    max_batch_size = 32
+    actual_batch_size = min(batch_size, max_batch_size)
+    accumulation_steps = math.ceil(batch_size / actual_batch_size)
+
     device = torch.device("cuda" if is_cuda_available() else "cpu")
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
@@ -647,14 +652,14 @@ def _train_model_lightning(
         val_ds = TensorDataset(X_tensor[val_idx], y_tensor[val_idx])
         train_loader = DataLoader(
             train_ds,
-            batch_size=batch_size,
+            batch_size=actual_batch_size,
             shuffle=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
         )
         val_loader = DataLoader(
             val_ds,
-            batch_size=batch_size,
+            batch_size=actual_batch_size,
             shuffle=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
@@ -710,14 +715,57 @@ def _train_model_lightning(
             patience=early_stopping_patience,
             mode="min",
         )
+
+        class CudaMemoryCallback(pl.callbacks.Callback):
+            def on_train_epoch_end(self, trainer, pl_module):
+                if hasattr(torch, "cuda") and getattr(torch.cuda, "is_available", lambda: False)():
+                    mem = getattr(torch.cuda, "memory_reserved", lambda: 0)()
+                    logger.info("CUDA memory reserved: %s", mem)
+
+        callbacks = [early_stop, CudaMemoryCallback()]
         trainer = pl.Trainer(
             max_epochs=epochs,
             logger=False,
             enable_checkpointing=False,
             devices=1 if is_cuda_available() else None,
-            callbacks=[early_stop],
+            callbacks=callbacks,
+            accumulate_grad_batches=accumulation_steps,
         )
-        trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        try:
+            trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        except Exception as exc:
+            oom_error = getattr(torch.cuda, "OutOfMemoryError", ())
+            if isinstance(exc, oom_error):
+                logger.warning("CUDA out of memory, falling back to CPU")
+                if hasattr(torch.cuda, "empty_cache"):
+                    torch.cuda.empty_cache()
+                device = torch.device("cpu")
+                train_loader = DataLoader(
+                    train_ds,
+                    batch_size=actual_batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=False,
+                )
+                val_loader = DataLoader(
+                    val_ds,
+                    batch_size=actual_batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=False,
+                )
+                trainer = pl.Trainer(
+                    max_epochs=epochs,
+                    logger=False,
+                    enable_checkpointing=False,
+                    devices=None,
+                    callbacks=callbacks,
+                    accumulate_grad_batches=accumulation_steps,
+                )
+                wrapper.to(device)
+                trainer.fit(wrapper, train_dataloaders=train_loader, val_dataloaders=val_loader)
+            else:
+                raise
         wrapper.eval()
 
         with torch.no_grad():
