@@ -929,8 +929,39 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
 async def run_once_async() -> None:
     """Execute a single trading cycle."""
 
+    env = _load_env()
+    price = await fetch_price(SYMBOL, env)
+    if price is None or price <= 0:
+        return
 
+    features = await build_feature_vector(price)
+    pdata = await get_prediction(SYMBOL, features, env)
+    if not pdata:
+        return
 
+    signal = pdata.get("signal")
+    if not signal:
+        return
+    if not should_trade(str(signal)):
+        return
+
+    logger.info("Prediction: %s", signal)
+    tp, sl, trailing_stop = _parse_trade_params(
+        pdata.get("tp"), pdata.get("sl"), pdata.get("trailing_stop")
+    )
+    tp, sl, trailing_stop = _resolve_trade_params(tp, sl, trailing_stop, price)
+
+    async with httpx.AsyncClient(trust_env=False) as client:
+        await send_trade_async(
+            client,
+            SYMBOL,
+            str(signal),
+            price,
+            env,
+            tp=tp,
+            sl=sl,
+            trailing_stop=trailing_stop,
+        )
 
 async def main_async() -> None:
     """Run the trading bot until interrupted."""
