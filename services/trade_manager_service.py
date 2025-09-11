@@ -17,8 +17,6 @@ import os
 from dotenv import load_dotenv
 import logging
 import threading
-from pathlib import Path
-from utils import validate_host, safe_int
 
 load_dotenv()
 app = Flask(__name__)
@@ -188,28 +186,51 @@ def open_position() -> ResponseReturnValue:
             opp_side = 'sell' if side == 'buy' else 'buy'
             if sl is not None:
                 stop_order = None
-                try:
-                    stop_order = exchange.create_order(
-                        symbol, 'stop', opp_side, amount, sl
-                    )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('stop order failed: %s', exc)
+                delay = 1.0
+                for attempt in range(3):
                     try:
                         stop_order = exchange.create_order(
-                            symbol, 'stop_market', opp_side, amount, sl
+                            symbol, 'stop', opp_side, amount, sl
                         )
                     except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('stop_market order failed: %s', exc)
-                        stop_order = None
+                        app.logger.debug('stop order failed: %s', exc)
+                        try:
+                            stop_order = exchange.create_order(
+                                symbol, 'stop_market', opp_side, amount, sl
+                            )
+                        except CCXT_BASE_ERROR as exc:
+                            app.logger.debug('stop_market order failed: %s', exc)
+                            stop_order = None
+                    if stop_order and stop_order.get('id') is not None:
+                        break
+                    if attempt < 2:
+                        time.sleep(delay)
+                        delay *= 2
+                if not stop_order or stop_order.get('id') is None:
+                    warn_msg = f"не удалось создать stop loss ордер для {symbol}"
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
                 orders.append(stop_order)
             if tp is not None:
-                try:
-                    tp_order = exchange.create_order(
-                        symbol, 'limit', opp_side, amount, tp
-                    )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('take profit order failed: %s', exc)
-                    tp_order = None
+                tp_order = None
+                delay = 1.0
+                for attempt in range(3):
+                    try:
+                        tp_order = exchange.create_order(
+                            symbol, 'limit', opp_side, amount, tp
+                        )
+                    except CCXT_BASE_ERROR as exc:
+                        app.logger.debug('take profit order failed: %s', exc)
+                        tp_order = None
+                    if tp_order and tp_order.get('id') is not None:
+                        break
+                    if attempt < 2:
+                        time.sleep(delay)
+                        delay *= 2
+                if not tp_order or tp_order.get('id') is None:
+                    warn_msg = f"не удалось создать take profit ордер для {symbol}"
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
                 orders.append(tp_order)
             if trailing_stop is not None and price > 0:
                 tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
