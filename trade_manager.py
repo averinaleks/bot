@@ -447,11 +447,18 @@ class TradeManager:
                         self.positions = df.set_index(["symbol", "timestamp"])
                     else:
                         self.positions = df
-                if (
-                    "timestamp" in self.positions.index.names
-                    and self.positions.index.get_level_values("timestamp").tz is None
-                ):
-                    self.positions = self.positions.tz_localize("UTC", level="timestamp")
+                if "timestamp" in self.positions.index.names:
+                    ts_level = self.positions.index.get_level_values("timestamp")
+                    if ts_level.tz is None:
+                        self.positions = (
+                            self.positions
+                            .tz_localize("UTC", level="timestamp")
+                            .tz_convert("UTC", level="timestamp")
+                        )
+                    else:
+                        self.positions = self.positions.tz_convert(
+                            "UTC", level="timestamp"
+                        )
                 self._sort_positions()
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "r", encoding="utf-8") as f:
