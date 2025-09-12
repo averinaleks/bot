@@ -428,7 +428,7 @@ class TradeManager:
             self.positions_changed = False
             logger.info("Состояние TradeManager сохранено")
         except (OSError, ValueError) as e:
-            logger.exception("Не удалось сохранить состояние (%s): %s", type(e).__name__, e)
+            logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
             for path in (locals().get("tmp_state"), locals().get("tmp_returns")):
                 try:
                     if path and os.path.exists(path):
@@ -1628,8 +1628,6 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal in ("buy", "sell"):
-                    return (rl_signal, float(prediction)) if return_prob else rl_signal
 
             ema_signal = None
             check = self.evaluate_ema_condition(symbol, "buy")

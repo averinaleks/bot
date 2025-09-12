@@ -20,8 +20,6 @@ from fastapi import FastAPI, HTTPException, Request, Response
 
 try:
     import fastapi_csrf_protect
-    from fastapi_csrf_protect.exceptions import CsrfProtectError
-    CsrfProtect = fastapi_csrf_protect.CsrfProtect
 except ImportError as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
@@ -227,7 +225,6 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
-    secret_key = os.getenv("CSRF_SECRET", "testsecret")
     return CsrfSettings(secret_key=secret_key)
 
 
