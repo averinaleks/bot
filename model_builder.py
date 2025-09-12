@@ -1687,6 +1687,7 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
+        self.drawdown_penalty = getattr(self.config, "drawdown_penalty", 0.0)
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -1709,9 +1710,6 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # open long
             self.position = 1
-        elif action == 2:  # open short
-            self.position = -1
-        elif action == 3:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -1856,8 +1854,6 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
-            action, _states = model.predict(obs, deterministic=True)
-        return self.ACTIONS.get(int(action))
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------

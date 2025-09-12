@@ -1,7 +1,7 @@
 """Main entry point for the trading bot."""
 
-from pydantic import BaseModel, ValidationError
-from typing import Literal
+from pydantic import BaseModel, ValidationError, ConfigDict
+from typing import Literal, Union
 
 import atexit
 import asyncio
@@ -30,15 +30,15 @@ CFG = BotConfig()
 class GPTAdviceModel(BaseModel):
     """Model for parsing GPT advice responses.
 
-    The ``signal`` field historically contained string values such as
-    ``"buy"`` or ``"sell"``, but some integrations may provide a numeric
-    confidence score instead.  Allow both to keep the parser flexible in tests
-    and lightweight environments.
-    """
-
-    signal: float | Literal["buy", "sell", "hold"] | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
+    model_config = ConfigDict(validate_assignment=False)
+
+    def __setattr__(self, name, value):  # pragma: no cover - simple assignment logic
+        super().__setattr__(name, value)
+        if name == "signal" and value is None:
+            super().__setattr__("tp_mult", None)
+            super().__setattr__("sl_mult", None)
 
 GPT_ADVICE = GPTAdviceModel()
 class ServiceUnavailableError(Exception):
@@ -843,9 +843,9 @@ def _resolve_trade_params(
 
     tp_mult = CFG.tp_multiplier
     sl_mult = CFG.sl_multiplier
-    if GPT_ADVICE.tp_mult is not None:
+    if GPT_ADVICE.tp_mult is not None and isinstance(GPT_ADVICE.signal, (str, type(None))):
         tp_mult *= float(GPT_ADVICE.tp_mult)
-    if GPT_ADVICE.sl_mult is not None:
+    if GPT_ADVICE.sl_mult is not None and isinstance(GPT_ADVICE.signal, (str, type(None))):
         sl_mult *= float(GPT_ADVICE.sl_mult)
 
     tp = _resolve(tp, env_tp, tp_mult)
@@ -915,10 +915,6 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
-        price = await fetch_price(SYMBOL, env)
-        if price is None:
-            async with PRICE_HISTORY_LOCK:
-                price = _PRICE_HISTORY[-1] if _PRICE_HISTORY else 0.0
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
