@@ -71,6 +71,22 @@ POSITIONS = []
 
 trade_manager: TradeManager | None = None
 
+TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+if not TRADE_MANAGER_TOKEN:
+    logger.warning("TRADE_MANAGER_TOKEN не установлен")
+
+
+def _require_token() -> tuple[Any, int] | None:
+    """Проверить заголовок Authorization."""
+    if IS_TEST_MODE:
+        return None
+    if not TRADE_MANAGER_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {TRADE_MANAGER_TOKEN}":
+        return jsonify({"error": "unauthorized"}), 401
+    return None
+
 
 async def create_trade_manager() -> TradeManager | None:
     """Instantiate the TradeManager using config.json."""
@@ -265,6 +281,9 @@ def _start_trade_manager() -> None:
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
     """Open a new trade position."""
+    err = _require_token()
+    if err:
+        return err
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
@@ -282,8 +301,32 @@ def open_position_route():
     return jsonify({"status": "ok"})
 
 
+@api_app.route("/close_position", methods=["POST"])
+def close_position_route():
+    err = _require_token()
+    if err:
+        return err
+    if not _ready_event.is_set() or trade_manager is None:
+        return jsonify({"error": "not ready"}), 503
+    info = request.get_json(force=True)
+    symbol = info.get("symbol")
+    price = float(info.get("price", 0))
+    reason = info.get("reason", "")
+    if getattr(trade_manager, "loop", None):
+        trade_manager.loop.call_soon_threadsafe(
+            asyncio.create_task,
+            trade_manager.close_position(symbol, price, reason),
+        )
+    else:
+        return jsonify({"error": "loop not running"}), 503
+    return jsonify({"status": "ok"})
+
+
 @api_app.route("/positions")
 def positions_route():
+    err = _require_token()
+    if err:
+        return err
     return jsonify({"positions": POSITIONS})
 
 
