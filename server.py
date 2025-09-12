@@ -227,6 +227,9 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
+    """Return CSRF settings for FastAPI CsrfProtect."""
+    secret = os.getenv("CSRF_SECRET", "change-me")
+    return CsrfSettings(secret_key=secret)
 
 
 csrf_protect = CsrfProtect()
