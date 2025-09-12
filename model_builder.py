@@ -1686,6 +1686,7 @@ class TradingEnv(gym.Env if gym else object):
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
+        self.drawdown_penalty = getattr(self.config, "drawdown_penalty", 0.0)
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -1708,6 +1709,9 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # открыть лонг
             self.position = 1
+        elif action == 2:  # открыть шорт
+            self.position = -1
+        elif action == 3:  # закрыть позицию
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -1850,6 +1854,11 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
+            action, _ = model.predict(obs, deterministic=True)
+            if isinstance(action, np.ndarray):
+                action = int(action.item())
+        actions_map = {0: "hold", 1: "open_long", 2: "open_short", 3: "close"}
+        return actions_map.get(int(action))
 
 
 # ----------------------------------------------------------------------
