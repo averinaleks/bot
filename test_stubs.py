@@ -94,6 +94,29 @@ class FlaskWithASGI(Protocol):
 IS_TEST_MODE = False
 
 
+class CsrfProtectError(Exception):
+    pass
+
+
+class CsrfProtect:
+    @classmethod
+    def load_config(cls, func):
+        return func
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def generate_csrf_token(self) -> str:
+        return "test-token"
+
+    def generate_csrf_tokens(self):
+        token = self.generate_csrf_token()
+        return token, token
+
+    async def validate_csrf(self, request) -> None:  # pragma: no cover - simple stub
+        return
+
+
 def apply() -> None:
     """Patch heavy dependencies with lightweight stubs in test mode."""
     global IS_TEST_MODE
@@ -294,30 +317,8 @@ def apply() -> None:
 
     # ------------------------------------------------ fastapi_csrf_protect
     csrf_mod = cast(ModuleType, types.ModuleType("fastapi_csrf_protect"))
-
-    class _CsrfProtectError(Exception):
-        pass
-
-    class _CsrfProtect:
-        @classmethod
-        def load_config(cls, func):
-            return func
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def generate_csrf_token(self) -> str:
-            return "test-token"
-
-        def generate_csrf_tokens(self):
-            token = self.generate_csrf_token()
-            return token, token
-
-        async def validate_csrf(self, request) -> None:
-            return
-
-    setattr(csrf_mod, "CsrfProtect", _CsrfProtect)
-    setattr(csrf_mod, "CsrfProtectError", _CsrfProtectError)
+    setattr(csrf_mod, "CsrfProtect", CsrfProtect)
+    setattr(csrf_mod, "CsrfProtectError", CsrfProtectError)
     sys.modules["fastapi_csrf_protect"] = csrf_mod
 
     # ------------------------------------------------------------------- torch
@@ -345,5 +346,5 @@ def apply() -> None:
 apply()
 
 
-__all__ = ["IS_TEST_MODE", "apply"]
+__all__ = ["IS_TEST_MODE", "apply", "CsrfProtect", "CsrfProtectError"]
 
