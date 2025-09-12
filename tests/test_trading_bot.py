@@ -744,6 +744,16 @@ def test_should_trade_invalid_gpt_signal():
     trading_bot.GPT_ADVICE.signal = None
 
 
+def test_should_trade_gpt_hold(monkeypatch):
+    trading_bot.GPT_ADVICE.signal = "hold"
+    trading_bot._PRICE_HISTORY.clear()
+    monkeypatch.setattr(trading_bot.CFG, "transformer_weight", 1.0, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "ema_weight", 0.0, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "gpt_weight", 10.0, raising=False)
+    assert trading_bot.should_trade("buy")
+    trading_bot.GPT_ADVICE.signal = None
+
+
 def test_run_once_env_fallback(monkeypatch):
     sent = {}
     async def fake_fetch_price2(*a, **k):
@@ -894,10 +904,27 @@ def test_resolve_trade_params_gpt(monkeypatch):
     monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 1.0, raising=False)
     trading_bot.GPT_ADVICE.tp_mult = 1.5
     trading_bot.GPT_ADVICE.sl_mult = 0.5
+    trading_bot.GPT_ADVICE.signal = "buy"
     result = trading_bot._resolve_trade_params(None, None, None, price=100.0)
     trading_bot.GPT_ADVICE.tp_mult = None
     trading_bot.GPT_ADVICE.sl_mult = None
+    trading_bot.GPT_ADVICE.signal = None
     assert result[:2] == pytest.approx((150.0, 50.0))
+
+
+def test_resolve_trade_params_gpt_hold(monkeypatch):
+    for var in ("TP", "SL", "TRAILING_STOP"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "tp_multiplier", 1.0, raising=False)
+    monkeypatch.setattr(trading_bot.CFG, "sl_multiplier", 1.0, raising=False)
+    trading_bot.GPT_ADVICE.tp_mult = 2.0
+    trading_bot.GPT_ADVICE.sl_mult = 0.5
+    trading_bot.GPT_ADVICE.signal = "hold"
+    result = trading_bot._resolve_trade_params(None, None, None, price=100.0)
+    trading_bot.GPT_ADVICE.tp_mult = None
+    trading_bot.GPT_ADVICE.sl_mult = None
+    trading_bot.GPT_ADVICE.signal = None
+    assert result[:2] == pytest.approx((100.0, 100.0))
 
 
 def test_resolve_trade_params_no_price(monkeypatch):

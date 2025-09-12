@@ -899,10 +899,11 @@ def _resolve_trade_params(
 
     tp_mult = CFG.tp_multiplier
     sl_mult = CFG.sl_multiplier
-    if GPT_ADVICE.tp_mult is not None and isinstance(GPT_ADVICE.signal, (str, type(None))):
-        tp_mult *= float(GPT_ADVICE.tp_mult)
-    if GPT_ADVICE.sl_mult is not None and isinstance(GPT_ADVICE.signal, (str, type(None))):
-        sl_mult *= float(GPT_ADVICE.sl_mult)
+    if GPT_ADVICE.signal in {"buy", "sell"}:
+        if GPT_ADVICE.tp_mult is not None:
+            tp_mult *= float(GPT_ADVICE.tp_mult)
+        if GPT_ADVICE.sl_mult is not None:
+            sl_mult *= float(GPT_ADVICE.sl_mult)
 
     tp = _resolve(tp, env_tp, tp_mult)
     sl = _resolve(sl, env_sl, sl_mult)
@@ -933,10 +934,7 @@ def should_trade(model_signal: str, symbol: str | None = None) -> bool:
         elif prices[-1] < ema:
             ema_signal = "sell"
 
-    weights = {
-        "model": CFG.transformer_weight,
-        "ema": CFG.ema_weight,
-    }
+    weights = {"model": CFG.transformer_weight, "ema": CFG.ema_weight}
     scores = {"buy": 0.0, "sell": 0.0}
     if model_signal == "buy":
         scores["buy"] += weights["model"]
@@ -946,12 +944,12 @@ def should_trade(model_signal: str, symbol: str | None = None) -> bool:
         scores["buy"] += weights["ema"]
     elif ema_signal == "sell":
         scores["sell"] += weights["ema"]
-    if gpt_signal in ("buy", "sell"):
+    if gpt_signal == "buy":
         weights["gpt"] = CFG.gpt_weight
-        if gpt_signal == "buy":
-            scores["buy"] += weights["gpt"]
-        else:
-            scores["sell"] += weights["gpt"]
+        scores["buy"] += weights["gpt"]
+    elif gpt_signal == "sell":
+        weights["gpt"] = CFG.gpt_weight
+        scores["sell"] += weights["gpt"]
 
     total_weight = sum(weights.values())
     final = None
