@@ -19,8 +19,11 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, Request, Response
 
 try:
-
-from pydantic import BaseModel, Field, ValidationError
+    from pydantic import BaseModel, Field, ValidationError
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "pydantic is required. Install it with 'pip install pydantic'."
+    ) from exc
 
 API_KEYS: set[str] = set()
 

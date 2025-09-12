@@ -438,11 +438,11 @@ async def build_feature_vector(price: float) -> list[float]:
 
     The vector includes:
 
-    1. ``price`` – latest price.
-    2. ``volume`` – price change since last observation as a proxy for volume.
-    3. ``sma`` – simple moving average of recent prices.
-    4. ``volatility`` – standard deviation of recent price changes.
-    5. ``rsi`` – Relative Strength Index over the recent window.
+    1. ``price`` - latest price.
+    2. ``volume`` - price change since last observation as a proxy for volume.
+    3. ``sma`` - simple moving average of recent prices.
+    4. ``volatility`` - standard deviation of recent price changes.
+    5. ``rsi`` - Relative Strength Index over the recent window.
     """
 
     async with PRICE_HISTORY_LOCK:
