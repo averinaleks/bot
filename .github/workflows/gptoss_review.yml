@@ -39,7 +39,7 @@ jobs:
         shell: bash
     env:
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-      MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}
+      MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
@@ -56,13 +56,12 @@ jobs:
             -e HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}" \
             -p 127.0.0.1:8000:8000 \
             vllm/vllm-openai:v0.10.1 \
-            --model "${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}" \
+            --model "${MODEL_NAME}" \
             --trust-remote-code \
             --device cpu
 
       - name: Wait for LLM container
         id: wait_llm
-        continue-on-error: true
         run: |
           set -euo pipefail
           for i in {1..180}; do
@@ -107,7 +106,7 @@ jobs:
         id: llm_review
         run: |
           set -euo pipefail
-          model="${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-1.5B-Instruct' }}"
+          model="${MODEL_NAME}"
           payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" \
             '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}' )
           resp=$(curl -sSf -H "Content-Type: application/json" -d "$payload" \
