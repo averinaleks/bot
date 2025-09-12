@@ -14,6 +14,7 @@ categories:
       - chore
       - refactor
       - docs
+      - dependencies
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 template: |
   ## Changes
