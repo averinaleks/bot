@@ -914,8 +914,6 @@ def _resolve_trade_params(
     return tp, sl, trailing_stop
 
 
-def should_trade(model_signal: str, symbol: str | None = None) -> bool:
-    """Return ``True`` if weighted signals favor ``model_signal``."""
 
     if symbol is None:
         symbol = SYMBOLS[0]
@@ -963,7 +961,10 @@ def should_trade(model_signal: str, symbol: str | None = None) -> bool:
             "Weighted advice %s conflicts with model signal %s", final, model_signal
         )
         return False
-    return final == model_signal
+    if model_signal == "buy":
+        return final == model_signal and prob >= threshold
+    else:
+        return final == model_signal and prob <= 1 - threshold
 
 
 async def refresh_gpt_advice() -> None:
@@ -1085,10 +1086,11 @@ async def run_once_async(symbol: str | None = None) -> None:
     signal = prediction.get("signal")
     if not signal:
         return
+    prob = float(prediction.get("prob", 0.0))
+    threshold = float(prediction.get("threshold", 0.5))
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
-    if not should_trade(signal, symbol):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(

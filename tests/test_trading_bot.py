@@ -485,7 +485,14 @@ async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
             if url.endswith("/predict"):
                 return types.SimpleNamespace(
                     status_code=200,
-                    json=lambda: {"signal": "buy", "tp": 10, "sl": 5, "trailing_stop": 1},
+                    json=lambda: {
+                        "signal": "buy",
+                        "tp": 10,
+                        "sl": 5,
+                        "trailing_stop": 1,
+                        "prob": 0.7,
+                        "threshold": 0.6,
+                    },
                 )
             time.sleep(0.01)
             called.append(json)
@@ -557,7 +564,10 @@ async def test_reactive_trade_reports_error_field(monkeypatch):
 
         async def post(self, url, json=None, timeout=None, headers=None):
             if url.endswith("/predict"):
-                return types.SimpleNamespace(status_code=200, json=lambda: {"signal": "buy"})
+                return types.SimpleNamespace(
+                    status_code=200,
+                    json=lambda: {"signal": "buy", "prob": 0.7, "threshold": 0.6},
+                )
             return types.SimpleNamespace(status_code=200, json=lambda: {"error": "boom"})
 
     dummy = DummyClient()
@@ -678,7 +688,14 @@ def test_run_once_forwards_prediction_params(monkeypatch):
         return 100.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price)
     async def fake_get_prediction(*a, **k):
-        return {"signal": "buy", "tp": 110, "sl": 90, "trailing_stop": 1}
+        return {
+            "signal": "buy",
+            "tp": 110,
+            "sl": 90,
+            "trailing_stop": 1,
+            "prob": 0.7,
+            "threshold": 0.6,
+        }
     monkeypatch.setattr(trading_bot, "get_prediction", fake_get_prediction)
     async def fake_send_trade(
         *a, tp=None, sl=None, trailing_stop=None, **k
@@ -710,7 +727,7 @@ def test_run_once_skips_on_gpt(monkeypatch):
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch)
 
     async def fake_pred(*a, **k):
-        return {"signal": "buy"}
+        return {"signal": "buy", "prob": 0.7, "threshold": 0.6}
 
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred)
 
@@ -740,7 +757,7 @@ def test_run_once_skips_on_gpt(monkeypatch):
 
 def test_should_trade_invalid_gpt_signal():
     trading_bot.GPT_ADVICE.signal = "maybe"
-    assert not trading_bot.should_trade("buy")
+    assert not trading_bot.should_trade("buy", 0.6, 0.5)
     trading_bot.GPT_ADVICE.signal = None
 
 
@@ -760,7 +777,7 @@ def test_run_once_env_fallback(monkeypatch):
         return 100.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price2)
     async def fake_pred_buy(*a, **k):
-        return {"signal": "buy"}
+        return {"signal": "buy", "prob": 0.7, "threshold": 0.6}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy)
     async def fake_send_trade2(
         *a, tp=None, sl=None, trailing_stop=None, **k
@@ -793,7 +810,7 @@ def test_run_once_config_fallback(monkeypatch):
         return 100.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price3)
     async def fake_pred_buy2(*a, **k):
-        return {"signal": "buy"}
+        return {"signal": "buy", "prob": 0.7, "threshold": 0.6}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy2)
     async def fake_send_trade3(
         *a, tp=None, sl=None, trailing_stop=None, **k
@@ -832,7 +849,7 @@ def test_run_once_ignores_invalid_env(monkeypatch):
         return 100.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price4)
     async def fake_pred_buy3(*a, **k):
-        return {"signal": "buy"}
+        return {"signal": "buy", "prob": 0.7, "threshold": 0.6}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy3)
     async def fake_send_trade4(
         *a, tp=None, sl=None, trailing_stop=None, **k
@@ -943,7 +960,7 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
         return 100.0
     monkeypatch.setattr(trading_bot, "fetch_price", fake_fetch_price5)
     async def fake_pred_buy4(*a, **k):
-        return {"signal": "buy"}
+        return {"signal": "buy", "prob": 0.7, "threshold": 0.6}
     monkeypatch.setattr(trading_bot, "get_prediction", fake_pred_buy4)
     async def fake_send_trade5(*a, **k):
         return True, None

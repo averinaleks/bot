@@ -906,6 +906,7 @@ class ModelBuilder:
                 "last_retrain_time": self.last_retrain_time,
                 "threshold_offset": self.threshold_offset,
                 "base_thresholds": self.base_thresholds,
+                "calibrators": self.calibrators,
             }
             tmp_file = f"{self.state_file}.tmp"
             with open(tmp_file, "wb") as f:
@@ -990,6 +991,7 @@ class ModelBuilder:
                 )
                 self.threshold_offset.update(state.get("threshold_offset", {}))
                 self.base_thresholds.update(state.get("base_thresholds", {}))
+                self.calibrators.update(state.get("calibrators", {}))
                 logger.info("Состояние ModelBuilder загружено")
         except (OSError, ValueError, KeyError, ImportError) as e:
             logger.exception("Ошибка загрузки состояния ModelBuilder: %s", e)
