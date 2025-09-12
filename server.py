@@ -28,8 +28,10 @@ API_KEYS: set[str] = set()
 
 try:  # pragma: no cover - handled in tests
     from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
-except Exception:  # pragma: no cover - fallback to test stubs
-    from test_stubs import CsrfProtect, CsrfProtectError
+except Exception as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+    ) from exc
 
 
 class ModelManager:
