@@ -3,6 +3,7 @@ import pytest
 
 pytest.importorskip("transformers")
 pytest.importorskip("httpx")
+pytest.importorskip("fastapi")
 pytest.importorskip("fastapi_csrf_protect")
 
 os.environ.setdefault("CSRF_SECRET", "testsecret")

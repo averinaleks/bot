@@ -4,8 +4,10 @@ import types
 import pytest
 
 from bot.data_handler import DataHandler
-from bot.services import model_builder_service as mbs
 from pathlib import Path
+
+pytest.importorskip("sklearn")
+from bot.services import model_builder_service as mbs
 
 
 class Cfg:
