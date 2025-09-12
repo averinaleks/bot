@@ -1699,6 +1699,8 @@ class TradingEnv(gym.Env if gym else object):
     def reset(self):
         self.current_step = 0
         self.position = 0
+        self.balance = 0.0
+        self.max_balance = 0.0
         return self._get_obs()
 
     def _get_obs(self):
@@ -1710,6 +1712,9 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # open long
             self.position = 1
+        elif action == 2:  # open short
+            self.position = -1
+        elif action == 3:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
