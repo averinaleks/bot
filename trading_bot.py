@@ -28,7 +28,7 @@ CFG = BotConfig()
 
 
 class GPTAdviceModel(BaseModel):
-    """Model for parsing GPT advice responses.
+    """Model for parsing GPT advice responses."""
 
     tp_mult: float | None = None
     sl_mult: float | None = None
@@ -40,7 +40,10 @@ class GPTAdviceModel(BaseModel):
             super().__setattr__("tp_mult", None)
             super().__setattr__("sl_mult", None)
 
+
 GPT_ADVICE = GPTAdviceModel()
+
+
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
@@ -438,11 +441,11 @@ async def build_feature_vector(price: float) -> list[float]:
 
     The vector includes:
 
-    1. ``price`` – latest price.
-    2. ``volume`` – price change since last observation as a proxy for volume.
-    3. ``sma`` – simple moving average of recent prices.
-    4. ``volatility`` – standard deviation of recent price changes.
-    5. ``rsi`` – Relative Strength Index over the recent window.
+    1. ``price`` - latest price.
+    2. ``volume`` - price change since last observation as a proxy for volume.
+    3. ``sma`` - simple moving average of recent prices.
+    4. ``volatility`` - standard deviation of recent price changes.
+    5. ``rsi`` - Relative Strength Index over the recent window.
     """
 
     async with PRICE_HISTORY_LOCK:
@@ -915,6 +918,9 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
+        price = await fetch_price(SYMBOL, env)
+        if price is None:
+            return
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
@@ -1049,8 +1055,9 @@ async def run_once_async() -> None:
         sl=sl,
         trailing_stop=trailing_stop,
     )
+
 async def main_async() -> None:
-    """Run the trading bot until interrupted."""
+    # Run the trading bot until interrupted.
     train_task = None
     monitor_task = None
     gpt_task = None
