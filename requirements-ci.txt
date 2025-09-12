@@ -2,6 +2,7 @@
 aiohttp>=3.9.4
 bcrypt>=4.1.2
 flake8==7.3.0
+bandit==1.7.9
 pytest==8.4.2
 pytest-asyncio==1.1.0
 tenacity>=8.5,<10
