@@ -1710,6 +1710,9 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # open long
             self.position = 1
+        elif action == 2:  # open short
+            self.position = -1
+        elif action == 3:  # close
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -1854,6 +1857,8 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
+            action, _ = model.predict(obs, deterministic=True)
+        return self.ACTIONS.get(int(action))
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------

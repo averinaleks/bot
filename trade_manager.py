@@ -1646,6 +1646,7 @@ class TradeManager:
                 if ema_sell:
                     ema_signal = "sell"
 
+            final = None
             weights = {
                 "transformer": self.config.get("transformer_weight", 0.5),
                 "ema": self.config.get("ema_weight", 0.2),
@@ -1657,7 +1658,7 @@ class TradeManager:
                 scores["buy"] += weights["ema"]
             elif ema_signal == "sell":
                 scores["sell"] += weights["ema"]
-
+            
             gpt_signal = None
             try:
                 from bot import trading_bot as tb
@@ -1665,11 +1666,11 @@ class TradeManager:
             except Exception:
                 gpt_signal = None
             if gpt_signal in ("buy", "sell"):
-                weights["gpt"] = self.config.get("gpt_weight", 0.3)
-                if gpt_signal == "buy":
-                    scores["buy"] += weights["gpt"]
-                else:
-                    scores["sell"] += weights["gpt"]
+                  weights["gpt"] = self.config.get("gpt_weight", 0.3)
+                  if gpt_signal == "buy":
+                      scores["buy"] += weights["gpt"]
+                  else:
+                      scores["sell"] += weights["gpt"]
 
             total_weight = sum(weights.values())
             if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
@@ -1678,11 +1679,15 @@ class TradeManager:
                 final = "sell"
             else:
                 final = None
+            if rl_signal == "open_long":
+                final = "buy"
+            elif rl_signal == "open_short":
+                final = "sell"
             if final:
                 logger.info(
-                    "Voting result for %s -> %s (scores %.2f/%.2f)",
-                    symbol,
-                    final,
+                      "Voting result for %s -> %s (scores %.2f/%.2f)",
+                      symbol,
+                      final,
                     scores["buy"],
                     scores["sell"],
                 )
