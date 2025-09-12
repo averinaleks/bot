@@ -292,13 +292,44 @@ def apply() -> None:
     )
     sys.modules["uvicorn"] = cast(ModuleType, uvicorn_mod)
 
+    # ------------------------------------------------ fastapi_csrf_protect
+    csrf_mod = cast(ModuleType, types.ModuleType("fastapi_csrf_protect"))
+
+    class _CsrfProtectError(Exception):
+        pass
+
+    class _CsrfProtect:
+        @classmethod
+        def load_config(cls, func):
+            return func
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate_csrf_token(self) -> str:
+            return "test-token"
+
+        def generate_csrf_tokens(self):
+            token = self.generate_csrf_token()
+            return token, token
+
+        async def validate_csrf(self, request) -> None:
+            return
+
+    setattr(csrf_mod, "CsrfProtect", _CsrfProtect)
+    setattr(csrf_mod, "CsrfProtectError", _CsrfProtectError)
+    sys.modules["fastapi_csrf_protect"] = csrf_mod
+
     # ------------------------------------------------------------------- torch
-    try:
-        import torch  # type: ignore  # pragma: no cover - use real torch if available
-    except ImportError:
-        # If torch is not installed, allow modules to handle its absence
-        # individually. The model builder will fall back to lightweight stubs.
-        torch = None  # type: ignore[assignment]
+    # Importing the real ``torch`` package is expensive and unnecessary during
+    # tests.  Instead, provide a very small stub that exposes the attributes
+    # commonly checked by the codebase.  This keeps test startup fast and
+    # ensures modules can safely call ``torch.cuda.is_available()`` without
+    # pulling in heavy dependencies.
+    if "torch" not in sys.modules:
+        torch = cast(ModuleType, types.ModuleType("torch"))
+        torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        sys.modules["torch"] = torch
 
     # ------------------------------------------------------------------- Flask
     try:  # pragma: no cover - best effort

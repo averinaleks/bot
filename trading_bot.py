@@ -28,9 +28,15 @@ CFG = BotConfig()
 
 
 class GPTAdviceModel(BaseModel):
-    """Model for parsing GPT advice responses."""
+    """Model for parsing GPT advice responses.
 
-    signal: Literal["buy", "sell", "hold"] | None = None
+    The ``signal`` field historically contained string values such as
+    ``"buy"`` or ``"sell"``, but some integrations may provide a numeric
+    confidence score instead.  Allow both to keep the parser flexible in tests
+    and lightweight environments.
+    """
+
+    signal: float | Literal["buy", "sell", "hold"] | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
 
@@ -905,11 +911,14 @@ def should_trade(model_signal: str) -> bool:
 
 async def refresh_gpt_advice() -> None:
     """Fetch GPT analysis and update ``GPT_ADVICE``."""
+    global GPT_ADVICE
+    GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
         price = await fetch_price(SYMBOL, env)
         if price is None:
-            return
+            async with PRICE_HISTORY_LOCK:
+                price = _PRICE_HISTORY[-1] if _PRICE_HISTORY else 0.0
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
@@ -920,7 +929,6 @@ async def refresh_gpt_advice() -> None:
         )
         gpt_result = await query_gpt_json_async(prompt)
         advice = GPTAdviceModel.model_validate(gpt_result)
-        global GPT_ADVICE
         GPT_ADVICE = advice
         logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientJSONError as exc:

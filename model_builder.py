@@ -1683,6 +1683,7 @@ class TradingEnv(gym.Env if gym else object):
     def __init__(self, df: pd.DataFrame, config: BotConfig | None = None):
         self.df = df.reset_index(drop=True)
         self.config = config or BotConfig()
+        self.drawdown_penalty = getattr(self.config, "drawdown_penalty", 0.0)
         self.current_step = 0
         self.balance = 0.0
         self.max_balance = 0.0
@@ -1706,8 +1707,11 @@ class TradingEnv(gym.Env if gym else object):
         done = False
         reward = 0.0
         prev_position = self.position
-        if action == 1:  # открыть лонг
+        if action == 1:  # open long
             self.position = 1
+        elif action == 2:  # open short
+            self.position = -1
+        elif action == 3:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:
@@ -1734,6 +1738,8 @@ class TradingEnv(gym.Env if gym else object):
 
 
 class RLAgent:
+    ACTIONS = {0: "hold", 1: "open_long", 2: "open_short", 3: "close"}
+
     def __init__(self, config: BotConfig, data_handler, model_builder):
         self.config = config
         self.data_handler = data_handler
@@ -1850,8 +1856,8 @@ class RLAgent:
                     "stable_baselines3 not available, cannot make RL prediction"
                 )
                 return None
-
-
+            action, _states = model.predict(obs, deterministic=True)
+        return self.ACTIONS.get(int(action))
 # ----------------------------------------------------------------------
 # REST API for minimal integration testing
 # ----------------------------------------------------------------------

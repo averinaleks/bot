@@ -428,7 +428,7 @@ class TradeManager:
             self.positions_changed = False
             logger.info("Состояние TradeManager сохранено")
         except (OSError, ValueError) as e:
-            logger.exception("Не удалось сохранить состояние (%s): %s", type(e).__name__, e)
+            logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
             for path in (locals().get("tmp_state"), locals().get("tmp_returns")):
                 try:
                     if path and os.path.exists(path):
@@ -1184,19 +1184,19 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                    if rl_signal == "close":
-                        await self.close_position(symbol, current_price, "RL Signal")
-                        return
-                    if rl_signal == "open_long" and position["side"] == "sell":
-                        await self.close_position(symbol, current_price, "RL Reverse")
-                        params = await self.data_handler.parameter_optimizer.optimize(symbol)
-                        await self.open_position(symbol, "buy", current_price, params)
-                        return
-                    if rl_signal == "open_short" and position["side"] == "buy":
-                        await self.close_position(symbol, current_price, "RL Reverse")
-                        params = await self.data_handler.parameter_optimizer.optimize(symbol)
-                        await self.open_position(symbol, "sell", current_price, params)
-                        return
+                if rl_signal == "close":
+                    await self.close_position(symbol, current_price, "RL Signal")
+                    return
+                if rl_signal == "open_long" and position["side"] == "sell":
+                    await self.close_position(symbol, current_price, "RL Reverse")
+                    params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                    await self.open_position(symbol, "buy", current_price, params)
+                    return
+                if rl_signal == "open_short" and position["side"] == "buy":
+                    await self.close_position(symbol, current_price, "RL Reverse")
+                    params = await self.data_handler.parameter_optimizer.optimize(symbol)
+                    await self.open_position(symbol, "sell", current_price, params)
+                    return
             long_threshold, short_threshold = (
                 await self.model_builder.adjust_thresholds(symbol, prediction)
             )
@@ -1628,6 +1628,13 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
+                final = signal
+                if rl_signal == "open_long":
+                    final = "buy"
+                elif rl_signal == "open_short":
+                    final = "sell"
+                elif rl_signal == "close":
+                    final = "close"
                 return (final, float(prediction)) if return_prob else final
 
             ema_signal = None
