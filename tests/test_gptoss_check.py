@@ -20,8 +20,8 @@ _fake_client.query_gpt = lambda *args, **kwargs: None
 
 sys.modules.setdefault("gpt_client", _fake_client)
 
-import gptoss_check.check_code as check_code
-from gptoss_check import main as gptoss_main
+import gptoss_check.check_code as check_code  # noqa: E402
+from gptoss_check import main as gptoss_main  # noqa: E402
 
 
 def test_skip_message(caplog, tmp_path):

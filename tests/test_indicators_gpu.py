@@ -1,13 +1,13 @@
-import os
 import sys
+import types
+
 import numpy as np
 import pandas as pd
 import pytest
-ta = pytest.importorskip("ta")
-import types
 from bot import utils
 
-import importlib.util
+ta = pytest.importorskip("ta")
+
 
 # Stub heavy dependencies before importing data_handler
 ccxt_mod = types.ModuleType('ccxt')

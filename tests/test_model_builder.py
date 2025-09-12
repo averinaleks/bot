@@ -1,11 +1,9 @@
-import os
 import sys
 
 import numpy as np
 import pandas as pd
 import types
 import pytest
-import importlib.util
 import contextlib
 from bot.config import BotConfig
 import asyncio
@@ -15,8 +13,8 @@ from collections import deque
 # Skip tests if required optional packages are missing
 pytest.importorskip("gymnasium", reason="requires gymnasium")
 sklearn = pytest.importorskip("sklearn", reason="requires scikit-learn")
-from sklearn.preprocessing import StandardScaler  # type: ignore
-from sklearn.metrics import brier_score_loss  # type: ignore
+from sklearn.preprocessing import StandardScaler  # type: ignore  # noqa: E402
+from sklearn.metrics import brier_score_loss  # type: ignore  # noqa: E402
 
 pytestmark = pytest.mark.requires_sklearn
 
@@ -56,8 +54,8 @@ if "stable_baselines3" not in sys.modules:
     sys.modules["stable_baselines3.common"] = common
     sys.modules["stable_baselines3.common.vec_env"] = vec_env
 
-from bot import model_builder
-from bot.model_builder import (
+from bot import model_builder  # noqa: E402
+from bot.model_builder import (  # noqa: E402
     ModelBuilder,
     _train_model_remote,
     prepare_features,
@@ -417,8 +415,8 @@ async def test_base_threshold_convergence(tmp_path):
     mb = ModelBuilder(cfg, dh, tm)
     mb.prediction_history["BTCUSDT"] = deque([], maxlen=10)
     data = [(0.7, 1), (0.3, 0), (0.8, 1), (0.2, 0), (0.6, 0)]
-    for p, l in data:
-        mb.prediction_history["BTCUSDT"].append((p, l))
+    for p, label in data:
+        mb.prediction_history["BTCUSDT"].append((p, label))
         mb.compute_prediction_metrics("BTCUSDT")
     assert mb.base_thresholds["BTCUSDT"] == pytest.approx(0.8)
     long_thr, short_thr = await mb.adjust_thresholds("BTCUSDT", 0.5)
@@ -447,8 +445,8 @@ async def test_base_threshold_clamped_min(tmp_path):
     mb = ModelBuilder(cfg, dh, tm)
     mb.prediction_history["BTCUSDT"] = deque([], maxlen=10)
     data = [(0.1, 1), (0.2, 1), (0.3, 1), (0.8, 0), (0.6, 0)]
-    for p, l in data:
-        mb.prediction_history["BTCUSDT"].append((p, l))
+    for p, label in data:
+        mb.prediction_history["BTCUSDT"].append((p, label))
         mb.compute_prediction_metrics("BTCUSDT")
     assert mb.base_thresholds["BTCUSDT"] == pytest.approx(0.5)
     long_thr, short_thr = await mb.adjust_thresholds("BTCUSDT", 0.5)

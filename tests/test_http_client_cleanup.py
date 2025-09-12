@@ -9,8 +9,7 @@ os.environ.setdefault("TEST_MODE", "1")
 stub_data_handler = types.ModuleType("data_handler")
 stub_data_handler.get_settings = lambda: None
 sys.modules.setdefault("data_handler", stub_data_handler)
-
-from bot.trading_bot import get_http_client, close_http_client
+from bot.trading_bot import get_http_client, close_http_client  # noqa: E402
 
 
 @pytest.mark.asyncio

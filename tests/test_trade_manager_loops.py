@@ -3,7 +3,6 @@ import contextlib
 import logging
 import sys
 import types
-import os
 import pandas as pd
 import pytest
 import tempfile

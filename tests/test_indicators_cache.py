@@ -3,9 +3,9 @@ import types
 import pandas as pd
 import numpy as np
 import pytest
+from bot.config import BotConfig
 
 ta = pytest.importorskip("ta")
-from bot.config import BotConfig
 
 optimizer_stubbed = False
 if 'optimizer' not in sys.modules and 'bot.optimizer' not in sys.modules:

@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import logging
 import types
-import os
 import sys
 import pytest
 from bot.config import BotConfig

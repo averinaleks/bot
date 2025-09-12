@@ -5,7 +5,6 @@ import asyncio
 import pytest
 import sys
 import threading
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from bot.telegram_logger import TelegramLogger

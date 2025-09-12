@@ -4,7 +4,6 @@ import pytest
 import sys
 import types
 import logging
-import os
 import math
 import contextlib
 import tempfile
@@ -57,7 +56,7 @@ joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
 sys.modules.setdefault('joblib', joblib_mod)
 
-import asyncio
+import asyncio  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -84,7 +83,8 @@ def _cleanup_telegram_logger(_import_trade_manager):
     asyncio.run(trade_manager.TelegramLogger.shutdown())
 
 def test_utils_injected_before_trade_manager_import():
-    import importlib, sys
+    import importlib
+    import sys
     tm = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
     tm.TelegramLogger = _TL
     assert tm.TelegramLogger is _TL
@@ -1532,7 +1532,9 @@ async def test_execute_top_signals_ranking(monkeypatch):
 
 
 def test_shutdown_shuts_down_ray(monkeypatch):
-    import importlib, sys, types
+    import importlib
+    import sys
+    import types
 
     ray_stub = types.ModuleType("ray")
     called = {"done": False}
@@ -1557,7 +1559,9 @@ def test_shutdown_shuts_down_ray(monkeypatch):
 
 
 def test_shutdown_calls_ray_shutdown_in_test_mode(monkeypatch):
-    import importlib, sys, types
+    import importlib
+    import sys
+    import types
 
     ray_stub = types.ModuleType("ray")
     called = {"done": False}
@@ -1577,7 +1581,9 @@ def test_shutdown_calls_ray_shutdown_in_test_mode(monkeypatch):
 
 
 def test_shutdown_handles_missing_is_initialized(monkeypatch):
-    import importlib, sys, types
+    import importlib
+    import sys
+    import types
 
     monkeypatch.setenv("TEST_MODE", "0")
 
