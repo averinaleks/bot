@@ -124,6 +124,10 @@ def setup_multiprocessing() -> None:
 
 device_type = "cuda" if is_cuda_available() else "cpu"
 
+TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+if TRADE_MANAGER_TOKEN is None:
+    logger.warning("TRADE_MANAGER_TOKEN not set")
+
 _HOSTNAME_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$")
 
 
@@ -2096,6 +2100,16 @@ if IS_TEST_MODE:
 _startup_launched = False
 
 
+def _check_auth():
+    if TRADE_MANAGER_TOKEN is None:
+        return None
+    auth_header = request.headers.get("Authorization", "")
+    expected = f"Bearer {TRADE_MANAGER_TOKEN}"
+    if auth_header != expected:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
+
+
 @api_app.before_request
 def _start_trade_manager() -> None:
     """Launch trade manager initialization in a background thread."""
@@ -2112,6 +2126,8 @@ def _start_trade_manager() -> None:
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
     """Open a new trade position."""
+    if (resp := _check_auth()) is not None:
+        return resp
     if not _ready_event.is_set() or trade_manager is None:
         return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
@@ -2129,8 +2145,31 @@ def open_position_route():
     return jsonify({"status": "ok"})
 
 
+@api_app.route("/close_position", methods=["POST"])
+def close_position_route():
+    if (resp := _check_auth()) is not None:
+        return resp
+    if not _ready_event.is_set() or trade_manager is None:
+        return jsonify({"error": "not ready"}), 503
+    info = request.get_json(force=True)
+    symbol = info.get("symbol")
+    price = float(info.get("price", 0))
+    reason = info.get("reason", "Manual")
+    if getattr(trade_manager, "loop", None):
+        trade_manager.loop.call_soon_threadsafe(
+            asyncio.create_task,
+            trade_manager.close_position(symbol, price, reason),
+        )
+        POSITIONS[:] = [p for p in POSITIONS if p.get("symbol") != symbol]
+    else:
+        return jsonify({"error": "loop not running"}), 503
+    return jsonify({"status": "ok"})
+
+
 @api_app.route("/positions")
 def positions_route():
+    if (resp := _check_auth()) is not None:
+        return resp
     return jsonify({"positions": POSITIONS})
 
 
