@@ -328,7 +328,7 @@ def apply() -> None:
     # pulling in heavy dependencies.
     if "torch" not in sys.modules:
         torch = cast(ModuleType, types.ModuleType("torch"))
-        torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
         sys.modules["torch"] = torch
 
     # ------------------------------------------------------------------- Flask

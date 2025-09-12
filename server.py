@@ -17,10 +17,19 @@ except ImportError as exc:  # pragma: no cover - dependency required
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, Response
+try:
+    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+    ) from exc
 
 try:
-
-from pydantic import BaseModel, Field, ValidationError
+    from pydantic import BaseModel, Field, ValidationError
+except ImportError as exc:  # pragma: no cover - dependency required
+    raise RuntimeError(
+        "pydantic is required. Install it with 'pip install pydantic'."
+    ) from exc
 
 API_KEYS: set[str] = set()
 
@@ -220,7 +229,7 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings(secret_key=secret_key)
+    return CsrfSettings(secret_key=os.getenv("CSRF_SECRET", "testsecret"))
 
 
 csrf_protect = CsrfProtect()

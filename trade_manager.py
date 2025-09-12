@@ -1184,6 +1184,10 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
+                if rl_signal == "open_long":
+                    return "buy"
+                if rl_signal == "open_short":
+                    return "sell"
                 if rl_signal == "close":
                     await self.close_position(symbol, current_price, "RL Signal")
                     return
@@ -1628,6 +1632,10 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
+                if rl_signal == "open_long":
+                    return "buy"
+                if rl_signal == "open_short":
+                    return "sell"
 
             ema_signal = None
             check = self.evaluate_ema_condition(symbol, "buy")
