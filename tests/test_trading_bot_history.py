@@ -30,4 +30,4 @@ async def test_fetch_initial_history(monkeypatch):
     env = {"data_handler_url": "http://test"}
     trading_bot._PRICE_HISTORY.clear()
     await trading_bot.fetch_initial_history("SYM", env)
-    assert list(trading_bot._PRICE_HISTORY) == [10.0, 11.0]
+    assert list(trading_bot._PRICE_HISTORY["SYM"]) == [10.0, 11.0]
