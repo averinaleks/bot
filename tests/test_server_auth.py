@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("transformers")
 pytest.importorskip("httpx")
+pytest.importorskip("fastapi")
 pytest.importorskip("fastapi_csrf_protect")
 
 try:
