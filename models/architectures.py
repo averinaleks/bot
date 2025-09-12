@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 import os
+from typing import Tuple, TypedDict
+
 import numpy as np
 
 KERAS_FRAMEWORKS = {"tensorflow", "keras"}
 PYTORCH_FRAMEWORKS = {"pytorch", "lightning"}
 
-MLP_PARAMS = {"hidden_sizes": (128, 64), "dropout": 0.2, "l2_lambda": 1e-5}
+
+class MLPParams(TypedDict):
+    """Parameters for a simple multilayer perceptron."""
+
+    hidden_sizes: Tuple[int, ...]
+    dropout: float
+    l2_lambda: float
+
+
+MLP_PARAMS: MLPParams = {
+    "hidden_sizes": (128, 64),
+    "dropout": 0.2,
+    "l2_lambda": 1e-5,
+}
 GRU_PARAMS = {
     "hidden_size": 64,
     "num_layers": 2,
