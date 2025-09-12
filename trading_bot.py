@@ -10,7 +10,7 @@ import math
 import os
 import statistics
 import time
-from collections import deque
+from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
 
@@ -193,12 +193,10 @@ async def shutdown_async_tasks(timeout: float = 5.0) -> None:
 # Threshold for slow trade confirmations
 CONFIRMATION_TIMEOUT = safe_float("ORDER_CONFIRMATION_TIMEOUT", 5.0)
 
-# Keep a short history of prices to derive simple features such as
-# price change (used as a lightweight volume proxy) and a moving
-# average.  This avoids additional service calls while still allowing
-# us to build a small feature vector for the prediction service.
+# Keep a short history of prices per symbol to derive simple features such as
+# price change (used as a lightweight volume proxy) and a moving average.
 # Use a larger window to accommodate EMA/RSI calculations.
-_PRICE_HISTORY: deque[float] = deque(maxlen=200)
+_PRICE_HISTORY: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=200))
 PRICE_HISTORY_LOCK = asyncio.Lock()
 
 # Track model performance
@@ -206,8 +204,12 @@ _PRED_RESULTS: deque[int] = deque(maxlen=CFG.prediction_history_size)
 _LAST_PREDICTION: int | None = None
 
 
-# Default trading symbol; overridden from configuration at runtime.
-SYMBOL = "BTCUSDT"
+# Default trading symbols; overridden from configuration at runtime.
+SYMBOLS: list[str] = ["BTCUSDT"]
+
+# Maximum allowed capital exposure across all open positions. When not set, no
+# limit is enforced.
+CAPITAL_LIMIT = safe_float("CAPITAL_LIMIT", float("inf"))
 
 
 def _compute_ema(prices: list[float], period: int = 10) -> float:
@@ -428,16 +430,17 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
             logger.warning("Failed to fetch initial history: %s", exc)
             candles = []
     async with PRICE_HISTORY_LOCK:
-        _PRICE_HISTORY.clear()
+        hist = _PRICE_HISTORY[symbol]
+        hist.clear()
         for candle in candles:
             if len(candle) > 4:
                 try:
-                    _PRICE_HISTORY.append(float(candle[4]))
+                    hist.append(float(candle[4]))
                 except (TypeError, ValueError):
                     continue
 
 
-async def build_feature_vector(price: float) -> list[float]:
+async def build_feature_vector(symbol: str, price: float) -> list[float]:
     """Derive a feature vector from recent price history.
 
     The vector includes:
@@ -450,29 +453,25 @@ async def build_feature_vector(price: float) -> list[float]:
     """
 
     async with PRICE_HISTORY_LOCK:
-        _PRICE_HISTORY.append(price)
+        hist = _PRICE_HISTORY[symbol]
+        hist.append(price)
 
-        if len(_PRICE_HISTORY) > 1:
-            volume = _PRICE_HISTORY[-1] - _PRICE_HISTORY[-2]
-            deltas = [
-                _PRICE_HISTORY[i] - _PRICE_HISTORY[i - 1]
-                for i in range(1, len(_PRICE_HISTORY))
-            ]
-            volatility = (
-                statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
-            )
+        if len(hist) > 1:
+            volume = hist[-1] - hist[-2]
+            deltas = [hist[i] - hist[i - 1] for i in range(1, len(hist))]
+            volatility = statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
         else:
             volume = 0.0
             volatility = 0.0
 
-        sma = statistics.fmean(_PRICE_HISTORY)
+        sma = statistics.fmean(hist)
 
         rsi_period = 14
-        if len(_PRICE_HISTORY) > rsi_period:
+        if len(hist) > rsi_period:
             gains: list[float] = []
             losses: list[float] = []
-            for i in range(len(_PRICE_HISTORY) - rsi_period, len(_PRICE_HISTORY)):
-                change = _PRICE_HISTORY[i] - _PRICE_HISTORY[i - 1]
+            for i in range(len(hist) - rsi_period, len(hist)):
+                change = hist[i] - hist[i - 1]
                 if change > 0:
                     gains.append(change)
                 else:
@@ -800,6 +799,59 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
             await asyncio.sleep(interval)
 
 
+async def _total_position_notional(env: dict) -> float:
+    """Return total notional value of all open positions."""
+    client = await get_http_client()
+    try:
+        resp = await client.get(f"{env['trade_manager_url']}/positions", timeout=5)
+        if resp.status_code != 200:
+            logger.error(
+                "Failed to fetch positions: status code %s", resp.status_code
+            )
+            return 0.0
+        positions = resp.json().get("positions", [])
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("Failed to fetch positions: %s", exc)
+        return 0.0
+
+    total = 0.0
+    missing: list[tuple[str, float]] = []
+    for pos in positions:
+        symbol = pos.get("symbol")
+        try:
+            amount = float(pos.get("amount", 0) or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        price = pos.get("entry_price")
+        if amount <= 0 or not symbol:
+            continue
+        if price is None:
+            missing.append((symbol, amount))
+        else:
+            try:
+                total += amount * float(price)
+            except (TypeError, ValueError):
+                continue
+
+    if missing:
+        tasks = [fetch_price(sym, env) for sym, _ in missing]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (sym, amt), res in zip(missing, results):
+            if isinstance(res, Exception) or res is None:
+                logger.error("Price task failed for %s: %s", sym, res)
+            else:
+                total += amt * res
+    return total
+
+
+async def capital_under_limit(env: dict) -> bool:
+    """Return ``True`` if total exposure is below ``CAPITAL_LIMIT``."""
+    if not math.isfinite(CAPITAL_LIMIT):
+        return True
+    exposure = await _total_position_notional(env)
+    return exposure < CAPITAL_LIMIT
+
+
 def _parse_trade_params(
     tp: float | str | None = None,
     sl: float | str | None = None,
@@ -861,15 +913,18 @@ def _resolve_trade_params(
     return tp, sl, trailing_stop
 
 
-def should_trade(model_signal: str) -> bool:
+def should_trade(model_signal: str, symbol: str | None = None) -> bool:
     """Return ``True`` if weighted signals favor ``model_signal``."""
+
+    if symbol is None:
+        symbol = SYMBOLS[0]
 
     gpt_signal = GPT_ADVICE.signal
     if gpt_signal and gpt_signal not in {"buy", "sell", "hold"}:
         logger.info("Invalid GPT advice %s", gpt_signal)
         return False
 
-    prices = list(_PRICE_HISTORY)
+    prices = list(_PRICE_HISTORY.get(symbol, []))
     ema_signal = None
     if prices:
         ema = _compute_ema(prices)
@@ -919,10 +974,12 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
-        price = _PRICE_HISTORY[-1] if _PRICE_HISTORY else 0.0
-        features = await build_feature_vector(price)
+        symbol = SYMBOLS[0]
+        hist = _PRICE_HISTORY[symbol]
+        price = hist[-1] if hist else 0.0
+        features = await build_feature_vector(symbol, price)
         rsi = features[-1]
-        ema = _compute_ema(list(_PRICE_HISTORY))
+        ema = _compute_ema(list(hist))
         prompt = (
             "На основании рыночных данных:\n"
             f"price={price}, EMA={ema}, RSI={rsi}.\n"
@@ -967,7 +1024,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             if price is None or price <= 0:
                 logger.warning("Invalid price for %s: %s", symbol, price)
                 return
-            features = await build_feature_vector(price)
+            features = await build_feature_vector(symbol, price)
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": features},
@@ -1002,30 +1059,28 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             logger.error("Reactive trade request error: %s", exc)
 
 
-async def run_once_async() -> None:
-    """Execute a single trading cycle.
-
-    The cycle is:
-    * Fetch the latest price for ``SYMBOL``.
-    * Build a feature vector and obtain a model prediction.
-    * Resolve TP/SL/trailing-stop values from prediction, environment or
-      config defaults.
-    * If trading is enabled and GPT advice allows it, forward the trade to the
-    trade manager.
-    """
+async def run_once_async(symbol: str | None = None) -> None:
+    """Execute a single trading cycle for ``symbol``."""
 
     env = _load_env()
+    if symbol is None:
+        symbol = SYMBOLS[0]
 
     if not await get_trading_enabled():
         logger.info("Trading disabled")
         return
 
-    price = await fetch_price(SYMBOL, env)
-    if price is None:
+    if not await capital_under_limit(env):
+        logger.warning("Capital limit reached, skipping %s", symbol)
+        await send_telegram_alert(f"Capital limit reached for {symbol}")
         return
 
-    features = await build_feature_vector(price)
-    prediction = await get_prediction(SYMBOL, features, env)
+    price = await fetch_price(symbol, env)
+    if price is None or price <= 0:
+        return
+
+    features = await build_feature_vector(symbol, price)
+    prediction = await get_prediction(symbol, features, env)
     if not prediction:
         return
 
@@ -1033,9 +1088,9 @@ async def run_once_async() -> None:
     if not signal:
         return
 
-    logger.info("Prediction: %s", signal)
+    logger.info("Prediction for %s: %s", symbol, signal)
 
-    if not should_trade(signal):
+    if not should_trade(signal, symbol):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
@@ -1046,7 +1101,7 @@ async def run_once_async() -> None:
     client = await get_http_client()
     await send_trade_async(
         client,
-        SYMBOL,
+        symbol,
         signal,
         price,
         env,
@@ -1066,7 +1121,8 @@ async def main_async() -> None:
         gpt_task = asyncio.create_task(_gpt_advice_loop())
         while True:
             try:
-                await run_once_async()
+                for symbol in SYMBOLS:
+                    await run_once_async(symbol)
             except ServiceUnavailableError as exc:
                 logger.error("Service availability check failed: %s", exc)
                 await send_telegram_alert(
@@ -1109,8 +1165,8 @@ def main() -> None:
         logger.error("Invalid environment configuration: %s", exc)
         raise SystemExit(1)
     suppress_tf_logs()
-    global SYMBOL
-    SYMBOL = cfg.symbols[0]
+    global SYMBOLS
+    SYMBOLS = cfg.symbols
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
         logger.warning(
             "Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"

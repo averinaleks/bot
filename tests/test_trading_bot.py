@@ -935,7 +935,7 @@ def test_run_once_logs_prediction(monkeypatch, caplog):
     with caplog.at_level("INFO"):
         asyncio.run(trading_bot.run_once_async())
 
-    assert "Prediction: buy" in caplog.messages
+    assert f"Prediction for {trading_bot.SYMBOLS[0]}: buy" in caplog.messages
 
 
 @pytest.mark.asyncio
