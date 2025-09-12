@@ -41,7 +41,10 @@ class GPTAdviceModel(BaseModel):
             super().__setattr__("tp_mult", None)
             super().__setattr__("sl_mult", None)
 
+
 GPT_ADVICE = GPTAdviceModel()
+
+
 class ServiceUnavailableError(Exception):
     """Raised when required services are not reachable."""
 
@@ -916,7 +919,6 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
-        price = _PRICE_HISTORY[-1] if _PRICE_HISTORY else 0.0
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
@@ -1051,8 +1053,9 @@ async def run_once_async() -> None:
         sl=sl,
         trailing_stop=trailing_stop,
     )
+
 async def main_async() -> None:
-    """Run the trading bot until interrupted."""
+    # Run the trading bot until interrupted.
     train_task = None
     monitor_task = None
     gpt_task = None
