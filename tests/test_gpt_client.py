@@ -413,12 +413,27 @@ async def test_query_gpt_json_async(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
 
     def fake_stream(self, *args, **kwargs):
-        content = json.dumps({"choices": [{"text": '{"signal": "buy"}'}]}).encode()
+        content = json.dumps({"choices": [{"text": '{"signal": "buy", "tp_mult": 1, "sl_mult": 1}'}]}).encode()
         return DummyStream(content=content)
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     result = await query_gpt_json_async("hi")
     assert result["signal"] == "buy"
+
+
+@pytest.mark.asyncio
+async def test_query_gpt_json_async_missing_fields(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": '{"signal": "buy"}'}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    with caplog.at_level(logging.ERROR):
+        result = await query_gpt_json_async("hi")
+    assert result == {"signal": "hold"}
+    assert "Missing fields in GPT response" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -437,7 +452,7 @@ async def test_query_gpt_no_env_leak(monkeypatch):
             pass
 
         def stream(self, *args, **kwargs):
-            content = json.dumps({"choices": [{"text": '{"signal": "buy"}'}]}).encode()
+            content = json.dumps({"choices": [{"text": '{"signal": "buy", "tp_mult": 1, "sl_mult": 1}'}]}).encode()
             return DummyStream(content=content)
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)

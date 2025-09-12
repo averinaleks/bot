@@ -21,7 +21,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from utils import validate_host, safe_int
+from bot.utils import validate_host, safe_int
 
 load_dotenv()
 app = Flask(__name__)
