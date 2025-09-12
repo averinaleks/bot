@@ -50,7 +50,7 @@ utils_stub.safe_api_call = _safe_api_call
 sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
-sys.modules.pop('bot.trade_manager', None)
+sys.modules.pop('bot.trade_manager.core', None)
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None
 joblib_mod.load = lambda *a, **k: {}
@@ -70,8 +70,8 @@ def _set_test_mode():
 @pytest.fixture(scope="module", autouse=True)
 def _import_trade_manager(_set_test_mode):
     global trade_manager, TradeManager
-    from bot import trade_manager as tm
-    from bot.trade_manager import TradeManager as TM
+    import bot.trade_manager.core as tm
+    from bot.trade_manager.core import TradeManager as TM
     trade_manager = tm
     TradeManager = TM
     yield
@@ -85,7 +85,7 @@ def _cleanup_telegram_logger(_import_trade_manager):
 def test_utils_injected_before_trade_manager_import():
     import importlib
     import sys
-    tm = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    tm = importlib.reload(sys.modules.get("bot.trade_manager.core", trade_manager))
     tm.TelegramLogger = _TL
     assert tm.TelegramLogger is _TL
 
@@ -1548,7 +1548,7 @@ def test_shutdown_shuts_down_ray(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ray", ray_stub)
 
-    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager.core", trade_manager))
     monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
 
     dh = DummyDataHandler()
@@ -1570,7 +1570,7 @@ def test_shutdown_calls_ray_shutdown_in_test_mode(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ray", ray_stub)
 
-    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager.core", trade_manager))
     monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
 
     dh = DummyDataHandler()
@@ -1618,7 +1618,7 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ray", ray_stub)
 
-    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager", trade_manager))
+    tm_mod = importlib.reload(sys.modules.get("bot.trade_manager.core", trade_manager))
     monkeypatch.setattr(tm_mod, "ray", ray_stub, raising=False)
 
     dh = DummyDataHandler()

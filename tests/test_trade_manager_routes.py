@@ -60,8 +60,8 @@ def _setup_module(monkeypatch):
     sys.modules.setdefault("joblib", joblib_mod)
 
     monkeypatch.syspath_prepend(os.getcwd())
-    sys.modules.pop("trade_manager", None)
-    tm = importlib.import_module("trade_manager")
+    sys.modules.pop("bot.trade_manager.service", None)
+    tm = importlib.import_module("bot.trade_manager.service")
     loop = DummyLoop()
     stub = types.SimpleNamespace(
         loop=loop,

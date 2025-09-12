@@ -31,7 +31,7 @@ def _make_positions(symbol: str, ts: str) -> pd.DataFrame:
 
 def test_trade_manager_save_recovery(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("TEST_MODE", "1")
-    from bot.trade_manager import TradeManager
+    from bot.trade_manager.core import TradeManager
 
     cfg = BotConfig(cache_dir=str(tmp_path))
     dh = types.SimpleNamespace(exchange=types.SimpleNamespace(), usdt_pairs=["BTCUSDT"])
