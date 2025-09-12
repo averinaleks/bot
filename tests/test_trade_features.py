@@ -33,7 +33,7 @@ def trade_manager(monkeypatch):
     import bot.test_stubs as stubs
     importlib.reload(stubs)
     stubs.apply()
-    tm_module = importlib.reload(importlib.import_module("bot.trade_manager"))
+    tm_module = importlib.reload(importlib.import_module("bot.trade_manager.core"))
     cfg = BotConfig(
         cache_dir=tempfile.mkdtemp(),
         sl_multiplier=1.0,
