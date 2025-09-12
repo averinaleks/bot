@@ -1628,10 +1628,6 @@ class TradeManager:
                     [float(prediction), num_positions / max(1, self.max_positions)],
                 ).astype(np.float32)
                 rl_signal = self.rl_agent.predict(symbol, rl_feat)
-                if rl_signal:
-                    mapping = {"open_long": "buy", "open_short": "sell", "close": None}
-                    mapped = mapping.get(rl_signal, rl_signal)
-                    return (mapped, float(prediction)) if return_prob else mapped
 
             ema_signal = None
             check = self.evaluate_ema_condition(symbol, "buy")
