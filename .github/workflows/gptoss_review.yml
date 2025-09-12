@@ -1,5 +1,5 @@
 # .github/workflows/gptoss_review.yml
-# yamllint disable rule:line-length
+# yamllint disable rule:line-length rule:truthy
 ---
 name: GPT-OSS Code Review
 
