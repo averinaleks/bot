@@ -5,7 +5,10 @@ pytest.importorskip("httpx")
 pytest.importorskip("fastapi_csrf_protect")
 
 os.environ.setdefault("CSRF_SECRET", "testsecret")
-import server
+try:
+    import server
+except RuntimeError:
+    pytest.skip("fastapi_csrf_protect is required", allow_module_level=True)
 from contextlib import contextmanager
 from fastapi.testclient import TestClient
 from fastapi_csrf_protect import CsrfProtect
