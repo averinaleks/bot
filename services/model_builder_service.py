@@ -224,7 +224,7 @@ def predict() -> ResponseReturnValue:
                 if scaler is not None:
                     features = scaler.transform(features)
                 if _model_builder.nn_framework in KERAS_FRAMEWORKS:
-                    prob = float(model.predict(features)[0, 0])
+                    raw_prob = float(model.predict(features)[0, 0])
                 else:
                     torch_mods = _get_torch_modules()
                     torch = torch_mods["torch"]
@@ -235,12 +235,17 @@ def predict() -> ResponseReturnValue:
                         )
                         if _model_builder.model_type == "mlp":
                             tens = tens.view(tens.size(0), -1)
-                        prob = float(torch.sigmoid(model(tens)).cpu().numpy().item())
+                        raw_prob = float(torch.sigmoid(model(tens)).cpu().numpy().item())
+                prob = raw_prob
+                calibrator = _model_builder.calibrators.get(symbol)
+                if calibrator is not None:
+                    prob = float(calibrator.predict_proba([[raw_prob]])[0, 1])
             except Exception as exc:  # pragma: no cover - prediction may fail
                 app.logger.exception("Prediction failed: %s", exc)
                 prob = 0.0
-            signal = "buy" if prob >= 0.5 else "sell"
-        return jsonify({"signal": signal, "prob": prob})
+        threshold = _model_builder.base_thresholds.get(symbol, 0.5) + _model_builder.threshold_offset.get(symbol, 0.0)
+        signal = "buy" if prob >= threshold else "sell"
+        return jsonify({"signal": signal, "prob": prob, "threshold": threshold})
 
     features = data.get("features")
     if features is None:
@@ -267,8 +272,10 @@ def predict() -> ResponseReturnValue:
         prob = 1.0 if signal else 0.0
     else:
         prob = float(model.predict_proba(features)[0, 1])
-        signal = "buy" if prob >= 0.5 else "sell"
-    return jsonify({"signal": signal, "prob": prob})
+    threshold = 0.5
+    if model is not None:
+        signal = "buy" if prob >= threshold else "sell"
+    return jsonify({"signal": signal, "prob": prob, "threshold": threshold})
 
 
 @app.route("/ping")
