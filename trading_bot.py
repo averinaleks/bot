@@ -28,9 +28,8 @@ CFG = BotConfig()
 
 
 class GPTAdviceModel(BaseModel):
-    """Model for parsing GPT advice responses."""
+    """Model for parsing GPT advice responses.
 
-    signal: Union[float, Literal["buy", "sell", "hold"], None] = None
     tp_mult: float | None = None
     sl_mult: float | None = None
     model_config = ConfigDict(validate_assignment=False)
@@ -912,15 +911,10 @@ def should_trade(model_signal: str) -> bool:
 
 async def refresh_gpt_advice() -> None:
     """Fetch GPT analysis and update ``GPT_ADVICE``."""
+    global GPT_ADVICE
+    GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
-        price = 0.0
-        try:
-            fetched = await fetch_price(SYMBOL, env)
-            if fetched is not None:
-                price = fetched
-        except Exception as exc:  # pragma: no cover - network issues
-            logger.error("Price request error: %s", exc)
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
@@ -931,7 +925,6 @@ async def refresh_gpt_advice() -> None:
         )
         gpt_result = await query_gpt_json_async(prompt)
         advice = GPTAdviceModel.model_validate(gpt_result)
-        global GPT_ADVICE
         GPT_ADVICE = advice
         logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientJSONError as exc:

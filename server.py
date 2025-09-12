@@ -19,11 +19,6 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, Request, Response
 
 try:
-    import fastapi_csrf_protect
-except ImportError as exc:  # pragma: no cover - dependency required
-    raise RuntimeError(
-        "fastapi_csrf_protect is required. Install it with 'pip install fastapi-csrf-protect'."
-    ) from exc
 
 from pydantic import BaseModel, Field, ValidationError
 
