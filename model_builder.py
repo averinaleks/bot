@@ -1710,7 +1710,6 @@ class TradingEnv(gym.Env if gym else object):
         prev_position = self.position
         if action == 1:  # open long
             self.position = 1
-        elif action == 3:  # close position
             self.position = 0
 
         if self.current_step < len(self.df) - 1:

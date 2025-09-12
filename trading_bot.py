@@ -919,6 +919,7 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
+        price = _PRICE_HISTORY[-1] if _PRICE_HISTORY else 0.0
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))
