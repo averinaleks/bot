@@ -30,6 +30,7 @@ CFG = BotConfig()
 class GPTAdviceModel(BaseModel):
     """Model for parsing GPT advice responses."""
 
+    signal: float | str | None = None
     tp_mult: float | None = None
     sl_mult: float | None = None
     model_config = ConfigDict(validate_assignment=False)
@@ -918,9 +919,6 @@ async def refresh_gpt_advice() -> None:
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
-        price = await fetch_price(SYMBOL, env)
-        if price is None:
-            return
         features = await build_feature_vector(price)
         rsi = features[-1]
         ema = _compute_ema(list(_PRICE_HISTORY))

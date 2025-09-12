@@ -17,7 +17,6 @@ except ImportError as exc:  # pragma: no cover - dependency required
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, Response
-
 try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError as exc:  # pragma: no cover - dependency required
@@ -228,7 +227,6 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings(secret_key=os.getenv("CSRF_SECRET", "changeme"))
 
 
 csrf_protect = CsrfProtect()
