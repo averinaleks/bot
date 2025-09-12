@@ -3,8 +3,9 @@ import os
 import pickle
 import pandas as pd
 import pytest
-psutil = pytest.importorskip("psutil")
 from bot.cache import HistoricalDataCache
+
+psutil = pytest.importorskip("psutil")
 
 
 def _mock_virtual_memory():

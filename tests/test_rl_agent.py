@@ -1,11 +1,12 @@
 import sys
 import types
 import importlib
-import pandas as pd
-import numpy as np
-import pytest
 import importlib.util
 import os
+
+import numpy as np
+import pandas as pd
+import pytest
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 spec = importlib.util.spec_from_file_location("utils_real", os.path.join(ROOT, "utils.py"))
@@ -59,10 +60,11 @@ if "gymnasium" not in sys.modules:
     gym_stub.spaces = types.SimpleNamespace(Discrete=DummyDiscrete, Box=DummyBox)
     sys.modules["gymnasium"] = gym_stub
 
-from bot import model_builder
+from bot import model_builder  # noqa: E402
+from bot.config import BotConfig  # noqa: E402
+from bot.model_builder import RLAgent  # noqa: E402
+
 importlib.reload(model_builder)
-from bot.config import BotConfig
-from bot.model_builder import RLAgent
 
 
 class DummyModelBuilder:

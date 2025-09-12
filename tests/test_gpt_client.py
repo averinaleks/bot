@@ -6,8 +6,6 @@ import json
 
 import pytest
 import httpx
-
-sys.modules.pop("tenacity", None)
 import tenacity  # noqa: F401  # re-import after pop
 
 from bot.gpt_client import (
@@ -24,6 +22,8 @@ from bot.gpt_client import (
     query_gpt_async,
     query_gpt_json_async,
 )
+
+sys.modules.pop("tenacity", None)
 
 
 class DummyStream:

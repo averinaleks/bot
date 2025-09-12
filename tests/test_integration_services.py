@@ -1,4 +1,3 @@
-import os
 import httpx
 import multiprocessing
 import sys
@@ -124,7 +123,6 @@ def test_services_communicate(monkeypatch, ctx):
 
 @pytest.mark.integration
 def test_service_availability_check(monkeypatch, ctx):
-    from bot import trading_bot  # noqa: E402
     dh_port = get_free_port()
     mb_port = get_free_port()
     tm_port = get_free_port()
