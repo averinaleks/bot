@@ -133,8 +133,9 @@ jobs:
         id: tags
         env:
           MATRIX_IMAGE: ${{ matrix.image }}
+          OWNER: ${{ github.repository_owner }}
         run: |
-          tags="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${MATRIX_IMAGE}:latest"
+          tags="ghcr.io/${OWNER}/${MATRIX_IMAGE}:latest"
           if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             tags="$tags"$'\n'"docker.io/$DOCKERHUB_USERNAME/$MATRIX_IMAGE:latest"
           fi
