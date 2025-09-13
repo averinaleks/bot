@@ -1933,7 +1933,12 @@ def fit_scaler(features: np.ndarray, labels: np.ndarray):
     pipeline = Pipeline(
         [
             ("scaler", StandardScaler()),
-            ("model", LogisticRegression(multi_class="auto")),
+            # ``multi_class`` параметр в sklearn >=1.5 всегда равен "multinomial",
+            # поэтому явное указание ``multi_class="auto"`` вызывает предупреждение
+            # о устаревании. Оставляем значение по умолчанию, чтобы избежать
+            # лишних предупреждений и сохранить совместимость с будущими версиями
+            # библиотеки.
+            ("model", LogisticRegression()),
         ]
     )
     pipeline.fit(features, labels)

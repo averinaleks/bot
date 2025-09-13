@@ -419,8 +419,8 @@ waitress-serve services.data_handler_service:app
 features to `/train`.  Predictions are requested via `/predict` using
 `{"features": [...]}` where the first element usually represents the price.
 For backward compatibility a single `price` value is also accepted.  The
-service supports multi-class problems via
-`LogisticRegression(multi_class="auto")` and returns an error if the labels
+service supports multi-class problems via `LogisticRegression()` and returns an
+error if the labels
 contain only a single class.
 `trade_manager_service.py` opens and closes positions on Bybit via
 `/open_position` and `/close_position` and also provides `/positions`, `/ping`

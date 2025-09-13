@@ -189,7 +189,12 @@ def train() -> ResponseReturnValue:
         return jsonify({"error": "labels must contain at least two classes"}), 400
     scaler = StandardScaler().fit(features)
     features = scaler.transform(features)
-    model = LogisticRegression(multi_class="auto")
+    # Параметр ``multi_class="auto"`` больше не нужен в новых версиях
+    # scikit-learn: логистическая регрессия всегда работает в режиме
+    # ``multinomial``. Убираем явное указание, чтобы не появлялись
+    # предупреждения об устаревании и чтобы код оставался совместимым
+    # с будущими релизами библиотеки.
+    model = LogisticRegression()
     model.fit(features, labels)
     _models[symbol] = model
     _scalers[symbol] = scaler
