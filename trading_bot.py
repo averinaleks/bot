@@ -913,12 +913,6 @@ def _resolve_trade_params(
 
     return tp, sl, trailing_stop
 
-
-def _is_trade_allowed(
-    symbol: str | None,
-    model_signal: str,
-    prob: float,
-    threshold: float,
 ) -> bool:
     if symbol is None:
         symbol = SYMBOLS[0]
@@ -967,9 +961,13 @@ def _is_trade_allowed(
         )
         return False
     if model_signal == "buy":
-        return final == model_signal and prob >= threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob >= threshold
+        return final == model_signal
     else:
-        return final == model_signal and prob <= 1 - threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob <= 1 - threshold
+        return final == model_signal
 
 
 def should_trade(
@@ -1106,7 +1104,6 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
-    if not _is_trade_allowed(symbol, signal, prob, threshold):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
