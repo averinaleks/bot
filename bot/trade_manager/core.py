@@ -51,6 +51,7 @@ from bot.utils import (
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
     safe_api_call,
+    TelegramLogger,
 )
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
@@ -239,13 +240,20 @@ class TradeManager:
                 unsent_path = os.path.join(
                     config.log_dir, config.unsent_telegram_path
                 )
+            try:
+                self.telegram_logger = TelegramLogger(
+                    telegram_bot,
+                    chat_id,
+                    max_queue_size=config.get("telegram_queue_size"),
+                    unsent_path=unsent_path,
+                )
+            except TypeError:  # pragma: no cover - stub without args
+                self.telegram_logger = TelegramLogger()  # type: ignore[call-arg]
+            if not hasattr(self.telegram_logger, "send_telegram_message"):
+                async def _noop(*a, **k):
+                    pass
 
-            self.telegram_logger = TelegramLogger(
-                telegram_bot,
-                chat_id,
-                max_queue_size=config.get("telegram_queue_size"),
-                unsent_path=unsent_path,
-            )
+                self.telegram_logger.send_telegram_message = _noop  # type: ignore[attr-defined]
         self.positions = pd.DataFrame(
             columns=[
                 "symbol",
