@@ -7,3 +7,9 @@ hypothesis>=6.90.0
 pytest-asyncio
 iniconfig
 tomli
+
+flake8
+bandit
+ruff
+mypy
+pip-audit
