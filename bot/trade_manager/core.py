@@ -2,6 +2,7 @@
 
 This module coordinates order placement, risk management and Telegram
 notifications while interacting with the :class:`ModelBuilder` and exchange.
+"""
 
 
 import asyncio
@@ -38,6 +39,7 @@ import numpy as np  # type: ignore
 from bot import test_stubs
 test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE
+from telegram_logger import TelegramLogger
 
 import ray
 import httpx
@@ -1669,7 +1671,7 @@ class TradeManager:
             
             gpt_signal = None
             try:
-                import trading_bot as tb
+                from bot import trading_bot as tb
                 gpt_signal = tb.GPT_ADVICE.signal
             except Exception:
                 gpt_signal = None
