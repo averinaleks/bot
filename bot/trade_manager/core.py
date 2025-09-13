@@ -9,26 +9,28 @@ import asyncio
 import atexit
 import signal
 import os
-import sys
 import types
 import json
 import logging
-import ipaddress
 import re
+import time
+from typing import Dict, Optional, Tuple
+import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
 except Exception:  # pragma: no cover - minimal stub
-    aiohttp = types.SimpleNamespace(ClientError=Exception)
+    aiohttp = types.SimpleNamespace(ClientError=Exception)  # type: ignore[assignment]
 
 try:  # pragma: no cover - fallback for tests
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover - stub
-    def load_dotenv(*args, **kwargs):
-        return None
+    from typing import Any
+
+    load_dotenv = lambda *args, **kwargs: False  # type: ignore[assignment]
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
-except ImportError as exc:  # noqa: W0703 - allow missing pandas
+except ImportError as exc:  # allow missing pandas
     logging.getLogger(__name__).warning("pandas import failed: %s", exc)
     pd = types.ModuleType("pandas")  # type: ignore[assignment]
     pd.DataFrame = dict  # type: ignore[attr-defined]
@@ -38,13 +40,13 @@ except ImportError as exc:  # noqa: W0703 - allow missing pandas
 import numpy as np  # type: ignore
 from bot import test_stubs
 test_stubs.apply()
-from bot.test_stubs import IS_TEST_MODE
-import ray
-import httpx
-from tenacity import retry, wait_exponential, stop_after_attempt
-import inspect
+from bot.test_stubs import IS_TEST_MODE  # noqa: E402
+import ray  # noqa: E402
+import httpx  # noqa: E402
+from tenacity import retry, wait_exponential, stop_after_attempt  # noqa: E402
+import inspect  # noqa: E402
 # Базовые утилиты импортируются всегда
-from bot.utils import (
+from bot.utils import (  # noqa: E402
     logger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
@@ -54,33 +56,32 @@ from bot.utils import (
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
 try:  # pragma: no cover - fallback для тестов
-    from bot.utils import configure_logging
+    from bot.utils import configure_logging  # noqa: E402
 except ImportError:  # pragma: no cover - заглушка
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
         pass
-from bot.config import BotConfig, load_config
-import contextlib
-from bot.http_client import (
+from bot.config import BotConfig  # noqa: E402
+import contextlib  # noqa: E402
+from bot.http_client import (  # noqa: E402
     get_async_http_client as get_http_client,
     close_async_http_client as close_http_client,
 )
 
 try:  # pragma: no cover - optional dependency
-    import torch  # type: ignore
-except ImportError as exc:  # noqa: W0703 - optional dependency may not be installed
+    import torch  # type: ignore  # noqa: E402
+except ImportError as exc:  # optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
     torch = types.ModuleType("torch")  # type: ignore[assignment]
-    torch.tensor = lambda *a, **k: a[0]  # type: ignore[attr-defined]
-    torch.float32 = float  # type: ignore[attr-defined]
-    torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined]
-    torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
-    torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())  # type: ignore[attr-defined]
-import time
-from typing import Dict, Optional, Tuple
-import shutil
+    torch.tensor = lambda *a, **k: a[0]  # type: ignore[attr-defined,assignment]
+    torch.float32 = float  # type: ignore[attr-defined,assignment]
+    torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined,assignment,misc]
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined,assignment,misc]
+    torch.amp = types.SimpleNamespace(
+        autocast=lambda *a, **k: contextlib.nullcontext()
+    )  # type: ignore[attr-defined,assignment,misc]
 try:  # pragma: no cover - optional dependency
-    from flask import Flask, request, jsonify  # type: ignore
+    from flask import Flask, request, jsonify  # type: ignore  # noqa: E402
 except Exception:  # pragma: no cover - minimal stubs
     Flask = object  # type: ignore
 
@@ -110,9 +111,8 @@ except Exception:  # pragma: no cover - minimal stubs
         def asgi_app(self):  # pragma: no cover - simple property
             return None
 
-    Flask = _StubApp  # type: ignore[assignment]
-import threading
-import multiprocessing as mp
+    Flask = _StubApp  # type: ignore[assignment,misc]
+import multiprocessing as mp  # noqa: E402
 
 def setup_multiprocessing() -> None:
     """Ensure multiprocessing uses the 'spawn' start method."""
@@ -1184,9 +1184,9 @@ class TradeManager:
             prediction = await _predict_async(model, X_tensor)
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
-                prediction = await asyncio.to_thread(
-                    _calibrate_output, calibrator, float(prediction)
-                )
+                  prediction = await asyncio.to_thread(
+                      _calibrate_output, calibrator, float(prediction)  # type: ignore[arg-type]
+                  )
             rl_signal = None
             if self.rl_agent and symbol in self.rl_agent.models:
                 rl_feat = np.append(
@@ -1572,9 +1572,12 @@ class TradeManager:
                 logger.debug("Устаревшие данные для %s, пропуск сигнала", symbol)
                 return None
             if df is not None and not df.empty:
-                volatility = df["close"].pct_change().std()
+                # Расчёт волатильности ранее сохранялся в переменную, которая не
+                # использовалась.  Убираем присваивание, чтобы избежать F841 и
+                # лишних предупреждений от линтера.
+                df["close"].pct_change().std()
             else:
-                volatility = self.config.get("volatility_threshold", 0.02)
+                self.config.get("volatility_threshold", 0.02)
             features = self.model_builder.get_cached_features(symbol)
             if features is None or len(features) < self.config["lstm_timesteps"]:
                 try:
@@ -1611,7 +1614,7 @@ class TradeManager:
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = await asyncio.to_thread(
-                    _calibrate_output, calibrator, float(prediction)
+                    _calibrate_output, calibrator, float(prediction)  # type: ignore[arg-type]
                 )
 
             if self.config.get("prediction_target", "direction") == "pnl":
