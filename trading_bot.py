@@ -913,8 +913,12 @@ def _resolve_trade_params(
 
     return tp, sl, trailing_stop
 
-
-
+def should_trade(
+    model_signal: str,
+    prob: float | None = None,
+    threshold: float | None = None,
+    symbol: str | None = None,
+) -> bool:
     if symbol is None:
         symbol = SYMBOLS[0]
 
@@ -962,9 +966,13 @@ def _resolve_trade_params(
         )
         return False
     if model_signal == "buy":
-        return final == model_signal and prob >= threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob >= threshold
+        return final == model_signal
     else:
-        return final == model_signal and prob <= 1 - threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob <= 1 - threshold
+        return final == model_signal
 
 
 async def refresh_gpt_advice() -> None:
@@ -1091,6 +1099,7 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if prob < threshold:
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
