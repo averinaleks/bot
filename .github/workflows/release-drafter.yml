@@ -10,13 +10,17 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   update_release_draft:
-    permissions:
-      contents: write
-      pull-requests: write
     runs-on: ubuntu-latest
+    # Skip forked pull requests that lack write permissions
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
+      - uses: actions/checkout@v4
       - name: Update release draft
         uses: release-drafter/release-drafter@v6
         env:
