@@ -60,10 +60,9 @@ jobs:
           docker run -d --rm --name gptoss \
             -e HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}" \
             -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:v0.10.1 \
+            vllm/vllm-openai:gptoss \
             --model "${MODEL_NAME}" \
-            --trust-remote-code \
-            --device cpu
+            --trust-remote-code
 
       - name: Wait for LLM container
         id: wait_llm
@@ -71,7 +70,7 @@ jobs:
           set -euo pipefail
           for i in {1..180}; do
             if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss && \
-               curl -sSf --retry 3 --retry-delay 1 http://127.0.0.1:8000/v1/models >/dev/null; then
+               curl -sSf --retry 3 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/v1/models >/dev/null; then
               exit 0
             fi
             if ! docker ps --filter "name=gptoss" | grep -q gptoss; then
