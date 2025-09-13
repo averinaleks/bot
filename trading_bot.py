@@ -1130,6 +1130,10 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if not should_trade(signal, prob, threshold, symbol):
+        logger.info("Trade for %s vetoed by weighted advice", symbol)
+        return
+
     if prob < threshold:
         logger.info(
             "Probability %.3f below threshold %.3f for %s",

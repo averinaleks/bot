@@ -39,6 +39,7 @@ import numpy as np  # type: ignore
 from bot import test_stubs
 test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE
+from telegram_logger import TelegramLogger
 
 import ray
 import httpx
@@ -1679,9 +1680,6 @@ class TradeManager:
             gpt_signal = None
             try:
                 from bot import trading_bot as tb
-            except Exception:  # pragma: no cover - fallback for script usage
-                import trading_bot as tb  # type: ignore
-            try:
                 gpt_signal = tb.GPT_ADVICE.signal
             except Exception:
                 gpt_signal = None

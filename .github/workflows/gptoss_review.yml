@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: gptoss-review-${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: gptoss-review-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -134,7 +134,12 @@ jobs:
             const fs = require('fs');
             const review = fs.readFileSync('review.md', 'utf8');
             const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber, body: review });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: review
+            });
 
       - name: Cleanup
         if: always()
