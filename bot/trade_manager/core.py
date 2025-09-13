@@ -2,7 +2,6 @@
 
 This module coordinates order placement, risk management and Telegram
 notifications while interacting with the :class:`ModelBuilder` and exchange.
-"""
 
 
 import asyncio
@@ -166,7 +165,6 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
         logger.info("Остановка TradeManager")
         tm.shutdown()
         try:
-            from bot.utils import TelegramLogger
 
             asyncio.run(TelegramLogger.shutdown())
         except RuntimeError:
@@ -239,7 +237,6 @@ class TradeManager:
                 unsent_path = os.path.join(
                     config.log_dir, config.unsent_telegram_path
                 )
-            from bot.utils import TelegramLogger
 
             self.telegram_logger = TelegramLogger(
                 telegram_bot,
@@ -1813,7 +1810,6 @@ class TradeManager:
             except asyncio.CancelledError:
                 pass
         self.tasks.clear()
-        from bot.utils import TelegramLogger
 
         await TelegramLogger.shutdown()
         await close_http_client()

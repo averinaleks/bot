@@ -913,7 +913,6 @@ def _resolve_trade_params(
 
     return tp, sl, trailing_stop
 
-) -> bool:
     if symbol is None:
         symbol = SYMBOLS[0]
 
@@ -949,7 +948,7 @@ def _resolve_trade_params(
         scores["sell"] += weights["gpt"]
 
     total_weight = sum(weights.values())
-    final = None
+    final: str | None = None
     if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
         final = "buy"
     elif scores["sell"] > scores["buy"] and scores["sell"] >= total_weight / 2:
@@ -960,6 +959,10 @@ def _resolve_trade_params(
             "Weighted advice %s conflicts with model signal %s", final, model_signal
         )
         return False
+
+    if prob is None or threshold is None:
+        return final == model_signal
+
     if model_signal == "buy":
         if prob is not None and threshold is not None:
             return final == model_signal and prob >= threshold
@@ -1104,7 +1107,6 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
-    if prob < threshold:
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
