@@ -914,6 +914,18 @@ def _resolve_trade_params(
     return tp, sl, trailing_stop
 
 
+def should_trade(
+    model_signal: str,
+    prob: float | None = None,
+    threshold: float | None = None,
+    symbol: str | None = None,
+) -> bool:
+    """Return ``True`` when the model signal should result in a trade.
+
+    The decision combines the model's signal with EMA-based market direction
+    and optional GPT advice.  When ``prob`` or ``threshold`` are not provided,
+    the check degenerates to a simple signal agreement.
+    """
 
     if symbol is None:
         symbol = SYMBOLS[0]
@@ -950,7 +962,7 @@ def _resolve_trade_params(
         scores["sell"] += weights["gpt"]
 
     total_weight = sum(weights.values())
-    final = None
+    final: str | None = None
     if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
         final = "buy"
     elif scores["sell"] > scores["buy"] and scores["sell"] >= total_weight / 2:
@@ -961,6 +973,10 @@ def _resolve_trade_params(
             "Weighted advice %s conflicts with model signal %s", final, model_signal
         )
         return False
+
+    if prob is None or threshold is None:
+        return final == model_signal
+
     if model_signal == "buy":
         return final == model_signal and prob >= threshold
     else:
@@ -1091,6 +1107,7 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if not should_trade(signal, prob, threshold, symbol):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(

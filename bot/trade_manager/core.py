@@ -2,9 +2,11 @@
 
 This module coordinates order placement, risk management and Telegram
 notifications while interacting with the :class:`ModelBuilder` and exchange.
-"""
 
-from bot.utils import TelegramLogger
+``TelegramLogger`` is intentionally imported lazily so tests can substitute
+lightweight stubs before :class:`TradeManager` is instantiated without leaving
+residual state in this module.
+"""
 
 import asyncio
 import atexit
@@ -167,6 +169,8 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
         logger.info("Остановка TradeManager")
         tm.shutdown()
         try:
+            from bot.utils import TelegramLogger  # local import to avoid stale stubs
+
             asyncio.run(TelegramLogger.shutdown())
         except RuntimeError:
             # event loop may already be closed
@@ -238,6 +242,8 @@ class TradeManager:
                 unsent_path = os.path.join(
                     config.log_dir, config.unsent_telegram_path
                 )
+            from bot.utils import TelegramLogger  # lazy import for testability
+
             self.telegram_logger = TelegramLogger(
                 telegram_bot,
                 chat_id,
@@ -1810,6 +1816,8 @@ class TradeManager:
             except asyncio.CancelledError:
                 pass
         self.tasks.clear()
+        from bot.utils import TelegramLogger  # import here to avoid stale stubs
+
         await TelegramLogger.shutdown()
         await close_http_client()
 

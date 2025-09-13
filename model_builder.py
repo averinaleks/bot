@@ -111,10 +111,17 @@ else:
 from bot.cache import HistoricalDataCache
 from bot.utils import (
     check_dataframe_empty,
-    configure_logging,
     is_cuda_available,
     logger,
 )
+
+# ``configure_logging`` may be missing in test stubs; provide a no-op fallback
+try:  # pragma: no cover - optional in tests
+    from bot.utils import configure_logging
+except ImportError:  # pragma: no cover - stub for test environment
+    def configure_logging() -> None:  # type: ignore
+        """Stubbed logging configurator."""
+        pass
 from dotenv import load_dotenv
 try:  # pragma: no cover - optional dependency
     from sklearn.preprocessing import StandardScaler

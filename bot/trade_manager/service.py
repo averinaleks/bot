@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 from .core import (
-    IS_TEST_MODE,
+    IS_TEST_MODE as CORE_TEST_MODE,
     TradeManager,
     _HOSTNAME_RE,
     _register_cleanup_handlers,
@@ -71,13 +71,16 @@ POSITIONS = []
 
 trade_manager: TradeManager | None = None
 
+# Determine test mode at import time, considering both environment and core flag
+IS_TEST_MODE = os.getenv("TEST_MODE") == "1" or CORE_TEST_MODE
+
 TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
 if not TRADE_MANAGER_TOKEN:
     logger.warning("TRADE_MANAGER_TOKEN не установлен")
 
 
 def _require_token() -> tuple[Any, int] | None:
-    """Проверить заголовок Authorization."""
+    """Validate Authorization header unless running in test mode."""
     if IS_TEST_MODE:
         return None
     if not TRADE_MANAGER_TOKEN:
