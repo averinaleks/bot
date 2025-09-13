@@ -17,7 +17,10 @@ from typing import Awaitable, Callable, TypeVar
 from model_builder_client import schedule_retrain, retrain
 
 import httpx
-import ccxt
+try:  # pragma: no cover - optional dependency
+    import ccxt  # type: ignore
+except Exception:  # noqa: BLE001 - broad to avoid test import errors
+    ccxt = type("ccxt_stub", (), {})()
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
