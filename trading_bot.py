@@ -914,7 +914,12 @@ def _resolve_trade_params(
     return tp, sl, trailing_stop
 
 
-
+def _is_trade_allowed(
+    symbol: str | None,
+    model_signal: str,
+    prob: float,
+    threshold: float,
+) -> bool:
     if symbol is None:
         symbol = SYMBOLS[0]
 
@@ -965,6 +970,16 @@ def _resolve_trade_params(
         return final == model_signal and prob >= threshold
     else:
         return final == model_signal and prob <= 1 - threshold
+
+
+def should_trade(
+    model_signal: str,
+    prob: float = 1.0,
+    threshold: float = 0.5,
+    symbol: str | None = None,
+) -> bool:
+    """Return ``True`` if the weighted advice supports the model signal."""
+    return _is_trade_allowed(symbol, model_signal, prob, threshold)
 
 
 async def refresh_gpt_advice() -> None:
@@ -1091,6 +1106,7 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if not _is_trade_allowed(symbol, signal, prob, threshold):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(

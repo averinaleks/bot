@@ -4,7 +4,6 @@ This module coordinates order placement, risk management and Telegram
 notifications while interacting with the :class:`ModelBuilder` and exchange.
 """
 
-from bot.utils import TelegramLogger
 
 import asyncio
 import atexit
@@ -31,10 +30,10 @@ try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
 except ImportError as exc:  # noqa: W0703 - allow missing pandas
     logging.getLogger(__name__).warning("pandas import failed: %s", exc)
-    pd = types.ModuleType("pandas")
-    pd.DataFrame = dict
-    pd.Series = list
-    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])
+    pd = types.ModuleType("pandas")  # type: ignore[assignment]
+    pd.DataFrame = dict  # type: ignore[attr-defined]
+    pd.Series = list  # type: ignore[attr-defined]
+    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])  # type: ignore[attr-defined]
 
 import numpy as np  # type: ignore
 from bot import test_stubs
@@ -71,12 +70,12 @@ try:  # pragma: no cover - optional dependency
     import torch  # type: ignore
 except ImportError as exc:  # noqa: W0703 - optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
-    torch = types.ModuleType("torch")
-    torch.tensor = lambda *a, **k: a[0]
-    torch.float32 = float
-    torch.no_grad = contextlib.nullcontext
-    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
-    torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())
+    torch = types.ModuleType("torch")  # type: ignore[assignment]
+    torch.tensor = lambda *a, **k: a[0]  # type: ignore[attr-defined]
+    torch.float32 = float  # type: ignore[attr-defined]
+    torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined]
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
+    torch.amp = types.SimpleNamespace(autocast=lambda *a, **k: contextlib.nullcontext())  # type: ignore[attr-defined]
 import time
 from typing import Dict, Optional, Tuple
 import shutil
@@ -161,12 +160,14 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
     if getattr(tm, "_cleanup_registered", False):
         return
 
-    tm._cleanup_registered = True
+    setattr(tm, "_cleanup_registered", True)
 
     def _handler(*_args):
         logger.info("Остановка TradeManager")
         tm.shutdown()
         try:
+            from bot.utils import TelegramLogger
+
             asyncio.run(TelegramLogger.shutdown())
         except RuntimeError:
             # event loop may already be closed
@@ -238,6 +239,8 @@ class TradeManager:
                 unsent_path = os.path.join(
                     config.log_dir, config.unsent_telegram_path
                 )
+            from bot.utils import TelegramLogger
+
             self.telegram_logger = TelegramLogger(
                 telegram_bot,
                 chat_id,
@@ -265,7 +268,7 @@ class TradeManager:
                 names=["symbol", "timestamp"],
             ),
         )
-        self.returns_by_symbol = {symbol: [] for symbol in data_handler.usdt_pairs}
+        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = {symbol: [] for symbol in data_handler.usdt_pairs}
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task] = []
@@ -1669,16 +1672,16 @@ class TradeManager:
             
             gpt_signal = None
             try:
-                from bot import trading_bot as tb
+                import trading_bot as tb
                 gpt_signal = tb.GPT_ADVICE.signal
             except Exception:
                 gpt_signal = None
             if gpt_signal in ("buy", "sell"):
-                  weights["gpt"] = self.config.get("gpt_weight", 0.3)
-                  if gpt_signal == "buy":
-                      scores["buy"] += weights["gpt"]
-                  else:
-                      scores["sell"] += weights["gpt"]
+                weights["gpt"] = self.config.get("gpt_weight", 0.3)
+                if gpt_signal == "buy":
+                    scores["buy"] += weights["gpt"]
+                else:
+                    scores["sell"] += weights["gpt"]
 
             total_weight = sum(weights.values())
             if scores["buy"] > scores["sell"] and scores["buy"] >= total_weight / 2:
@@ -1810,6 +1813,8 @@ class TradeManager:
             except asyncio.CancelledError:
                 pass
         self.tasks.clear()
+        from bot.utils import TelegramLogger
+
         await TelegramLogger.shutdown()
         await close_http_client()
 

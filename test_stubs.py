@@ -342,7 +342,6 @@ def apply() -> None:
     except Exception as exc:  # pragma: no cover - best effort
         logging.debug("Failed to patch Flask for ASGI support: %s", exc)
 
-
 apply()
 
 
