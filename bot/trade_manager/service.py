@@ -4,21 +4,18 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
 import inspect
 import ipaddress
 import json
 import os
-import signal
 import sys
 import threading
-import types
 from typing import Any
 
 import httpx
 import ray
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
@@ -53,7 +50,7 @@ api_app = Flask(__name__)
 # Expose an ASGI-compatible application so Gunicorn's UvicornWorker can run
 # this Flask app without raising "Flask.__call__() missing start_response".
 try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
-    asgi_app = api_app.asgi_app
+    asgi_app = api_app.asgi_app  # type: ignore[attr-defined]
 except AttributeError:  # pragma: no cover - older Flask versions
     try:
         from a2wsgi import WSGIMiddleware  # type: ignore
@@ -61,7 +58,7 @@ except AttributeError:  # pragma: no cover - older Flask versions
         logger.exception("Не удалось импортировать a2wsgi (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware
 
-    asgi_app = WSGIMiddleware(api_app)
+        asgi_app = WSGIMiddleware(api_app)  # type: ignore[arg-type]
 
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
@@ -360,7 +357,7 @@ def ping():
 
 
 @api_app.route("/ready")
-def ready() -> tuple:
+def ready() -> Response | tuple[Response, int]:
     """Return 200 once the TradeManager is initialized."""
     if _ready_event.is_set() and trade_manager is not None:
         return jsonify({"status": "ok"})
