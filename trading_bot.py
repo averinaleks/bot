@@ -914,6 +914,13 @@ def _resolve_trade_params(
     return tp, sl, trailing_stop
 
 
+def should_trade(
+    model_signal: str,
+    prob: float = 1.0,
+    threshold: float = 0.5,
+    symbol: str | None = None,
+) -> bool:
+    """Return ``True`` if combined signals confirm ``model_signal``."""
 
     if symbol is None:
         symbol = SYMBOLS[0]
@@ -1091,6 +1098,10 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if prob < threshold:
+        return
+
+    if not should_trade(signal, prob, threshold, symbol):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
