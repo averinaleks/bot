@@ -1113,6 +1113,18 @@ async def run_once_async(symbol: str | None = None) -> None:
     signal = prediction.get("signal")
     if not signal:
         return
+    if (
+        CFG.get("gpt_weight", 0) >= 1.0
+        and GPT_ADVICE.signal in {"buy", "sell"}
+        and GPT_ADVICE.signal != signal
+    ):
+        logger.info(
+            "GPT advice %s conflicts with model signal %s for %s, skipping",
+            GPT_ADVICE.signal,
+            signal,
+            symbol,
+        )
+        return
     prob = float(prediction.get("prob", 0.0))
     threshold = float(prediction.get("threshold", 0.5))
 
