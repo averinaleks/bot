@@ -15,6 +15,9 @@ import time
 from typing import Any, Optional
 
 import httpx
+from config import OFFLINE_MODE
+if OFFLINE_MODE:
+    from services.offline import OfflineTelegram
 try:  # pragma: no cover - optional dependency
     from telegram.error import BadRequest, Forbidden, RetryAfter
 except Exception as exc:  # pragma: no cover - missing telegram
@@ -241,4 +244,8 @@ class TelegramLogger(logging.Handler):
         cls._queue = None
         cls._stop_event = None
         cls._bot = None
+
+
+if OFFLINE_MODE:
+    TelegramLogger = OfflineTelegram  # type: ignore
 
