@@ -17,12 +17,16 @@ from typing import Awaitable, Callable, TypeVar
 from model_builder_client import schedule_retrain, retrain
 
 import httpx
+import ccxt
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 from bot.utils import logger, suppress_tf_logs
+
+BybitError = getattr(ccxt, "BaseError", Exception)
+NetworkError = getattr(ccxt, "NetworkError", BybitError)
 
 CFG = BotConfig()
 
@@ -913,6 +917,13 @@ def _resolve_trade_params(
 
     return tp, sl, trailing_stop
 
+
+def _is_trade_allowed(
+    symbol: str | None,
+    model_signal: str,
+    prob: float | None,
+    threshold: float | None,
+) -> bool:
     if symbol is None:
         symbol = SYMBOLS[0]
 
@@ -1107,6 +1118,13 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if prob < threshold:
+        logger.info(
+            "Probability %.3f below threshold %.3f for %s",
+            prob,
+            threshold,
+            symbol,
+        )
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
@@ -1144,16 +1162,28 @@ async def main_async() -> None:
                 await send_telegram_alert(
                     f"Service availability check failed: {exc}"
                 )
-            except Exception as exc:
-                logger.exception("Error in main loop: %s", exc)
-                await send_telegram_alert(f"Error in main loop: {exc}")
+            except (NetworkError, httpx.HTTPError) as exc:
+                logger.exception("Network error in main loop: %s", exc)
+                await send_telegram_alert(f"Network error in main loop: {exc}")
+            except GPTClientError as exc:
+                logger.exception("GPT client error in main loop: %s", exc)
+                await send_telegram_alert(f"GPT client error in main loop: {exc}")
+            except BybitError as exc:
+                logger.exception("Bybit error in main loop: %s", exc)
+                await send_telegram_alert(f"Bybit error in main loop: {exc}")
             await asyncio.sleep(INTERVAL)
     except ServiceUnavailableError as exc:
         logger.error("Service availability check failed: %s", exc)
         await send_telegram_alert(f"Service availability check failed: {exc}")
-    except Exception as exc:  # pragma: no cover - unexpected startup errors
-        logger.exception("Unexpected error in main_async: %s", exc)
-        await send_telegram_alert(f"Unexpected error in main_async: {exc}")
+    except (NetworkError, httpx.HTTPError) as exc:  # pragma: no cover - startup network
+        logger.exception("Network error in main_async: %s", exc)
+        await send_telegram_alert(f"Network error in main_async: {exc}")
+    except GPTClientError as exc:  # pragma: no cover - startup GPT errors
+        logger.exception("GPT client error in main_async: %s", exc)
+        await send_telegram_alert(f"GPT client error in main_async: {exc}")
+    except BybitError as exc:  # pragma: no cover - startup Bybit errors
+        logger.exception("Bybit error in main_async: %s", exc)
+        await send_telegram_alert(f"Bybit error in main_async: {exc}")
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
