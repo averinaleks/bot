@@ -197,6 +197,14 @@ def test_validate_host_accepts_localhost(monkeypatch, caplog):
     assert 'localhost' in caplog.text
 
 
+def test_validate_host_strips_and_normalizes(monkeypatch, caplog):
+    monkeypatch.setenv('HOST', '  LOCALHOST  ')
+    with caplog.at_level('INFO'):
+        host = utils.validate_host()
+    assert host == '127.0.0.1'
+    assert 'localhost' in caplog.text
+
+
 def test_validate_host_empty_string(monkeypatch, caplog):
     monkeypatch.setenv('HOST', '')
     with caplog.at_level('INFO'):

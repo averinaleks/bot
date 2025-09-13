@@ -143,12 +143,12 @@ _BYBIT_INTERVALS = {
 
 def validate_host() -> str:
     """Проверить допустимость значения переменной окружения ``HOST``."""
-    host = os.getenv("HOST")
+    host = os.getenv("HOST", "").strip()
     if not host:
         logger.info("HOST не установлен, используется 127.0.0.1")
         return "127.0.0.1"
 
-    if host == "localhost":
+    if host.lower() == "localhost":
         logger.info("HOST 'localhost' интерпретирован как 127.0.0.1")
         return "127.0.0.1"
 
@@ -161,11 +161,11 @@ def validate_host() -> str:
             raise ValueError(f"Некорректный IP: {host}")
         logger.warning("HOST '%s' не локальный хост", host)
         raise ValueError(f"HOST '{host}' не локальный хост")
-
-    if host != "127.0.0.1":
-        logger.warning("HOST '%s' не локальный хост", host)
-        raise ValueError(f"HOST '{host}' не локальный хост")
-    return host
+    else:
+        if ip != ipaddress.ip_address("127.0.0.1"):
+            logger.warning("HOST '%s' не локальный хост", host)
+            raise ValueError(f"HOST '{host}' не локальный хост")
+        return str(ip)
 
 
 def safe_int(
