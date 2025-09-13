@@ -1104,6 +1104,7 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
+    if prob < threshold:
         return
 
     tp, sl, trailing_stop = _parse_trade_params(
