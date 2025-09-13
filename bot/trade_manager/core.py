@@ -39,8 +39,6 @@ import numpy as np  # type: ignore
 from bot import test_stubs
 test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE
-from telegram_logger import TelegramLogger
-
 import ray
 import httpx
 from tenacity import retry, wait_exponential, stop_after_attempt
@@ -204,6 +202,8 @@ class TradeManager:
     rl_agent : optional
         Reinforcement learning agent used for decisions.
     """
+
+    telegram_logger: TelegramLogger | types.SimpleNamespace
 
     def __init__(
         self,
@@ -1679,7 +1679,7 @@ class TradeManager:
             
             gpt_signal = None
             try:
-                from bot import trading_bot as tb
+                from bot import trading_bot as tb  # type: ignore[attr-defined]
                 gpt_signal = tb.GPT_ADVICE.signal
             except Exception:
                 gpt_signal = None
