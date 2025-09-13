@@ -913,20 +913,6 @@ def _resolve_trade_params(
 
     return tp, sl, trailing_stop
 
-
-def should_trade(
-    model_signal: str,
-    prob: float | None = None,
-    threshold: float | None = None,
-    symbol: str | None = None,
-) -> bool:
-    """Return ``True`` when the model signal should result in a trade.
-
-    The decision combines the model's signal with EMA-based market direction
-    and optional GPT advice.  When ``prob`` or ``threshold`` are not provided,
-    the check degenerates to a simple signal agreement.
-    """
-
     if symbol is None:
         symbol = SYMBOLS[0]
 
@@ -978,9 +964,23 @@ def should_trade(
         return final == model_signal
 
     if model_signal == "buy":
-        return final == model_signal and prob >= threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob >= threshold
+        return final == model_signal
     else:
-        return final == model_signal and prob <= 1 - threshold
+        if prob is not None and threshold is not None:
+            return final == model_signal and prob <= 1 - threshold
+        return final == model_signal
+
+
+def should_trade(
+    model_signal: str,
+    prob: float = 1.0,
+    threshold: float = 0.5,
+    symbol: str | None = None,
+) -> bool:
+    """Return ``True`` if the weighted advice supports the model signal."""
+    return _is_trade_allowed(symbol, model_signal, prob, threshold)
 
 
 async def refresh_gpt_advice() -> None:
@@ -1107,7 +1107,6 @@ async def run_once_async(symbol: str | None = None) -> None:
 
     logger.info("Prediction for %s: %s", symbol, signal)
 
-    if not should_trade(signal, prob, threshold, symbol):
         return
 
     tp, sl, trailing_stop = _parse_trade_params(

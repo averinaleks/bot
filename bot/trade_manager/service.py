@@ -232,7 +232,7 @@ async def create_trade_manager() -> TradeManager | None:
                 target=lambda: asyncio.run(listener.listen(handle_command)),
                 daemon=True,
             ).start()
-            trade_manager._listener = listener
+            setattr(trade_manager, "_listener", listener)
         if not IS_TEST_MODE:
             _register_cleanup_handlers(trade_manager)
     return trade_manager

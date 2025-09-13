@@ -129,17 +129,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prepare image tags
+        id: tags
+        run: |
+          tags="ghcr.io/$GITHUB_REPOSITORY_OWNER/$MATRIX_IMAGE:latest"
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            tags="$tags"$'\n'"docker.io/$DOCKERHUB_USERNAME/$MATRIX_IMAGE:latest"
+          fi
+          printf 'list<<EOF\n%s\nEOF\n' "$tags" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
         with:
           context: .
           file: ${{ matrix.file }}
           push: true
-          tags: >-
-            ${{ (env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '') &&
-                format('ghcr.io/{0}/{1}:latest,docker.io/{2}/{1}:latest',
-                       github.repository_owner, matrix.image, env.DOCKERHUB_USERNAME) ||
-                format('ghcr.io/{0}/{1}:latest', github.repository_owner, matrix.image) }}
+          tags: ${{ steps.tags.outputs.list }}
           cache-from: type=local,src=${{ github.workspace }}/.buildx-cache
           cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
 
