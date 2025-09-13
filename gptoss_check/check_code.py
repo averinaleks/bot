@@ -27,8 +27,10 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
             with get_httpx_client(timeout=5, trust_env=False) as client:
                 health_url = urljoin(api_url, "/v1/models")
                 response = client.get(health_url)
-                response.raise_for_status()
-                response.close()
+                try:
+                    response.raise_for_status()
+                finally:
+                    response.close()
             return
         except httpx.HTTPError:
             time.sleep(1)

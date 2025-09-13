@@ -78,13 +78,20 @@ def test_run_without_api(monkeypatch, caplog):
 
 def test_wait_for_api_http_error(monkeypatch):
     class DummyResponse:
-        def close(self):
-            pass
+        def __init__(self) -> None:
+            self.closed = False
 
-        def raise_for_status(self):
+        def close(self) -> None:
+            self.closed = True
+
+        def raise_for_status(self) -> None:
             raise httpx.HTTPStatusError(
-                "err", request=httpx.Request("GET", "http://test"), response=httpx.Response(404)
+                "err",
+                request=httpx.Request("GET", "http://test"),
+                response=httpx.Response(404),
             )
+
+    response = DummyResponse()
 
     class DummyClient:
         def __enter__(self):
@@ -94,13 +101,13 @@ def test_wait_for_api_http_error(monkeypatch):
             return False
 
         def get(self, url):
-            return DummyResponse()
+            return response
 
     calls = {"count": 0}
 
     def fake_time():
         calls["count"] += 1
-        return 0 if calls["count"] == 1 else 100
+        return 0 if calls["count"] < 3 else 100
 
     monkeypatch.setattr(check_code, "get_httpx_client", lambda **kw: DummyClient())
     monkeypatch.setattr(check_code.time, "time", fake_time)
@@ -108,6 +115,7 @@ def test_wait_for_api_http_error(monkeypatch):
 
     with pytest.raises(RuntimeError):
         check_code.wait_for_api("http://gptoss:8000", timeout=1)
+    assert response.closed
 
 
 def test_wait_for_api_uses_models_endpoint(monkeypatch):
