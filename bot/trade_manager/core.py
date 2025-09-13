@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import time
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, cast
 import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
@@ -68,8 +68,10 @@ from bot.http_client import (  # noqa: E402
     close_async_http_client as close_http_client,
 )
 
+torch: Any
 try:  # pragma: no cover - optional dependency
-    import torch  # type: ignore  # noqa: E402
+    import torch as _torch  # type: ignore  # noqa: E402
+    torch = cast(Any, _torch)
 except ImportError as exc:  # optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
     torch = types.ModuleType("torch")  # type: ignore[assignment]
