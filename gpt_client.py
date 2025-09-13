@@ -25,6 +25,9 @@ from pydantic import BaseModel, Field, ValidationError
 if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
     del sys.modules["tenacity"]
 from tenacity import retry, stop_after_attempt, wait_exponential
+from config import OFFLINE_MODE
+if OFFLINE_MODE:
+    from services.offline import OfflineGPT
 
 logger = logging.getLogger("TradingBot")
 
@@ -250,6 +253,9 @@ def query_gpt(prompt: str) -> str:
     seconds before giving up. Prompts longer than :data:`MAX_PROMPT_BYTES` are
     truncated with a warning.
     """
+    if OFFLINE_MODE:
+        return OfflineGPT.query(prompt)
+
     prompt = _truncate_prompt(prompt)
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
@@ -324,6 +330,9 @@ async def query_gpt_async(prompt: str) -> str:
     :func:`query_gpt` including error handling and environment configuration.
     Prompts longer than :data:`MAX_PROMPT_BYTES` are truncated with a warning.
     """
+    if OFFLINE_MODE:
+        return await OfflineGPT.query_async(prompt)
+
     prompt = _truncate_prompt(prompt)
     url, timeout, hostname, allowed_ips = await asyncio.to_thread(
         _get_api_url_timeout
@@ -358,6 +367,9 @@ async def query_gpt_async(prompt: str) -> str:
 
 async def query_gpt_json_async(prompt: str) -> dict:
     """Return JSON parsed from :func:`query_gpt_async` text output."""
+
+    if OFFLINE_MODE:
+        return await OfflineGPT.query_json_async(prompt)
 
     text = await query_gpt_async(prompt)
     try:

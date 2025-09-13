@@ -13,7 +13,11 @@ from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
+from dotenv import dotenv_values
 
+
+_env = dotenv_values()
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
 
 logger = logging.getLogger(__name__)
 
