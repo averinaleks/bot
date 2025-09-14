@@ -25,7 +25,9 @@ from pydantic import BaseModel, Field, ValidationError
 if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
     del sys.modules["tenacity"]
 from tenacity import retry, stop_after_attempt, wait_exponential
-from config import OFFLINE_MODE
+# Absolute import ensures the project's own configuration module is used
+# instead of any unrelated ``config`` module on the import path.
+from bot.config import OFFLINE_MODE
 if OFFLINE_MODE:
     from services.offline import OfflineGPT
 

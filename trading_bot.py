@@ -1128,7 +1128,7 @@ async def run_once_async(symbol: str | None = None) -> None:
             symbol,
         )
         return
-    prob = float(prediction.get("prob", 0.0))
+    prob = prediction.get("prob")
     threshold = float(prediction.get("threshold", 0.5))
 
     logger.info("Prediction for %s: %s", symbol, signal)
@@ -1137,7 +1137,7 @@ async def run_once_async(symbol: str | None = None) -> None:
         logger.info("Trade for %s vetoed by weighted advice", symbol)
         return
 
-    if prob < threshold:
+    if prob is not None and prob < threshold:
         logger.info(
             "Probability %.3f below threshold %.3f for %s",
             prob,

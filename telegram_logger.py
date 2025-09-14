@@ -15,7 +15,9 @@ import time
 from typing import Any, Optional
 
 import httpx
-from config import OFFLINE_MODE
+# Use absolute import to ensure the local configuration module is loaded even
+# when a similarly named module exists on ``PYTHONPATH``.
+from bot.config import OFFLINE_MODE
 if OFFLINE_MODE:
     from services.offline import OfflineTelegram
 try:  # pragma: no cover - optional dependency

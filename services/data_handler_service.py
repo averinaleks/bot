@@ -44,6 +44,8 @@ history_cache = (
     if HistoricalDataCache
     else None
 )
+if os.getenv("TEST_MODE") == "1":
+    history_cache = None
 _init_lock = threading.Lock()
 
 

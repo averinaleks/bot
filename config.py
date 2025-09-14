@@ -22,9 +22,14 @@ OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
 logger = logging.getLogger(__name__)
 
 # Load defaults from config.json lazily
+# Resolve the default configuration file. Test runs should always use the
+# repository's bundled ``config.json`` regardless of any ``CONFIG_PATH`` value
+# defined in the environment (for example via ``.env``).
 CONFIG_PATH = os.getenv(
     "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
 )
+if os.getenv("TEST_MODE") == "1":
+    CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 # Cached defaults; populated on first load
 DEFAULTS: Optional[Dict[str, Any]] = None
 DEFAULTS_LOCK = threading.Lock()

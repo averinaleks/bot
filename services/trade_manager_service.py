@@ -19,8 +19,6 @@ import os
 from dotenv import load_dotenv
 import logging
 import threading
-import time
-from pathlib import Path
 from bot.utils import validate_host, safe_int
 
 load_dotenv()
@@ -192,7 +190,7 @@ def open_position() -> ResponseReturnValue:
             opp_side = 'sell' if side == 'buy' else 'buy'
             if sl is not None:
                 stop_order = None
-                delay = 1.0
+                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
                 for attempt in range(3):
                     try:
                         stop_order = exchange.create_order(
@@ -219,7 +217,7 @@ def open_position() -> ResponseReturnValue:
                 orders.append(stop_order)
             if tp is not None:
                 tp_order = None
-                delay = 1.0
+                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
                 for attempt in range(3):
                     try:
                         tp_order = exchange.create_order(
