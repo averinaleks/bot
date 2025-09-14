@@ -229,6 +229,7 @@ def predict() -> ResponseReturnValue:
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         if _model_builder is None:
+            return jsonify({"error": "ModelBuilder not initialized"}), 500
         features = np.array(data.get("features", []), dtype=np.float32)
         if features.ndim == 1:
             features = features.reshape(1, -1)
