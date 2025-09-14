@@ -175,7 +175,7 @@ jobs:
           TMPDIR: /mnt/trivy-tmp
           TRIVY_CACHE_DIR: /mnt/trivy-cache
         with:
-          trivy_version: v0.65.0
+          version: v0.65.0
           image-ref: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
           format: table
           output: ${{ matrix.artifact }}.txt
