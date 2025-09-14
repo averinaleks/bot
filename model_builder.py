@@ -161,25 +161,7 @@ try:  # pragma: no cover - optional dependency
     import joblib  # type: ignore
 except Exception as exc:  # pragma: no cover - stub for tests
     logger.warning("Не удалось импортировать joblib: %s", exc)
-    import types
-
-    import pickle  # nosec B403
-
-    def _dump(obj, dest, *a, **k):  # type: ignore[unused-arg]
-        if hasattr(dest, "write"):
-            pickle.dump(obj, dest)
-        else:
-            with open(dest, "wb") as f:
-                pickle.dump(obj, f)
-
-    def _load(src, *a, **k):  # type: ignore[unused-arg]
-        """Fallback loader used when joblib is unavailable."""
-        if hasattr(src, "read"):
-            return pickle.load(src)  # nosec B301
-        with open(src, "rb") as f:
-            return pickle.load(f)  # nosec B301
-
-    joblib = types.SimpleNamespace(dump=_dump, load=_load)
+    raise ImportError("joblib package is required for model serialization") from exc
 
 try:
     import mlflow
