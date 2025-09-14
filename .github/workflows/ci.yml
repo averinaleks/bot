@@ -35,15 +35,15 @@ jobs:
           device: ${{ matrix.device }}
       - name: Install development requirements
         run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: ruff check bot tests --output-format=github
-      - run: mypy bot
-      - run: bandit -r bot -x tests -ll
+      - run: python -m ruff check bot tests --output-format=github
+      - run: python -m mypy bot
+      - run: python -m bandit -r bot -x tests -ll
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
         continue-on-error: true
         run: |
-          pip-audit --strict -f json -o pip-audit.json
+          python -m pip_audit --strict -f json -o pip-audit.json
       - name: Upload pip-audit report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -54,7 +54,7 @@ jobs:
       - name: Run flake8
         run: |
           set -o pipefail
-          flake8 . | tee flake8.log || code=$?
+          python -m flake8 . | tee flake8.log || code=$?
           exit $code
       - name: Upload flake8 log
         if: always()
