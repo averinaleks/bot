@@ -62,7 +62,9 @@ jobs:
         run: pytest -m "not integration" -q
 
       - name: Enable auto-merge for Dependabot PRs
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' && github.event.repository.allow_auto_merge }}
+        if: >-
+          ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major'
+              && github.event.repository.allow_auto_merge }}
         continue-on-error: true
         # v3.0.0
         # yamllint disable-line rule:line-length
