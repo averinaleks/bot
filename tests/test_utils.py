@@ -46,6 +46,17 @@ async def test_safe_api_call_test_mode():
 
 
 @pytest.mark.asyncio
+async def test_safe_api_call_env_var_false(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "0")
+    exch = DummyExchange()
+
+    with pytest.raises(RuntimeError):
+        await utils.safe_api_call(exch, 'fail')
+
+    assert exch.calls == 5
+
+
+@pytest.mark.asyncio
 async def test_safe_api_call_unhandled(monkeypatch):
     monkeypatch.delenv("TEST_MODE", raising=False)
 

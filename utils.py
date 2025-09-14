@@ -284,7 +284,7 @@ async def safe_api_call(
 ):
     """Call a ccxt method with retry, status and retCode verification."""
     if test_mode is None:
-        test_mode = bool(os.getenv("TEST_MODE"))
+        test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes"}
 
     if test_mode:
         # During unit tests we do not want to spend time in the retry loop.
