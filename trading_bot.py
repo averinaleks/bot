@@ -1015,7 +1015,11 @@ async def refresh_gpt_advice() -> None:
             "Дай JSON {\"signal\": 'buy'|'sell'|'hold', \"tp_mult\": float, \"sl_mult\": float}."
         )
         gpt_result = await query_gpt_json_async(prompt)
-        advice = GPTAdviceModel.model_validate(gpt_result)
+        try:
+            advice = GPTAdviceModel.model_validate(gpt_result)
+        except ValidationError as exc:
+            logger.warning("Invalid GPT advice: %s", exc)
+            advice = GPTAdviceModel(signal="hold")
         GPT_ADVICE = advice
         logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientJSONError as exc:
@@ -1023,14 +1027,15 @@ async def refresh_gpt_advice() -> None:
         logger.debug("GPT analysis failed: %s", exc)
     except GPTClientError as exc:  # pragma: no cover - non-critical
         logger.debug("GPT analysis failed: %s", exc)
-    except ValidationError as exc:
-        await send_telegram_alert(f"Invalid GPT advice schema: {exc}")
-        raise
 
 
 async def _gpt_advice_loop() -> None:
     while True:
-        await refresh_gpt_advice()
+        try:
+            await refresh_gpt_advice()
+        except Exception as exc:  # noqa: BLE001 - keep loop running
+            logger.warning("GPT advice loop error: %s", exc)
+            await send_telegram_alert(f"GPT advice loop error: {exc}")
         await asyncio.sleep(3600)
 
 
