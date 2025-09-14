@@ -13,7 +13,7 @@ permissions:
 jobs:
   dependabot:
     # Run this job only for Dependabot PRs.
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    if: ${{ github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
@@ -23,8 +23,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
-        if: >-
-          ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v4.0.0
         uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363
         with:
@@ -47,6 +46,7 @@ jobs:
         uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install dependencies
         if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         run: |
@@ -62,8 +62,7 @@ jobs:
         run: pytest -m "not integration" -q
 
       - name: Enable auto-merge for Dependabot PRs
-        if: >-
-          ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v3.0.0
         # yamllint disable-line rule:line-length
         uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
