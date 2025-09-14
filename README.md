@@ -18,7 +18,9 @@
 ## Зависимости
 
 Основные пакеты устанавливаются из `requirements.txt` и включают, например,
-`Flask` для веб‑сервисов, `pandas`, `numpy`, `httpx`, `psutil` и `scipy`.
+`Flask 3.1.2` для веб‑сервисов, `FastAPI 0.116.1` для HTTP‑эндпойнтов, а также
+`pandas 2.3.2`, `numpy 2.2.6`, `httpx 0.28.1`, `psutil 7.0.0`, `scipy 1.15.3`
+и `uvicorn 0.35.0`.
 GPU-зависимости вынесены в отдельный файл `requirements-gpu.txt` и устанавливаются при необходимости.
 Дополнительные библиотеки используются только для расширенного функционала и
 устанавливаются при необходимости:
@@ -29,7 +31,8 @@ GPU-зависимости вынесены в отдельный файл `requ
 - `ta` — расчёт технических индикаторов;
 - `ray` — распределённые вычисления и оптимизация параметров;
 - `numba` — ускорение критичных участков кода;
-- `python-telegram-bot` — отправка уведомлений в Telegram.
+- `python-telegram-bot` (опционально) — вспомогательные обёртки; сообщения
+  отправляются прямыми HTTP‑запросами к Telegram API.
 
 При отсутствии этих опциональных зависимостей некоторые возможности
 отключаются или переходят в упрощённый режим (например, `pandas` вместо
@@ -120,8 +123,23 @@ GPU-зависимости вынесены в отдельный файл `requ
 
     - `BYBIT_API_KEY` и `BYBIT_API_SECRET` — токены биржи;
     - `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` — параметры для уведомлений;
+    - `TRADE_MANAGER_TOKEN` — токен доступа к сервису торговли;
     - `TRADE_RISK_USD` — риск в долларах на одну сделку;
     - `OPENAI_API_KEY` или `GPT_OSS_API` — если используется GPT‑сервис.
+
+    Пример `.env`:
+
+    ```env
+    BYBIT_API_KEY=xxx
+    BYBIT_API_SECRET=yyy
+    TELEGRAM_BOT_TOKEN=zzz
+    TELEGRAM_CHAT_ID=123456789
+    TRADE_RISK_USD=5
+    TRADE_MANAGER_TOKEN=secret
+    ```
+
+    `TradeManager` проверяет `TRADE_MANAGER_TOKEN` и отклоняет запросы при его
+    отсутствии или неверном значении.
 
     **Типичные ошибки:** забытый `TRADE_RISK_USD`, кавычки вокруг чисел,
     неверные токены или отсутствие переменных в `env_file` контейнера.
@@ -566,30 +584,25 @@ use these steps to diagnose the problem:
 
 ## Telegram notifications
 
-Set the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` variables in `.env` to
-enable notifications. Create the bot with `telegram.Bot` and pass it to both
-`DataHandler` and `TradeManager`:
+Укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `.env`, чтобы включить
+уведомления. `TelegramLogger` отправляет сообщения в Telegram через HTTP‑запросы,
+поэтому отдельный объект `telegram.Bot` не требуется. Пример ручной отправки
+сообщения:
 
 ```python
-from telegram import Bot
-import json
-import os
+import os, httpx, asyncio
 
-with open("config.json") as f:
-    cfg = json.load(f)
+async def send(msg: str) -> None:
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    chat_id = os.environ["TELEGRAM_CHAT_ID"]
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    await httpx.AsyncClient().post(url, json={"chat_id": chat_id, "text": msg})
 
-bot = Bot(os.environ["TELEGRAM_BOT_TOKEN"])
-chat_id = os.environ["TELEGRAM_CHAT_ID"]
-
-data_handler = DataHandler(cfg, bot, chat_id)
-model_builder = ModelBuilder(cfg, data_handler, None)
-trade_manager = TradeManager(cfg, data_handler, model_builder, bot, chat_id)
-
-You can limit the logger queue with `telegram_queue_size` in `config.json`.
-# Optionally cache features ahead of time
-# data_handler = DataHandler(cfg, bot, chat_id,
-#                            feature_callback=model_builder.precompute_features)
+asyncio.run(send("Бот запущен"))
 ```
+
+Ограничить очередь логгера можно параметром `telegram_queue_size` в
+`config.json`.
 
 Both services check the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 variables at startup. If either variable is missing, a warning is logged and
@@ -601,10 +614,7 @@ it to the `offset` parameter when calling `get_updates`. The helper class
 
 Telegram enforces message limits per bot account, so duplicate notifications are
 typically caused by bugs rather than global restrictions. Ensure that your code
-filters repeated messages and checks that `send_message` returns HTTP 200.
-
-You can run this bot either with long polling or a webhook using the
-`Application` class from `python-telegram-bot`.
+filters repeated messages and checks that the HTTP request returns status 200.
 
 When deploying the `trade_manager` service with Gunicorn, use a single worker
 (`-w 1`). This ensures only one `TelegramUpdateListener` polls the bot token,
