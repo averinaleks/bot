@@ -32,7 +32,9 @@ app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
-BASE_DIR = Path.cwd().resolve()
+# Determine the project root based on this file's location rather than the
+# current working directory so the service can be launched from anywhere.
+BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -53,8 +55,19 @@ _scaler: Any = None  # backwards compatibility for tests
 _model_builder = None
 
 
+def _load_model() -> None:
+    """Best-effort loading of a pre-trained model for compatibility tests."""
+    model_file = Path(os.getenv("MODEL_FILE", ""))
+    if not model_file.is_file():  # nothing to load
+        return
+    try:  # pragma: no cover - exercised in integration tests
+        _models["default"] = joblib.load(model_file)
+    except Exception:
+        app.logger.exception("Failed to load model from %s", model_file)
+
+
 if NN_FRAMEWORK != "sklearn":
-    from config import BotConfig
+    from bot.config import BotConfig
     from model_builder import ModelBuilder, KERAS_FRAMEWORKS, _get_torch_modules
 
     class _DummyDH:

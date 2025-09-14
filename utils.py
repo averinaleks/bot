@@ -97,10 +97,10 @@ except ImportError:
 
 import httpx
 
-try:  # pragma: no cover - allow running outside package
-    from .telegram_logger import TelegramLogger
-except ImportError as exc:  # pragma: no cover - fallback when executed directly
-    logger.warning("Failed to import TelegramLogger relatively: %s", exc)
+try:  # pragma: no cover - prefer package import to avoid shadowing
+    from bot.telegram_logger import TelegramLogger
+except ImportError as exc:  # pragma: no cover - fallback when package import fails
+    logger.warning("Failed to import TelegramLogger via package: %s", exc)
     from telegram_logger import TelegramLogger  # type: ignore
 
 try:
