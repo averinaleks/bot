@@ -15,8 +15,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: >-
-    gptoss-review-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref_name || github.run_id }}
+  group: gptoss-review-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref_name || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -85,7 +84,7 @@ jobs:
           exit 1
 
       - name: Generate diff
-        if: steps.wait_llm.outcome == 'success'
+        if: steps.wait_llm.conclusion == 'success'
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
