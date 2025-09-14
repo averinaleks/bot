@@ -8,7 +8,7 @@ import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from collections import defaultdict
-from typing import AsyncGenerator, Generator, TYPE_CHECKING, Any, Dict, Tuple
+from typing import AsyncGenerator, Callable, Generator, TYPE_CHECKING, Any, Dict, Tuple
 import random
 
 # Use system-level randomness for jitter to avoid predictable retry delays
@@ -16,15 +16,17 @@ _RNG = random.SystemRandom()
 
 import httpx
 try:  # pragma: no cover - optional dependency handling
-    from tenacity import retry, wait_exponential_jitter, stop_after_attempt
+    from tenacity import retry, wait_exponential_jitter, stop_after_attempt, RetryCallState
 except (ImportError, AttributeError):  # pragma: no cover - fallback for stub
-    from tenacity import retry, wait_exponential, stop_after_attempt
+    from tenacity import retry, wait_exponential, stop_after_attempt, RetryCallState
 
-    def wait_exponential_jitter(min: float, max: float):
+    def wait_exponential_jitter(  # type: ignore[no-redef]
+        min: float, max: float
+    ) -> Callable[[RetryCallState], float]:
         base = wait_exponential(multiplier=1, min=min, max=max)
 
-        def _wait(attempt: int) -> float:
-            return base(attempt) + _RNG.uniform(0, 1)
+        def _wait(state: RetryCallState) -> float:
+            return base(state) + _RNG.uniform(0, 1)
 
         return _wait
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
