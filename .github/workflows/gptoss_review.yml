@@ -61,7 +61,7 @@ jobs:
           docker run -d --rm --name gptoss \
             -e HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}" \
             -p 127.0.0.1:8000:8000 \
-            vllm/vllm-openai:gptoss \
+            ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest \
             --model "${MODEL_NAME}" \
             --trust-remote-code
 
@@ -148,4 +148,6 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker rm -f gptoss || true
+        run: |
+          docker rm -f gptoss || true
+          docker image rm ghcr.io/openaccess-ai-collective/gpt-oss:cpu-latest || true
