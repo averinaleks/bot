@@ -54,7 +54,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Login to GHCR
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3.5.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -119,7 +119,9 @@ jobs:
         run: |
           set -euo pipefail
           model="${MODEL_NAME}"
-          payload=$(jq -n --arg diff "$(cat diff.patch)" --arg model "$model" \
+          payload=$(jq -n \
+            --arg diff "$(cat diff.patch)" \
+            --arg model "$model" \
             '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}' )
           resp=$(curl -sSf -H "Content-Type: application/json" -d "$payload" \
             http://127.0.0.1:8000/v1/chat/completions)
@@ -133,14 +135,14 @@ jobs:
 
       - name: Upload review artifact
         if: steps.llm_review.outputs.has_content == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: gptoss-review-${{ env.PR_NUMBER }}
           path: review.md
 
       - name: Comment PR
         if: steps.llm_review.outputs.has_content == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
         with:
           script: |
             const fs = require('fs');
