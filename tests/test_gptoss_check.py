@@ -118,8 +118,18 @@ def test_wait_for_api_http_error(monkeypatch):
     assert response.closed
 
 
-def test_wait_for_api_uses_models_endpoint(monkeypatch):
-    """wait_for_api should query /v1/models regardless of API path."""
+@pytest.mark.parametrize(
+    "api_url,expected",
+    [
+        ("http://gptoss:8000/api", "http://gptoss:8000/api/v1/models"),
+        (
+            "http://gptoss:8000/api/v1/chat/completions",
+            "http://gptoss:8000/api/v1/models",
+        ),
+    ],
+)
+def test_wait_for_api_uses_models_endpoint(monkeypatch, api_url, expected):
+    """wait_for_api should query /v1/models while preserving base paths."""
 
     called = {}
 
@@ -146,9 +156,8 @@ def test_wait_for_api_uses_models_endpoint(monkeypatch):
     monkeypatch.setattr(check_code.time, "time", lambda: 0)
     monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
 
-    api_url = "http://gptoss:8000/v1/chat/completions"
     check_code.wait_for_api(api_url, timeout=1)
-    assert called["url"] == "http://gptoss:8000/v1/models"
+    assert called["url"] == expected
 
 
 def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
