@@ -19,12 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.x'
       - name: Prepare requirements
-        run: |
-          awk '/^ccxtpro/ {skip=1; next} skip && /^[ \t]/ {next} {skip=0; print}' \
-            requirements.out > requirements-submission.txt
-      - name: Submit dependency graph
-        uses: github/dependency-submission-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          requirements: requirements-submission.txt
+          detectorArgs: Pip=EnableIfDefaultOff
