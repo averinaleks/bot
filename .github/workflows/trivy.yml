@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         if: ${{ github.event_name != 'pull_request' && always() }}
-        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b  # yamllint disable-line rule:line-length
+        uses: github/codeql-action/upload-sarif@ad2a4837011b42f6947b78d6417e7c253b1c504b
         # v3
         with:
           sarif_file: trivy-results.sarif
