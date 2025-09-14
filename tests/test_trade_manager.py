@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 import sys
 import types
+import importlib
 import logging
 import math
 import contextlib
@@ -1626,6 +1627,20 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
     tm.shutdown()
 
     assert not called["done"]
+
+
+def test_warn_when_token_missing(monkeypatch, caplog):
+    monkeypatch.delenv("TRADE_MANAGER_TOKEN", raising=False)
+    ray_stub = types.ModuleType("ray")
+    ray_stub.is_initialized = lambda: False
+    ray_stub.init = lambda *a, **k: None
+    monkeypatch.setitem(sys.modules, "ray", ray_stub)
+    service = importlib.reload(
+        importlib.import_module("bot.trade_manager.service")
+    )
+    with caplog.at_level(logging.WARNING, logger=service.logger.name):
+        service._load_env()
+    assert "торговые запросы будут отвергнуты" in caplog.text
 
 
 sys.modules.pop('utils', None)

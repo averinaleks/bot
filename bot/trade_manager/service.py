@@ -72,8 +72,17 @@ trade_manager: TradeManager | None = None
 IS_TEST_MODE = os.getenv("TEST_MODE") == "1" or CORE_TEST_MODE
 
 TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
-if not TRADE_MANAGER_TOKEN:
-    logger.warning("TRADE_MANAGER_TOKEN не установлен")
+
+
+def _load_env() -> None:
+    """Load `.env` and validate required environment variables."""
+    global TRADE_MANAGER_TOKEN
+    load_dotenv()
+    TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+    if not TRADE_MANAGER_TOKEN:
+        logger.warning(
+            "TRADE_MANAGER_TOKEN пуст, все торговые запросы будут отвергнуты"
+        )
 
 
 def _require_token() -> tuple[Any, int] | None:
@@ -402,7 +411,7 @@ def main() -> None:
     """Entry point for running the service as a script."""
     configure_logging()
     setup_multiprocessing()
-    load_dotenv()
+    _load_env()
     try:
         host = _resolve_host()
     except InvalidHostError as exc:  # pragma: no cover - configuration errors
