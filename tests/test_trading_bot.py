@@ -1003,3 +1003,40 @@ async def test_trading_enabled_parallel():
 
     await trading_bot.set_trading_enabled(True)
     assert await trading_bot.get_trading_enabled() is True
+
+
+@pytest.mark.asyncio
+async def test_gpt_advice_loop_handles_invalid_json(monkeypatch):
+    from collections import deque
+
+    async def fake_query(prompt):
+        return {"signal": {"bad": True}}
+
+    async def fake_features(symbol, price):
+        return [price, 0.0, price, 0.0, 50.0]
+
+    sleeps = {"count": 0}
+
+    async def fake_sleep(_):
+        sleeps["count"] += 1
+        if sleeps["count"] >= 2:
+            raise asyncio.CancelledError
+
+    alerts: list[str] = []
+
+    async def fake_alert(msg: str):
+        alerts.append(msg)
+
+    monkeypatch.setattr(trading_bot, "query_gpt_json_async", fake_query)
+    monkeypatch.setattr(trading_bot, "build_feature_vector", fake_features)
+    monkeypatch.setattr(trading_bot, "SYMBOLS", ["BTCUSDT"])
+    monkeypatch.setattr(trading_bot, "_PRICE_HISTORY", {"BTCUSDT": deque([1.0], maxlen=200)})
+    monkeypatch.setattr(trading_bot.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(trading_bot, "send_telegram_alert", fake_alert)
+
+    with pytest.raises(asyncio.CancelledError):
+        await trading_bot._gpt_advice_loop()
+
+    assert sleeps["count"] >= 2
+    assert trading_bot.GPT_ADVICE.signal == "hold"
+    assert alerts == []
