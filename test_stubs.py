@@ -170,10 +170,21 @@ def apply() -> None:
         httpx_mod = cast(HTTPXModule, types.ModuleType("httpx"))
 
         class _HTTPXResponse:
-            def __init__(self, status_code: int = 200, text: str = "", json_data: Any | None = None):
+            def __init__(
+                self,
+                status_code: int = 200,
+                text: str = "",
+                json: Any | None = None,
+                request: Any | None = None,
+                content: bytes | None = None,
+                headers: dict[str, str] | None = None,
+            ) -> None:
                 self.status_code = status_code
                 self._text = text
-                self._json = json_data
+                self._json = json
+                self.request = request
+                self.content = content or b""
+                self.headers = headers or {}
 
             def json(self) -> Any:
                 return self._json
@@ -181,6 +192,9 @@ def apply() -> None:
             @property
             def text(self) -> str:
                 return self._text
+
+            async def aread(self) -> bytes:
+                return self.content
 
         def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
             return _HTTPXResponse()
@@ -242,6 +256,11 @@ def apply() -> None:
         class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
             ...
 
+        class _HTTPXRequest:  # pragma: no cover - minimal placeholder
+            def __init__(self, method: str, url: str) -> None:
+                self.method = method
+                self.url = url
+
         class _TimeoutException(Exception):  # pragma: no cover - simple subclass
             ...
 
@@ -260,6 +279,7 @@ def apply() -> None:
         setattr(httpx_mod, "HTTPError", Exception)
         setattr(httpx_mod, "TimeoutException", _TimeoutException)
         setattr(httpx_mod, "ConnectError", _ConnectError)
+        setattr(httpx_mod, "Request", _HTTPXRequest)
         setattr(httpx_mod, "Client", _HTTPXClient)
         setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
         setattr(httpx_mod, "_client", _client_mod)
