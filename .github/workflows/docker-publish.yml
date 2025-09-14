@@ -152,9 +152,10 @@ jobs:
           cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
 
       - name: Update buildx cache
+        if: ${{ always() }}
         run: |
           rm -rf "$GITHUB_WORKSPACE/.buildx-cache"
-          mv "$GITHUB_WORKSPACE/.buildx-cache-new" "$GITHUB_WORKSPACE/.buildx-cache"
+          mv "$GITHUB_WORKSPACE/.buildx-cache-new" "$GITHUB_WORKSPACE/.buildx-cache" || true
 
       - name: Cleanup before Trivy scan
         if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
@@ -191,6 +192,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.txt
       - name: Cleanup Docker
+        if: ${{ always() }}
         run: |
           docker buildx prune -af || true
           docker system prune -af || true
