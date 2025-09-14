@@ -11,6 +11,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+try:
+    from werkzeug.utils import secure_filename
+except ImportError:
+    secure_filename = None
 from typing import Any, Dict
 
 import joblib
@@ -123,8 +127,17 @@ else:  # scikit-learn fallback used by tests
                 return self.transform(X)
 
     def _model_path(symbol: str) -> Path:
-        safe = Path(symbol).name
-        return (MODEL_DIR / f"{safe}.pkl").resolve()
+        # Use werkzeug.utils.secure_filename if available, otherwise fallback to basic sanitation
+        if secure_filename is not None:
+            safe = secure_filename(symbol)
+        else:
+            safe = Path(symbol).name
+        candidate = (MODEL_DIR / f"{safe}.pkl")
+        fullpath = candidate.resolve()
+        # Ensure the full path is within the MODEL_DIR
+        if MODEL_DIR.resolve() not in fullpath.parents:
+            raise ValueError("Invalid model path - outside of MODEL_DIR")
+        return fullpath
 
     def _load_state(symbol: str) -> None:
         # Only allow models that actually exist in the MODEL_DIR.
