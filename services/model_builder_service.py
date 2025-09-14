@@ -15,7 +15,7 @@ try:
     from werkzeug.utils import secure_filename
 except ImportError:
     secure_filename = None
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
 
 import joblib
 import numpy as np
@@ -30,6 +30,9 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
 from utils import validate_host, safe_int
+
+if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
+    from model_builder import ModelBuilder
 
 load_dotenv()
 app = Flask(__name__)
@@ -56,7 +59,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 _models: Dict[str, Any] = {}
 _scalers: Dict[str, Any] = {}
 _scaler: Any = None  # backwards compatibility for tests
-_model_builder = None
+_model_builder: ModelBuilder | None = None
 
 
 def _load_model() -> None:
@@ -173,7 +176,8 @@ def train() -> ResponseReturnValue:
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         import asyncio
-
+        if _model_builder is None:  # pragma: no cover - should be set in non-sklearn mode
+            return jsonify({"error": "model builder not initialized"}), 500
         try:
             asyncio.run(_model_builder.retrain_symbol(symbol))
             _model_builder.save_state()
