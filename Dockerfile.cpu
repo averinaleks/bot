@@ -33,6 +33,7 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     find $VIRTUAL_ENV -type f -name '*.pyc' -delete
 
 FROM ubuntu:24.04
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновляем систему перед установкой зависимостей выполнения
 RUN apt-get update && apt-get dist-upgrade -y

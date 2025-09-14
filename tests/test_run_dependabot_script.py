@@ -8,10 +8,11 @@ def test_run_dependabot_requires_token():
     env = os.environ.copy()
     env["GITHUB_REPOSITORY"] = "owner/repo"
     env.pop("TOKEN", None)
+    env.pop("GITHUB_TOKEN", None)
 
     proc = subprocess.run(
         ["bash", str(script)], capture_output=True, text=True, env=env
     )
 
     assert proc.returncode == 1
-    assert "TOKEN is not set" in proc.stderr
+    assert "TOKEN or GITHUB_TOKEN is not set" in proc.stderr

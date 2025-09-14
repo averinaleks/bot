@@ -1,4 +1,2 @@
 [bandit]
-exclude = tests/*,scripts/*,gptoss_check/*
-targets = .
-recursive = True
+exclude = */tests/*,*/scripts/*,*/gptoss_check/*
