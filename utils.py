@@ -654,14 +654,16 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
         z_scores = pd.Series(zscore(filled.to_numpy()), index=df.index)
 
         mask = (np.abs(z_scores) <= threshold) | series.isna()
-        df_filtered = df[mask]
-        if len(df_filtered) < len(df):
+        df_filtered = df.copy()
+        outliers = ~mask
+        if outliers.any():
             logger.info(
-                "Удалено %s аномалий в %s с z-оценкой, порог=%.2f",
-                len(df) - len(df_filtered),
+                "Заменено %s аномалий в %s с z-оценкой, порог=%.2f",
+                int(outliers.sum()),
                 column,
                 threshold,
             )
+            df_filtered.loc[outliers, column] = np.nan
         return df_filtered
     except (KeyError, TypeError) as e:
         logger.error("Ошибка фильтрации аномалий в %s: %s", column, e)
