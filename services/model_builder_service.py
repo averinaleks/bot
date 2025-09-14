@@ -15,6 +15,7 @@ from typing import Any, Dict
 
 import joblib
 import numpy as np
+from numpy.typing import NDArray
 import pandas as pd
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -157,6 +158,7 @@ def train() -> ResponseReturnValue:
             return jsonify({"error": "training failed"}), 500
 
     prices = data.get("prices")
+    features: NDArray[np.float32]
     if prices is not None:
         features = _compute_ema(prices).reshape(-1, 1)
     else:
@@ -255,8 +257,9 @@ def predict() -> ResponseReturnValue:
     features = data.get("features")
     if features is None:
         price_val = float(data.get("price", 0.0))
-        features = [price_val]
-    features = np.array(features, dtype=np.float32)
+        features = np.array([price_val], dtype=np.float32)
+    else:
+        features = np.array(features, dtype=np.float32)
     if features.ndim == 0:
         features = np.array([[features]], dtype=np.float32)
     elif features.ndim == 1:

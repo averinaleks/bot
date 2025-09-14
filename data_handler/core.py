@@ -32,6 +32,8 @@ class DataHandler:
         self.ws_min_process_rate = expected_ws_rate(cfg.timeframe)
         self.disk_buffer: Dict[int, list] = {}
         self.indicators: Dict[str, Any] = {}
+        self._ohlcv: Any
+        self._ohlcv_2h: Any
         if getattr(cfg, "use_polars", False) and pl is not None:
             self._ohlcv = pl.DataFrame()
             self._ohlcv_2h = pl.DataFrame()
