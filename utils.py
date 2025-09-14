@@ -162,7 +162,7 @@ def validate_host() -> str:
         logger.warning("HOST '%s' не локальный хост", host)
         raise ValueError(f"HOST '{host}' не локальный хост")
     else:
-        if ip != ipaddress.ip_address("127.0.0.1"):
+        if not ip.is_loopback:
             logger.warning("HOST '%s' не локальный хост", host)
             raise ValueError(f"HOST '{host}' не локальный хост")
         return str(ip)
