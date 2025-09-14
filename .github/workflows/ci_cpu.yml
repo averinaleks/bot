@@ -106,7 +106,10 @@ jobs:
           fi
       - name: Run docker compose
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build --abort-on-container-exit --exit-code-from gptoss_check
+          docker compose -f docker-compose.yml \
+            -f docker-compose.cpu.yml \
+            up --build --abort-on-container-exit \
+            --exit-code-from gptoss_check
           docker compose -f docker-compose.yml -f docker-compose.cpu.yml down
       - name: Cleanup buildx
         if: always()
