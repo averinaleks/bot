@@ -160,8 +160,6 @@ def train() -> ResponseReturnValue:
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         import asyncio
-        if _model_builder is None:
-            raise RuntimeError("Model builder is not initialized")
 
         try:
             asyncio.run(_model_builder.retrain_symbol(symbol))
@@ -231,7 +229,6 @@ def predict() -> ResponseReturnValue:
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         if _model_builder is None:
-            raise RuntimeError("Model builder is not initialized")
         features = np.array(data.get("features", []), dtype=np.float32)
         if features.ndim == 1:
             features = features.reshape(1, -1)
