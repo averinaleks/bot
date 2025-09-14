@@ -5,7 +5,12 @@ import pytest
 
 from bot import http_client as _http_client
 
-pytest_plugins = ("pytest_asyncio",)
+try:  # pragma: no cover - defensive import
+    import pytest_asyncio  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    pytest_plugins: tuple[str, ...] = ()
+else:
+    pytest_plugins = ("pytest_asyncio",)
 
 # MLflow spawns a background telemetry thread on import which keeps the
 # process alive after tests finish. Disabling telemetry prevents the thread
