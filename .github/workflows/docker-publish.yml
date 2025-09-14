@@ -100,6 +100,7 @@ jobs:
 
       - name: Cache Docker layers
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809  # v4
+        continue-on-error: true
         with:
           path: ${{ github.workspace }}/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ matrix.image }}-${{ github.sha }}

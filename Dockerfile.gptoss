@@ -1,4 +1,5 @@
 FROM python:3.11-slim
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libtbbmalloc2 libnuma1 curl git \
