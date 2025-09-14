@@ -97,7 +97,7 @@ jobs:
           base_sha=$(echo "$pull_info" | jq -r .base.sha)
           base_ref=$(echo "$pull_info" | jq -r .base.ref)
           [ -n "$base_sha" ] && [ "$base_sha" != "null" ] && [ -n "$base_ref" ] && [ "$base_ref" != "null" ]
-          git fetch --no-tags --depth=50 origin "$base_ref"
+          git fetch --no-tags origin "$base_ref"
           git diff "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
           if [ ! -s diff.patch ]; then
             echo "has_diff=false" >> "$GITHUB_OUTPUT"
