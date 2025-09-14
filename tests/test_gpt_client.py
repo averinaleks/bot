@@ -408,6 +408,18 @@ def test_get_api_url_timeout_invalid(monkeypatch, caplog):
     assert "Invalid GPT_OSS_TIMEOUT value 'abc'; defaulting to 5.0" in caplog.text
 
 
+def test_get_api_url_timeout_respects_base_path(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "http://localhost/api")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))],
+    )
+    url, timeout, hostname, ips = _get_api_url_timeout()
+    assert url == "http://localhost/api/v1/completions"
+    assert hostname == "localhost"
+
+
 @pytest.mark.asyncio
 async def test_query_gpt_json_async(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")

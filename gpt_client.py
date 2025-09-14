@@ -10,7 +10,7 @@ import os
 import json
 import socket
 from enum import Enum
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from ipaddress import ip_address
 import asyncio
 import threading
@@ -219,7 +219,8 @@ def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
         )
         timeout = 5.0
 
-    url = api_url.rstrip("/") + "/v1/completions"
+    api_url = api_url.rstrip("/")
+    url = urljoin(api_url + "/", "v1/completions")
     return url, timeout, hostname, allowed_ips
 
 
