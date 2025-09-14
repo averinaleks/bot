@@ -228,3 +228,4 @@ jobs:
         if: always() && steps.start_service.outputs.service_running == 'true'
         run: |
           kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
+          rm -f "$GITHUB_WORKSPACE/service.pid"
