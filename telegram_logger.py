@@ -35,12 +35,7 @@ logger = logging.getLogger("TradingBot")
 class TelegramLogger(logging.Handler):
     """Handler для пересылки логов и сообщений в Telegram."""
 
-    _queue: asyncio.Queue | None = None
-    _worker_task: asyncio.Task | None = None
-    _worker_thread: threading.Thread | None = None
-    _worker_lock = asyncio.Lock()
-    _bot: Any | None = None
-    _stop_event: asyncio.Event | None = None
+    _instances: set["TelegramLogger"] = set()
 
     def __init__(
         self,
@@ -58,30 +53,37 @@ class TelegramLogger(logging.Handler):
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()
 
-        TelegramLogger._queue = asyncio.Queue(maxsize=max_queue_size or 0)
-        TelegramLogger._bot = bot
-        TelegramLogger._stop_event = asyncio.Event()
+        self._queue: asyncio.Queue | None = asyncio.Queue(
+            maxsize=max_queue_size or 0
+        )
+        self._bot: Any | None = bot
+        self._stop_event: asyncio.Event | None = asyncio.Event()
+        self._worker_task: asyncio.Task | None = None
+        self._worker_thread: threading.Thread | None = None
+
         if os.getenv("TEST_MODE") != "1":
             try:
                 loop = asyncio.get_running_loop()
-                TelegramLogger._worker_task = loop.create_task(self._worker())
+                self._worker_task = loop.create_task(self._worker())
             except RuntimeError:
                 t = threading.Thread(
                     target=lambda: asyncio.run(self._worker()),
                     daemon=True,
                 )
                 t.start()
-                TelegramLogger._worker_thread = t
+                self._worker_thread = t
+
+        TelegramLogger._instances.add(self)
 
         self.last_sent_text = ""
 
     async def _worker(self) -> None:
         while True:
-            if TelegramLogger._queue is None or TelegramLogger._stop_event is None:
+            if self._queue is None or self._stop_event is None:
                 return
-            if TelegramLogger._stop_event.is_set():
+            if self._stop_event.is_set():
                 return
-            queue = TelegramLogger._queue
+            queue = self._queue
             try:
                 item = await asyncio.wait_for(queue.get(), 1.0)
             except asyncio.TimeoutError:
@@ -124,7 +126,7 @@ class TelegramLogger(logging.Handler):
                 delay = 1
                 for attempt in range(5):
                     try:
-                        bot = TelegramLogger._bot
+                        bot = self._bot
                         if bot is None:
                             raise RuntimeError("Telegram bot not initialized")
                         result = await bot.send_message(chat_id=chat_id, text=part)
@@ -173,12 +175,12 @@ class TelegramLogger(logging.Handler):
             logger.error("Не удалось сохранить сообщение Telegram: %s", exc)
 
     async def send_telegram_message(self, message: str, urgent: bool = False) -> None:
-        if TelegramLogger._queue is None:
+        if self._queue is None:
             logger.warning("TelegramLogger queue is None, message dropped")
             return
         msg = message[:4096]
         try:
-            TelegramLogger._queue.put_nowait((self.chat_id, msg, urgent))
+            self._queue.put_nowait((self.chat_id, msg, urgent))
         except asyncio.QueueFull:
             logger.warning("Очередь Telegram переполнена, сообщение пропущено")
 
@@ -203,47 +205,52 @@ class TelegramLogger(logging.Handler):
         except (ValueError, RuntimeError) as exc:
             logger.error("Ошибка в TelegramLogger: %s", exc)
 
-    @classmethod
-    async def shutdown(cls) -> None:
-        if cls._stop_event is None:
+    async def _shutdown(self) -> None:
+        if self._stop_event is None:
             return
 
-        if cls._queue is not None:
-            # Ensure no pending unfinished tasks block shutdown
-            while not cls._queue.empty():
+        if self._queue is not None:
+            while not self._queue.empty():
                 try:
-                    cls._queue.get_nowait()
-                    cls._queue.task_done()
+                    self._queue.get_nowait()
+                    self._queue.task_done()
                 except asyncio.QueueEmpty:
                     break
-            if cls._worker_task is not None or cls._worker_thread is not None:
+            if self._worker_task is not None or self._worker_thread is not None:
                 try:
-                    cls._queue.put_nowait((None, "", False))
+                    self._queue.put_nowait((None, "", False))
                     try:
-                        await asyncio.wait_for(cls._queue.join(), timeout=5)
+                        await asyncio.wait_for(self._queue.join(), timeout=5)
                     except (asyncio.TimeoutError, RuntimeError):
                         pass
                 except asyncio.QueueFull:
                     pass
 
-        if cls._stop_event is not None:
-            cls._stop_event.set()
+        if self._stop_event is not None:
+            self._stop_event.set()
 
-        if cls._worker_task is not None:
-            cls._worker_task.cancel()
+        if self._worker_task is not None:
+            self._worker_task.cancel()
             try:
-                await cls._worker_task
+                await self._worker_task
             except asyncio.CancelledError:
                 pass
-            cls._worker_task = None
+            self._worker_task = None
 
-        if cls._worker_thread is not None:
-            cls._worker_thread.join(timeout=5)
-            cls._worker_thread = None
+        if self._worker_thread is not None:
+            self._worker_thread.join(timeout=5)
+            self._worker_thread = None
 
-        cls._queue = None
-        cls._stop_event = None
-        cls._bot = None
+        self._queue = None
+        self._stop_event = None
+        self._bot = None
+
+        TelegramLogger._instances.discard(self)
+
+    @classmethod
+    async def shutdown(cls) -> None:
+        for inst in list(cls._instances):
+            await inst._shutdown()
 
 
 if OFFLINE_MODE:

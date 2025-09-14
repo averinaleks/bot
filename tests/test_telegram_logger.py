@@ -1,10 +1,10 @@
+import asyncio
 import logging
 import os
-import types
-import asyncio
 import pytest
 import sys
 import threading
+import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from bot.telegram_logger import TelegramLogger
@@ -42,19 +42,19 @@ async def test_worker_thread_stops_after_shutdown(monkeypatch, fast_sleep):
 
     await TelegramLogger.shutdown()
     start_threads = threading.active_count()
-    TelegramLogger(_Bot(), chat_id=1)
+    tl = TelegramLogger(_Bot(), chat_id=1)
 
     await asyncio.sleep(0)
     assert (
         threading.active_count() > start_threads
-        or TelegramLogger._worker_task is not None
+        or tl._worker_task is not None
     )
 
     await TelegramLogger.shutdown()
     await asyncio.sleep(0)
     assert (
         threading.active_count() <= start_threads
-        and TelegramLogger._worker_task is None
+        and tl._worker_task is None
     )
 
 
@@ -76,9 +76,9 @@ async def test_long_message_split_into_parts(monkeypatch):
     long_message = "x" * 600
     await tl.send_telegram_message(long_message)
 
-    chat_id, text, urgent = TelegramLogger._queue.get_nowait()
+    chat_id, text, urgent = tl._queue.get_nowait()
     await tl._send(text, chat_id, urgent)
-    TelegramLogger._queue.task_done()
+    tl._queue.task_done()
 
     await TelegramLogger.shutdown()
 
@@ -120,9 +120,34 @@ async def test_worker_propagates_unexpected_exception(monkeypatch):
         raise CustomError
 
     tl._send = types.MethodType(failing_send, tl)
-    TelegramLogger._queue.put_nowait((1, "boom", False))
+    tl._queue.put_nowait((1, "boom", False))
 
     with pytest.raises(CustomError):
         await tl._worker()
 
     await TelegramLogger.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_two_loggers_independent(monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
+
+    class _Bot:
+        async def send_message(self, chat_id, text):
+            return types.SimpleNamespace(message_id=1)
+
+    await TelegramLogger.shutdown()
+    tl1 = TelegramLogger(_Bot(), chat_id=1)
+    tl2 = TelegramLogger(_Bot(), chat_id=2)
+
+    await tl1.send_telegram_message("one")
+    await tl2.send_telegram_message("two")
+
+    msg1 = tl1._queue.get_nowait()
+    msg2 = tl2._queue.get_nowait()
+    assert msg1[1] == "one"
+    assert msg2[1] == "two"
+
+    await TelegramLogger.shutdown()
+    assert tl1._worker_task is None
+    assert tl2._worker_task is None
