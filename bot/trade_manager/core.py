@@ -24,9 +24,17 @@ except Exception:  # pragma: no cover - minimal stub
 try:  # pragma: no cover - fallback for tests
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover - stub
-    from typing import Any
+    from typing import Any, IO
 
-    load_dotenv = lambda *args, **kwargs: False  # type: ignore[assignment]
+    def load_dotenv(
+        dotenv_path: str | os.PathLike[str] | None = None,
+        stream: IO[str] | None = None,
+        verbose: bool = False,
+        override: bool = False,
+        interpolate: bool = True,
+        encoding: str | None = None,
+    ) -> bool:  # type: ignore[assignment]
+        return False
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore
@@ -75,7 +83,9 @@ try:  # pragma: no cover - optional dependency
 except ImportError as exc:  # optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
     torch = types.ModuleType("torch")  # type: ignore[assignment]
-    torch.tensor = lambda *a, **k: a[0]  # type: ignore[attr-defined,assignment]
+    def _tensor(*args: Any, **kwargs: Any) -> Any:
+        return args[0]
+    torch.tensor = _tensor  # type: ignore[attr-defined,assignment]
     torch.float32 = float  # type: ignore[attr-defined,assignment]
     torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined,assignment,misc]
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined,assignment,misc]
