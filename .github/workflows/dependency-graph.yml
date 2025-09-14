@@ -20,7 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Prepare requirements
-        run: sed '/^ccxtpro/d' requirements.out > requirements-submission.txt
+        run: |
+          awk '/^ccxtpro/ {skip=1; next} skip && /^[ \t]/ {next} {skip=0; print}' \
+            requirements.out > requirements-submission.txt
       - name: Submit dependency graph
         uses: github/dependency-submission-action@v4
         with:
