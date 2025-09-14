@@ -14,7 +14,7 @@ import re
 import math
 import json
 import platform
-import subprocess
+import importlib.metadata
 from pathlib import Path
 from bot.config import BotConfig
 from collections import deque
@@ -207,16 +207,24 @@ def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
     joblib.dump(model, target_dir / "model.pkl")
 
     try:
-        code_version = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip()
+        head_file = Path(".git/HEAD")
+        if head_file.is_file():
+            ref = head_file.read_text().strip()
+            if ref.startswith("ref:"):
+                ref_path = Path(".git") / ref.split()[1]
+                code_version = ref_path.read_text().strip()
+            else:
+                code_version = ref
+        else:
+            code_version = "unknown"
     except Exception:
         code_version = "unknown"
 
     try:
-        pip_freeze = subprocess.check_output(
-            [sys.executable, "-m", "pip", "freeze"], text=True
-        ).splitlines()
+        pip_freeze = sorted(
+            f"{dist.metadata['Name']}=={dist.version}"
+            for dist in importlib.metadata.distributions()
+        )
     except Exception:
         pip_freeze = []
 
@@ -462,8 +470,8 @@ def _train_model_keras(
         torch.manual_seed(seed)
         if os.getenv("TRANSFORMERS_OFFLINE"):
             torch.use_deterministic_algorithms(True)
-    except Exception:  # pragma: no cover - torch may be unavailable
-        pass
+    except Exception as exc:  # pragma: no cover - torch may be unavailable
+        logger.debug("torch unavailable: %s", exc)
 
     input_dim = X.shape[1] * X.shape[2] if model_type == "mlp" else X.shape[2]
     model = create_model(model_type, framework, input_dim, regression=prediction_target == "pnl")
