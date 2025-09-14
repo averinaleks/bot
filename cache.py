@@ -5,7 +5,6 @@ import shutil
 import time
 from io import BytesIO, StringIO
 import logging
-from bot.data_handler.utils import ensure_utc
 
 logger = logging.getLogger("TradingBot")
 
@@ -27,6 +26,15 @@ def _sanitize_symbol(symbol: str) -> str:
         from utils import sanitize_symbol  # type: ignore  # noqa: WPS433
 
     return sanitize_symbol(symbol)
+
+
+def _ensure_utc(ts):
+    """Import ``ensure_utc`` lazily to support multiple import styles."""
+    try:  # pragma: no cover - import style depends on caller
+        from .data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: WPS433
+    except ImportError:  # pragma: no cover
+        from data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: WPS433
+    return _ensure_utc(ts)
 
 
 class HistoricalDataCache:
@@ -266,9 +274,9 @@ class HistoricalDataCache:
                 logger.info("Данные загружены из кэша (%s): %s", fmt, filename)
                 if isinstance(data, pd.DataFrame):
                     if "timestamp" in data.columns:
-                        data["timestamp"] = ensure_utc(data["timestamp"])
+                        data["timestamp"] = _ensure_utc(data["timestamp"])
                     elif isinstance(data.index, pd.DatetimeIndex):
-                        data.index = ensure_utc(data.index)
+                        data.index = _ensure_utc(data.index)
                 return data
             if os.path.exists(legacy_json):
                 logger.info(
@@ -282,9 +290,9 @@ class HistoricalDataCache:
                 data = pd.read_json(StringIO(data_json), orient="split")
                 if isinstance(data, pd.DataFrame):
                     if "timestamp" in data.columns:
-                        data["timestamp"] = ensure_utc(data["timestamp"])
+                        data["timestamp"] = _ensure_utc(data["timestamp"])
                     elif isinstance(data.index, pd.DatetimeIndex):
-                        data.index = ensure_utc(data.index)
+                        data.index = _ensure_utc(data.index)
                 if not isinstance(data, pd.DataFrame):
                     logger.error(
                         "Неверный тип данных в старом кэше %s_%s: %s",
