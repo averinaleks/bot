@@ -31,8 +31,8 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                 if v1_index != -1:
                     path = path[:v1_index]
                 base = urlunparse(parsed._replace(path=path.rstrip("/")))
-                health_url = urljoin(base.rstrip("/") + "/", "v1/models")
-                response = client.get(health_url)
+                health_url = urljoin(base.rstrip("/") + "/", "v1/completions")
+                response = client.post(health_url, json={})
                 try:
                     response.raise_for_status()
                 finally:
