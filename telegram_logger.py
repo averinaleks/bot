@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import os
 import threading
@@ -259,4 +260,20 @@ class TelegramLogger(logging.Handler):
 
 if OFFLINE_MODE:
     TelegramLogger = OfflineTelegram  # type: ignore
+
+
+def _shutdown_all() -> None:
+    coro = TelegramLogger.shutdown()
+    try:
+        asyncio.run(coro)
+    except RuntimeError:
+        coro.close()
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(TelegramLogger.shutdown())
+        except RuntimeError:
+            pass
+
+
+atexit.register(_shutdown_all)
 
