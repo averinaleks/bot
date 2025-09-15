@@ -229,3 +229,19 @@ def test_validate_host_rejects_invalid(host, monkeypatch):
     monkeypatch.setenv('HOST', host)
     with pytest.raises(ValueError):
         utils.validate_host()
+
+
+def test_validate_host_ignores_port(monkeypatch):
+    monkeypatch.setenv('HOST', '127.0.0.1:8080')
+    assert utils.validate_host() == '127.0.0.1'
+
+
+def test_validate_host_ipv6_port(monkeypatch):
+    monkeypatch.setenv('HOST', '[::1]:9000')
+    assert utils.validate_host() == '::1'
+
+
+def test_validate_host_invalid_port(monkeypatch):
+    monkeypatch.setenv('HOST', '127.0.0.1:notaport')
+    with pytest.raises(ValueError):
+        utils.validate_host()

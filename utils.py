@@ -148,6 +148,27 @@ def validate_host() -> str:
         logger.info("HOST не установлен, используется 127.0.0.1")
         return "127.0.0.1"
 
+    # Support "host:port" style values by stripping any port component before
+    # validation.  This allows users to specify e.g. ``127.0.0.1:8000`` or
+    # ``[::1]:8080`` in the environment variable without triggering a
+    # ``ValueError``.
+    port = ""
+    if host.startswith("["):
+        # IPv6 address, possibly in "[addr]:port" form
+        end = host.find("]")
+        if end != -1:
+            port = host[end + 1 :]
+            host = host[1:end]
+    else:
+        if host.count(":") == 1:
+            host, port = host.split(":")
+
+    if port:
+        if port.startswith(":"):
+            port = port[1:]
+        if port and not port.isdigit():
+            raise ValueError(f"Некорректный порт: {port}")
+
     if host.lower() == "localhost":
         logger.info("HOST 'localhost' интерпретирован как 127.0.0.1")
         return "127.0.0.1"
