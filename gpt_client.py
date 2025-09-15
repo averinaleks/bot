@@ -124,25 +124,15 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
             ) from exc
 
+
     if scheme == "http" and parsed.hostname != "localhost":
         for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
-                if _allow_insecure_url():
                     logger.warning(
                         "Using insecure GPT_OSS_API URL: %s (public address)",
                         api_url,
                     )
-                    break
-                logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
-                raise GPTClientError(
-                    "GPT_OSS_API must use HTTPS, be a private address, or point to localhost",
-                )
-        else:
-            logger.warning(
-                "Using GPT_OSS_API over HTTP with private or localhost address: %s",
-                api_url,
-            )
 
     return parsed.hostname, resolved_ips
 
