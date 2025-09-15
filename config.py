@@ -10,11 +10,27 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
-from dataclasses import MISSING, dataclass, field, fields, asdict
-from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
-from dotenv import dotenv_values
+import warnings
+from dataclasses import MISSING, asdict, dataclass, field, fields
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
+
+try:
+    from dotenv import dotenv_values as _real_dotenv_values
+except ImportError:  # pragma: no cover - optional dependency in CI
+    warnings.warn(
+        "python-dotenv не установлен; значения из .env не будут загружены",
+        RuntimeWarning,
+    )
+
+    def _dotenv_values(*args: Any, **kwargs: Any) -> Dict[str, str]:
+        """Заглушка для отсутствующего ``python-dotenv``."""
+
+        return {}
+else:
+    def _dotenv_values(*args: Any, **kwargs: Any) -> Dict[str, str]:
+        return _real_dotenv_values(*args, **kwargs)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +54,7 @@ def validate_env(required_keys: list[str]) -> None:
             raise SystemExit(1)
 
 
-_env = dotenv_values()
+_env = _dotenv_values()
 validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
