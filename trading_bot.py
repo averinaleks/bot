@@ -99,6 +99,11 @@ def safe_float(env_var: str, default: float) -> float:
     return safe_number(env_var, default, float)
 
 
+GPT_ADVICE_MAX_ATTEMPTS = safe_int("GPT_ADVICE_MAX_ATTEMPTS", 3)
+_GPT_ADVICE_ERROR_COUNT = 0
+_GPT_SAFE_MODE = False
+
+
 async def send_telegram_alert(message: str) -> None:
     """Send a Telegram notification if credentials are configured."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -1007,9 +1012,57 @@ def should_trade(
     return _is_trade_allowed(symbol, model_signal, prob, threshold)
 
 
+async def _enter_gpt_safe_mode(reason: str | None = None) -> None:
+    """Disable trading and freeze GPT advice after repeated failures."""
+
+    global _GPT_SAFE_MODE, GPT_ADVICE
+    if _GPT_SAFE_MODE:
+        return
+
+    _GPT_SAFE_MODE = True
+    GPT_ADVICE = GPTAdviceModel(signal="hold")
+    message = "GPT advice unavailable; entering safe mode"
+    if reason:
+        message = f"{message}: {reason}"
+
+    logger.error(message)
+    try:
+        await set_trading_enabled(False)
+    except Exception as exc:  # pragma: no cover - unexpected failure to toggle trading
+        logger.exception("Failed to disable trading during safe mode: %s", exc)
+    await send_telegram_alert(message)
+
+
+async def _record_gpt_failure(reason: str | None = None) -> None:
+    """Increment failure counter and enter safe mode when the limit is reached."""
+
+    global _GPT_ADVICE_ERROR_COUNT
+    _GPT_ADVICE_ERROR_COUNT += 1
+    if reason:
+        logger.warning(
+            "GPT advice refresh failure (%s/%s): %s",
+            _GPT_ADVICE_ERROR_COUNT,
+            GPT_ADVICE_MAX_ATTEMPTS,
+            reason,
+        )
+    else:
+        logger.warning(
+            "GPT advice refresh failure (%s/%s)",
+            _GPT_ADVICE_ERROR_COUNT,
+            GPT_ADVICE_MAX_ATTEMPTS,
+        )
+    if _GPT_ADVICE_ERROR_COUNT >= GPT_ADVICE_MAX_ATTEMPTS:
+        await _enter_gpt_safe_mode(reason)
+
+
 async def refresh_gpt_advice() -> None:
     """Fetch GPT analysis and update ``GPT_ADVICE``."""
-    global GPT_ADVICE
+    global GPT_ADVICE, _GPT_ADVICE_ERROR_COUNT
+    if _GPT_SAFE_MODE:
+        GPT_ADVICE = GPTAdviceModel(signal="hold")
+        logger.warning("GPT safe mode active; skipping advice refresh")
+        return
+
     GPT_ADVICE = GPTAdviceModel()
     try:
         env = _load_env()
@@ -1031,12 +1084,17 @@ async def refresh_gpt_advice() -> None:
             logger.warning("Invalid GPT advice: %s", exc)
             advice = GPTAdviceModel(signal="hold")
         GPT_ADVICE = advice
+        _GPT_ADVICE_ERROR_COUNT = 0
         logger.info("GPT analysis: %s", advice.model_dump())
     except GPTClientJSONError as exc:
+        GPT_ADVICE = GPTAdviceModel(signal="hold")
         await send_telegram_alert(f"Некорректный JSON от GPT: {exc}")
         logger.debug("GPT analysis failed: %s", exc)
+        await _record_gpt_failure(str(exc))
     except GPTClientError as exc:  # pragma: no cover - non-critical
+        GPT_ADVICE = GPTAdviceModel(signal="hold")
         logger.debug("GPT analysis failed: %s", exc)
+        await _record_gpt_failure(str(exc))
 
 
 async def _gpt_advice_loop() -> None:
