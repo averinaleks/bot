@@ -1,4 +1,3 @@
-import sys
 import asyncio
 import socket
 import logging
@@ -6,7 +5,6 @@ import json
 
 import pytest
 import httpx
-import tenacity  # noqa: F401  # re-import after pop
 
 from bot.gpt_client import (
     GPTClientError,
@@ -22,8 +20,6 @@ from bot.gpt_client import (
     query_gpt_async,
     query_gpt_json_async,
 )
-
-sys.modules.pop("tenacity", None)
 
 
 class DummyStream:

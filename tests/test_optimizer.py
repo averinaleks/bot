@@ -54,6 +54,11 @@ async def _cde(*a, **kw):
 utils.check_dataframe_empty = _cde
 utils.check_dataframe_empty_async = _cde
 utils.is_cuda_available = lambda: False
+def _retry(max_attempts, delay_fn):
+    def decorator(func):
+        return func
+    return decorator
+utils.retry = _retry
 sys.modules['utils'] = utils
 
 scipy_mod = types.ModuleType('scipy')

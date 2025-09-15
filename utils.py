@@ -11,8 +11,55 @@ import inspect
 import threading
 import warnings
 from functools import wraps
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable, TypeVar
 import shutil
+
+
+T = TypeVar("T")
+
+
+def retry(max_attempts: int, delay_fn: Callable[[float], float]):
+    """Декоратор повторного выполнения функции с экспоненциальной задержкой.
+
+    ``delay_fn`` получает базовую задержку ``2 ** (attempt - 1)`` и может
+    модифицировать её (например, ограничить максимальное значение или добавить
+    джиттер). Поддерживаются как обычные, так и асинхронные функции.
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                attempt = 1
+                while True:
+                    try:
+                        return await func(*args, **kwargs)
+                    except Exception:
+                        if attempt >= max_attempts:
+                            raise
+                        delay = delay_fn(2 ** (attempt - 1))
+                        await asyncio.sleep(delay)
+                        attempt += 1
+
+            return async_wrapper  # type: ignore[return-value]
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            attempt = 1
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except Exception:
+                    if attempt >= max_attempts:
+                        raise
+                    delay = delay_fn(2 ** (attempt - 1))
+                    time.sleep(delay)
+                    attempt += 1
+
+        return sync_wrapper
+
+    return decorator
 
 
 def suppress_tf_logs() -> None:

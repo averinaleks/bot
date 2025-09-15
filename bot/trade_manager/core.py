@@ -51,7 +51,7 @@ test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 import ray  # noqa: E402
 import httpx  # noqa: E402
-from tenacity import retry, wait_exponential, stop_after_attempt  # noqa: E402
+from bot.utils import retry  # noqa: E402
 import inspect  # noqa: E402
 # Базовые утилиты импортируются всегда
 from bot.utils import (  # noqa: E402
@@ -499,9 +499,7 @@ class TradeManager:
         if not self.positions.empty:
             self.positions.sort_index(level=["symbol", "timestamp"], inplace=True)
 
-    @retry(
-        wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3)
-    )
+    @retry(3, lambda attempt: min(2 ** attempt, 5))
     async def place_order(
         self,
         symbol: str,
