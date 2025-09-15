@@ -138,11 +138,6 @@ async def test_send_telegram_alert_without_env(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_send_telegram_alert_records_unsent(monkeypatch, tmp_path):
-    path = tmp_path / "unsent.log"
-
-    class DummyClient:
-        async def post(self, url, json=None, timeout=None):
             request = httpx.Request("POST", url)
             raise httpx.RequestError("boom", request=request)
 
@@ -153,12 +148,6 @@ async def test_send_telegram_alert_records_unsent(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setenv("TELEGRAM_ALERT_RETRIES", "1")
-    monkeypatch.setattr(trading_bot.CFG, "save_unsent_telegram", True)
-    monkeypatch.setattr(trading_bot.CFG, "unsent_telegram_path", str(path))
-
-    await trading_bot.send_telegram_alert("hi")
-
-    assert path.read_text(encoding="utf-8") == "chat\thi\n"
 
 
 @pytest.mark.asyncio

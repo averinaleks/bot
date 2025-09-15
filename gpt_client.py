@@ -19,12 +19,9 @@ from typing import Any, Coroutine
 # NOTE: httpx is imported for exception types only.
 import httpx
 
-import sys
 from pydantic import BaseModel, Field, ValidationError
 
-if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
-    del sys.modules["tenacity"]
-from tenacity import retry, stop_after_attempt, wait_exponential
+from bot.utils import retry
 # Absolute import ensures the project's own configuration module is used
 # instead of any unrelated ``config`` module on the import path.
 from bot.config import OFFLINE_MODE
@@ -40,6 +37,10 @@ MAX_RESPONSE_BYTES = 10000
 # Maximum number of retries for network requests
 MAX_RETRIES = 3
 
+
+# Allow using an insecure GPT_OSS_API URL when explicitly enabled via
+# ``ALLOW_INSECURE_GPT_URL=1`` environment variable.
+ALLOW_INSECURE_GPT_URL = os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
 
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
@@ -120,14 +121,22 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
             ) from exc
 
-    if scheme == "http" and parsed.hostname != "localhost":
+    allow_insecure = os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
+    if scheme == "http" and parsed.hostname != "localhost" and not allow_insecure:
         for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
-                logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
-                raise GPTClientError(
-                    "GPT_OSS_API must use HTTPS, be a private address, or point to localhost"
-                )
+                if ALLOW_INSECURE_GPT_URL:
+                    logger.warning(
+                        "Using insecure GPT_OSS_API URL: %s (not private or localhost)",
+                        api_url,
+                    )
+                else:
+                    logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
+                    raise GPTClientError(
+                        "GPT_OSS_API must use HTTPS, be a private address, or point to localhost"
+                    )
+                break
 
     return parsed.hostname, resolved_ips
 
@@ -287,9 +296,8 @@ def query_gpt(prompt: str) -> str:
         return result["value"]
 
     @retry(
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(min=1, max=10),
-        reraise=True,
+        MAX_RETRIES,
+        lambda attempt: min(2 ** (attempt - 1), 10),
     )
     def _post() -> bytes:
         async def _async_post() -> bytes:
@@ -342,9 +350,8 @@ async def query_gpt_async(prompt: str) -> str:
     )
 
     @retry(
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(min=1, max=10),
-        reraise=True,
+        MAX_RETRIES,
+        lambda attempt: min(2 ** (attempt - 1), 10),
     )
     async def _post() -> bytes:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:

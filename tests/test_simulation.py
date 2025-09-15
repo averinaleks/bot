@@ -39,6 +39,11 @@ utils.is_cuda_available = lambda: False
 async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils.safe_api_call = _safe_api_call
+def _retry(max_attempts, delay_fn):
+    def decorator(func):
+        return func
+    return decorator
+utils.retry = _retry
 sys.modules['utils'] = utils
 joblib_mod = types.ModuleType('joblib')
 joblib_mod.dump = lambda *a, **k: None

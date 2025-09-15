@@ -22,11 +22,8 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # noqa: BLE001 - broad to avoid test import errors
     ccxt = type("ccxt_stub", (), {})()
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs, TelegramLogger
 
 BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
@@ -129,7 +126,9 @@ async def send_telegram_alert(message: str) -> None:
             )
             if attempt == max_attempts:
                 logger.error(
-                    "Failed to send Telegram alert after %s attempts", max_attempts,
+                    "Failed to send Telegram alert after %s attempts: %s",
+                    max_attempts,
+                    message,
                 )
                 if CFG.save_unsent_telegram:
                     _logger = type("_TL", (), {"unsent_path": CFG.unsent_telegram_path})()
@@ -397,7 +396,7 @@ async def check_services() -> None:
 
 
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
+@retry(3, lambda attempt: min(2 ** attempt, 5))
 async def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
     try:
@@ -499,7 +498,7 @@ async def build_feature_vector(symbol: str, price: float) -> list[float]:
     return [price, volume, sma, volatility, rsi]
 
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=5), stop=stop_after_attempt(3))
+@retry(3, lambda attempt: min(2 ** attempt, 5))
 async def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
     """Return raw model prediction output for the given ``features``."""
     try:

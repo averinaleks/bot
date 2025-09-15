@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import os
 import threading
@@ -15,6 +16,7 @@ import time
 from typing import Any, Optional
 
 import httpx
+import hashlib
 # Use absolute import to ensure the local configuration module is loaded even
 # when a similarly named module exists on ``PYTHONPATH``.
 from bot.config import OFFLINE_MODE
@@ -77,7 +79,7 @@ class TelegramLogger(logging.Handler):
 
         TelegramLogger._instances.add(self)
 
-        self.last_sent_text = ""
+        self.last_hash = ""
 
     async def _worker(self) -> None:
         while True:
@@ -121,7 +123,8 @@ class TelegramLogger(logging.Handler):
 
             parts = [message[i : i + 500] for i in range(0, len(message), 500)]
             for part in parts:
-                if part == self.last_sent_text:
+                part_hash = hashlib.md5(part.encode("utf-8")).hexdigest()
+                if part_hash == self.last_hash:
                     logger.debug("Повторное сообщение Telegram пропущено")
                     continue
 
@@ -137,7 +140,7 @@ class TelegramLogger(logging.Handler):
                                 "Telegram message response without message_id",
                             )
                         else:
-                            self.last_sent_text = part
+                            self.last_hash = part_hash
                         self.last_message_time = time.time()
                         break
                     except RetryAfter as e:
@@ -257,4 +260,20 @@ class TelegramLogger(logging.Handler):
 
 if OFFLINE_MODE:
     TelegramLogger = OfflineTelegram  # type: ignore
+
+
+def _shutdown_all() -> None:
+    coro = TelegramLogger.shutdown()
+    try:
+        asyncio.run(coro)
+    except RuntimeError:
+        coro.close()
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(TelegramLogger.shutdown())
+        except RuntimeError:
+            pass
+
+
+atexit.register(_shutdown_all)
 

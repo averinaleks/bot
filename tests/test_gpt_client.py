@@ -1,4 +1,3 @@
-import sys
 import asyncio
 import socket
 import logging
@@ -6,7 +5,6 @@ import json
 
 import pytest
 import httpx
-import tenacity  # noqa: F401  # re-import after pop
 
 from bot.gpt_client import (
     GPTClientError,
@@ -22,8 +20,6 @@ from bot.gpt_client import (
     query_gpt_async,
     query_gpt_json_async,
 )
-
-sys.modules.pop("tenacity", None)
 
 
 class DummyStream:
@@ -151,6 +147,29 @@ async def test_insecure_url(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "http://example.com")
     with pytest.raises(GPTClientError):
         await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_allow_insecure_url(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(client_cls, "stream", fake_stream)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))
+        ],
+    )
+
+    result = await run_query(func, "hi")
+    assert result in {"ok", "offline response"}
 
 
 @pytest.mark.asyncio
@@ -344,6 +363,22 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     with pytest.raises(GPTClientError):
         _validate_api_url("http://foo.local")
+
+
+def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
+    monkeypatch.setattr("bot.gpt_client.ALLOW_INSECURE_GPT_URL", True)
+    with caplog.at_level(logging.WARNING):
+        host, ips = _validate_api_url("http://foo.local")
+
+    assert host == "foo.local"
+    assert ips == {"8.8.8.8"}
+    assert "Using insecure GPT_OSS_API URL" in caplog.text
 
 
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
