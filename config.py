@@ -57,6 +57,9 @@ def _load_env_file() -> Dict[str, str]:
     return {}
 
 
+_env: Dict[str, str] = _load_env_file()
+
+
 def validate_env(required_keys: list[str]) -> None:
     """Ensure that required environment variables are present.
 
@@ -79,15 +82,43 @@ def validate_env(required_keys: list[str]) -> None:
         raise MissingEnvError(missing_keys)
 
 
-    [
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "TRADE_MANAGER_TOKEN",
-        "TRADE_RISK_USD",
-        "BYBIT_API_KEY",
-        "BYBIT_API_SECRET",
-    ]
-    )
+def _get_env_value(key: str, default: Optional[str] = None) -> Optional[str]:
+    """Return an environment variable value from ``os.environ`` or ``.env``."""
+
+    if key in os.environ:
+        return os.environ[key]
+    if key in _env:
+        return _env[key]
+    return default
+
+
+def _as_bool(value: Optional[str], default: bool = False) -> bool:
+    """Convert truthy string values to ``bool`` with a fallback."""
+
+    if value is None:
+        return default
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    logger.warning("Не удалось интерпретировать значение %r как bool", value)
+    return default
+
+
+OFFLINE_MODE = _as_bool(_get_env_value("OFFLINE_MODE"), default=False)
+
+_REQUIRED_ENV_VARS = [
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "TRADE_MANAGER_TOKEN",
+    "TRADE_RISK_USD",
+    "BYBIT_API_KEY",
+    "BYBIT_API_SECRET",
+]
+
+try:
+    validate_env(_REQUIRED_ENV_VARS)
 except MissingEnvError as exc:
     missing = ", ".join(exc.missing_keys)
     if OFFLINE_MODE:

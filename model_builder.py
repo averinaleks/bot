@@ -74,17 +74,12 @@ def _create_gym_stub():
 
 
 if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
-    gym, spaces = _create_gym_stub()
-else:
-    try:  # prefer gymnasium if available
-        import gymnasium as gym  # type: ignore
-        from gymnasium import spaces  # type: ignore
-    except ImportError:
-        try:
-            import gym  # type: ignore
-            from gym import spaces  # type: ignore
-        except ImportError:  # provide lightweight stubs for tests
-            gym, spaces = _create_gym_stub()
+    raise ImportError("gymnasium package is required for model_builder")
+try:  # prefer gymnasium if available
+    import gymnasium as gym  # type: ignore
+    from gymnasium import spaces  # type: ignore
+except ImportError as exc:
+    raise ImportError("gymnasium package is required for model_builder") from exc
 
 if os.getenv("TEST_MODE") == "1":
     import types

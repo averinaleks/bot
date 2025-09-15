@@ -15,6 +15,8 @@ from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
 import logging
 
+from bot.config import BotConfig, OFFLINE_MODE
+from bot.dotenv_utils import load_dotenv
 from model_builder_client import schedule_retrain, retrain
 from utils import retry, suppress_tf_logs
 from telegram_logger import TelegramLogger
