@@ -26,7 +26,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs
+from bot.utils import logger, suppress_tf_logs, TelegramLogger
 
 BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
@@ -131,6 +131,9 @@ async def send_telegram_alert(message: str) -> None:
                 logger.error(
                     "Failed to send Telegram alert after %s attempts", max_attempts,
                 )
+                if CFG.save_unsent_telegram:
+                    _logger = type("_TL", (), {"unsent_path": CFG.unsent_telegram_path})()
+                    TelegramLogger._save_unsent(_logger, chat_id, message)
                 return
             await asyncio.sleep(delay)
             delay *= 2
