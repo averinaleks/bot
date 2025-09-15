@@ -19,7 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Update release draft
-        uses: release-drafter/release-drafter@v6
+        # Release Drafter has no v7 tag yet; pin to the latest v6 release to avoid resolution errors.
+        uses: release-drafter/release-drafter@v6.1.0
         with:
           config-name: release-drafter.yml
         env:
