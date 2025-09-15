@@ -76,7 +76,7 @@ jobs:
         id: wait_llm
         run: |
           set -euo pipefail
-          for i in {1..180}; do
+          for _ in {1..180}; do
             if docker ps --filter "name=gptoss" --filter "status=running" | grep -q gptoss && \
                curl -sSf --retry 3 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/v1/models >/dev/null; then
               exit 0
