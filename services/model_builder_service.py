@@ -9,7 +9,9 @@ feature-rich :class:`ModelBuilder` class.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import sys
 from pathlib import Path
 try:
     from werkzeug.utils import secure_filename
@@ -18,7 +20,28 @@ except ImportError:
         return filename
 from typing import Any, Dict, TYPE_CHECKING
 
-import joblib
+LOGGER = logging.getLogger(__name__)
+
+try:
+    import joblib  # type: ignore
+    JOBLIB_AVAILABLE = True
+except Exception as exc:  # pragma: no cover - joblib is optional in tests
+    JOBLIB_AVAILABLE = False
+    LOGGER.warning(
+        "Не удалось импортировать joblib: %s. Сохранение моделей отключено.", exc
+    )
+
+    import types
+
+    def _joblib_unavailable(*_args, **_kwargs):
+        raise RuntimeError(
+            "joblib недоступен: установите зависимость для работы с артефактами"
+        )
+
+    joblib = types.ModuleType("joblib")
+    joblib.dump = _joblib_unavailable  # type: ignore[attr-defined]
+    joblib.load = _joblib_unavailable  # type: ignore[attr-defined]
+    sys.modules.setdefault("joblib", joblib)
 import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
@@ -67,6 +90,11 @@ def _load_model() -> None:
     """Best-effort loading of a pre-trained model for compatibility tests."""
     model_file = Path(os.getenv("MODEL_FILE", ""))
     if not model_file.is_file():  # nothing to load
+        return
+    if not JOBLIB_AVAILABLE:
+        app.logger.warning(
+            "joblib недоступен, предварительно обученная модель не загружена"
+        )
         return
     try:  # pragma: no cover - exercised in integration tests
         _models["default"] = joblib.load(model_file)
@@ -149,6 +177,11 @@ else:  # scikit-learn fallback used by tests
         if symbol not in allowed_symbols:
             app.logger.warning("Refused to load model: %r is not whitelisted", symbol)
             return
+        if not JOBLIB_AVAILABLE:
+            app.logger.warning(
+                "joblib недоступен, загрузка состояния модели %s пропущена", symbol
+            )
+            return
         path = _model_path(symbol)
         if path.exists():
             data = joblib.load(path)
@@ -158,6 +191,11 @@ else:  # scikit-learn fallback used by tests
     def _save_state(symbol: str) -> None:
         model = _models.get(symbol)
         if model is None:
+            return
+        if not JOBLIB_AVAILABLE:
+            app.logger.warning(
+                "joblib недоступен, состояние модели %s не сохранено", symbol
+            )
             return
         data = {"model": model, "scaler": _scalers.get(symbol)}
         joblib.dump(data, _model_path(symbol))
