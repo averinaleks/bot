@@ -20,6 +20,15 @@ import threading
 logger = logging.getLogger(__name__)
 
 
+class MissingEnvError(Exception):
+    """Raised when required environment variables are missing."""
+
+    def __init__(self, missing_keys: list[str]):
+        self.missing_keys = tuple(missing_keys)
+        message = "Missing required environment variables: " + ", ".join(missing_keys)
+        super().__init__(message)
+
+
 def _load_env_file() -> Dict[str, str]:
     """Загрузить значения из ``.env`` при наличии python-dotenv.
 
@@ -61,14 +70,20 @@ def validate_env(required_keys: list[str]) -> None:
     if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
         return
 
+    missing_keys: list[str] = []
     for key in required_keys:
         if not (os.getenv(key) or _env.get(key)):
-            logger.error("Missing required environment variable: %s", key)
-            raise SystemExit(1)
+            missing_keys.append(key)
+
+    if missing_keys:
+        raise MissingEnvError(missing_keys)
 
 
 _env = _load_env_file()
-validate_env(
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
+
+try:
+    validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
@@ -77,9 +92,20 @@ validate_env(
         "BYBIT_API_KEY",
         "BYBIT_API_SECRET",
     ]
-)
-
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
+    )
+except MissingEnvError as exc:
+    missing = ", ".join(exc.missing_keys)
+    if OFFLINE_MODE:
+        logger.warning(
+            "OFFLINE_MODE=1: запуск офлайн-режима из-за отсутствующих переменных: %s",
+            missing,
+        )
+    else:
+        logger.critical(
+            "Не заданы обязательные переменные окружения: %s",
+            missing,
+        )
+        raise
 
 # Load defaults from config.json lazily
 # Resolve the default configuration file. Test runs should always use the
