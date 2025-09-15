@@ -2,7 +2,7 @@ import sys
 import types
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 import trading_bot
 
