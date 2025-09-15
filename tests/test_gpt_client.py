@@ -365,6 +365,22 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
         _validate_api_url("http://foo.local")
 
 
+def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
+    monkeypatch.setattr("bot.gpt_client.ALLOW_INSECURE_GPT_URL", True)
+    with caplog.at_level(logging.WARNING):
+        host, ips = _validate_api_url("http://foo.local")
+
+    assert host == "foo.local"
+    assert ips == {"8.8.8.8"}
+    assert "Using insecure GPT_OSS_API URL" in caplog.text
+
+
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
     called = {"value": False}
