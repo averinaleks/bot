@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 import ray
-from dotenv import load_dotenv
+from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request, Response
 
 from .core import (

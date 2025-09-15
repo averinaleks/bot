@@ -22,7 +22,7 @@ import joblib
 import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
-from dotenv import load_dotenv
+from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request
 
 try:  # optional dependency

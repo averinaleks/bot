@@ -21,20 +21,7 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - minimal stub
     aiohttp = types.SimpleNamespace(ClientError=Exception)  # type: ignore[assignment]
 
-try:  # pragma: no cover - fallback for tests
-    from dotenv import load_dotenv
-except Exception:  # pragma: no cover - stub
-    from typing import Any, IO
-
-    def load_dotenv(
-        dotenv_path: str | os.PathLike[str] | None = None,
-        stream: IO[str] | None = None,
-        verbose: bool = False,
-        override: bool = False,
-        interpolate: bool = True,
-        encoding: str | None = None,
-    ) -> bool:  # type: ignore[assignment]
-        return False
+from bot.dotenv_utils import load_dotenv
 
 try:  # pragma: no cover - optional dependency
     import pandas as pd  # type: ignore

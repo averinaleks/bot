@@ -79,11 +79,6 @@ def validate_env(required_keys: list[str]) -> None:
         raise MissingEnvError(missing_keys)
 
 
-_env = _load_env_file()
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
-
-try:
-    validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",

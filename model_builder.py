@@ -154,7 +154,7 @@ except ImportError:  # pragma: no cover - stub for test environment
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
         pass
-from dotenv import load_dotenv
+from bot.dotenv_utils import load_dotenv
 try:  # pragma: no cover - optional dependency
     from sklearn.preprocessing import StandardScaler
     from sklearn.linear_model import LogisticRegression

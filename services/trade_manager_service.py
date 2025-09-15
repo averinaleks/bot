@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 import ccxt
 import json
 import os
-from dotenv import load_dotenv
+from bot.dotenv_utils import load_dotenv
 import logging
 import threading
 from bot.utils import validate_host, safe_int

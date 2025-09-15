@@ -25,8 +25,6 @@ try:  # pragma: no cover - optional dependency
     import ccxt  # type: ignore
 except Exception:  # noqa: BLE001 - broad to avoid test import errors
     ccxt = type("ccxt_stub", (), {})()
-from dotenv import load_dotenv
-from bot.config import BotConfig, OFFLINE_MODE
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 
 BybitError = getattr(ccxt, "BaseError", Exception)
