@@ -19,12 +19,9 @@ from typing import Any, Coroutine
 # NOTE: httpx is imported for exception types only.
 import httpx
 
-import sys
 from pydantic import BaseModel, Field, ValidationError
 
-if "tenacity" in sys.modules and not getattr(sys.modules["tenacity"], "__file__", None):
-    del sys.modules["tenacity"]
-from tenacity import retry, stop_after_attempt, wait_exponential
+from bot.utils import retry
 # Absolute import ensures the project's own configuration module is used
 # instead of any unrelated ``config`` module on the import path.
 from bot.config import OFFLINE_MODE
@@ -287,9 +284,8 @@ def query_gpt(prompt: str) -> str:
         return result["value"]
 
     @retry(
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(min=1, max=10),
-        reraise=True,
+        MAX_RETRIES,
+        lambda attempt: min(2 ** (attempt - 1), 10),
     )
     def _post() -> bytes:
         async def _async_post() -> bytes:
@@ -342,9 +338,8 @@ async def query_gpt_async(prompt: str) -> str:
     )
 
     @retry(
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(min=1, max=10),
-        reraise=True,
+        MAX_RETRIES,
+        lambda attempt: min(2 ** (attempt - 1), 10),
     )
     async def _post() -> bytes:
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:

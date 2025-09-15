@@ -26,6 +26,11 @@ def test_telegramlogger_injection_order():
     async def _safe_api_call(exchange, method: str, *args, **kwargs):
         return await getattr(exchange, method)(*args, **kwargs)
     utils_stub.safe_api_call = _safe_api_call
+    def _retry(max_attempts, delay_fn):
+        def decorator(func):
+            return func
+        return decorator
+    utils_stub.retry = _retry
     sys.modules['utils'] = utils_stub
     sys.modules['bot.utils'] = utils_stub
 

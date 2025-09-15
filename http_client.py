@@ -15,20 +15,7 @@ import random
 _RNG = random.SystemRandom()
 
 import httpx
-try:  # pragma: no cover - optional dependency handling
-    from tenacity import retry, wait_exponential_jitter, stop_after_attempt, RetryCallState
-except (ImportError, AttributeError):  # pragma: no cover - fallback for stub
-    from tenacity import retry, wait_exponential, stop_after_attempt, RetryCallState
-
-    def wait_exponential_jitter(  # type: ignore[no-redef]
-        min: float, max: float
-    ) -> Callable[[RetryCallState], float]:
-        base = wait_exponential(multiplier=1, min=min, max=max)
-
-        def _wait(state: RetryCallState) -> float:
-            return base(state) + _RNG.uniform(0, 1)
-
-        return _wait
+from bot.utils import retry
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     import requests  # type: ignore[import-untyped]
 
@@ -152,11 +139,7 @@ async def async_http_client(
             await close()
 
 
-@retry(
-    wait=wait_exponential_jitter(1, 8),
-    stop=stop_after_attempt(5),
-    reraise=True,
-)
+@retry(5, lambda base: min(base, 8) + _RNG.uniform(0, 1))
 async def _send_request(
     method: str, url: str, *, client: httpx.AsyncClient, **kwargs: Any
 ) -> httpx.Response:

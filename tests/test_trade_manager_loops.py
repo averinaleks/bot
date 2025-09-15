@@ -44,6 +44,11 @@ utils_stub.is_cuda_available = lambda: False
 async def _safe_api_call(exchange, method: str, *args, **kwargs):
     return await getattr(exchange, method)(*args, **kwargs)
 utils_stub.safe_api_call = _safe_api_call
+def _retry(max_attempts, delay_fn):
+    def decorator(func):
+        return func
+    return decorator
+utils_stub.retry = _retry
 sys.modules['utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
 joblib_mod = types.ModuleType('joblib')
