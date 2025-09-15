@@ -137,11 +137,16 @@ jobs:
           MATRIX_IMAGE: ${{ matrix.image }}
           OWNER: ${{ github.repository_owner }}
         run: |
+          set -euo pipefail
           tags="ghcr.io/${OWNER}/${MATRIX_IMAGE}:latest"
-          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
-            tags="$tags"$'\n'"docker.io/$DOCKERHUB_USERNAME/$MATRIX_IMAGE:latest"
+          if [[ -n "${DOCKERHUB_USERNAME}" && -n "${DOCKERHUB_TOKEN}" ]]; then
+            tags="${tags}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/${MATRIX_IMAGE}:latest"
           fi
-          printf 'list<<EOF\n%s\nEOF\n' "$tags" >> "$GITHUB_OUTPUT"
+          {
+            echo "list<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
