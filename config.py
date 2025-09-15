@@ -9,17 +9,48 @@ load configuration values from ``config.json`` and environment variables.
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
 from dotenv import dotenv_values
 
+logger = logging.getLogger(__name__)
+
+
+def validate_env(required_keys: list[str]) -> None:
+    """Ensure that required environment variables are present.
+
+    Parameters
+    ----------
+    required_keys:
+        List of environment variable names that must be defined. The check is
+        skipped during tests (``TEST_MODE=1`` or when ``pytest`` is running).
+    """
+
+    if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
+        return
+
+    for key in required_keys:
+        if not (os.getenv(key) or _env.get(key)):
+            logger.error("Missing required environment variable: %s", key)
+            raise SystemExit(1)
+
 
 _env = dotenv_values()
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
+validate_env(
+    [
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "TRADE_MANAGER_TOKEN",
+        "TRADE_RISK_USD",
+        "BYBIT_API_KEY",
+        "BYBIT_API_SECRET",
+    ]
+)
 
-logger = logging.getLogger(__name__)
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
 
 # Load defaults from config.json lazily
 # Resolve the default configuration file. Test runs should always use the
