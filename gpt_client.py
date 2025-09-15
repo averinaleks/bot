@@ -41,6 +41,10 @@ MAX_RESPONSE_BYTES = 10000
 MAX_RETRIES = 3
 
 
+# Allow using an insecure GPT_OSS_API URL when explicitly enabled via
+# ``ALLOW_INSECURE_GPT_URL=1`` environment variable.
+ALLOW_INSECURE_GPT_URL = os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
+
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
 
@@ -124,10 +128,17 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
         for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
-                logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
-                raise GPTClientError(
-                    "GPT_OSS_API must use HTTPS, be a private address, or point to localhost"
-                )
+                if ALLOW_INSECURE_GPT_URL:
+                    logger.warning(
+                        "Using insecure GPT_OSS_API URL: %s (not private or localhost)",
+                        api_url,
+                    )
+                else:
+                    logger.critical("Insecure GPT_OSS_API URL: %s", api_url)
+                    raise GPTClientError(
+                        "GPT_OSS_API must use HTTPS, be a private address, or point to localhost"
+                    )
+                break
 
     return parsed.hostname, resolved_ips
 
