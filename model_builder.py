@@ -188,29 +188,29 @@ except Exception as exc:  # pragma: no cover - missing sklearn
         bins = np.linspace(0.0, 1.0, n_bins)
         return bins, bins
 # ``joblib`` is used for lightweight serialization but may be missing in test
-# environments. Provide a minimal stub to keep imports cheap and optional.
+# environments. Track availability explicitly so the rest of the module can
+# gracefully degrade instead of falling back to unsafe pickle-based helpers.
+JOBLIB_AVAILABLE = True
 try:  # pragma: no cover - optional dependency
     import joblib  # type: ignore
 except Exception as exc:  # pragma: no cover - stub for tests
-    logger.warning("Не удалось импортировать joblib: %s", exc)
+    JOBLIB_AVAILABLE = False
+    logger.warning(
+        "Не удалось импортировать joblib: %s. Сериализация моделей будет отключена.",
+        exc,
+    )
 
     import types
-    import pickle
+
+    def _joblib_unavailable(*_args, **_kwargs):  # type: ignore[override]
+        raise RuntimeError(
+            "joblib недоступен: установите зависимость для сохранения/загрузки моделей"
+        )
 
     joblib = types.ModuleType("joblib")
-
-    def _dump(value, filename, *args, **kwargs):  # type: ignore[override]
-        with open(filename, "wb") as fh:
-            pickle.dump(value, fh)
-        return filename
-
-    def _load(filename, *args, **kwargs):  # type: ignore[override]
-        with open(filename, "rb") as fh:
-            return pickle.load(fh)
-
-    joblib.dump = _dump  # type: ignore[attr-defined]
-    joblib.load = _load  # type: ignore[attr-defined]
-    sys.modules["joblib"] = joblib
+    joblib.dump = _joblib_unavailable  # type: ignore[attr-defined]
+    joblib.load = _joblib_unavailable  # type: ignore[attr-defined]
+    sys.modules.setdefault("joblib", joblib)
 
 try:
     import mlflow
@@ -235,7 +235,13 @@ def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
     timestamp = str(int(time.time()))
     target_dir = MODEL_DIR / symbol / timestamp
     target_dir.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, target_dir / "model.pkl")
+    model_file = target_dir / "model.pkl"
+    if JOBLIB_AVAILABLE:
+        joblib.dump(model, model_file)
+    else:
+        logger.warning(
+            "joblib недоступен, модель %s не будет сохранена на диск", symbol
+        )
 
     try:
         head_file = Path(".git/HEAD")
@@ -941,6 +947,11 @@ class ModelBuilder:
     def save_state(self):
         if time.time() - self.last_save_time < self.save_interval:
             return
+        if not JOBLIB_AVAILABLE:
+            logger.warning(
+                "joblib недоступен, состояние ModelBuilder не будет сохранено"
+            )
+            return
         try:
             if self.nn_framework == "pytorch":
                 models_state = {k: v.state_dict() for k, v in self.predictive_models.items()}
@@ -972,6 +983,9 @@ class ModelBuilder:
             raise
 
     def load_state(self):
+        if not JOBLIB_AVAILABLE:
+            logger.warning("joblib недоступен, загрузка состояния пропущена")
+            return
         try:
             if os.path.exists(self.state_file):
                 with open(self.state_file, "rb") as f:
@@ -1588,6 +1602,12 @@ class ModelBuilder:
             if not was_training:
                 model_cpu.eval()
             model.to(current_device)
+            if not JOBLIB_AVAILABLE:
+                logger.warning(
+                    "joblib недоступен, SHAP значения для %s не будут кэшированы",
+                    symbol,
+                )
+                return
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
                 joblib.dump(values, str(cache_file))
@@ -1921,6 +1941,10 @@ _model = None
 
 def _load_model() -> None:
     global _model
+    if not JOBLIB_AVAILABLE:
+        logger.warning("joblib недоступен, REST API пропускает загрузку модели")
+        _model = None
+        return
     if os.path.exists(MODEL_FILE):
         try:
             _model = joblib.load(MODEL_FILE)
@@ -1995,6 +2019,8 @@ def train_route():
     if len(np.unique(labels)) < 2:
         return jsonify({"error": "labels must contain at least two classes"}), 400
     model = fit_scaler(features, labels)
+    if not JOBLIB_AVAILABLE:
+        return jsonify({"error": "joblib unavailable"}), 503
     joblib.dump(model, MODEL_FILE)
     global _model
     _model = model
