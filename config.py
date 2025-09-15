@@ -6,6 +6,8 @@ This module defines the :class:`BotConfig` dataclass along with helpers to
 load configuration values from ``config.json`` and environment variables.
 """
 
+import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -14,9 +16,36 @@ from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
-from dotenv import dotenv_values
 
 logger = logging.getLogger(__name__)
+
+
+def _load_env_file() -> Dict[str, str]:
+    """Загрузить значения из ``.env`` при наличии python-dotenv.
+
+    Библиотека ``python-dotenv`` не является обязательной зависимостью для
+    тестов, поэтому модуль должен корректно работать и без неё. Вместо
+    перехвата ошибки импорта используется ``importlib.util.find_spec`` чтобы
+    избежать ``ModuleNotFoundError`` и соответствовать требованиям стиля.
+    """
+
+    spec = importlib.util.find_spec("dotenv")
+    if spec is None:
+        logger.warning(
+            "python-dotenv не установлен: значения из .env будут проигнорированы"
+        )
+        return {}
+
+    module = importlib.import_module("dotenv")
+    dotenv_values = getattr(module, "dotenv_values", None)
+    if callable(dotenv_values):
+        loaded = dotenv_values()
+        return dict(loaded) if loaded else {}
+
+    logger.warning(
+        "Модуль python-dotenv не содержит функцию dotenv_values; .env пропущен"
+    )
+    return {}
 
 
 def validate_env(required_keys: list[str]) -> None:
@@ -38,7 +67,7 @@ def validate_env(required_keys: list[str]) -> None:
             raise SystemExit(1)
 
 
-_env = dotenv_values()
+_env = _load_env_file()
 validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
