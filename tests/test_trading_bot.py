@@ -138,6 +138,27 @@ async def test_send_telegram_alert_without_env(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
+async def test_send_telegram_alert_logs_failure(monkeypatch, caplog):
+    class DummyClient:
+        async def post(self, url, data=None, timeout=None):
+            request = httpx.Request("POST", url)
+            raise httpx.RequestError("boom", request=request)
+
+    async def _get_client():
+        return DummyClient()
+
+    monkeypatch.setattr(trading_bot, "get_http_client", _get_client)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    monkeypatch.setenv("TELEGRAM_ALERT_RETRIES", "1")
+
+    with caplog.at_level(logging.ERROR):
+        await trading_bot.send_telegram_alert("msg")
+
+    assert "msg" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_send_trade_timeout_env(monkeypatch):
     called = {}
 

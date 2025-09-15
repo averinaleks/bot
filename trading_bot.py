@@ -129,7 +129,9 @@ async def send_telegram_alert(message: str) -> None:
             )
             if attempt == max_attempts:
                 logger.error(
-                    "Failed to send Telegram alert after %s attempts", max_attempts,
+                    "Failed to send Telegram alert after %s attempts: %s",
+                    max_attempts,
+                    message,
                 )
                 return
             await asyncio.sleep(delay)

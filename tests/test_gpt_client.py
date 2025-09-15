@@ -155,6 +155,29 @@ async def test_insecure_url(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_allow_insecure_url(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(client_cls, "stream", fake_stream)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))
+        ],
+    )
+
+    result = await run_query(func, "hi")
+    assert result in {"ok", "offline response"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_localhost_allowed(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "http://localhost")
 

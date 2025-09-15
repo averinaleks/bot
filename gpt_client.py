@@ -120,7 +120,8 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
             ) from exc
 
-    if scheme == "http" and parsed.hostname != "localhost":
+    allow_insecure = os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
+    if scheme == "http" and parsed.hostname != "localhost" and not allow_insecure:
         for resolved_ip in resolved_ips:
             ip = ip_address(resolved_ip)
             if not (ip.is_loopback or ip.is_private):
