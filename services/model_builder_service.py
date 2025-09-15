@@ -14,7 +14,8 @@ from pathlib import Path
 try:
     from werkzeug.utils import secure_filename
 except ImportError:
-    secure_filename = None
+    def secure_filename(filename: str) -> str:
+        return filename
 from typing import Any, Dict, TYPE_CHECKING
 
 import joblib

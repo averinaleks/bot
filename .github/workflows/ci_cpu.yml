@@ -78,7 +78,7 @@ jobs:
           path: flake8.log
           if-no-files-found: ignore
       - name: Run mypy
-        run: python -m mypy --no-site-packages --exclude venv .
+        run: python -m mypy --exclude venv .
       - name: Remove test caches
         if: always()
         uses: ./.github/actions/clear-test-caches
