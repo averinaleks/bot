@@ -6,6 +6,8 @@ This module defines the :class:`BotConfig` dataclass along with helpers to
 load configuration values from ``config.json`` and environment variables.
 """
 
+import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -14,9 +16,45 @@ from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
-from bot.dotenv_utils import DOTENV_AVAILABLE, dotenv_values
 
 logger = logging.getLogger(__name__)
+
+
+class MissingEnvError(Exception):
+    """Raised when required environment variables are missing."""
+
+    def __init__(self, missing_keys: list[str]):
+        self.missing_keys = tuple(missing_keys)
+        message = "Missing required environment variables: " + ", ".join(missing_keys)
+        super().__init__(message)
+
+
+def _load_env_file() -> Dict[str, str]:
+    """Загрузить значения из ``.env`` при наличии python-dotenv.
+
+    Библиотека ``python-dotenv`` не является обязательной зависимостью для
+    тестов, поэтому модуль должен корректно работать и без неё. Вместо
+    перехвата ошибки импорта используется ``importlib.util.find_spec`` чтобы
+    избежать ``ModuleNotFoundError`` и соответствовать требованиям стиля.
+    """
+
+    spec = importlib.util.find_spec("dotenv")
+    if spec is None:
+        logger.warning(
+            "python-dotenv не установлен: значения из .env будут проигнорированы"
+        )
+        return {}
+
+    module = importlib.import_module("dotenv")
+    dotenv_values = getattr(module, "dotenv_values", None)
+    if callable(dotenv_values):
+        loaded = dotenv_values()
+        return dict(loaded) if loaded else {}
+
+    logger.warning(
+        "Модуль python-dotenv не содержит функцию dotenv_values; .env пропущен"
+    )
+    return {}
 
 
 def validate_env(required_keys: list[str]) -> None:
@@ -32,16 +70,15 @@ def validate_env(required_keys: list[str]) -> None:
     if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
         return
 
+    missing_keys: list[str] = []
     for key in required_keys:
         if not (os.getenv(key) or _env.get(key)):
-            logger.error("Missing required environment variable: %s", key)
-            raise SystemExit(1)
+            missing_keys.append(key)
+
+    if missing_keys:
+        raise MissingEnvError(missing_keys)
 
 
-_env = dotenv_values()
-if not DOTENV_AVAILABLE:
-    logger.debug("python-dotenv is not installed; .env overrides will be ignored")
-validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
@@ -50,9 +87,20 @@ validate_env(
         "BYBIT_API_KEY",
         "BYBIT_API_SECRET",
     ]
-)
-
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", _env.get("OFFLINE_MODE", "0")) == "1"
+    )
+except MissingEnvError as exc:
+    missing = ", ".join(exc.missing_keys)
+    if OFFLINE_MODE:
+        logger.warning(
+            "OFFLINE_MODE=1: запуск офлайн-режима из-за отсутствующих переменных: %s",
+            missing,
+        )
+    else:
+        logger.critical(
+            "Не заданы обязательные переменные окружения: %s",
+            missing,
+        )
+        raise
 
 # Load defaults from config.json lazily
 # Resolve the default configuration file. Test runs should always use the

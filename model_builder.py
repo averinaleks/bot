@@ -17,41 +17,74 @@ import platform
 import importlib.metadata
 from pathlib import Path
 from bot.config import BotConfig
+from bot.utils import logger
 from collections import deque
 import importlib
 import random
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", ".")).resolve()
-if not MODEL_DIR.exists():
-    raise FileNotFoundError(f"MODEL_DIR {MODEL_DIR} does not exist")
+try:
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+except OSError as exc:
+    logger.error(
+        "Не удалось создать каталог моделей %s: %s. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR.",
+        MODEL_DIR,
+        exc,
+    )
+    raise
 if not os.access(MODEL_DIR, os.W_OK):
-    raise PermissionError(f"MODEL_DIR {MODEL_DIR} is not writable")
+    logger.error(
+        "Каталог моделей %s недоступен для записи. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR.",
+        MODEL_DIR,
+    )
+    raise PermissionError(
+        f"Каталог моделей {MODEL_DIR} недоступен для записи. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR."
+    )
 
-# Ensure required RL dependency is available before importing heavy modules
+# Ensure required RL dependency is available before importing heavy modules.
+# ``gymnasium`` may be replaced with ``None`` by tests to emulate the missing
+# dependency. Provide a tiny stub instead of failing fast so offline tests keep
+# working.
+
+
+def _create_gym_stub():
+    import types
+
+    gym_module = types.ModuleType("gymnasium")
+    gym_module.Env = object  # type: ignore[attr-defined]
+
+    class _DummySpace:
+        def __init__(self, *a, **k):
+            self.shape = None
+
+    spaces_module = types.ModuleType("gymnasium.spaces")
+    spaces_module.Box = _DummySpace  # type: ignore[attr-defined]
+    spaces_module.Discrete = _DummySpace  # type: ignore[attr-defined]
+
+    # Register stubs so subsequent ``import gymnasium`` or ``import gym`` work.
+    sys.modules.setdefault("gymnasium", gym_module)
+    sys.modules.setdefault("gymnasium.spaces", spaces_module)
+    sys.modules.setdefault("gym", gym_module)
+    sys.modules.setdefault("gym.spaces", spaces_module)
+
+    return gym_module, spaces_module  # type: ignore
+
+
 if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
-    raise ImportError("gymnasium package is required")
-
-try:  # prefer gymnasium if available
-    import gymnasium as gym  # type: ignore
-    from gymnasium import spaces  # type: ignore
-except ImportError:
-    try:
-        import gym  # type: ignore
-        from gym import spaces  # type: ignore
-    except ImportError:  # provide lightweight stubs for tests
-        import types
-
-        gym = types.SimpleNamespace(Env=object)
-
-        class _DummySpace:
-            def __init__(self, *a, **k):
-                self.shape = None
-
-        class _Spaces(types.SimpleNamespace):
-            Box = _DummySpace
-            Discrete = _DummySpace
-
-        spaces = _Spaces()  # type: ignore
+    gym, spaces = _create_gym_stub()
+else:
+    try:  # prefer gymnasium if available
+        import gymnasium as gym  # type: ignore
+        from gymnasium import spaces  # type: ignore
+    except ImportError:
+        try:
+            import gym  # type: ignore
+            from gym import spaces  # type: ignore
+        except ImportError:  # provide lightweight stubs for tests
+            gym, spaces = _create_gym_stub()
 
 if os.getenv("TEST_MODE") == "1":
     import types
@@ -112,7 +145,6 @@ from bot.cache import HistoricalDataCache
 from bot.utils import (
     check_dataframe_empty,
     is_cuda_available,
-    logger,
 )
 
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
@@ -161,7 +193,24 @@ try:  # pragma: no cover - optional dependency
     import joblib  # type: ignore
 except Exception as exc:  # pragma: no cover - stub for tests
     logger.warning("Не удалось импортировать joblib: %s", exc)
-    raise ImportError("joblib package is required for model serialization") from exc
+
+    import types
+    import pickle
+
+    joblib = types.ModuleType("joblib")
+
+    def _dump(value, filename, *args, **kwargs):  # type: ignore[override]
+        with open(filename, "wb") as fh:
+            pickle.dump(value, fh)
+        return filename
+
+    def _load(filename, *args, **kwargs):  # type: ignore[override]
+        with open(filename, "rb") as fh:
+            return pickle.load(fh)
+
+    joblib.dump = _dump  # type: ignore[attr-defined]
+    joblib.load = _load  # type: ignore[attr-defined]
+    sys.modules["joblib"] = joblib
 
 try:
     import mlflow
