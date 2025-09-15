@@ -165,10 +165,13 @@ jobs:
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
           rm -rf ~/.cache/trivy || true
-          mkdir -p /mnt/trivy-cache
+          sudo mkdir -p /mnt/trivy-cache
+          sudo chown "$(id -u):$(id -g)" /mnt/trivy-cache
       - name: Prepare Trivy temp
         if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
-        run: mkdir -p /mnt/trivy-tmp
+        run: |
+          sudo mkdir -p /mnt/trivy-tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
         if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         id: trivy
