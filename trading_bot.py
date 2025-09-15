@@ -15,6 +15,7 @@ from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
 
 from model_builder_client import schedule_retrain, retrain
+from utils import retry
 
 import httpx
 try:  # pragma: no cover - optional dependency
@@ -29,6 +30,10 @@ BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
 
 CFG = BotConfig()
+
+import logging
+
+logger = logging.getLogger("TradingBot")
 
 
 class GPTAdviceModel(BaseModel):
