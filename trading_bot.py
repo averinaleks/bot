@@ -18,6 +18,7 @@ from model_builder_client import schedule_retrain, retrain
 from utils import retry
 
 import httpx
+import logging
 try:  # pragma: no cover - optional dependency
     import ccxt  # type: ignore
 except Exception:  # noqa: BLE001 - broad to avoid test import errors
@@ -25,6 +26,10 @@ except Exception:  # noqa: BLE001 - broad to avoid test import errors
 from dotenv import load_dotenv
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
+from bot.utils import retry, suppress_tf_logs
+from telegram_logger import TelegramLogger
+
+logger = logging.getLogger("TradingBot")
 
 BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
