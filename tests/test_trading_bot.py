@@ -136,7 +136,6 @@ async def test_send_telegram_alert_without_env(monkeypatch, caplog):
         await trading_bot.send_telegram_alert("hi")
     assert "hi" in caplog.text
 
-
 @pytest.mark.asyncio
 async def test_send_trade_timeout_env(monkeypatch):
     called = {}
