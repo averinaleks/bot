@@ -4,6 +4,8 @@ from typing import List, Optional, Tuple
 
 import httpx
 
+from bot.config import OFFLINE_MODE
+
 logger = logging.getLogger("TradingBot")
 
 _MODEL_VERSION = 0
@@ -13,6 +15,12 @@ async def _fetch_training_data(
     data_url: str, symbol: str, limit: int = 50
 ) -> Tuple[List[List[float]], List[int]]:
     """Fetch recent OHLCV data and derive direction labels."""
+
+    if OFFLINE_MODE:
+        logger.info(
+            "Offline mode: skipping training data fetch for %s", symbol
+        )
+        return [], []
 
     features: List[List[float]] = []
     labels: List[int] = []
@@ -46,6 +54,10 @@ async def _fetch_training_data(
 async def train(url: str, features: List[List[float]], labels: List[int]) -> bool:
     """Send training data to the model_builder service."""
 
+    if OFFLINE_MODE:
+        logger.info("Offline mode: skipping model training request")
+        return True
+
     payload = {"features": features, "labels": labels}
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
@@ -64,6 +76,10 @@ async def retrain(model_url: str, data_url: str, symbol: str = "BTCUSDT") -> Opt
     """Retrain the model using data from ``data_url``."""
 
     global _MODEL_VERSION
+    if OFFLINE_MODE:
+        logger.info("Offline mode: retrain skipped")
+        return _MODEL_VERSION
+
     features, labels = await _fetch_training_data(data_url, symbol)
     if not features or not labels:
         logger.error("No training data available for retrain")
@@ -78,6 +94,9 @@ async def retrain(model_url: str, data_url: str, symbol: str = "BTCUSDT") -> Opt
 async def _retrain_loop(
     model_url: str, data_url: str, interval: float, symbol: str
 ) -> None:
+    if OFFLINE_MODE:
+        logger.info("Offline mode: retrain loop disabled")
+        return
     while True:
         await retrain(model_url, data_url, symbol)
         await asyncio.sleep(interval)

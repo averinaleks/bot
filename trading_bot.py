@@ -26,7 +26,7 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # noqa: BLE001 - broad to avoid test import errors
     ccxt = type("ccxt_stub", (), {})()
 from dotenv import load_dotenv
-from bot.config import BotConfig
+from bot.config import BotConfig, OFFLINE_MODE
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 
 BybitError = getattr(ccxt, "BaseError", Exception)
@@ -101,6 +101,9 @@ def safe_float(env_var: str, default: float) -> float:
 
 async def send_telegram_alert(message: str) -> None:
     """Send a Telegram notification if credentials are configured."""
+    if OFFLINE_MODE:
+        logger.debug("Offline mode enabled, Telegram alert suppressed: %s", message)
+        return
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
@@ -274,6 +277,8 @@ async def get_http_client() -> httpx.AsyncClient:
     Timeout for requests can be configured via the ``HTTP_CLIENT_TIMEOUT``
     environment variable (default 5 seconds).
     """
+    if OFFLINE_MODE:
+        raise RuntimeError("HTTP client unavailable in offline mode")
     global HTTP_CLIENT
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
@@ -353,6 +358,9 @@ def _load_env() -> dict:
 
 async def check_services() -> None:
     """Ensure dependent services are responsive."""
+    if OFFLINE_MODE:
+        logger.info("Offline mode enabled, skipping service availability check")
+        return
     env = _load_env()
     retries = safe_int("SERVICE_CHECK_RETRIES", DEFAULT_SERVICE_CHECK_RETRIES)
     delay = safe_float("SERVICE_CHECK_DELAY", DEFAULT_SERVICE_CHECK_DELAY)
@@ -407,6 +415,9 @@ async def check_services() -> None:
 @retry(3, lambda attempt: min(2 ** attempt, 5))
 async def fetch_price(symbol: str, env: dict) -> float | None:
     """Return current price or ``None`` if the request fails."""
+    if OFFLINE_MODE:
+        logger.debug("Offline mode: price fetch skipped for %s", symbol)
+        return None
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
             resp = await client.get(
@@ -436,6 +447,9 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
 
 async def fetch_initial_history(symbol: str, env: dict) -> None:
     """Populate ``_PRICE_HISTORY`` with initial OHLCV data."""
+    if OFFLINE_MODE:
+        logger.debug("Offline mode: initial history fetch skipped for %s", symbol)
+        return
     async with httpx.AsyncClient(trust_env=False) as client:
         try:
             resp = await client.get(
@@ -509,6 +523,9 @@ async def build_feature_vector(symbol: str, price: float) -> list[float]:
 @retry(3, lambda attempt: min(2 ** attempt, 5))
 async def get_prediction(symbol: str, features: list[float], env: dict) -> dict | None:
     """Return raw model prediction output for the given ``features``."""
+    if OFFLINE_MODE:
+        logger.debug("Offline mode: prediction request skipped for %s", symbol)
+        return None
     try:
         payload = json.dumps({"symbol": symbol, "features": features}).encode()
         headers = {
@@ -657,6 +674,14 @@ async def send_trade_async(
     Returns a tuple ``(ok, error)`` where ``error`` is ``None`` on success.
     """
 
+    if OFFLINE_MODE:
+        logger.info(
+            "Offline mode: trade request suppressed for %s (%s)",
+            symbol,
+            side,
+        )
+        return True, None
+
     for attempt in range(1, max_attempts + 1):
         ok, elapsed, error = await _post_trade(
             client, symbol, side, price, env, tp, sl, trailing_stop
@@ -698,6 +723,14 @@ async def close_position_async(
     Returns a tuple ``(ok, error)`` similar to :func:`send_trade_async`.
     """
 
+    if OFFLINE_MODE:
+        logger.info(
+            "Offline mode: close position request suppressed for %s (%s)",
+            order_id,
+            side,
+        )
+        return True, None
+
     url = f"{env['trade_manager_url']}/close_position"
     for attempt in range(1, max_attempts + 1):
         try:
@@ -731,6 +764,9 @@ async def close_position_async(
 
 async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
     """Poll open positions and close them when exit conditions are met."""
+    if OFFLINE_MODE:
+        logger.info("Offline mode: position monitoring disabled")
+        return
     trail_state: dict[str, float] = {}
     async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
         while True:
@@ -818,6 +854,9 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
 
 async def _total_position_notional(env: dict) -> float:
     """Return total notional value of all open positions."""
+    if OFFLINE_MODE:
+        logger.debug("Offline mode: assuming zero position notional")
+        return 0.0
     client = await get_http_client()
     try:
         resp = await client.get(f"{env['trade_manager_url']}/positions", timeout=5)
@@ -1051,6 +1090,9 @@ async def _gpt_advice_loop() -> None:
 
 async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     """Asynchronously fetch prediction and open position if signaled."""
+    if OFFLINE_MODE:
+        logger.info("Offline mode: reactive trade skipped for %s", symbol)
+        return
     env = env or _load_env()
     async with httpx.AsyncClient(trust_env=False) as client:
         try:
@@ -1180,6 +1222,9 @@ async def run_once_async(symbol: str | None = None) -> None:
 
 async def main_async() -> None:
     # Run the trading bot until interrupted.
+    if OFFLINE_MODE:
+        logger.info("Offline mode enabled, trading loop not started")
+        return
     train_task = None
     monitor_task = None
     gpt_task = None
