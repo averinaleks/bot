@@ -46,45 +46,46 @@ if not os.access(MODEL_DIR, os.W_OK):
 
 # Ensure required RL dependency is available before importing heavy modules.
 # ``gymnasium`` may be replaced with ``None`` by tests to emulate the missing
-# dependency. Provide a tiny stub instead of failing fast so offline tests keep
-# working.
+# dependency. In that case we fail fast with a clear error instead of silently
+# continuing with incomplete functionality.
 
 
-def _create_gym_stub():
-    import types
+def _import_gym_modules():
+    if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
+        raise ImportError("gymnasium package is required for reinforcement learning support")
 
-    gym_module = types.ModuleType("gymnasium")
-    gym_module.Env = object  # type: ignore[attr-defined]
+    gym_mod = None
+    spaces_mod = None
 
-    class _DummySpace:
-        def __init__(self, *a, **k):
-            self.shape = None
-
-    spaces_module = types.ModuleType("gymnasium.spaces")
-    spaces_module.Box = _DummySpace  # type: ignore[attr-defined]
-    spaces_module.Discrete = _DummySpace  # type: ignore[attr-defined]
-
-    # Register stubs so subsequent ``import gymnasium`` or ``import gym`` work.
-    sys.modules.setdefault("gymnasium", gym_module)
-    sys.modules.setdefault("gymnasium.spaces", spaces_module)
-    sys.modules.setdefault("gym", gym_module)
-    sys.modules.setdefault("gym.spaces", spaces_module)
-
-    return gym_module, spaces_module  # type: ignore
-
-
-if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
-    gym, spaces = _create_gym_stub()
-else:
     try:  # prefer gymnasium if available
-        import gymnasium as gym  # type: ignore
-        from gymnasium import spaces  # type: ignore
+        gym_mod = importlib.import_module("gymnasium")  # type: ignore[import]
     except ImportError:
-        try:
-            import gym  # type: ignore
-            from gym import spaces  # type: ignore
-        except ImportError:  # provide lightweight stubs for tests
-            gym, spaces = _create_gym_stub()
+        gym_mod = None
+
+    if gym_mod is not None:
+        spaces_mod = getattr(gym_mod, "spaces", None)
+        if spaces_mod is None:
+            spaces_mod = sys.modules.get("gymnasium.spaces")
+        if spaces_mod is None:
+            try:
+                spaces_mod = importlib.import_module("gymnasium.spaces")  # type: ignore[import]
+            except ImportError:
+                spaces_mod = None
+        if spaces_mod is not None:
+            return gym_mod, spaces_mod
+        raise ImportError("gymnasium package is required for reinforcement learning support")
+
+    try:
+        gym_mod = importlib.import_module("gym")  # type: ignore[import]
+        spaces_mod = importlib.import_module("gym.spaces")  # type: ignore[import]
+    except ImportError as exc:
+        raise ImportError(
+            "gymnasium package is required for reinforcement learning support"
+        ) from exc
+    return gym_mod, spaces_mod
+
+
+gym, spaces = _import_gym_modules()
 
 if os.getenv("TEST_MODE") == "1":
     import types

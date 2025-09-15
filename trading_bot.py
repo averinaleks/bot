@@ -1,26 +1,25 @@
 """Main entry point for the trading bot."""
 
-from pydantic import BaseModel, ValidationError, ConfigDict
-from typing import Literal, Union
-
 import atexit
 import asyncio
 import json
+import logging
 import math
 import os
 import statistics
 import time
 from collections import defaultdict, deque
 from contextlib import suppress
-from typing import Awaitable, Callable, TypeVar
-import logging
-
-from model_builder_client import schedule_retrain, retrain
-from utils import retry, suppress_tf_logs
-from telegram_logger import TelegramLogger
+from typing import Awaitable, Callable, Literal, TypeVar, Union
 
 import httpx
-import logging
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from bot.config import BotConfig, OFFLINE_MODE
+from bot.dotenv_utils import load_dotenv
+from model_builder_client import schedule_retrain, retrain
+from telegram_logger import TelegramLogger
+from utils import retry, suppress_tf_logs
 try:  # pragma: no cover - optional dependency
     import ccxt  # type: ignore
 except Exception:  # noqa: BLE001 - broad to avoid test import errors

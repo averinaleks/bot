@@ -29,14 +29,20 @@ class MissingEnvError(Exception):
         super().__init__(message)
 
 
-def _load_env_file() -> Dict[str, str]:
-    """Загрузить значения из ``.env`` при наличии python-dotenv.
+_DOTENV_VALUES: Dict[str, str] = {}
 
-    Библиотека ``python-dotenv`` не является обязательной зависимостью для
-    тестов, поэтому модуль должен корректно работать и без неё. Вместо
-    перехвата ошибки импорта используется ``importlib.util.find_spec`` чтобы
-    избежать ``ModuleNotFoundError`` и соответствовать требованиям стиля.
-    """
+_BOOL_TRUE = {"1", "true", "yes", "on"}
+_BOOL_FALSE = {"0", "false", "no", "off"}
+
+
+def _normalise_env_key(key: str) -> str:
+    """Return a normalised representation for environment variable ``key``."""
+
+    return key.strip()
+
+
+def _load_env_file() -> Dict[str, str]:
+    """Load key/value pairs from ``.env`` if python-dotenv is available."""
 
     spec = importlib.util.find_spec("dotenv")
     if spec is None:
@@ -45,16 +51,68 @@ def _load_env_file() -> Dict[str, str]:
         )
         return {}
 
-    module = importlib.import_module("dotenv")
-    dotenv_values = getattr(module, "dotenv_values", None)
-    if callable(dotenv_values):
-        loaded = dotenv_values()
-        return dict(loaded) if loaded else {}
+    try:
+        module = importlib.import_module("dotenv")
+    except Exception as exc:  # pragma: no cover - defensive import guard
+        logger.warning("Не удалось импортировать python-dotenv: %s", exc)
+        return {}
 
-    logger.warning(
-        "Модуль python-dotenv не содержит функцию dotenv_values; .env пропущен"
-    )
-    return {}
+    dotenv_values = getattr(module, "dotenv_values", None)
+    if not callable(dotenv_values):
+        logger.warning(
+            "Модуль python-dotenv не содержит функцию dotenv_values; .env пропущен"
+        )
+        return {}
+
+    try:
+        loaded = dotenv_values() or {}
+    except Exception as exc:  # pragma: no cover - robust against misconfigured files
+        logger.warning("Не удалось загрузить .env: %s", exc)
+        return {}
+
+    result: Dict[str, str] = {}
+    for raw_key, raw_value in loaded.items():
+        if raw_value is None:
+            continue
+        key = _normalise_env_key(str(raw_key))
+        if not key:
+            continue
+        value = str(raw_value)
+        result[key] = value
+        upper_key = key.upper()
+        if upper_key not in result:
+            result[upper_key] = value
+    return result
+
+
+_DOTENV_VALUES = _load_env_file()
+
+
+def _get_env_value(name: str) -> str | None:
+    """Return an environment variable from ``os.environ`` or ``.env``."""
+
+    value = os.getenv(name)
+    if value is not None:
+        return value
+    return _DOTENV_VALUES.get(name)
+
+
+def _as_bool(name: str, default: bool = False) -> bool:
+    """Convert the environment variable ``name`` to ``bool``.
+
+    Unknown values fall back to ``default`` and trigger a warning.
+    """
+
+    raw = _get_env_value(name)
+    if raw is None:
+        return default
+    lowered = raw.strip().lower()
+    if lowered in _BOOL_TRUE:
+        return True
+    if lowered in _BOOL_FALSE:
+        return False
+    logger.warning("Неизвестное булево значение %s=%r; используется %s", name, raw, default)
+    return default
 
 
 def validate_env(required_keys: list[str]) -> None:
@@ -67,27 +125,31 @@ def validate_env(required_keys: list[str]) -> None:
         skipped during tests (``TEST_MODE=1`` or when ``pytest`` is running).
     """
 
-    if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
+    if _as_bool("TEST_MODE") or "pytest" in sys.modules:
         return
 
     missing_keys: list[str] = []
     for key in required_keys:
-        if not (os.getenv(key) or _env.get(key)):
+        if _get_env_value(key) is None:
             missing_keys.append(key)
 
     if missing_keys:
         raise MissingEnvError(missing_keys)
 
 
-    [
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "TRADE_MANAGER_TOKEN",
-        "TRADE_RISK_USD",
-        "BYBIT_API_KEY",
-        "BYBIT_API_SECRET",
-    ]
-    )
+OFFLINE_MODE = _as_bool("OFFLINE_MODE")
+
+_REQUIRED_ENV_VARS = [
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "TRADE_MANAGER_TOKEN",
+    "TRADE_RISK_USD",
+    "BYBIT_API_KEY",
+    "BYBIT_API_SECRET",
+]
+
+try:
+    validate_env(_REQUIRED_ENV_VARS)
 except MissingEnvError as exc:
     missing = ", ".join(exc.missing_keys)
     if OFFLINE_MODE:
@@ -106,11 +168,10 @@ except MissingEnvError as exc:
 # Resolve the default configuration file. Test runs should always use the
 # repository's bundled ``config.json`` regardless of any ``CONFIG_PATH`` value
 # defined in the environment (for example via ``.env``).
-CONFIG_PATH = os.getenv(
-    "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
-)
-if os.getenv("TEST_MODE") == "1":
-    CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+_CONFIG_DEFAULT = os.path.join(os.path.dirname(__file__), "config.json")
+CONFIG_PATH = _get_env_value("CONFIG_PATH") or _CONFIG_DEFAULT
+if _as_bool("TEST_MODE"):
+    CONFIG_PATH = _CONFIG_DEFAULT
 # Cached defaults; populated on first load
 DEFAULTS: Optional[Dict[str, Any]] = None
 DEFAULTS_LOCK = threading.Lock()
@@ -385,7 +446,8 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                         pass
     type_hints = get_type_hints(BotConfig)
     for fdef in fields(BotConfig):
-        env_val = os.getenv(fdef.name.upper())
+        env_key = fdef.name.upper()
+        env_val = _get_env_value(env_key)
         if env_val is not None:
             expected_type = type_hints.get(fdef.name, fdef.type)
             origin = get_origin(expected_type)
@@ -406,7 +468,7 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                 expected_name = getattr(expected_type, "__name__", str(expected_type))
                 logger.warning(
                     "Ignoring %s: expected value of type %s",
-                    fdef.name.upper(),
+                    env_key,
                     expected_name,
                 )
     return BotConfig(**cfg)
