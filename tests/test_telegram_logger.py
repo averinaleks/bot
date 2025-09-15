@@ -5,6 +5,7 @@ import pytest
 import sys
 import threading
 import types
+import hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from bot.telegram_logger import TelegramLogger
@@ -151,3 +152,39 @@ async def test_two_loggers_independent(monkeypatch):
     await TelegramLogger.shutdown()
     assert tl1._worker_task is None
     assert tl2._worker_task is None
+
+
+@pytest.mark.asyncio
+async def test_hash_filter(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+
+    class CaptureBot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, chat_id, text):
+            self.sent.append(text)
+            return types.SimpleNamespace(message_id=len(self.sent))
+
+    bot = CaptureBot()
+    tl = TelegramLogger(bot, chat_id=1)
+
+    message = "duplicate"
+    await tl.send_telegram_message(message, urgent=True)
+    chat_id, text, urgent = tl._queue.get_nowait()
+    await tl._send(text, chat_id, urgent)
+    tl._queue.task_done()
+
+    first_hash = tl.last_hash
+    expected_hash = hashlib.md5(message.encode("utf-8")).hexdigest()
+    assert first_hash == expected_hash
+
+    await tl.send_telegram_message(message, urgent=True)
+    chat_id, text, urgent = tl._queue.get_nowait()
+    await tl._send(text, chat_id, urgent)
+    tl._queue.task_done()
+
+    await TelegramLogger.shutdown()
+
+    assert len(bot.sent) == 1
+    assert tl.last_hash == first_hash
