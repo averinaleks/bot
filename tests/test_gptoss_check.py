@@ -100,7 +100,7 @@ def test_wait_for_api_http_error(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def get(self, url):
+        def post(self, url, json):
             return response
 
     calls = {"count": 0}
@@ -121,15 +121,15 @@ def test_wait_for_api_http_error(monkeypatch):
 @pytest.mark.parametrize(
     "api_url,expected",
     [
-        ("http://gptoss:8000/api", "http://gptoss:8000/api/v1/models"),
+        ("http://gptoss:8000/api", "http://gptoss:8000/api/v1/completions"),
         (
             "http://gptoss:8000/api/v1/chat/completions",
-            "http://gptoss:8000/api/v1/models",
+            "http://gptoss:8000/api/v1/completions",
         ),
     ],
 )
-def test_wait_for_api_uses_models_endpoint(monkeypatch, api_url, expected):
-    """wait_for_api should query /v1/models while preserving base paths."""
+def test_wait_for_api_uses_completions_endpoint(monkeypatch, api_url, expected):
+    """wait_for_api should query /v1/completions while preserving base paths."""
 
     called = {}
 
@@ -147,7 +147,7 @@ def test_wait_for_api_uses_models_endpoint(monkeypatch, api_url, expected):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def get(self, url):
+        def post(self, url, json):
             called["url"] = url
             return DummyResponse()
 
