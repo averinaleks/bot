@@ -17,15 +17,32 @@ import platform
 import importlib.metadata
 from pathlib import Path
 from bot.config import BotConfig
+from bot.utils import logger
 from collections import deque
 import importlib
 import random
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", ".")).resolve()
-if not MODEL_DIR.exists():
-    raise FileNotFoundError(f"MODEL_DIR {MODEL_DIR} does not exist")
+try:
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+except OSError as exc:
+    logger.error(
+        "Не удалось создать каталог моделей %s: %s. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR.",
+        MODEL_DIR,
+        exc,
+    )
+    raise
 if not os.access(MODEL_DIR, os.W_OK):
-    raise PermissionError(f"MODEL_DIR {MODEL_DIR} is not writable")
+    logger.error(
+        "Каталог моделей %s недоступен для записи. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR.",
+        MODEL_DIR,
+    )
+    raise PermissionError(
+        f"Каталог моделей {MODEL_DIR} недоступен для записи. "
+        "Укажите доступный путь через переменную окружения MODEL_DIR."
+    )
 
 # Ensure required RL dependency is available before importing heavy modules
 if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
@@ -112,7 +129,6 @@ from bot.cache import HistoricalDataCache
 from bot.utils import (
     check_dataframe_empty,
     is_cuda_available,
-    logger,
 )
 
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
