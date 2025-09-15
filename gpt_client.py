@@ -132,6 +132,25 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
 
 
     if scheme == "http" and parsed.hostname != "localhost":
+        private_ips = {
+            ip
+            for ip in resolved_ips
+            if ip_address(ip).is_private
+            or ip_address(ip).is_loopback
+            or ip_address(ip).is_link_local
+        }
+        public_ips = resolved_ips - private_ips
+        if private_ips and public_ips:
+            raise GPTClientError(
+                "GPT_OSS_API host resolves to both private and public addresses"
+            )
+        if public_ips:
+            if _insecure_allowed():
+                logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
+            else:
+                raise GPTClientError(
+                    "Insecure GPT_OSS_API URL; only private addresses are allowed"
+                )
     return parsed.hostname, resolved_ips
 
 
