@@ -10,7 +10,7 @@ import threading
 import ccxt
 import os
 import tempfile
-from dotenv import load_dotenv
+from bot.dotenv_utils import load_dotenv
 try:  # optional dependency
     import pandas as pd
 except Exception:  # pragma: no cover - pandas not installed

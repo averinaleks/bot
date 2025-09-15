@@ -7,12 +7,12 @@ import re
 from typing import List, Mapping
 from contextlib import asynccontextmanager
 
-try:
-    from dotenv import load_dotenv
-except ImportError as exc:  # pragma: no cover - dependency required
+from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
+
+if not DOTENV_AVAILABLE:
     raise RuntimeError(
         "python-dotenv is required. Install it with 'pip install python-dotenv'."
-    ) from exc
+    ) from DOTENV_ERROR
 
 load_dotenv()
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
-from dotenv import dotenv_values
+from bot.dotenv_utils import DOTENV_AVAILABLE, dotenv_values
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ def validate_env(required_keys: list[str]) -> None:
 
 
 _env = dotenv_values()
+if not DOTENV_AVAILABLE:
+    logger.debug("python-dotenv is not installed; .env overrides will be ignored")
 validate_env(
     [
         "TELEGRAM_BOT_TOKEN",
