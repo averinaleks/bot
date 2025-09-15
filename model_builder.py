@@ -44,47 +44,25 @@ if not os.access(MODEL_DIR, os.W_OK):
         "Укажите доступный путь через переменную окружения MODEL_DIR."
     )
 
-# Ensure required RL dependency is available before importing heavy modules.
-# ``gymnasium`` may be replaced with ``None`` by tests to emulate the missing
-# dependency. Provide a tiny stub instead of failing fast so offline tests keep
-# working.
+def _load_gym() -> tuple[object, object]:
+    """Import gymnasium or gym, raising ``ImportError`` when unavailable."""
 
-
-def _create_gym_stub():
-    import types
-
-    gym_module = types.ModuleType("gymnasium")
-    gym_module.Env = object  # type: ignore[attr-defined]
-
-    class _DummySpace:
-        def __init__(self, *a, **k):
-            self.shape = None
-
-    spaces_module = types.ModuleType("gymnasium.spaces")
-    spaces_module.Box = _DummySpace  # type: ignore[attr-defined]
-    spaces_module.Discrete = _DummySpace  # type: ignore[attr-defined]
-
-    # Register stubs so subsequent ``import gymnasium`` or ``import gym`` work.
-    sys.modules.setdefault("gymnasium", gym_module)
-    sys.modules.setdefault("gymnasium.spaces", spaces_module)
-    sys.modules.setdefault("gym", gym_module)
-    sys.modules.setdefault("gym.spaces", spaces_module)
-
-    return gym_module, spaces_module  # type: ignore
-
-
-if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
-    gym, spaces = _create_gym_stub()
-else:
+    if sys.modules.get("gymnasium") is None:
+        raise ImportError("gymnasium package is required")
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
-    except ImportError:
+        return gym, spaces
+    except ImportError as gymnasium_error:
         try:
             import gym  # type: ignore
             from gym import spaces  # type: ignore
-        except ImportError:  # provide lightweight stubs for tests
-            gym, spaces = _create_gym_stub()
+            return gym, spaces
+        except ImportError as gym_error:
+            raise ImportError("gymnasium package is required") from gymnasium_error
+
+
+gym, spaces = _load_gym()
 
 if os.getenv("TEST_MODE") == "1":
     import types
