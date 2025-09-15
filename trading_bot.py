@@ -24,7 +24,6 @@ except Exception:  # noqa: BLE001 - broad to avoid test import errors
 from dotenv import load_dotenv
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
-from bot.utils import logger, suppress_tf_logs, retry
 
 BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
@@ -131,6 +130,9 @@ async def send_telegram_alert(message: str) -> None:
                     max_attempts,
                     message,
                 )
+                if CFG.save_unsent_telegram:
+                    _logger = type("_TL", (), {"unsent_path": CFG.unsent_telegram_path})()
+                    TelegramLogger._save_unsent(_logger, chat_id, message)
                 return
             await asyncio.sleep(delay)
             delay *= 2
