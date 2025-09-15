@@ -13,6 +13,7 @@ import time
 from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
+import logging
 
 from model_builder_client import schedule_retrain, retrain
 
@@ -24,6 +25,9 @@ except Exception:  # noqa: BLE001 - broad to avoid test import errors
 from dotenv import load_dotenv
 from bot.config import BotConfig
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
+from utils import retry
+
+logger = logging.getLogger(__name__)
 
 BybitError = getattr(ccxt, "BaseError", Exception)
 NetworkError = getattr(ccxt, "NetworkError", BybitError)
