@@ -12,10 +12,10 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
-from dataclasses import MISSING, dataclass, field, fields, asdict
-from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 import threading
+from dataclasses import MISSING, asdict, dataclass, field, fields
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,18 @@ def _load_env_file() -> Dict[str, str]:
     return {}
 
 
+_env: Dict[str, str] = _load_env_file()
+
+
+def _get_bool_env(name: str, default: bool = False) -> bool:
+    """Прочитать булево значение из переменных окружения и ``.env``."""
+
+    raw = os.getenv(name) or _env.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def validate_env(required_keys: list[str]) -> None:
     """Ensure that required environment variables are present.
 
@@ -79,14 +91,18 @@ def validate_env(required_keys: list[str]) -> None:
         raise MissingEnvError(missing_keys)
 
 
-    [
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "TRADE_MANAGER_TOKEN",
-        "TRADE_RISK_USD",
-        "BYBIT_API_KEY",
-        "BYBIT_API_SECRET",
-    ]
+OFFLINE_MODE = _get_bool_env("OFFLINE_MODE", False)
+
+try:
+    validate_env(
+        [
+            "TELEGRAM_BOT_TOKEN",
+            "TELEGRAM_CHAT_ID",
+            "TRADE_MANAGER_TOKEN",
+            "TRADE_RISK_USD",
+            "BYBIT_API_KEY",
+            "BYBIT_API_SECRET",
+        ]
     )
 except MissingEnvError as exc:
     missing = ", ".join(exc.missing_keys)
