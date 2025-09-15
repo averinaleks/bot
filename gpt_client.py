@@ -45,6 +45,12 @@ def _allow_insecure_url() -> bool:
 # Backward compatibility: expose module-level flag for tests/legacy code.
 ALLOW_INSECURE_GPT_URL = _allow_insecure_url()
 
+
+def _insecure_allowed() -> bool:
+    """Return True if insecure GPT URLs are explicitly permitted."""
+
+    return ALLOW_INSECURE_GPT_URL or os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
+
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
 
@@ -126,9 +132,10 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
 
 
     if scheme == "http" and parsed.hostname != "localhost":
-        for resolved_ip in resolved_ips:
-            ip = ip_address(resolved_ip)
-            if not (ip.is_loopback or ip.is_private):
+        if not _insecure_allowed():
+            for resolved_ip in resolved_ips:
+                ip = ip_address(resolved_ip)
+                if not (ip.is_loopback or ip.is_private):
                     logger.warning(
                         "Using insecure GPT_OSS_API URL: %s (public address)",
                         api_url,
