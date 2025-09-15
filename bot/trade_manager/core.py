@@ -213,6 +213,11 @@ class TradeManager:
         chat_id,
         rl_agent=None,
     ):
+        # Ensure environment variables from optional .env file are available
+        # before we read Telegram-related settings. ``load_dotenv`` is a no-op
+        # when python-dotenv isn't installed, so calling it is safe in tests.
+        load_dotenv()
+
         self.config = config
         self.data_handler = data_handler
         self.model_builder = model_builder
