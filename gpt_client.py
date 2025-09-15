@@ -392,8 +392,8 @@ async def query_gpt_json_async(prompt: str) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        logger.exception("Invalid JSON from GPT OSS API: %s", exc)
-        raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
+        logger.error("Invalid JSON from GPT OSS API: %s", exc)
+        return {"signal": "hold"}
     if not isinstance(data, dict):
         raise GPTClientResponseError("Unexpected response structure from GPT OSS API")
     required = {"signal", "tp_mult", "sl_mult"}

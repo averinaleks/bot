@@ -484,6 +484,21 @@ async def test_query_gpt_json_async_missing_fields(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
+async def test_query_gpt_json_async_invalid_payload(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "not json"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    with caplog.at_level(logging.ERROR):
+        result = await query_gpt_json_async("hi")
+    assert result == {"signal": "hold"}
+    assert "Invalid JSON from GPT OSS API" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_query_gpt_no_env_leak(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     captured: dict[str, bool | None] = {}
