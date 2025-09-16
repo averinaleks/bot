@@ -275,6 +275,20 @@ class HistoricalDataCache:
                 if isinstance(data, pd.DataFrame):
                     if "timestamp" in data.columns:
                         data["timestamp"] = _ensure_utc(data["timestamp"])
+                    elif isinstance(data.index, pd.MultiIndex) and "timestamp" in data.index.names:
+                        # ``MultiIndex.set_levels`` requires providing the
+                        # unique level values which is awkward for repeated
+                        # timestamps.  Constructing a new MultiIndex from the
+                        # level arrays preserves order while allowing us to
+                        # normalise the ``timestamp`` level to UTC.
+                        names = list(data.index.names)
+                        arrays = []
+                        for pos, name in enumerate(names):
+                            level_values = data.index.get_level_values(pos)
+                            if name == "timestamp":
+                                level_values = _ensure_utc(level_values)
+                            arrays.append(level_values)
+                        data.index = pd.MultiIndex.from_arrays(arrays, names=names)
                     elif isinstance(data.index, pd.DatetimeIndex):
                         data.index = _ensure_utc(data.index)
                 return data

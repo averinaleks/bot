@@ -26,6 +26,29 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.equals(df)
 
 
+def test_load_multiindex_timestamps_localized(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
+    # Build a MultiIndex with a naive ``timestamp`` level to ensure the cache
+    # normalises it back to UTC when loading.
+    timestamps = pd.date_range("2025-01-01", periods=3, freq="1h", tz=None)
+    idx = pd.MultiIndex.from_product(
+        [["BTCUSDT"], timestamps], names=["symbol", "timestamp"]
+    )
+    df = pd.DataFrame({"close": [1.0, 2.0, 3.0]}, index=idx)
+    cache.save_cached_data("BTCUSDT", "1m", df)
+    loaded = cache.load_cached_data("BTCUSDT", "1m")
+    ts_level = loaded.index.get_level_values("timestamp")
+    assert getattr(ts_level, "tz", None) is not None
+    expected_ts = pd.to_datetime(timestamps).tz_localize("UTC")
+    expected_index = pd.MultiIndex.from_arrays(
+        [idx.get_level_values("symbol"), expected_ts], names=idx.names
+    )
+    expected = df.copy()
+    expected.index = expected_index
+    pd.testing.assert_frame_equal(loaded.sort_index(), expected.sort_index())
+
+
 @pytest.mark.parametrize("suffix", [".pkl", ".pkl.gz"])
 def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
