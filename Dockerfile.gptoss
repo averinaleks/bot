@@ -1,27 +1,17 @@
 FROM python:3.11-slim
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libtbbmalloc2 libnuma1 curl git \
-    && apt-get install -y --no-install-recommends gnupg dirmngr \
+# ``gptoss`` в CI используется исключительно как лёгкий HTTP-сервер,
+# поэтому достаточно установить только curl для healthcheck'ов.  Тяжёлые
+# библиотеки вроде ``torch`` и ``vllm`` больше не ставятся, что существенно
+# ускоряет сборку и делает её стабильной в среде GitHub Actions.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
     && apt-get install -y --only-upgrade libpam0g libpam-modules \
-    && rm -rf /var/lib/apt/lists/* \
-    && gpg --version \
-    && dirmngr --version
-
-# Ensure curl is up to date
-RUN apt-get update && apt-get install -y --only-upgrade curl libpam0g libpam-modules \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
-
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.8.0+cpu \
-    && pip install --no-cache-dir git+https://github.com/NICTA/pyairports \
-    && pip install --no-cache-dir vllm==0.10.2 \
-    && pip install --no-cache-dir openai==1.99.1 \
-    && rm -rf /root/.cache/pip
 
 COPY scripts/gptoss_mock_server.py /usr/local/bin/gptoss_mock_server.py
 
