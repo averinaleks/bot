@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  data_handler:
+    build:
+      context: ..
+      dockerfile: Dockerfile.cpu
+    command: >-
+      /app/venv/bin/flask --app services/data_handler_service.py run --host 0.0.0.0 --port 8000 --no-reload
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../config.json:/app/config.json:ro
+      - ../cache:/app/cache
+      - ../logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - bot_services
+
+  model_builder:
+    build:
+      context: ..
+      dockerfile: Dockerfile.cpu
+    command: >-
+      /app/venv/bin/flask --app services/model_builder_service.py run --host 0.0.0.0 --port 8001 --no-reload
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8001"
+      MODEL_DIR: /app/models
+      CONFIG_PATH: /app/config.json
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../config.json:/app/config.json:ro
+      - ../models:/app/models
+      - ../logs:/app/logs
+    depends_on:
+      - data_handler
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - bot_services
+
+  trade_manager:
+    build:
+      context: ..
+      dockerfile: Dockerfile.cpu
+    command: >-
+      /app/venv/bin/flask --app services/trade_manager_service.py run --host 0.0.0.0 --port 8002 --no-reload
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8002"
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../cache:/app/cache
+      - ../logs:/app/logs
+    depends_on:
+      - data_handler
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - bot_services
+
+networks:
+  bot_services:
+    driver: bridge
