@@ -70,12 +70,18 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c  # v10
         with:
-          root-reserve-mb: 4096
+          root-reserve-mb: 8192
           temp-reserve-mb: 100
           swap-size-mb: 4096
           build-mount-path: /mnt
-          pv-loop-path: /root-pv.img
+          pv-loop-path: /mnt/root-pv.img
           tmp-pv-loop-path: /mnt/tmp-pv.img
+
+      - name: Verify root and /mnt free space
+        run: |
+          set -euo pipefail
+          df -h /
+          df -h /mnt
 
       - name: Relocate Docker storage to /mnt
         run: |
