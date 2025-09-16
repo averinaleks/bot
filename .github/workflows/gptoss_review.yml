@@ -49,13 +49,28 @@ jobs:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
 
+      - name: Choose free port for GPT-OSS mock
+        id: choose_port
+        run: |
+          set -euo pipefail
+          port=$(python - <<'PY'
+import socket
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+          )
+          echo "LLM_PORT=$port" >> "$GITHUB_ENV"
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Start mock GPT-OSS server
         run: |
           set -euo pipefail
-          python scripts/gptoss_mock_server.py --host 127.0.0.1 --port 8000 &
+          python scripts/gptoss_mock_server.py --host 127.0.0.1 --port "${LLM_PORT}" &
           echo $! > mock_server.pid
         env:
           MODEL_NAME: ${{ env.MODEL_NAME }}
@@ -65,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           for _ in {1..60}; do
-            if curl -sSf http://127.0.0.1:8000/v1/models >/dev/null; then
+            if curl -sSf "http://127.0.0.1:${LLM_PORT}/v1/models" >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -113,7 +128,7 @@ jobs:
             --diff diff.patch \
             --output review.md \
             --model "${MODEL_NAME}" \
-            --api-url http://127.0.0.1:8000/v1/chat/completions
+            --api-url "http://127.0.0.1:${LLM_PORT}/v1/chat/completions"
 
       - name: Upload review artifact
         if: steps.llm_review.outputs.has_content == 'true'
