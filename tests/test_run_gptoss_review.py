@@ -121,6 +121,21 @@ def test_extract_review_handles_unexpected_payload() -> None:
     assert run_gptoss_review._extract_review({"choices": "invalid"}) == ""
 
 
+def test_parse_args_rejects_unknown_arguments() -> None:
+    with pytest.raises(ValueError):
+        run_gptoss_review._parse_args(["--unknown"])
+
+
+def test_main_handles_unknown_arguments(monkeypatch, tmp_path) -> None:
+    github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    exit_code = run_gptoss_review.main(["--unknown"])  # type: ignore[arg-type]
+
+    assert exit_code == 0
+    assert "has_content=false" in github_output.read_text(encoding="utf-8")
+
+
 def test_main_handles_unexpected_exception(monkeypatch, tmp_path):
     diff_path = tmp_path / "diff.patch"
     diff_path.write_text("dummy", encoding="utf-8")
