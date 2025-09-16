@@ -41,10 +41,18 @@ async def _fetch_training_data(
 
     for i in range(1, len(ohlcv)):
         try:
-            _ts, o, h, l, c, v = ohlcv[i]
+            _ts, open_price, high_price, low_price, close_price, volume = ohlcv[i]
             prev_close = float(ohlcv[i - 1][4])
-            direction = 1 if float(c) > prev_close else 0
-            features.append([float(o), float(h), float(l), float(c), float(v)])
+            direction = 1 if float(close_price) > prev_close else 0
+            features.append(
+                [
+                    float(open_price),
+                    float(high_price),
+                    float(low_price),
+                    float(close_price),
+                    float(volume),
+                ]
+            )
             labels.append(direction)
         except (ValueError, TypeError, IndexError):
             continue

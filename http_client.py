@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-import asyncio
+import random
+from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from collections import defaultdict
-from typing import AsyncGenerator, Callable, Generator, TYPE_CHECKING, Any, Dict, Tuple
-import random
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
+
+import httpx
+
+from bot.utils import retry
 
 # Use system-level randomness for jitter to avoid predictable retry delays
 _RNG = random.SystemRandom()
-
-import httpx
-from bot.utils import retry
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     import requests  # type: ignore[import-untyped]
 

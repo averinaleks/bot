@@ -13,7 +13,7 @@ try:
 except Exception:  # pragma: no cover - optional
     pl = None  # type: ignore
 
-from .utils import expected_ws_rate, ensure_utc
+from .utils import expected_ws_rate
 
 
 class DataHandler:

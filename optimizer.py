@@ -4,12 +4,15 @@ Uses Optuna and Ray to search for the best indicator parameters based on
 Sharpe ratio and supports an optional grid search refinement step.
 """
 
-import pandas as pd
-import numpy as np
 import asyncio
-import time
+import inspect
 import os
+import time
 from itertools import product
+import types
+
+import numpy as np
+import pandas as pd
 
 try:
     import polars as pl  # type: ignore
@@ -31,9 +34,22 @@ try:
     import torch
 except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
-import inspect
-import types
-import sys
+
+from bot.config import BotConfig
+from bot.utils import (
+    check_dataframe_empty_async as _check_df_async,
+    is_cuda_available,
+    logger,
+)
+from sklearn.base import BaseEstimator
+from sklearn.model_selection import GridSearchCV
+try:
+    from skopt import Optimizer as SkOptimizer
+    from skopt.space import Integer, Real
+except ImportError as exc:  # pragma: no cover - optional dependency
+    logger.warning("skopt import failed: %s", exc)
+    SkOptimizer = None  # type: ignore
+    Integer = Real = None  # type: ignore
 
 
 def _create_ray_stub():
@@ -73,21 +89,6 @@ else:
         import ray  # type: ignore
     except ImportError:  # pragma: no cover - provide fallback stub
         ray = _create_ray_stub()
-from bot.utils import (
-    logger,
-    is_cuda_available,
-    check_dataframe_empty_async as _check_df_async,
-)
-from bot.config import BotConfig
-from sklearn.model_selection import GridSearchCV
-from sklearn.base import BaseEstimator
-try:
-    from skopt import Optimizer as SkOptimizer
-    from skopt.space import Integer, Real
-except ImportError as exc:  # pragma: no cover - optional dependency
-    logger.warning("skopt import failed: %s", exc)
-    SkOptimizer = None  # type: ignore
-    Integer = Real = None  # type: ignore
 
 
 @ray.remote

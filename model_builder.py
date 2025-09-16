@@ -6,24 +6,30 @@ remote training helpers and a small REST API for integration tests.
 
 from __future__ import annotations
 
+import asyncio
+import importlib
+import importlib.metadata
+import json
+import math
+import os
+import platform
+import random
+import re
+import sys
+import tempfile
+import time
+from collections import deque
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import os
-import time
-import asyncio
-import sys
-import re
-import math
-import json
-import platform
-import importlib.metadata
-import tempfile
-from pathlib import Path
+from flask import Flask, jsonify, request
+
+from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
-from bot.utils import logger
-from collections import deque
-import importlib
-import random
+from bot.dotenv_utils import load_dotenv
+from bot.utils import check_dataframe_empty, is_cuda_available, logger
+from models.architectures import KERAS_FRAMEWORKS, create_model
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", ".")).resolve()
 try:
@@ -170,12 +176,6 @@ else:
         ray.get = lambda x: x
         ray.init = lambda *a, **k: None
         ray.is_initialized = lambda: False
-from bot.cache import HistoricalDataCache
-from bot.utils import (
-    check_dataframe_empty,
-    is_cuda_available,
-)
-
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
     from bot.utils import configure_logging
@@ -183,7 +183,6 @@ except ImportError:  # pragma: no cover - stub for test environment
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
         pass
-from bot.dotenv_utils import load_dotenv
 try:  # pragma: no cover - optional dependency
     from sklearn.preprocessing import StandardScaler
     from sklearn.linear_model import LogisticRegression
@@ -249,8 +248,6 @@ except ImportError as e:  # pragma: no cover - optional dependency
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
-from flask import Flask, request, jsonify
-from models.architectures import create_model, KERAS_FRAMEWORKS
 
 
 def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
@@ -817,11 +814,16 @@ def _train_model_remote(
             def update(self):
                 pass
         from contextlib import nullcontext
+
         scaler = _DummyScaler()
-        autocast = lambda: nullcontext()
+
+        def autocast():
+            return nullcontext()
     else:
         scaler = amp_module.GradScaler(enabled=cuda_available)
-        autocast = lambda: amp_module.autocast(device_type="cuda", enabled=cuda_available)
+
+        def autocast():
+            return amp_module.autocast(device_type="cuda", enabled=cuda_available)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     preds: list[float] = []
@@ -1012,11 +1014,11 @@ class ModelBuilder:
             return None
         if not isinstance(hist[0], tuple):
             return None
-        pairs = [(float(p), int(l)) for p, l in hist if l is not None]
+        pairs = [(float(prob), int(label)) for prob, label in hist if label is not None]
         if not pairs:
             return None
         preds, labels = zip(*pairs)
-        acc = float(np.mean([(p >= 0.5) == l for p, l in zip(preds, labels)]))
+        acc = float(np.mean([(prob >= 0.5) == label for prob, label in zip(preds, labels)]))
         self.base_thresholds[symbol] = max(0.5, min(acc, 0.9))
         try:
             brier = float(brier_score_loss(labels, preds))
@@ -1076,7 +1078,6 @@ class ModelBuilder:
                     state = joblib.load(f)
                 self.scalers = state.get("scalers", {})
                 if self.nn_framework == "pytorch":
-                    torch_mods = _get_torch_modules()
                     for symbol, sd in state.get("lstm_models", {}).items():
                         scaler = self.scalers.get(symbol)
                         input_size = (
@@ -1102,8 +1103,6 @@ class ModelBuilder:
                 else:
                     if self.nn_framework in KERAS_FRAMEWORKS:
                         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-                        from tensorflow import keras
-
                         for symbol, weights in state.get("lstm_models", {}).items():
                             scaler = self.scalers.get(symbol)
                             input_size = (
@@ -1310,8 +1309,7 @@ class ModelBuilder:
             raise ValueError("Training data contains infinite values")
         train_task = _train_model_remote
         if self.nn_framework in {"pytorch", "lightning"}:
-            torch_mods = _get_torch_modules()
-            torch = torch_mods["torch"]
+            _get_torch_modules()
             train_task = _train_model_remote.options(
                 num_gpus=1 if is_cuda_available() else 0
             )
@@ -1334,8 +1332,6 @@ class ModelBuilder:
         logger.debug("Выполнение _train_model_remote завершено для %s", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-            from tensorflow import keras
-
             input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
             model = create_model(
                 self.model_type,
@@ -1346,7 +1342,7 @@ class ModelBuilder:
             )
             model.set_weights(model_state)
         else:
-            torch_mods = _get_torch_modules()
+            _get_torch_modules()
             pt = self.config.get("prediction_target", "direction")
             input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
             model = create_model(
@@ -1492,8 +1488,6 @@ class ModelBuilder:
         logger.debug("Выполнение _train_model_remote завершено для %s (дообучение)", symbol)
         if self.nn_framework in KERAS_FRAMEWORKS:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-            from tensorflow import keras
-
             input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
             model = create_model(
                 self.model_type,
@@ -1504,7 +1498,7 @@ class ModelBuilder:
             )
             model.set_weights(model_state)
         else:
-            torch_mods = _get_torch_modules()
+            _get_torch_modules()
             pt = self.config.get("prediction_target", "direction")
             input_dim = X.shape[1] * X.shape[2] if self.model_type == "mlp" else X.shape[2]
             model = create_model(

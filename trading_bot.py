@@ -10,7 +10,7 @@ import statistics
 import time
 from collections import defaultdict, deque
 from contextlib import suppress
-from typing import Awaitable, Callable, Literal, TypeVar, Union
+from typing import Awaitable, Callable, TypeVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -18,7 +18,6 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from bot.config import BotConfig, OFFLINE_MODE
 from bot.dotenv_utils import load_dotenv
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
-from model_builder_client import retrain, schedule_retrain
 from telegram_logger import TelegramLogger
 from utils import retry, suppress_tf_logs
 
@@ -1100,7 +1099,6 @@ async def refresh_gpt_advice() -> None:
 
     GPT_ADVICE = GPTAdviceModel()
     try:
-        env = _load_env()
         symbol = SYMBOLS[0]
         hist = _PRICE_HISTORY[symbol]
         price = hist[-1] if hist else 0.0
@@ -1284,7 +1282,6 @@ async def main_async() -> None:
     gpt_task = None
     try:
         await check_services()
-        env = _load_env()
         gpt_task = asyncio.create_task(_gpt_advice_loop())
         while True:
             try:

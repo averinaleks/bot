@@ -13,12 +13,25 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict
+
+import numpy as np
+from flask import Flask, jsonify, request
+from numpy.typing import NDArray
+
+from bot.dotenv_utils import load_dotenv
+from utils import safe_int, validate_host
+
 try:
     from werkzeug.utils import secure_filename
 except ImportError:
     def secure_filename(filename: str) -> str:
         return filename
-from typing import Any, Dict, TYPE_CHECKING
+
+try:  # optional dependency
+    from flask.typing import ResponseReturnValue
+except Exception:  # pragma: no cover - fallback when flask.typing missing
+    ResponseReturnValue = Any  # type: ignore
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,8 +55,7 @@ except Exception as exc:  # pragma: no cover - joblib is optional in tests
     joblib.dump = _joblib_unavailable  # type: ignore[attr-defined]
     joblib.load = _joblib_unavailable  # type: ignore[attr-defined]
     sys.modules.setdefault("joblib", joblib)
-import numpy as np
-from numpy.typing import NDArray
+
 try:
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - critical dependency missing
@@ -55,15 +67,6 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
     raise ImportError(
         "Сервис требует установленный `pandas` для подготовки данных."
     ) from exc
-from bot.dotenv_utils import load_dotenv
-from flask import Flask, jsonify, request
-
-try:  # optional dependency
-    from flask.typing import ResponseReturnValue
-except Exception:  # pragma: no cover - fallback when flask.typing missing
-    ResponseReturnValue = Any  # type: ignore
-
-from utils import validate_host, safe_int
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from model_builder import ModelBuilder
