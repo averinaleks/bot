@@ -35,6 +35,7 @@ def _candidate_paths() -> Iterable[str]:
 
 def _load_real_module() -> ModuleType | None:
     """Attempt to import the real HuggingFace transformers package."""
+    shim = sys.modules.get(__name__)
     for path in _candidate_paths():
         try:
             spec = importlib.machinery.PathFinder().find_spec(__name__, [path])
@@ -43,8 +44,15 @@ def _load_real_module() -> ModuleType | None:
         if spec is None or spec.loader is None:
             continue
         module = importlib.util.module_from_spec(spec)
-        sys.modules[__name__] = module
-        spec.loader.exec_module(module)
+        try:
+            sys.modules[__name__] = module
+            spec.loader.exec_module(module)
+        except Exception:  # pragma: no cover - defensive: optional dependency issues
+            if shim is not None:
+                sys.modules[__name__] = shim
+            else:  # pragma: no cover - defensive fallback
+                sys.modules.pop(__name__, None)
+            continue
         return module
     return None
 
