@@ -153,11 +153,32 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Адрес GPT-OSS API",
     )
     parser.add_argument("--timeout", type=float, default=30.0)
-    return parser.parse_args(argv)
+
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        raise ValueError(
+            "Неизвестные аргументы: " + " ".join(unknown)
+        )
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
+    try:
+        args = _parse_args(argv)
+    except ValueError as exc:
+        print(f"::warning::{exc}", file=sys.stderr)
+        _write_github_output(False)
+        return 0
+    except SystemExit as exc:
+        # argparse uses SystemExit for ``--help`` and fatal parsing errors.
+        code = getattr(exc, "code", 0)
+        if code not in (0, None):
+            print(
+                f"::warning::Парсер аргументов завершился с кодом {code}",
+                file=sys.stderr,
+            )
+        _write_github_output(False)
+        return 0
     diff_path = Path(args.diff)
     output_path = Path(args.output)
 
