@@ -33,6 +33,9 @@ def _candidate_paths() -> Iterable[str]:
                 yield normalized
 
 
+_SHIM_MODULE = sys.modules[__name__]
+
+
 def _load_real_module() -> ModuleType | None:
     """Attempt to import the real HuggingFace transformers package."""
     for path in _candidate_paths():
@@ -44,7 +47,11 @@ def _load_real_module() -> ModuleType | None:
             continue
         module = importlib.util.module_from_spec(spec)
         sys.modules[__name__] = module
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except Exception:  # pragma: no cover - fallback to shim on import failure
+            sys.modules[__name__] = _SHIM_MODULE
+            continue
         return module
     return None
 
