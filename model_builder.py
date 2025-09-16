@@ -45,20 +45,68 @@ if not os.access(MODEL_DIR, os.W_OK):
     )
 
 def _load_gym() -> tuple[object, object]:
-    """Import gymnasium or gym, raising ``ImportError`` when unavailable."""
+    """Import gymnasium or fall back to lightweight stubs in test mode."""
 
-    if sys.modules.get("gymnasium") is None:
-        raise ImportError("gymnasium package is required")
+    def _ensure_stub() -> tuple[object, object]:
+        import types
+
+        gym_mod = sys.modules.get("gymnasium")
+        spaces_mod = sys.modules.get("gymnasium.spaces")
+        if gym_mod is not None and spaces_mod is not None:
+            return gym_mod, spaces_mod
+
+        gym_mod = types.ModuleType("gymnasium")
+
+        class _Env:  # pragma: no cover - simple placeholder
+            metadata: dict[str, object] = {}
+
+        gym_mod.Env = _Env
+
+        spaces_mod = types.ModuleType("gymnasium.spaces")
+
+        class _Discrete:  # pragma: no cover - simple placeholder
+            def __init__(self, n: int):
+                self.n = int(n)
+
+            def sample(self) -> int:
+                return 0
+
+        class _Box:  # pragma: no cover - simple placeholder
+            def __init__(self, low, high, shape=None, dtype=float):
+                self.low = low
+                self.high = high
+                self.shape = shape
+                self.dtype = dtype
+
+            def sample(self):
+                if self.shape is None:
+                    return np.array(self.low, dtype=self.dtype)
+                return np.full(self.shape, self.low, dtype=self.dtype)
+
+        spaces_mod.Discrete = _Discrete
+        spaces_mod.Box = _Box
+        gym_mod.spaces = spaces_mod
+        sys.modules.setdefault("gymnasium", gym_mod)
+        sys.modules.setdefault("gymnasium.spaces", spaces_mod)
+        return gym_mod, spaces_mod
+
+    test_mode = os.getenv("TEST_MODE") == "1"
+    allow_stub = test_mode and os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {"0", "false", "no"}
+
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
         return gym, spaces
     except ImportError as gymnasium_error:
+        if allow_stub:
+            return _ensure_stub()
         try:
             import gym  # type: ignore
             from gym import spaces  # type: ignore
             return gym, spaces
-        except ImportError as gym_error:
+        except ImportError:
+            if allow_stub:
+                return _ensure_stub()
             raise ImportError("gymnasium package is required") from gymnasium_error
 
 
