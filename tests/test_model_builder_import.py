@@ -24,6 +24,7 @@ def test_model_builder_requires_gymnasium(monkeypatch):
         monkeypatch.setitem(sys.modules, 'torch.utils', utils_stub)
         monkeypatch.setitem(sys.modules, 'torch.utils.data', data_stub)
     monkeypatch.setitem(sys.modules, 'gymnasium', None)
+    monkeypatch.setenv('ALLOW_GYM_STUB', '0')
     with pytest.raises(ImportError, match='gymnasium package is required'):
         importlib.import_module('model_builder')
 
