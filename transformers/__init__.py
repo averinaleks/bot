@@ -9,6 +9,9 @@ from types import ModuleType
 from typing import Iterable
 
 
+_STUB_MODULE = sys.modules.get(__name__)
+
+
 def _candidate_paths() -> Iterable[str]:
     """Yield unique site-package paths to search for the real library."""
     seen: set[str] = set()
@@ -44,7 +47,19 @@ def _load_real_module() -> ModuleType | None:
             continue
         module = importlib.util.module_from_spec(spec)
         sys.modules[__name__] = module
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except Exception:  # pragma: no cover - defensive fallback
+            # ``transformers`` has optional heavy dependencies such as ``torch``.
+            # When they are missing the import can raise arbitrary exceptions
+            # (for example ``ValueError`` when ``torch`` provides no module spec).
+            # In that situation we want to fall back to the lightweight stub
+            # instead of failing during test collection.
+            if _STUB_MODULE is not None:
+                sys.modules[__name__] = _STUB_MODULE
+            else:  # pragma: no cover - extremely defensive
+                sys.modules.pop(__name__, None)
+            continue
         return module
     return None
 
