@@ -11,10 +11,9 @@ categories:
       - fix
   - title: '### 🧰 Maintenance'
     labels:
-      - chore
-      - refactor
-      - docs
       - dependencies
+      - documentation
+      - github_actions
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 template: |
   ## Changes
