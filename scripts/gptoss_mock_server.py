@@ -173,7 +173,10 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
-        if self.path.rstrip("/") == "/v1/models":
+        endpoint = self.path.rstrip("/") or "/"
+        if endpoint in {"/health", "/v1/health"}:
+            self._send_json({"status": "ok"})
+        elif endpoint == "/v1/models":
             self._send_json({"data": [{"id": _MODEL_NAME}]})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)

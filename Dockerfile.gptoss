@@ -23,8 +23,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir openai==1.99.1 \
     && rm -rf /root/.cache/pip
 
+COPY scripts/gptoss_mock_server.py /usr/local/bin/gptoss_mock_server.py
+
 EXPOSE 8000
 
-CMD ["python", "-m", "http.server", "8000"]
+CMD ["python", "/usr/local/bin/gptoss_mock_server.py", "--host", "0.0.0.0", "--port", "8000"]
 
 
