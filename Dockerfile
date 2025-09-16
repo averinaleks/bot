@@ -47,7 +47,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements-core.txt requirements-gpu.txt .
+COPY requirements-core.txt requirements-gpu.txt ./
 
 # Создаем виртуальное окружение
 ENV VIRTUAL_ENV=/app/venv
@@ -117,6 +117,13 @@ RUN echo "Checking library versions and CUDA availability..." && \
     if [ "$ENABLE_TF" = "1" ]; then /app/venv/bin/python3 -c "import tensorflow as tf; print('TF Version:', tf.__version__)" || echo "TensorFlow check failed"; else echo "TensorFlow check skipped"; fi && \
     /app/venv/bin/python3 -c "import pytorch_lightning as pl; print('Lightning Version:', pl.__version__)" || echo "Lightning check failed" && \
     /app/venv/bin/python3 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
+
+# Use a dedicated non-root user at runtime
+RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
+    && mkdir -p /home/bot \
+    && chown -R bot:bot /app /home/bot
+
+USER bot
 
 # Указываем команду для запуска
 CMD ["/app/venv/bin/python3", "-m", "bot.trading_bot"]

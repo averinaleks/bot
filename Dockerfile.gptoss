@@ -4,13 +4,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libtbbmalloc2 libnuma1 curl git \
     && apt-get install -y --no-install-recommends gnupg dirmngr \
-    && apt-get install -y --only-upgrade libpam0g libpam-modules \
+    && apt-get install -y --no-install-recommends --only-upgrade libpam0g libpam-modules \
     && rm -rf /var/lib/apt/lists/* \
     && gpg --version \
     && dirmngr --version
 
 # Ensure curl is up to date
-RUN apt-get update && apt-get install -y --only-upgrade curl libpam0g libpam-modules \
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade curl libpam0g libpam-modules \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
@@ -26,6 +26,14 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY scripts/gptoss_mock_server.py /usr/local/bin/gptoss_mock_server.py
 
 EXPOSE 8000
+
+# Use a non-root user for running the mock server
+RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
+    && mkdir -p /home/bot \
+    && chown bot:bot /usr/local/bin/gptoss_mock_server.py \
+    && chown -R bot:bot /home/bot
+
+USER bot
 
 CMD ["python", "/usr/local/bin/gptoss_mock_server.py", "--host", "0.0.0.0", "--port", "8000"]
 
