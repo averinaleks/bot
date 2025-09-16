@@ -101,6 +101,14 @@ jobs:
         if: steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
         run: |
+          if [ ! -f scripts/run_gptoss_review.py ]; then
+            echo "::notice::Скрипт scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "has_content=false" >> "${GITHUB_OUTPUT}"
+            fi
+            exit 0
+          fi
+
           python scripts/run_gptoss_review.py \
             --diff diff.patch \
             --output review.md \
