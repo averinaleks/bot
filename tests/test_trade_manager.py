@@ -133,7 +133,17 @@ class DummyExchange:
         if self.fail:
             return {'retCode': 1}
         return {'id': '1'}
-    async def create_order_with_take_profit_and_stop_loss(self, symbol, type, side, amount, price, takeProfit, stopLoss, params):
+    async def create_order_with_take_profit_and_stop_loss(
+        self,
+        symbol,
+        type,
+        side,
+        amount,
+        price,
+        takeProfit,
+        stopLoss,
+        params,
+    ):
         self.orders.append({'method': 'create_order_with_tp_sl', 'symbol': symbol, 'type': type, 'side': side,
                              'amount': amount, 'price': price, 'tp': takeProfit, 'sl': stopLoss,
                              'params': params})

@@ -107,7 +107,12 @@ class DummyDataHandler:
 async def test_simulator_trailing_stop(trade_manager_classes, tmp_path):
     TradeManager, HistoricalSimulator = trade_manager_classes
     dh = DummyDataHandler(str(tmp_path))
-    cfg = BotConfig(cache_dir=str(tmp_path), trailing_stop_percentage=1.0, trailing_stop_coeff=0.0, trailing_stop_multiplier=1.0)
+    cfg = BotConfig(
+        cache_dir=str(tmp_path),
+        trailing_stop_percentage=1.0,
+        trailing_stop_coeff=0.0,
+        trailing_stop_multiplier=1.0,
+    )
     tm = TradeManager(cfg, dh, None, None, None)
 
     first = {'n': 0}
