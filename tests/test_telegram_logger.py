@@ -176,7 +176,9 @@ async def test_hash_filter(monkeypatch):
     tl._queue.task_done()
 
     first_hash = tl.last_hash
-    expected_hash = hashlib.md5(message.encode("utf-8")).hexdigest()
+    expected_hash = hashlib.blake2s(
+        message.encode("utf-8"), digest_size=16
+    ).hexdigest()
     assert first_hash == expected_hash
 
     await tl.send_telegram_message(message, urgent=True)

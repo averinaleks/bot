@@ -1,4 +1,5 @@
 import gzip
+import logging
 import os
 import pickle
 import pandas as pd
@@ -121,3 +122,18 @@ def test_delete_cache_file_never_negative(tmp_path, monkeypatch):
     file_path.write_bytes(b"data")
     cache._delete_cache_file(str(file_path))
     assert cache.current_cache_size_mb >= 0
+
+
+def test_timeframe_path_traversal_rejected(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
+    df = pd.DataFrame({"close": [1, 2, 3]})
+
+    caplog.set_level(logging.ERROR)
+    cache.save_cached_data("BTCUSDT", "../etc/passwd", df)
+
+    assert not any(tmp_path.glob("*.parquet"))
+
+    caplog.set_level(logging.WARNING)
+    loaded = cache.load_cached_data("BTCUSDT", "../etc/passwd")
+    assert loaded is None

@@ -706,6 +706,17 @@ def sanitize_symbol(symbol: str) -> str:
     return re.sub(r'[^A-Za-z0-9._-]', '_', symbol)
 
 
+def sanitize_timeframe(timeframe: str) -> str:
+    """Validate that *timeframe* contains only safe characters."""
+
+    value = str(timeframe).strip()
+    if not value:
+        raise ValueError("Timeframe contains no valid characters")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", value):
+        raise ValueError(f"Invalid characters in timeframe: {timeframe!r}")
+    return value
+
+
 def filter_outliers_zscore(df, column="close", threshold=3.0):
     try:
         try:
