@@ -4,9 +4,58 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from collections.abc import Mapping
 from types import SimpleNamespace
 
+from bot.config import OFFLINE_MODE
+
 logger = logging.getLogger("TradingBot")
+
+_OFFLINE_ENV_DEFAULTS: dict[str, str] = {
+    "BYBIT_API_KEY": "offline-bybit-key",
+    "BYBIT_API_SECRET": "offline-bybit-secret",
+    "TRADE_MANAGER_TOKEN": "offline-trade-token",
+}
+
+
+def ensure_offline_env(defaults: Mapping[str, str] | None = None) -> list[str]:
+    """Ensure API credentials have placeholder values in offline mode.
+
+    Parameters
+    ----------
+    defaults:
+        Optional mapping of environment variables to fallback values. When a
+        variable from ``defaults`` is absent and :data:`OFFLINE_MODE` is
+        enabled, the value is injected into :mod:`os.environ` and a warning is
+        logged. Already defined variables are never overridden.
+
+    Returns
+    -------
+    list[str]
+        Names of variables that received placeholder values. The list is empty
+        when nothing was changed or :data:`OFFLINE_MODE` is disabled.
+    """
+
+    if not OFFLINE_MODE:
+        return []
+
+    applied: list[str] = []
+    mapping = defaults or _OFFLINE_ENV_DEFAULTS
+    for key, value in mapping.items():
+        if os.getenv(key):
+            continue
+        os.environ[key] = value
+        applied.append(key)
+        logger.warning(
+            "OFFLINE_MODE=1: переменная %s не задана; используется фиктивное значение",
+            key,
+        )
+    return applied
+
+
+if OFFLINE_MODE:
+    ensure_offline_env()
 
 
 class OfflineBybit:

@@ -56,12 +56,13 @@ except ImportError:  # pragma: no cover - заглушка
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
         pass
-from bot.config import BotConfig  # noqa: E402
+from bot.config import BotConfig, OFFLINE_MODE  # noqa: E402
 import contextlib  # noqa: E402
 from bot.http_client import (  # noqa: E402
     get_async_http_client as get_http_client,
     close_async_http_client as close_http_client,
 )
+from services.offline import ensure_offline_env  # noqa: E402
 
 torch: Any
 try:  # pragma: no cover - optional dependency
@@ -217,6 +218,14 @@ class TradeManager:
         # before we read Telegram-related settings. ``load_dotenv`` is a no-op
         # when python-dotenv isn't installed, so calling it is safe in tests.
         load_dotenv()
+
+        if OFFLINE_MODE:
+            ensure_offline_env(
+                {
+                    "TELEGRAM_BOT_TOKEN": "offline-telegram-token",
+                    "TELEGRAM_CHAT_ID": "offline-chat-id",
+                }
+            )
 
         self.config = config
         self.data_handler = data_handler
