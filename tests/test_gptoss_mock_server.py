@@ -76,3 +76,35 @@ def test_chat_completions_returns_message(mock_gptoss_server):
     message = data["choices"][0]["message"]["content"]
     assert "Автоматический обзор" in message
     assert message.count("В файле test.py") == 2
+
+
+def test_signal_handlers_ignore_sighup_and_shutdown(monkeypatch):
+    class DummyServer:
+        def __init__(self) -> None:
+            self.shutdown_calls = 0
+
+        def shutdown(self) -> None:
+            self.shutdown_calls += 1
+
+    registered: dict[int, object] = {}
+
+    def fake_signal(sig: int, handler: object) -> None:
+        registered[sig] = handler
+
+    dummy_server = DummyServer()
+    monkeypatch.setattr(gptoss_mock_server.signal, "signal", fake_signal)
+
+    gptoss_mock_server._install_signal_handlers(dummy_server)
+
+    sighup = getattr(gptoss_mock_server.signal, "SIGHUP", None)
+    if sighup is not None:
+        assert registered[sighup] is gptoss_mock_server.signal.SIG_IGN
+
+    for sig_name in ("SIGTERM", "SIGINT"):
+        sig = getattr(gptoss_mock_server.signal, sig_name, None)
+        if sig is None:
+            continue
+        handler = registered[sig]
+        handler(sig, None)
+        assert dummy_server.shutdown_calls == 1
+        dummy_server.shutdown_calls = 0
