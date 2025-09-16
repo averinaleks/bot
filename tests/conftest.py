@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+
 import pytest
 
 from bot import http_client as _http_client
@@ -9,6 +10,45 @@ try:  # pragma: no cover - defensive import
     import pytest_asyncio  # noqa: F401
 except ModuleNotFoundError:  # pragma: no cover
     pytest_plugins: tuple[str, ...] = ()
+
+    def _create_loop() -> asyncio.AbstractEventLoop:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+    @pytest.fixture
+    def event_loop():
+        loop = _create_loop()
+        try:
+            yield loop
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
+        test_func = pyfuncitem.obj
+        if asyncio.iscoroutinefunction(test_func):
+            loop = pyfuncitem.funcargs.get("event_loop")
+            owns_loop = False
+            if loop is None:
+                loop = _create_loop()
+                owns_loop = True
+            try:
+                call_kwargs = {
+                    name: pyfuncitem.funcargs[name]
+                    for name in pyfuncitem._fixtureinfo.argnames
+                    if name in pyfuncitem.funcargs
+                }
+                loop.run_until_complete(test_func(**call_kwargs))
+            finally:
+                if owns_loop:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    asyncio.set_event_loop(None)
+                    loop.close()
+            return True
+        return None
 else:
     pytest_plugins = ("pytest_asyncio",)
 
