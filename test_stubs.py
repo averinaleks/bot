@@ -11,6 +11,7 @@ import os
 import sys
 import types
 import logging
+from importlib.machinery import ModuleSpec
 from types import ModuleType
 from typing import Any, Protocol, cast
 
@@ -94,6 +95,12 @@ class FlaskWithASGI(Protocol):
 IS_TEST_MODE = False
 
 
+def _create_module(name: str) -> ModuleType:
+    module = types.ModuleType(name)
+    module.__spec__ = ModuleSpec(name, loader=None)  # type: ignore[attr-defined]
+    return module
+
+
 class CsrfProtectError(Exception):
     pass
 
@@ -125,7 +132,7 @@ def apply() -> None:
         return
 
     # ------------------------------------------------------------------ Ray
-    ray_mod = cast(RayModule, types.ModuleType("ray"))
+    ray_mod = cast(RayModule, _create_module("ray"))
 
     class _RayRemoteFunction:
         def __init__(self, func):
@@ -167,7 +174,7 @@ def apply() -> None:
     try:
         import httpx as _real_httpx  # noqa: F401
     except Exception:
-        httpx_mod = cast(HTTPXModule, types.ModuleType("httpx"))
+        httpx_mod = cast(HTTPXModule, _create_module("httpx"))
 
         class _HTTPXResponse:
             def __init__(
@@ -286,7 +293,7 @@ def apply() -> None:
         sys.modules["httpx"] = cast(ModuleType, httpx_mod)
 
     # ---------------------------------------------------------------- websockets
-    ws_mod = cast(ModuleType, types.ModuleType("websockets"))
+    ws_mod = cast(ModuleType, _create_module("websockets"))
 
     class _WSConnectionClosed(Exception):
         ...
@@ -312,20 +319,20 @@ def apply() -> None:
     sys.modules["websockets"] = cast(ModuleType, ws_mod)
 
     # ------------------------------------------------------------------- PyBit
-    pybit_mod = cast(PyBitModule, types.ModuleType("pybit"))
-    ut_mod = cast(PyBitUTModule, types.ModuleType("unified_trading"))
+    pybit_mod = cast(PyBitModule, _create_module("pybit"))
+    ut_mod = cast(PyBitUTModule, _create_module("pybit.unified_trading"))
     setattr(ut_mod, "HTTP", object)
     setattr(pybit_mod, "unified_trading", ut_mod)
     sys.modules["pybit"] = cast(ModuleType, pybit_mod)
     sys.modules["pybit.unified_trading"] = cast(ModuleType, ut_mod)
 
     # ------------------------------------------------------------------ a2wsgi
-    a2wsgi_mod = cast(A2WSGIModule, types.ModuleType("a2wsgi"))
+    a2wsgi_mod = cast(A2WSGIModule, _create_module("a2wsgi"))
     setattr(a2wsgi_mod, "WSGIMiddleware", lambda app: app)
     sys.modules["a2wsgi"] = cast(ModuleType, a2wsgi_mod)
 
     # ------------------------------------------------------------------ uvicorn
-    uvicorn_mod = cast(UvicornModule, types.ModuleType("uvicorn"))
+    uvicorn_mod = cast(UvicornModule, _create_module("uvicorn"))
     setattr(
         uvicorn_mod,
         "middleware",
@@ -336,7 +343,7 @@ def apply() -> None:
     sys.modules["uvicorn"] = cast(ModuleType, uvicorn_mod)
 
     # ------------------------------------------------ fastapi_csrf_protect
-    csrf_mod = cast(ModuleType, types.ModuleType("fastapi_csrf_protect"))
+    csrf_mod = cast(ModuleType, _create_module("fastapi_csrf_protect"))
     setattr(csrf_mod, "CsrfProtect", CsrfProtect)
     setattr(csrf_mod, "CsrfProtectError", CsrfProtectError)
     sys.modules["fastapi_csrf_protect"] = csrf_mod
@@ -348,9 +355,32 @@ def apply() -> None:
     # ensures modules can safely call ``torch.cuda.is_available()`` without
     # pulling in heavy dependencies.
     if "torch" not in sys.modules:
-        torch = cast(ModuleType, types.ModuleType("torch"))
+        torch = cast(ModuleType, _create_module("torch"))
+        torch.Tensor = type("Tensor", (), {})  # type: ignore[attr-defined]
         torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
+        torch.nn = types.SimpleNamespace(Module=type("Module", (), {}))  # type: ignore[attr-defined]
+        torch.distributed = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
         sys.modules["torch"] = torch
+
+    # ------------------------------------------------------------- safetensors
+    if "safetensors" not in sys.modules:
+        safetensors = _create_module("safetensors")
+        safetensors_torch = _create_module("safetensors.torch")
+
+        def _raise_not_implemented(*_a: Any, **_k: Any) -> None:
+            raise NotImplementedError("safetensors is not available in test mode")
+
+        safetensors.deserialize = _raise_not_implemented  # type: ignore[attr-defined]
+        safetensors.serialize = _raise_not_implemented  # type: ignore[attr-defined]
+        safetensors.serialize_file = _raise_not_implemented  # type: ignore[attr-defined]
+        safetensors.safe_open = _raise_not_implemented  # type: ignore[attr-defined]
+
+        safetensors_torch.save_file = _raise_not_implemented  # type: ignore[attr-defined]
+        safetensors_torch.load_file = _raise_not_implemented  # type: ignore[attr-defined]
+
+        safetensors.torch = safetensors_torch  # type: ignore[attr-defined]
+        sys.modules["safetensors"] = safetensors
+        sys.modules["safetensors.torch"] = safetensors_torch
 
     # ------------------------------------------------------------------- Flask
     try:  # pragma: no cover - best effort
