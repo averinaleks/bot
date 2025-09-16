@@ -106,7 +106,7 @@ jobs:
           payload=$(jq -n \
             --arg diff "$(cat diff.patch)" \
             --arg model "$model" \
-            '{model:$model, messages:[{role:"user", content:"Review the following diff and provide feedback:\n" + $diff}]}' )
+            '{model:$model, messages:[{role:"user", content:("Review the following diff and provide feedback:\n" + $diff)}]}' )
           resp=$(curl -sSf -H "Content-Type: application/json" -d "$payload" \
             http://127.0.0.1:8000/v1/chat/completions)
           review=$(echo "$resp" | jq -r '.choices[0].message.content // empty')
