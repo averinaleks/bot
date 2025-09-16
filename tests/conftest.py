@@ -1,4 +1,5 @@
 import os
+import importlib.util
 import sys
 import asyncio
 
@@ -6,9 +7,23 @@ import pytest
 
 from bot import http_client as _http_client
 
-try:  # pragma: no cover - defensive import
-    import pytest_asyncio  # noqa: F401
-except ModuleNotFoundError:  # pragma: no cover
+
+def _has_pytest_asyncio_plugin() -> bool:
+    """Return ``True`` when the ``pytest-asyncio`` plugin is importable.
+
+    ``pytest`` automatically exposes a namespace package named
+    :mod:`pytest_asyncio` even when the third-party plugin is not installed.
+    Importing the top-level module alone would therefore succeed and make the
+    fallback below unreachable.  Checking the actual plugin module ensures that
+    we only rely on ``pytest-asyncio`` when it is fully available.
+    """
+
+    return importlib.util.find_spec("pytest_asyncio.plugin") is not None
+
+
+if _has_pytest_asyncio_plugin():  # pragma: no cover - exercised in CI
+    pytest_plugins = ("pytest_asyncio",)
+else:  # pragma: no cover - exercised when plugin missing on CI
     pytest_plugins: tuple[str, ...] = ()
 
     def _create_loop() -> asyncio.AbstractEventLoop:
@@ -49,8 +64,6 @@ except ModuleNotFoundError:  # pragma: no cover
                     loop.close()
             return True
         return None
-else:
-    pytest_plugins = ("pytest_asyncio",)
 
 # MLflow spawns a background telemetry thread on import which keeps the
 # process alive after tests finish. Disabling telemetry prevents the thread
