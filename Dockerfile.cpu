@@ -20,22 +20,51 @@ WORKDIR /app
 COPY requirements-core.txt .
 
 ENV VIRTUAL_ENV=/app/venv
-RUN python3 -m venv $VIRTUAL_ENV && \
+RUN python3 -m venv "$VIRTUAL_ENV" && \
     # pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает актуальные уязвимости и подходит для сборки gymnasium
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
-    RAY_JARS_DIR=$($VIRTUAL_ENV/bin/python -c "import os, ray; print(os.path.join(os.path.dirname(ray.__file__), 'jars'))") && \
-    mkdir -p "$RAY_JARS_DIR" && \
-    rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
-    curl -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
-    nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)" && \
-    if [ -n "$nvidia_packages" ]; then \
-        printf '%s\n' "$nvidia_packages" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; \
-    else \
-        echo "No NVIDIA packages detected in the virtual environment"; \
-    fi && \
-    find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
-    find $VIRTUAL_ENV -type f -name '*.pyc' -delete
+    "$VIRTUAL_ENV/bin/pip" install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
+    "$VIRTUAL_ENV/bin/pip" install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
+    "$VIRTUAL_ENV/bin/python" - <<'PY'
+import pathlib
+import subprocess
+import sys
+import urllib.request
+
+import ray  # noqa: F401  # ensure dependency is importable
+
+
+def _download_commons_lang3() -> None:
+    jars_dir = pathlib.Path(ray.__file__).resolve().parent / "jars"
+    jars_dir.mkdir(parents=True, exist_ok=True)
+    for jar in jars_dir.glob("commons-lang3-*.jar"):
+        jar.unlink(missing_ok=True)
+    target = jars_dir / "commons-lang3-3.18.0.jar"
+    urllib.request.urlretrieve(
+        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar",
+        target,
+    )
+
+
+def _purge_nvidia_packages() -> None:
+    freeze = subprocess.run(
+        [sys.executable, "-m", "pip", "freeze"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    nvidia = [pkg.split("==", 1)[0] for pkg in freeze if pkg.lower().startswith("nvidia-")]
+    if nvidia:
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", *nvidia], check=True)
+    else:
+        print("No NVIDIA packages detected in the virtual environment", flush=True)
+
+
+if __name__ == "__main__":
+    _download_commons_lang3()
+    _purge_nvidia_packages()
+PY
+RUN find "$VIRTUAL_ENV" -type d -name '__pycache__' -exec rm -rf {} + && \
+    find "$VIRTUAL_ENV" -type f -name '*.pyc' -delete
 
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
