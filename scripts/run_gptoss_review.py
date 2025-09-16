@@ -87,8 +87,11 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
         raise RuntimeError("Сервер GPT-OSS вернул некорректный JSON") from exc
 
 
-def _extract_review(response: dict[str, Any]) -> str:
+def _extract_review(response: dict[str, Any] | Any) -> str:
     """Pull textual review content from OpenAI-compatible response payloads."""
+
+    if not isinstance(response, dict):
+        return ""
 
     choices = response.get("choices")
     if not isinstance(choices, list):
@@ -166,6 +169,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except RuntimeError as exc:
         print(f"::warning::{exc}", file=sys.stderr)
+        _write_github_output(False)
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Неожиданная ошибка при генерации обзора: {exc}",
+            file=sys.stderr,
+        )
         _write_github_output(False)
         return 0
 
