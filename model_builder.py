@@ -4,6 +4,8 @@ This module houses the :class:`ModelBuilder` used to train LSTM or RL models,
 remote training helpers and a small REST API for integration tests.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import os
@@ -15,6 +17,7 @@ import math
 import json
 import platform
 import importlib.metadata
+import tempfile
 from pathlib import Path
 from bot.config import BotConfig
 from bot.utils import logger
@@ -927,8 +930,12 @@ class ModelBuilder:
             self.nn_framework,
             self.device,
         )
-        self.cache = HistoricalDataCache(config["cache_dir"])
-        self.state_file = os.path.join(config["cache_dir"], "model_builder_state.pkl")
+        self.cache, resolved_cache_dir = self._prepare_history_cache(
+            config.get("cache_dir", "")
+        )
+        self.cache_dir = resolved_cache_dir
+        config["cache_dir"] = resolved_cache_dir
+        self.state_file = os.path.join(resolved_cache_dir, "model_builder_state.pkl")
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.last_save_time = time.time()
         self.save_interval = 900
@@ -945,6 +952,57 @@ class ModelBuilder:
         self.last_backtest_time = 0
         self.backtest_results = {}
         logger.info("Инициализация ModelBuilder завершена")
+
+    @staticmethod
+    def _prepare_history_cache(cache_dir: str) -> tuple[HistoricalDataCache | None, str]:
+        """Initialise the historical data cache with graceful fallbacks."""
+
+        requested_dir = os.path.abspath(os.fspath(cache_dir)) if cache_dir else ""
+        fallback_dir = os.path.abspath(
+            os.path.join(tempfile.gettempdir(), "model_builder_cache")
+        )
+        candidates: list[str] = []
+        if requested_dir:
+            candidates.append(requested_dir)
+        if fallback_dir not in candidates:
+            candidates.append(fallback_dir)
+
+        if HistoricalDataCache is None:
+            for path in candidates:
+                try:
+                    os.makedirs(path, exist_ok=True)
+                    return None, path
+                except Exception:
+                    logger.exception(
+                        "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                    )
+            return None, fallback_dir
+
+        for path in candidates:
+            try:
+                cache = HistoricalDataCache(path)
+            except PermissionError:
+                logger.warning(
+                    "Нет прав на запись в каталог ModelBuilder %s, пробуем временную директорию",
+                    path,
+                )
+            except Exception:
+                logger.exception(
+                    "Не удалось инициализировать кэш ModelBuilder в %s",
+                    path,
+                )
+            else:
+                return cache, cache.cache_dir
+
+        chosen = candidates[-1]
+        try:
+            os.makedirs(chosen, exist_ok=True)
+        except Exception:
+            logger.exception(
+                "Не удалось создать резервный каталог кэша ModelBuilder %s",
+                chosen,
+            )
+        return None, chosen
 
     def compute_prediction_metrics(self, symbol: str):
         """Return accuracy and Brier score over recent predictions."""
