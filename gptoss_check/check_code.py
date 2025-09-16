@@ -37,23 +37,70 @@ except Exception as import_error_gpt:  # pragma: no cover - fallback for CI cont
     class GPTClientError(RuntimeError):
         """Fallback GPT client error used when trading bot modules are unavailable."""
 
+    def _extract_choice_text(choice: object) -> str | None:
+        """Return textual content from a single GPT-OSS choice payload."""
+
+        if not isinstance(choice, dict):
+            return None
+
+        text = choice.get("text")
+        if isinstance(text, str) and text:
+            return text
+
+        message = choice.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                return content
+            if isinstance(content, list):
+                pieces: list[str] = []
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") == "text":
+                        fragment = item.get("text")
+                    else:
+                        fragment = item.get("content")
+                    if isinstance(fragment, str) and fragment:
+                        pieces.append(fragment)
+                if pieces:
+                    return "".join(pieces)
+
+        content = choice.get("content")
+        if isinstance(content, str) and content:
+            return content
+
+        return None
+
     def query_gpt(prompt: str) -> str:
         api_url = os.getenv("GPT_OSS_API")
         if not api_url:
             raise RuntimeError("Переменная окружения GPT_OSS_API не установлена")
 
         completions_url = _build_completions_url(api_url)
+        payload = {"prompt": prompt}
+        model = os.getenv("GPT_OSS_MODEL")
+        if model:
+            payload["model"] = model
+
         with get_httpx_client(timeout=30, trust_env=False) as client:
-            response = client.post(completions_url, json={"prompt": prompt})
-            response.raise_for_status()
+            response = client.post(completions_url, json=payload)
             try:
+                response.raise_for_status()
                 data = response.json()
             except ValueError as exc:  # pragma: no cover - unexpected API response
                 raise RuntimeError("Некорректный JSON-ответ от GPT-OSS") from exc
-        try:
-            return data["choices"][0]["text"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"Некорректный ответ GPT-OSS: {data!r}") from exc
+            finally:
+                response.close()
+
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise RuntimeError(f"Некорректный ответ GPT-OSS: {data!r}")
+
+        text = _extract_choice_text(choices[0])
+        if text is None:
+            raise RuntimeError(f"Некорректный ответ GPT-OSS: {data!r}")
+        return text
 
     logger.debug("Using fallback GPT client for GPT-OSS check: %s", import_error_gpt)
 else:  # pragma: no cover - import succeeds in fully configured environments
