@@ -42,4 +42,4 @@ jobs:
         run: bandit -r . -ll -x ./tests,./scripts,./gptoss_check
         continue-on-error: true
       - name: Run tests (pytest)
-        run: pytest -q --maxfail=1 --disable-warnings --cov=bot --cov-fail-under=0
+        run: pytest -q --maxfail=1 --disable-warnings
