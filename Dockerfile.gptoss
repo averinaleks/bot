@@ -17,9 +17,9 @@ ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 \
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.8.0+cpu \
     && pip install --no-cache-dir git+https://github.com/NICTA/pyairports \
-    && pip install --no-cache-dir vllm==0.6.3 \
+    && pip install --no-cache-dir vllm==0.10.2 \
     && pip install --no-cache-dir openai==1.99.1 \
     && rm -rf /root/.cache/pip
 
