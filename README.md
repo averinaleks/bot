@@ -153,6 +153,97 @@ pytest tests/test_password_utils.py
     TRADE_MANAGER_TOKEN=secret
     ```
 
+#### Переопределение переменных через `.env`
+
+Скрипты и сервисы вызывают `load_dotenv()` из модуля `bot.dotenv_utils`. Если
+установлен пакет `python-dotenv`, значения из файла `.env` автоматически
+переопределяют системные переменные при запуске любых команд проекта.
+Поменяйте значение в `.env` и перезапустите процесс либо передайте его только на
+время запуска (`VAR=value flask --app ... run`), чтобы проверить альтернативную
+конфигурацию. Пример в `services/docker-compose.yml` подключает тот же `.env`
+через директиву `env_file`, поэтому все контейнеры получают единый набор
+переменных. Отдельные значения можно переопределить в секции `environment`
+конкретного сервиса.
+
+### Переменные окружения по сервисам
+
+#### Общие переменные
+
+- `HOST` — адрес, на котором запускаются службы при прямом запуске через
+  `python services/...`. Значение `0.0.0.0` открывает порт наружу; по умолчанию
+  используется `127.0.0.1`. При использовании `flask run` адрес задавайте через
+  ключ `--host`.
+- `PORT` — порт, который слушает сервисы при запуске напрямую. В командах `flask
+  --app ... run` порт задаётся параметром `--port`.
+- `TEST_MODE` — установка значения `1` включает тестовый режим: сокращаются
+  задержки повторных попыток и отключаются тяжёлые операции, например диск и
+  сетевые вызовы.
+- `SERVICE_SCHEME` — схема (`http` или `https`), которую использует `trading_bot`
+  для формирования URL сервисов (по умолчанию `http`).
+- `LOG_LEVEL` и `LOG_DIR` — уровень логирования и каталог с логами. Значение
+  `LOG_LEVEL=DEBUG` пригодится при отладке, журналы пишутся в `LOG_DIR` (по
+  умолчанию `./logs`).
+- Переменная `SYMBOL` сохранена для обратной совместимости; текущая версия бота
+  выбирает торговые пары через `config.json`.
+
+#### DataHandlerService (`services/data_handler_service.py`)
+
+- `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи API биржи Bybit. Нужны для
+  авторизованных запросов и расчёта сигналов.
+- `STREAM_SYMBOLS` — список символов через запятую, историю которых нужно
+  предзагрузить в кэш при старте.
+- `HISTORY_TIMEFRAME` и `HISTORY_LIMIT` — таймфрейм и глубина исторических
+  данных для фоновой подгрузки (`1m` и `200` по умолчанию).
+- `CACHE_DIR` — каталог для сохранения OHLCV (по умолчанию используется
+  временная директория системы).
+- `TEST_MODE=1` отключает дисковый кэш и ускоряет тесты.
+
+#### TradeManagerService (`services/trade_manager_service.py`)
+
+- `BYBIT_API_KEY` и `BYBIT_API_SECRET` — ключи доступа к API.
+- `TRADE_MANAGER_TOKEN` — токен авторизации. Все POST-запросы и `/positions`
+  проверяют заголовок `Authorization: Bearer <token>` и возвращают `401` без
+  корректного значения.
+- `TRADE_RISK_USD` — риск на сделку в долларах. Используется для расчёта размера
+  позиции, если в запросе указан только `price`.
+- `TEST_MODE=1` сокращает задержки между повторными попытками создания ордеров.
+- **Типичные ошибки:** забытый `TRADE_RISK_USD`, кавычки вокруг чисел, неверные
+  токены или отсутствие переменных в `env_file` контейнера.
+
+#### ModelBuilderService (`services/model_builder_service.py`)
+
+- `CONFIG_PATH` — путь к файлу конфигурации (`config.json` по умолчанию).
+- `NN_FRAMEWORK` — используемая библиотека (`sklearn`, `pytorch` и т. д.). В
+  тестовом режиме значение принудительно переключается на `sklearn`.
+- `MODEL_DIR` — каталог для сохранения обученных моделей (создаётся
+  автоматически).
+- `MODEL_FILE` — путь к заранее обученной модели, которую нужно загрузить при
+  старте (опционально).
+- `TEST_MODE=1` переводит сервис в упрощённый режим и ускоряет тестовые сборки.
+
+#### FastAPI сервер (`server.py`)
+
+- `API_KEYS` — список токенов через запятую для проверки запросов. Без него
+  сервер завершает запуск с ошибкой.
+- `GPT_MODEL` и `GPT_MODEL_REVISION` — основная модель и хеш коммита, который
+  нужно загрузить из Hugging Face.
+- `GPT_MODEL_FALLBACK` и `GPT_MODEL_FALLBACK_REVISION` — резервная модель и её
+  коммит на случай, если основная недоступна.
+- `MODEL_CACHE_DIR` — каталог, куда `transformers` сохраняет загруженные веса.
+- `LOG_LEVEL` — уровень логов FastAPI. При ручном запуске можно задать `INFO`
+  или `DEBUG`.
+
+#### GPT OSS и интеграции
+
+- `GPT_OSS_API` — базовый адрес сервиса [GPT OSS](https://github.com/jina-ai/gpt-oss)
+  без суффикса `/completions`. При отсутствии переменной клиент выбрасывает
+  исключение.
+- `ALLOW_INSECURE_GPT_URL=1` явно разрешает обращения по `http` к публичным
+  адресам. Без этого параметра допускаются только `https` или частные хосты.
+- `GPT_OSS_WAIT_TIMEOUT` — время ожидания старта контейнера GPT OSS при
+  проверке `gptoss_check` (секунды, по умолчанию `300`).
+- `GPT_OSS_TIMEOUT` — таймаут HTTP-запросов к GPT OSS (секунды, по умолчанию `5`).
+
 ### Офлайн-режим
 
 Установите переменную окружения `OFFLINE_MODE=1`, чтобы полностью отключить обращения к внешним API. Значение можно задать в `.env` или перед запуском командой `export OFFLINE_MODE=1`.
@@ -460,44 +551,56 @@ API_KEYS=key1,key2
 Каждый запрос должен передавать заголовок `Authorization: Bearer <token>` с
 одним из перечисленных ключей, иначе сервер вернёт `401`.
 
-## Lightweight service scripts
+## Запуск сервисов
 
-The `services` directory provides minimal versions of the microservices. They
-avoid heavy dependencies so they start quickly and are useful for basic
-testing.
+Каталог `services/` содержит облегчённые версии микросервисов. Они запускаются
+быстро, не требуют TensorFlow или PyTorch и подходят для локальных проверок.
 
-Run each script directly from the project root:
+### Локальный запуск через Flask CLI
 
-```bash
-gunicorn services.data_handler_service:app
-python services/model_builder_service.py
-python services/trade_manager_service.py
-```
-
-Для альтернативы без зависимостей можно запустить сервис через Waitress:
+Запускайте каждый сервис в отдельном терминале. Команды считывают переменные из
+`.env`, если установлен `python-dotenv`:
 
 ```bash
-waitress-serve services.data_handler_service:app
+flask --app services/data_handler_service.py run --host 0.0.0.0 --port 8000
+flask --app services/model_builder_service.py run --host 0.0.0.0 --port 8001
+flask --app services/trade_manager_service.py run --host 0.0.0.0 --port 8002
 ```
 
-`data_handler_service.py` fetches prices from Bybit using `ccxt` and exposes
-`/price/<symbol>` и `/history/<symbol>`.
-`model_builder_service.py` trains a small logistic regression when you POST
-features to `/train`.  Predictions are requested via `/predict` using
-`{"features": [...]}` where the first element usually represents the price.
-For backward compatibility a single `price` value is also accepted.  The
-service supports multi-class problems via `LogisticRegression()` and returns an
-error if the labels
-contain only a single class.
-`trade_manager_service.py` opens and closes positions on Bybit via
-`/open_position` and `/close_position` and also provides `/positions`, `/ping`
-and `/ready` routes. The `/open_position` endpoint accepts either `amount` or
-`price`, calculating the size from `TRADE_RISK_USD` when only a price is given.
+Для production-окружений можно заменить `flask run` на WSGI/ASGI-серверы,
+например `gunicorn services.data_handler_service:app` или `waitress-serve
+services.data_handler_service:app`.
 
-`trade_manager_service.py` uses a simple token-based authentication. Set the
-`TRADE_MANAGER_TOKEN` environment variable on the service and supply the same
-token via an `Authorization: Bearer` header when calling any POST route or the
-`/positions` endpoint.  For example:
+### Запуск всех сервисов через Docker Compose
+
+Пример `docker-compose.yml` для облегчённых сервисов расположен в
+`services/docker-compose.yml`. Он собирает образ на базе `Dockerfile.cpu`,
+пробрасывает порты 8000–8002, монтирует каталоги `config.json`, `cache`, `logs`
+и `models`, а также подключает `.env` через `env_file`.
+
+```bash
+docker compose -f services/docker-compose.yml up --build
+```
+
+Добавьте флаг `-d` для запуска в фоне или переопределите отдельные значения в
+секции `environment`. Стандартный корневой `docker-compose.yml` по-прежнему
+использует полнофункциональные версии сервисов и требует тяжёлых зависимостей.
+
+### Что делают сервисы
+
+- `data_handler_service.py` получает котировки с Bybit через `ccxt` и
+  предоставляет эндпоинты `/price/<symbol>` и `/history/<symbol>`. История
+  сохраняется в `CACHE_DIR`.
+- `model_builder_service.py` принимает данные через `/train`, обучает простую
+  модель (логистическую регрессию или `ModelBuilder` в зависимости от
+  конфигурации) и отвечает на `/predict`. Модели сохраняются по символам в
+  `MODEL_DIR`.
+- `trade_manager_service.py` открывает и закрывает позиции через
+  `/open_position` и `/close_position`, а также выдаёт `/positions`, `/ping` и
+  `/ready`. Авторизация обязательна: задайте `TRADE_MANAGER_TOKEN` и передавайте
+  заголовок `Authorization: Bearer <token>`.
+
+Пример запроса к TradeManager:
 
 ```bash
 export TRADE_MANAGER_TOKEN=supersecret
@@ -507,63 +610,8 @@ curl --netrc-file /dev/null -H "Authorization: Bearer $TRADE_MANAGER_TOKEN" \
      http://localhost:8002/open_position
 ```
 
-These reference scripts expose the same HTTP routes as the full services but
-avoid heavy frameworks like TensorFlow and PyTorch, making them ideal for quick
-tests.
-
-Все Flask-сервисы ограничивают размер тела запроса 1 МБ. При превышении
-лимита клиент получает ответ 413 с JSON‑сообщением `{"error": "payload too large"}`.
-
-The model builder maintains separate models per trading pair.  POST JSON data
-of the form::
-
-    {"symbol": "BTC/USDT", "features": [[...], [...]], "labels": [0, 1]}
-
-### Switching implementations
-
-`docker-compose.yml` uses the full implementations in `data_handler.py` and
-`model_builder.py`. They depend on heavy packages like TensorFlow and PyTorch
-which are installed in the Docker image. For lightweight testing you can run
-the reference services instead. Replace the `command` entries for each service
-with the scripts from the `services` directory:
-
-```yaml
-data_handler:
-  command: gunicorn services.data_handler_service:app
-model_builder:
-  command: python services/model_builder_service.py
-trade_manager:
-  command: python services/trade_manager_service.py
-```
-
-Restore the Gunicorn commands when you want to launch the full services.
-
-### Running the full services
-
-Running these full modules requires TensorFlow, PyTorch and related
-libraries.  They may take noticeably longer to start while the frameworks
-initialise and will use a GPU if one is available.  Ensure the compose file
-sets `RUNTIME=nvidia` and that your system has the NVIDIA container runtime
-installed.  Without a GPU you can still run the services with
-`DOCKERFILE=Dockerfile.cpu` but startup will remain slower than the lightweight
-scripts above.
-
-The default `docker-compose.yml` already points to the full-featured
-implementations.  If you replaced the `command` entries with the minimal scripts
-earlier, simply revert those lines or copy the compose file from the repository
-again.  After restoring the Gunicorn commands, run:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build    # CPU
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build    # GPU
-```
-
-so the heavy frameworks load and the services expose their production APIs.
-
-
-
-
-
+Все Flask-сервисы ограничивают размер тела запроса 1 МБ. При превышении лимита
+клиент получает ответ `413` с JSON‑сообщением `{"error": "payload too large"}`.
 
 ## Docker Compose logs
 
