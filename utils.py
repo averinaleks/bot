@@ -207,13 +207,15 @@ def validate_host() -> str:
         # IPv6 address, possibly in "[addr]:port" form
         end = host.find("]")
         if end != -1:
-            suffix = host[end + 1 :]
+            suffix = host[end + 1 :].strip()
             has_port = bool(suffix)
             port = suffix
-            host = host[1:end]
+            host = host[1:end].strip()
     else:
         if host.count(":") == 1:
-            host, port = host.split(":")
+            host_part, port_part = host.split(":", 1)
+            host = host_part.strip()
+            port = port_part
             has_port = True
 
     if port:
