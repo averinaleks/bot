@@ -47,7 +47,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements-core.txt requirements-gpu.txt .
+COPY requirements-core.txt requirements-gpu.txt ./
 
 # Создаем виртуальное окружение
 ENV VIRTUAL_ENV=/app/venv
@@ -78,7 +78,11 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 WORKDIR /app
 
 # Копируем виртуальное окружение из этапа сборки
-COPY --from=builder /app/venv /app/venv
+RUN groupadd --system bot && \
+    useradd --system --gid bot --home-dir /app --shell /usr/sbin/nologin bot && \
+    chown -R bot:bot /app
+
+COPY --from=builder --chown=bot:bot /app/venv /app/venv
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
@@ -94,7 +98,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     && openssl version
 
 # Копируем исходный код в /app/bot
-COPY . /app/bot
+COPY --chown=bot:bot . /app/bot
 
 # Устанавливаем переменные окружения для виртуального окружения
 ENV VIRTUAL_ENV=/app/venv
@@ -117,6 +121,8 @@ RUN echo "Checking library versions and CUDA availability..." && \
     if [ "$ENABLE_TF" = "1" ]; then /app/venv/bin/python3 -c "import tensorflow as tf; print('TF Version:', tf.__version__)" || echo "TensorFlow check failed"; else echo "TensorFlow check skipped"; fi && \
     /app/venv/bin/python3 -c "import pytorch_lightning as pl; print('Lightning Version:', pl.__version__)" || echo "Lightning check failed" && \
     /app/venv/bin/python3 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
+
+USER bot
 
 # Указываем команду для запуска
 CMD ["/app/venv/bin/python3", "-m", "bot.trading_bot"]

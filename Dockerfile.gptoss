@@ -10,11 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && dirmngr --version
 
 # Ensure curl is up to date
-RUN apt-get update && apt-get install -y --only-upgrade curl libpam0g libpam-modules \
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade curl libpam0g libpam-modules \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
+
+WORKDIR /workspace
+
+RUN groupadd --system bot && \
+    useradd --system --gid bot --create-home --home-dir /workspace --shell /usr/sbin/nologin bot
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.8.0+cpu \
@@ -23,7 +28,11 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir openai==1.99.1 \
     && rm -rf /root/.cache/pip
 
+RUN chown -R bot:bot /workspace
+
 EXPOSE 8000
+
+USER bot
 
 CMD ["python", "-m", "http.server", "8000"]
 
