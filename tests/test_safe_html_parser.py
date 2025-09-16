@@ -58,6 +58,13 @@ def test_multilingual_input_counts_bytes():
         parser.feed("😀")
 
 
+def test_lone_surrogate_is_counted_without_error():
+    parser = SafeHTMLParser(max_feed_size=10)
+    surrogate = "\ud800"
+    parser.feed(surrogate)
+    assert parser.fed_bytes == len(surrogate.encode("utf-8", "surrogatepass"))
+
+
 def test_close_resets_counter():
     parser = SafeHTMLParser(max_feed_size=5)
     parser.feed("12345")

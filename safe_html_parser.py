@@ -53,7 +53,13 @@ class SafeHTMLParser(HTMLParser):
         data: str
             Chunk of HTML data to process.
         """
-        byte_length = len(data.encode("utf-8"))
+        # ``str.encode`` raises ``UnicodeEncodeError`` if the input contains
+        # lone surrogate code points.  Hypothesis-based fuzz tests exercise the
+        # parser with such inputs, and the standard ``HTMLParser`` accepts them
+        # without error.  We therefore use ``surrogatepass`` to ensure surrogate
+        # code points are counted towards the byte budget instead of bubbling up
+        # an exception.
+        byte_length = len(data.encode("utf-8", "surrogatepass"))
         self._fed += byte_length
         if self._fed > self._max_feed_size:
             raise ValueError("HTML input exceeds maximum allowed size")
