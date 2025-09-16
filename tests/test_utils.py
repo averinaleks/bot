@@ -245,3 +245,16 @@ def test_validate_host_invalid_port(monkeypatch):
     monkeypatch.setenv('HOST', '127.0.0.1:notaport')
     with pytest.raises(ValueError):
         utils.validate_host()
+
+
+def test_validate_host_port_out_of_range(monkeypatch):
+    monkeypatch.setenv('HOST', '127.0.0.1:70000')
+    with pytest.raises(ValueError):
+        utils.validate_host()
+
+
+@pytest.mark.parametrize('host', ['127.0.0.1:', '[::1]:'])
+def test_validate_host_missing_port_value(monkeypatch, host):
+    monkeypatch.setenv('HOST', host)
+    with pytest.raises(ValueError):
+        utils.validate_host()
