@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from collections.abc import Mapping
-from types import SimpleNamespace
 
 from bot.config import OFFLINE_MODE
 
@@ -64,7 +62,16 @@ class OfflineBybit:
     def __init__(self, *args, **kwargs) -> None:
         self.orders: list[dict] = []
 
-    def create_order(self, symbol: str, order_type: str, side: str, amount: float, price: float | None = None, *args, **kwargs) -> dict:
+    def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        *args,
+        **kwargs,
+    ) -> dict:
         order = {
             "id": len(self.orders) + 1,
             "symbol": symbol,

@@ -1,18 +1,21 @@
 """Miscellaneous helper utilities for the trading bot."""
 
+import asyncio
+import inspect
+import ipaddress
 import logging
-logger = logging.getLogger("TradingBot")
 import os
 import re
-import ipaddress
-import asyncio
+import shutil
 import time
-import inspect
-import threading
 import warnings
 from functools import wraps
-from typing import Dict, List, Optional, Callable, TypeVar
-import shutil
+from typing import Callable, Dict, List, Optional, TypeVar
+
+import httpx
+
+
+logger = logging.getLogger("TradingBot")
 
 
 T = TypeVar("T")
@@ -142,13 +145,11 @@ try:
 except ImportError:
     np = None
 
-import httpx
-
 try:  # pragma: no cover - prefer package import to avoid shadowing
-    from bot.telegram_logger import TelegramLogger
+    from bot.telegram_logger import TelegramLogger  # noqa: F401
 except ImportError as exc:  # pragma: no cover - fallback when package import fails
     logger.warning("Failed to import TelegramLogger via package: %s", exc)
-    from telegram_logger import TelegramLogger  # type: ignore
+    from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
 
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden

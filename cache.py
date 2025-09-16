@@ -21,9 +21,9 @@ def _sanitize_symbol(symbol: str) -> str:
     import if necessary.
     """
     try:  # pragma: no cover - import style depends on caller
-        from .utils import sanitize_symbol  # type: ignore  # noqa: WPS433
+        from .utils import sanitize_symbol  # type: ignore  # noqa: E402
     except ImportError:  # pragma: no cover
-        from utils import sanitize_symbol  # type: ignore  # noqa: WPS433
+        from utils import sanitize_symbol  # type: ignore  # noqa: E402
 
     return sanitize_symbol(symbol)
 
@@ -31,9 +31,9 @@ def _sanitize_symbol(symbol: str) -> str:
 def _ensure_utc(ts):
     """Import ``ensure_utc`` lazily to support multiple import styles."""
     try:  # pragma: no cover - import style depends on caller
-        from .data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: WPS433
+        from .data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: E402
     except ImportError:  # pragma: no cover
-        from data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: WPS433
+        from data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: E402
     return _ensure_utc(ts)
 
 

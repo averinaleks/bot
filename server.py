@@ -14,8 +14,6 @@ if not DOTENV_AVAILABLE:
         "python-dotenv is required. Install it with 'pip install python-dotenv'."
     ) from DOTENV_ERROR
 
-load_dotenv()
-
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
     from pydantic import BaseModel, Field, ValidationError
@@ -32,6 +30,8 @@ except Exception as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
     ) from exc
+
+load_dotenv()
 
 
 class ModelManager:

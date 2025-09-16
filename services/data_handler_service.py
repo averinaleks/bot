@@ -26,8 +26,9 @@ try:  # optional dependency
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - pandas not installed
     logging.getLogger(__name__).warning(
-        "Библиотека `pandas` не найдена. Установите `pip install pandas` "
-        "или используйте альтернативу на базе стандартных структур данных."
+        "Библиотека `pandas` не найдена: %s. Установите `pip install pandas` "
+        "или используйте альтернативу на базе стандартных структур данных.",
+        exc,
     )
     pd = None  # type: ignore
 try:

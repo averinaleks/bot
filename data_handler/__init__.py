@@ -36,17 +36,19 @@ def atr_fast(
     index-aligned iterables of equal length.
     """
 
-    h = np.asarray(list(high), dtype=float)
-    l = np.asarray(list(low), dtype=float)
-    c = np.asarray(list(close), dtype=float)
-    tr = np.empty_like(c)
-    tr[0] = h[0] - l[0]
-    prev_close = c[:-1]
-    tr[1:] = np.maximum(h[1:], prev_close) - np.minimum(l[1:], prev_close)
-    atr = np.empty_like(tr)
-    for i in range(len(tr)):
-        start = max(0, i - period + 1)
-        atr[i] = tr[start : i + 1].mean()
+    high_array = np.asarray(list(high), dtype=float)
+    low_array = np.asarray(list(low), dtype=float)
+    close_array = np.asarray(list(close), dtype=float)
+    true_range = np.empty_like(close_array)
+    true_range[0] = high_array[0] - low_array[0]
+    prev_close = close_array[:-1]
+    true_range[1:] = np.maximum(high_array[1:], prev_close) - np.minimum(
+        low_array[1:], prev_close
+    )
+    atr = np.empty_like(true_range)
+    for index in range(len(true_range)):
+        start = max(0, index - period + 1)
+        atr[index] = true_range[start : index + 1].mean()
     return atr
 
 

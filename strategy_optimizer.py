@@ -21,7 +21,6 @@ except ImportError:  # pragma: no cover - optional dependency
 
 if os.getenv("TEST_MODE") == "1":
     import types
-    import sys
 
     ray = types.ModuleType("ray")
 
