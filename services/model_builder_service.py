@@ -44,7 +44,17 @@ except Exception as exc:  # pragma: no cover - joblib is optional in tests
     sys.modules.setdefault("joblib", joblib)
 import numpy as np
 from numpy.typing import NDArray
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - critical dependency missing
+    LOGGER.critical(
+        "Не удалось импортировать `pandas`. Установите пакет "
+        "(`pip install pandas`) или переключитесь на обработку данных через "
+        "стандартные структуры/CSV до подключения `pandas`."
+    )
+    raise ImportError(
+        "Сервис требует установленный `pandas` для подготовки данных."
+    ) from exc
 from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request
 

@@ -1,12 +1,25 @@
-import os
-import bcrypt
 import logging
+import os
 import re
+
+logger = logging.getLogger(__name__)
+
+try:
+    import bcrypt
+except ImportError as exc:  # pragma: no cover - hard failure without bcrypt
+    logger.critical(
+        "Не удалось импортировать обязательный пакет `bcrypt`. "
+        "Установите его (`pip install bcrypt`) или временно переключитесь на "
+        "упрощённое хэширование PBKDF2 из `hashlib`."
+    )
+    raise ImportError(
+        "Отсутствует зависимость `bcrypt`, необходимая для безопасного "
+        "хэширования паролей. Установите пакет или реализуйте fallback на PBKDF2."
+    ) from exc
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
 DEFAULT_BCRYPT_ROUNDS = 12
-logger = logging.getLogger(__name__)
 
 
 def get_bcrypt_rounds() -> int:
