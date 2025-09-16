@@ -99,6 +99,18 @@ def _truncate_prompt(prompt: str) -> str:
     return prompt
 
 
+def _is_local_hostname(hostname: str) -> bool:
+    """Return ``True`` when *hostname* clearly refers to a local address."""
+
+    if hostname.lower() == "localhost":
+        return True
+    try:
+        ip_obj = ip_address(hostname)
+    except ValueError:
+        return False
+    return ip_obj.is_loopback or ip_obj.is_private
+
+
 def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     parsed = urlparse(api_url)
     if not parsed.scheme:
@@ -114,6 +126,7 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
             f"GPT_OSS_API URL scheme {scheme!r} is not supported; use http or https"
         )
 
+    resolution_failed = False
     try:
         addr_info = socket.getaddrinfo(
             parsed.hostname, None, family=socket.AF_UNSPEC
@@ -121,6 +134,7 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
         resolved_ips = {info[4][0] for info in addr_info}
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
+            resolution_failed = True
             resolved_ips = {"127.0.0.1"}
         else:
             logger.error(
@@ -130,18 +144,26 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
             ) from exc
 
-    if scheme == "http" and parsed.hostname != "localhost":
-        all_private = all(
-            ip_address(ip).is_private or ip_address(ip).is_loopback
-            for ip in resolved_ips
-        )
-        if not all_private:
-            if _insecure_allowed():
-                logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
-            else:
-                raise GPTClientError(
-                    "GPT_OSS_API URL must use HTTPS or resolve to a private address"
+    is_local_host = _is_local_hostname(parsed.hostname)
+    if scheme == "http":
+        if not is_local_host:
+            all_private = (
+                all(
+                    ip_address(ip).is_private or ip_address(ip).is_loopback
+                    for ip in resolved_ips
                 )
+                if not resolution_failed
+                else False
+            )
+            if not all_private:
+                if _insecure_allowed():
+                    logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
+                else:
+                    raise GPTClientError(
+                        "GPT_OSS_API URL must use HTTPS or resolve to a private address"
+                    )
+            elif _insecure_allowed():
+                logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
         elif _insecure_allowed():
             logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
 

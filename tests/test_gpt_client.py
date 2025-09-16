@@ -174,6 +174,21 @@ async def test_allow_insecure_url(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_insecure_url_dns_failure(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("TEST_MODE", "1")
+
+    def fail_resolution(*args, **kwargs):
+        raise socket.gaierror("resolution failed")
+
+    monkeypatch.setattr(socket, "getaddrinfo", fail_resolution)
+
+    with pytest.raises(GPTClientError):
+        await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_localhost_allowed(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "http://localhost")
 
