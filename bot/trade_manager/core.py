@@ -279,7 +279,9 @@ class TradeManager:
                 names=["symbol", "timestamp"],
             ),
         )
-        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = {symbol: [] for symbol in data_handler.usdt_pairs}
+        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = {
+            symbol: [] for symbol in data_handler.usdt_pairs
+        }
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task] = []

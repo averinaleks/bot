@@ -299,8 +299,21 @@ async def test_monitor_positions_tp(monkeypatch):
     env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
     class DummyResp:
         status_code = 200
+
         def json(self):
-            return {'positions': [{'id': '1', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': 100, 'sl': 90, 'trailing_stop': None, 'entry_price': 95}]}
+            return {
+                'positions': [
+                    {
+                        'id': '1',
+                        'symbol': 'BTCUSDT',
+                        'side': 'buy',
+                        'tp': 100,
+                        'sl': 90,
+                        'trailing_stop': None,
+                        'entry_price': 95,
+                    }
+                ]
+            }
     called = {}
     class DummyClient:
         async def __aenter__(self):
@@ -334,8 +347,21 @@ async def test_monitor_positions_sl(monkeypatch):
     env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
     class DummyResp:
         status_code = 200
+
         def json(self):
-            return {'positions': [{'id': '2', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': None, 'sl': 90, 'trailing_stop': None, 'entry_price': 100}]}
+            return {
+                'positions': [
+                    {
+                        'id': '2',
+                        'symbol': 'BTCUSDT',
+                        'side': 'buy',
+                        'tp': None,
+                        'sl': 90,
+                        'trailing_stop': None,
+                        'entry_price': 100,
+                    }
+                ]
+            }
     called = {}
     class DummyClient:
         async def __aenter__(self):
@@ -369,8 +395,21 @@ async def test_monitor_positions_trailing_stop(monkeypatch):
     env = {'trade_manager_url': 'http://tm', 'data_handler_url': 'http://dh'}
     class DummyResp:
         status_code = 200
+
         def json(self):
-            return {'positions': [{'id': '3', 'symbol': 'BTCUSDT', 'side': 'buy', 'tp': None, 'sl': None, 'trailing_stop': 1, 'entry_price': 100}]}
+            return {
+                'positions': [
+                    {
+                        'id': '3',
+                        'symbol': 'BTCUSDT',
+                        'side': 'buy',
+                        'tp': None,
+                        'sl': None,
+                        'trailing_stop': 1,
+                        'entry_price': 100,
+                    }
+                ]
+            }
     called = {}
     class DummyClient:
         async def __aenter__(self):
