@@ -151,3 +151,33 @@ def test_main_handles_unexpected_exception(monkeypatch, tmp_path):
 
     assert exit_code == 0
     assert "has_content=false" in github_output.read_text(encoding="utf-8")
+
+
+def test_cli_converts_system_exit(monkeypatch, tmp_path):
+    github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    def _boom(_argv=None):
+        raise SystemExit(3)
+
+    monkeypatch.setattr(run_gptoss_review, "main", _boom)
+
+    exit_code = run_gptoss_review.cli([])
+
+    assert exit_code == 0
+    assert "has_content=false" in github_output.read_text(encoding="utf-8")
+
+
+def test_cli_handles_base_exception(monkeypatch, tmp_path):
+    github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    def _boom(*_args, **_kwargs):
+        raise KeyboardInterrupt("stop")
+
+    monkeypatch.setattr(run_gptoss_review, "main", _boom)
+
+    exit_code = run_gptoss_review.cli([])
+
+    assert exit_code == 0
+    assert "has_content=false" in github_output.read_text(encoding="utf-8")

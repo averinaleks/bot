@@ -211,5 +211,28 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def cli(argv: list[str] | None = None) -> int:
+    """Wrapper around :func:`main` that shields CI from fatal exits."""
+
+    try:
+        return main(argv)
+    except SystemExit as exc:
+        code = exc.code  # ``code`` may be ``None`` or non-integer
+        if code not in (0, None):
+            print(
+                f"::warning::Скрипт завершился с кодом {code}. Возвращаю 0, чтобы не прерывать job.",
+                file=sys.stderr,
+            )
+            _write_github_output(False)
+        return 0
+    except BaseException as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Критическое исключение в CLI: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(False)
+        return 0
+
+
 if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
-    raise SystemExit(main())
+    raise SystemExit(cli())
