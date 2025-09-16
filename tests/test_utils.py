@@ -241,6 +241,14 @@ def test_validate_host_ipv6_port(monkeypatch):
     assert utils.validate_host() == '::1'
 
 
+def test_validate_host_strips_whitespace_around_host_and_port(monkeypatch):
+    monkeypatch.setenv('HOST', ' 127.0.0.1 : 8080 ')
+    assert utils.validate_host() == '127.0.0.1'
+
+    monkeypatch.setenv('HOST', '[ ::1 ] : 9000')
+    assert utils.validate_host() == '::1'
+
+
 def test_validate_host_invalid_port(monkeypatch):
     monkeypatch.setenv('HOST', '127.0.0.1:notaport')
     with pytest.raises(ValueError):
