@@ -51,14 +51,36 @@ if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
-history_cache = (
-    HistoricalDataCache(
-        os.getenv("CACHE_DIR")
-        or os.path.join(tempfile.gettempdir(), "cache")
-    )
-    if HistoricalDataCache
-    else None
-)
+def _create_history_cache() -> "HistoricalDataCache | None":
+    if HistoricalDataCache is None:
+        return None
+
+    logger = logging.getLogger(__name__)
+    candidates: list[str] = []
+    env_path = os.getenv("CACHE_DIR")
+    if env_path:
+        candidates.append(env_path)
+    tmp_path = os.path.join(tempfile.gettempdir(), "cache")
+    if not env_path or env_path != tmp_path:
+        candidates.append(tmp_path)
+
+    for path in candidates:
+        try:
+            return HistoricalDataCache(path)
+        except PermissionError:
+            logger.warning(
+                "Нет прав на запись в каталог кэша %s, пробуем временную директорию",
+                path,
+            )
+        except Exception:
+            logger.exception(
+                "Не удалось инициализировать кэш исторических данных в %s",
+                path,
+            )
+    return None
+
+
+history_cache = _create_history_cache()
 if os.getenv("TEST_MODE") == "1":
     history_cache = None
 _init_lock = threading.Lock()
