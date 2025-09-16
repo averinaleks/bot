@@ -19,11 +19,14 @@ def _candidate_paths() -> Iterable[str]:
         try:
             value = getter()
         except Exception:  # pragma: no cover - defensive: site config errors
-            continue
+            value = ()
         if isinstance(value, str):
-            iterable = [value]
+            iterable: Iterable[str] = (value,)
         else:
-            iterable = list(value)
+            try:
+                iterable = tuple(value)
+            except TypeError:  # pragma: no cover - defensive: unexpected value type
+                iterable = ()
         for path in iterable:
             if not path:
                 continue
