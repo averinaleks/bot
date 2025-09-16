@@ -101,21 +101,11 @@ jobs:
         if: steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
         run: |
-          set -euo pipefail
-          model="${MODEL_NAME}"
-          payload=$(jq -n \
-            --arg diff "$(cat diff.patch)" \
-            --arg model "$model" \
-            '{model:$model, messages:[{role:"user", content:("Review the following diff and provide feedback:\n" + $diff)}]}' )
-          resp=$(curl -sSf -H "Content-Type: application/json" -d "$payload" \
-            http://127.0.0.1:8000/v1/chat/completions)
-          review=$(echo "$resp" | jq -r '.choices[0].message.content // empty')
-          if [ -z "$review" ]; then
-            echo "has_content=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf "%s" "$review" > review.md
-          echo "has_content=true" >> "$GITHUB_OUTPUT"
+          python scripts/run_gptoss_review.py \
+            --diff diff.patch \
+            --output review.md \
+            --model "${MODEL_NAME}" \
+            --api-url http://127.0.0.1:8000/v1/chat/completions
 
       - name: Upload review artifact
         if: steps.llm_review.outputs.has_content == 'true'
