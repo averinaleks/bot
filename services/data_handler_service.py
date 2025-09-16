@@ -7,13 +7,28 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 import logging
 import threading
-import ccxt
+
+try:
+    import ccxt
+except ImportError as exc:  # pragma: no cover - critical dependency missing
+    logging.getLogger(__name__).critical(
+        "Библиотека `ccxt` не установлена. Установите `pip install ccxt` "
+        "или используйте заглушку биржи в тестовом окружении."
+    )
+    raise ImportError(
+        "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
+    ) from exc
+
 import os
 import tempfile
 from bot.dotenv_utils import load_dotenv
 try:  # optional dependency
     import pandas as pd
-except Exception:  # pragma: no cover - pandas not installed
+except ImportError as exc:  # pragma: no cover - pandas not installed
+    logging.getLogger(__name__).warning(
+        "Библиотека `pandas` не найдена. Установите `pip install pandas` "
+        "или используйте альтернативу на базе стандартных структур данных."
+    )
     pd = None  # type: ignore
 try:
     from bot.cache import HistoricalDataCache

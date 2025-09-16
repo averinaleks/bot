@@ -8,17 +8,28 @@ environment variables.
 from flask import Flask, request, jsonify
 from typing import Any
 from pathlib import Path
+import json
+import logging
+import os
+import threading
 import time
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
-import ccxt
-import json
-import os
+
+try:
+    import ccxt
+except ImportError as exc:  # pragma: no cover - critical dependency missing
+    logging.getLogger(__name__).critical(
+        "Библиотека `ccxt` обязательна для TradeManager. Установите её через "
+        "`pip install ccxt` или подключите локальный mock-объект биржи."
+    )
+    raise ImportError(
+        "TradeManager не может работать без зависимости `ccxt`."
+    ) from exc
+
 from bot.dotenv_utils import load_dotenv
-import logging
-import threading
 from bot.utils import validate_host, safe_int
 
 load_dotenv()
