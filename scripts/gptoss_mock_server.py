@@ -72,6 +72,24 @@ def _extract_diff(messages: Sequence[dict]) -> str:
     return next(reversed(list(_iter_messages_content(messages))), "")
 
 
+def _record_line_issue(content: str, current_file: str, issues: list[str]) -> None:
+    """Append a human readable warning for ``content`` if needed."""
+
+    location = current_file or "неопределённом"
+    if "TODO" in content or "FIXME" in content:
+        issues.append(
+            f"В файле {location} найден незавершённый комментарий: {content!r}."
+        )
+    if content.startswith("print("):
+        issues.append(
+            f"В файле {location} остался отладочный print: {content!r}."
+        )
+    if content.startswith("import ") and " as " not in content and "," in content:
+        issues.append(
+            f"Проверьте импорты в {location} – множественный import в одной строке сложнее поддерживать."
+        )
+
+
 def _analyze_diff(diff: str) -> DiffStats:
     files: set[str] = set()
     additions = 0
@@ -95,23 +113,29 @@ def _analyze_diff(diff: str) -> DiffStats:
         if line.startswith("+"):
             additions += 1
             content = line[1:].strip()
-            if "TODO" in content or "FIXME" in content:
-                issues.append(
-                    f"В файле {current_file or 'неопределённом'} найден незавершённый комментарий: {content!r}."
-                )
-            if content.startswith("print("):
-                issues.append(
-                    f"В файле {current_file or 'неопределённом'} остался отладочный print: {content!r}."
-                )
-            if content.startswith("import ") and " as " not in content and "," in content:
-                issues.append(
-                    f"Проверьте импорты в {current_file or 'неопределённом'} – множественный import в одной строке сложнее поддерживать."
-                )
+            if content:
+                _record_line_issue(content, current_file, issues)
             continue
         if line.startswith("-"):
             deletions += 1
 
     return DiffStats(files=len(files) or 0, additions=additions, deletions=deletions, issues=issues)
+
+
+def _analyze_prompt(prompt: str) -> DiffStats:
+    """Return pseudo diff stats for a raw prompt body."""
+
+    issues: list[str] = []
+    additions = 0
+    for raw_line in prompt.splitlines():
+        content = raw_line.strip()
+        if not content:
+            continue
+        additions += 1
+        _record_line_issue(content, "представленном коде", issues)
+
+    files = 1 if prompt.strip() else 0
+    return DiffStats(files=files, additions=additions, deletions=0, issues=issues)
 
 
 def _build_review(stats: DiffStats) -> str:
@@ -154,7 +178,8 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
-        if self.path.rstrip("/") not in {"/v1/chat/completions", "/v1/completions"}:
+        endpoint = self.path.rstrip("/")
+        if endpoint not in {"/v1/chat/completions", "/v1/completions"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
 
@@ -175,26 +200,45 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON payload")
             return
 
-        messages = payload.get("messages", [])
-        if not isinstance(messages, list):
-            self.send_error(HTTPStatus.BAD_REQUEST, "messages must be a list")
-            return
-
-        diff = _extract_diff(messages)
-        stats = _analyze_diff(diff)
-        review = _build_review(stats)
-
-        response = {
-            "object": "chat.completion",
-            "model": payload.get("model", _MODEL_NAME),
-            "choices": [
-                {
-                    "index": 0,
-                    "finish_reason": "stop",
-                    "message": {"role": "assistant", "content": review},
-                }
-            ],
-        }
+        if endpoint == "/v1/chat/completions":
+            messages = payload.get("messages", [])
+            if not isinstance(messages, list):
+                self.send_error(HTTPStatus.BAD_REQUEST, "messages must be a list")
+                return
+            diff = _extract_diff(messages)
+            stats = _analyze_diff(diff)
+            review = _build_review(stats)
+            response = {
+                "object": "chat.completion",
+                "model": payload.get("model", _MODEL_NAME),
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": review},
+                    }
+                ],
+            }
+        else:
+            prompt = payload.get("prompt", "")
+            if prompt is None:
+                prompt = ""
+            if not isinstance(prompt, str):
+                self.send_error(HTTPStatus.BAD_REQUEST, "prompt must be a string")
+                return
+            stats = _analyze_prompt(prompt)
+            review = _build_review(stats)
+            response = {
+                "object": "text_completion",
+                "model": payload.get("model", _MODEL_NAME),
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "text": review,
+                    }
+                ],
+            }
         self._send_json(response)
 
     def log_message(self, fmt: str, *args) -> None:  # pragma: no cover - reduce noise
