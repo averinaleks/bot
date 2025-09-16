@@ -18,3 +18,9 @@ change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 template: |
   ## Changes
   $CHANGES
+replacers:
+  - search: '/^([\s\S]{120000})([\s\S]+)/'
+    replace: |
+      $1
+
+      _Release notes truncated to satisfy GitHub's body size limit. Review the repository history for the complete list of merged pull requests._
