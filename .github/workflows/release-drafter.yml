@@ -19,8 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Update release draft
-        # Release Drafter still has no v7 tag; pin directly to the v6.1.0 commit to avoid resolution errors.
-        uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
+        # Track the latest v6 release. Release Drafter has no v7 tag yet, so stick to the v6 major channel.
+        uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
         env:
