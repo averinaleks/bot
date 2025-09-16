@@ -3,17 +3,16 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 # Обновляем систему перед установкой зависимостей
-RUN apt-get update && apt-get dist-upgrade -y
-
-RUN apt-get install -y --no-install-recommends \
-    linux-libc-dev \
-    libssl3t64 \
-    python3.12-minimal \
-    build-essential \
-    curl \
-    python3 python3-venv python3-dev \
-    zlib1g-dev \
-    && apt-get install -y --only-upgrade libpam0g libpam-modules \
+RUN apt-get update && apt-get dist-upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        linux-libc-dev \
+        libssl3t64 \
+        python3.12-minimal \
+        build-essential \
+        curl \
+        python3 python3-venv python3-dev \
+        zlib1g-dev \
+    && apt-get install -y --no-install-recommends --only-upgrade libpam0g libpam-modules \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
@@ -41,17 +40,15 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновляем систему перед установкой зависимостей выполнения
-RUN apt-get update && apt-get dist-upgrade -y
-
-# Установка минимальных пакетов выполнения
-RUN apt-get install -y --no-install-recommends \
-    libssl3t64 \
-    python3.12-minimal \
-    curl \
-    python3 \
-    # Исключаем tar, чтобы избежать CVE-2025-45582
-    coreutils libgcrypt20 login passwd \
-    && apt-get install -y --only-upgrade libpam0g libpam-modules \
+RUN apt-get update && apt-get dist-upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        libssl3t64 \
+        python3.12-minimal \
+        curl \
+        python3 \
+        # Исключаем tar, чтобы избежать CVE-2025-45582
+        coreutils libgcrypt20 login passwd \
+    && apt-get install -y --no-install-recommends --only-upgrade libpam0g libpam-modules \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && python3 --version
 
@@ -68,5 +65,12 @@ RUN echo "Checking package versions..." && \
     $VIRTUAL_ENV/bin/python -c "import torch; print('Torch:', torch.__version__)" && \
     if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi && \
     $VIRTUAL_ENV/bin/python -c "import stable_baselines3 as sb3, mlflow, pytorch_lightning as pl; print('SB3:', sb3.__version__, 'MLflow:', mlflow.__version__, 'Lightning:', pl.__version__)"
+
+# Use a dedicated non-root user for runtime
+RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
+    && mkdir -p /home/bot \
+    && chown -R bot:bot /app /home/bot
+
+USER bot
 
 CMD ["/app/venv/bin/python", "-m", "bot.trading_bot"]
