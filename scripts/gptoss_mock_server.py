@@ -21,9 +21,10 @@ import json
 import os
 import re
 from dataclasses import dataclass
+import signal
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
 _RESPONSE_LIMIT = 4000  # characters
@@ -246,6 +247,25 @@ class _RequestHandler(BaseHTTPRequestHandler):
         pass
 
 
+def _install_signal_handlers(server: ThreadingHTTPServer) -> None:
+    """Configure basic signal handlers for long-running CI jobs."""
+
+    if not hasattr(signal, "signal"):
+        return
+
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+
+    def _shutdown(_signum: int, _frame: Any | None) -> None:
+        # ``shutdown`` is idempotent and safe to call multiple times.
+        server.shutdown()
+
+    for sig_name in ("SIGTERM", "SIGINT"):
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
+            signal.signal(sig, _shutdown)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run mock GPT-OSS server")
     parser.add_argument("--host", default="127.0.0.1")
@@ -253,6 +273,7 @@ def main() -> None:
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), _RequestHandler)
+    _install_signal_handlers(server)
     try:
         server.serve_forever()
     except KeyboardInterrupt:  # pragma: no cover - manual shutdown
