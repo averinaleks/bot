@@ -1,17 +1,76 @@
+import logging
 import os
 import time
-import logging
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
-from http_client import get_httpx_client
-
-from gpt_client import GPTClientError, query_gpt
-
 
 logger = logging.getLogger(__name__)
+
+try:  # pragma: no cover - exercised via docker compose integration
+    from http_client import get_httpx_client as _get_httpx_client
+except Exception as import_error:  # pragma: no cover - fallback for CI container
+
+    @contextmanager
+    def get_httpx_client(timeout: float = 10.0, **kwargs):
+        """Provide a minimal ``httpx.Client`` when the shared helper is unavailable."""
+
+        kwargs.setdefault("timeout", timeout)
+        kwargs.setdefault("trust_env", False)
+        client = httpx.Client(**kwargs)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    logger.debug("Using fallback httpx client for GPT-OSS check: %s", import_error)
+else:  # pragma: no cover - import succeeds in fully configured environments
+    get_httpx_client = _get_httpx_client
+
+try:  # pragma: no cover - exercised via docker compose integration
+    from gpt_client import GPTClientError as _GPTClientError, query_gpt as _query_gpt
+except Exception as import_error_gpt:  # pragma: no cover - fallback for CI container
+
+    class GPTClientError(RuntimeError):
+        """Fallback GPT client error used when trading bot modules are unavailable."""
+
+    def query_gpt(prompt: str) -> str:
+        api_url = os.getenv("GPT_OSS_API")
+        if not api_url:
+            raise RuntimeError("Переменная окружения GPT_OSS_API не установлена")
+
+        completions_url = _build_completions_url(api_url)
+        with get_httpx_client(timeout=30, trust_env=False) as client:
+            response = client.post(completions_url, json={"prompt": prompt})
+            response.raise_for_status()
+            try:
+                data = response.json()
+            except ValueError as exc:  # pragma: no cover - unexpected API response
+                raise RuntimeError("Некорректный JSON-ответ от GPT-OSS") from exc
+        try:
+            return data["choices"][0]["text"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"Некорректный ответ GPT-OSS: {data!r}") from exc
+
+    logger.debug("Using fallback GPT client for GPT-OSS check: %s", import_error_gpt)
+else:  # pragma: no cover - import succeeds in fully configured environments
+    GPTClientError = _GPTClientError
+    query_gpt = _query_gpt
+
+
+def _build_completions_url(api_url: str) -> str:
+    """Normalize the GPT-OSS URL so requests always target ``/v1/completions``."""
+
+    parsed = urlparse(api_url)
+    path = parsed.path
+    v1_index = path.find("/v1")
+    if v1_index != -1:
+        path = path[:v1_index]
+    base = urlunparse(parsed._replace(path=path.rstrip("/")))
+    return urljoin(base.rstrip("/") + "/", "v1/completions")
 
 
 def wait_for_api(api_url: str, timeout: int | None = None) -> None:
@@ -25,13 +84,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     while time.time() < deadline:
         try:
             with get_httpx_client(timeout=5, trust_env=False) as client:
-                parsed = urlparse(api_url)
-                path = parsed.path
-                v1_index = path.find("/v1")
-                if v1_index != -1:
-                    path = path[:v1_index]
-                base = urlunparse(parsed._replace(path=path.rstrip("/")))
-                health_url = urljoin(base.rstrip("/") + "/", "v1/completions")
+                health_url = _build_completions_url(api_url)
                 response = client.post(health_url, json={})
                 try:
                     response.raise_for_status()
