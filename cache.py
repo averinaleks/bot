@@ -28,6 +28,17 @@ def _sanitize_symbol(symbol: str) -> str:
     return sanitize_symbol(symbol)
 
 
+def _sanitize_timeframe(timeframe: str) -> str:
+    """Sanitize timeframe string using utility helper."""
+
+    try:  # pragma: no cover - import style depends on caller
+        from .utils import sanitize_timeframe  # type: ignore  # noqa: WPS433
+    except ImportError:  # pragma: no cover
+        from utils import sanitize_timeframe  # type: ignore  # noqa: WPS433
+
+    return sanitize_timeframe(timeframe)
+
+
 def _ensure_utc(ts):
     """Import ``ensure_utc`` lazily to support multiple import styles."""
     try:  # pragma: no cover - import style depends on caller
@@ -157,6 +168,15 @@ class HistoricalDataCache:
                 "Для кэширования данных требуется пакет 'pandas'"
             ) from exc
         safe_symbol = _sanitize_symbol(symbol)
+        try:
+            safe_timeframe = _sanitize_timeframe(timeframe)
+        except ValueError:
+            logger.error(
+                "Невозможно кэшировать %s_%s: недопустимое значение таймфрейма",
+                symbol,
+                timeframe,
+            )
+            return
         if isinstance(data, pd.DataFrame) and data.empty:
             return
         if not self._check_disk_space():
@@ -166,7 +186,7 @@ class HistoricalDataCache:
                 timeframe,
             )
             return
-        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.parquet")
+        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{safe_timeframe}.parquet")
         start_time = time.time()
         try:
             buffer = BytesIO()
@@ -235,15 +255,26 @@ class HistoricalDataCache:
             ) from exc
         try:
             safe_symbol = _sanitize_symbol(symbol)
+            try:
+                safe_timeframe = _sanitize_timeframe(timeframe)
+            except ValueError:
+                logger.warning(
+                    "Запрошен недопустимый таймфрейм %s для символа %s",
+                    timeframe,
+                    symbol,
+                )
+                return None
             filename = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{timeframe}.parquet"
+                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.parquet"
             )
             legacy_json = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{timeframe}.json.gz"
+                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.json.gz"
             )
-            old_gzip = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.pkl.gz")
+            old_gzip = os.path.join(
+                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.pkl.gz"
+            )
             old_filename = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{timeframe}.pkl"
+                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.pkl"
             )
             if os.path.exists(filename):
                 if time.time() - os.path.getmtime(filename) > self.cache_ttl:

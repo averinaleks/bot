@@ -123,8 +123,8 @@ class TelegramLogger(logging.Handler):
 
             parts = [message[i : i + 500] for i in range(0, len(message), 500)]
             for part in parts:
-                part_hash = hashlib.md5(
-                    part.encode("utf-8"), usedforsecurity=False
+                part_hash = hashlib.blake2s(
+                    part.encode("utf-8"), digest_size=16
                 ).hexdigest()
                 if part_hash == self.last_hash:
                     logger.debug("Повторное сообщение Telegram пропущено")
