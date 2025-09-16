@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-import os
+import importlib
 import logging
-
+import os
+import sys
+from pathlib import Path
 from typing import Optional
 
 
@@ -44,7 +45,12 @@ def main(config_path: Optional[Path] = None) -> None:
     try:
         from . import check_code  # package execution
     except ImportError:  # script execution
-        import check_code  # type: ignore
+        module_dir = Path(__file__).resolve().parent
+        package_name = module_dir.name
+        parent_dir = module_dir.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        check_code = importlib.import_module(f"{package_name}.check_code")
     logger.info("Running GPT-OSS check...")
     check_code.run()
     logger.info("GPT-OSS check completed")
