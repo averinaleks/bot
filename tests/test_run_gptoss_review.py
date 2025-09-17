@@ -110,6 +110,23 @@ def test_main_handles_missing_diff(tmp_path: Path, monkeypatch) -> None:
     assert "has_content=false" in github_output.read_text(encoding="utf-8")
 
 
+def test_main_handles_timeout(monkeypatch, tmp_path):
+    diff_path = tmp_path / "diff.patch"
+    diff_path.write_text("dummy", encoding="utf-8")
+    github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    def _timeout(*_args, **_kwargs):
+        raise TimeoutError("boom")
+
+    monkeypatch.setattr(run_gptoss_review.request, "urlopen", _timeout)
+
+    exit_code = run_gptoss_review.main(["--diff", str(diff_path)])
+
+    assert exit_code == 0
+    assert "has_content=false" in github_output.read_text(encoding="utf-8")
+
+
 def test_extract_review_fallback_to_text() -> None:
     response = {"choices": [{"text": " result "}]}
     assert run_gptoss_review._extract_review(response) == "result"

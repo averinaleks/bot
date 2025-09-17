@@ -21,6 +21,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import socket
 from urllib import error, request
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
@@ -78,7 +79,7 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
     try:
         with request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
-    except error.URLError as exc:
+    except (error.URLError, socket.timeout, TimeoutError) as exc:
         raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
 
     try:
