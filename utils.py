@@ -7,9 +7,11 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import time
 import warnings
 from functools import wraps
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, TypeVar
 
 import httpx
@@ -21,6 +23,71 @@ logger = logging.getLogger("TradingBot")
 
 
 T = TypeVar("T")
+
+
+def ensure_writable_directory(
+    path: Path,
+    *,
+    description: str,
+    fallback_subdir: str | None = None,
+) -> Path:
+    """Return a writable directory, falling back to a temp location if needed."""
+
+    primary = path.resolve()
+    candidates: list[Path] = []
+    if str(primary):
+        candidates.append(primary)
+
+    if fallback_subdir:
+        fallback = Path(tempfile.gettempdir(), fallback_subdir).resolve()
+        if fallback not in candidates:
+            candidates.append(fallback)
+
+    last_error: Exception | None = None
+
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning(
+                "Не удалось создать каталог %s %s: %s",
+                description,
+                candidate,
+                exc,
+            )
+            last_error = exc
+            continue
+
+        if os.access(candidate, os.W_OK):
+            if candidate != primary:
+                logger.warning(
+                    "Каталог %s %s недоступен для записи, используем %s",
+                    description,
+                    primary,
+                    candidate,
+                )
+            return candidate
+
+        logger.warning(
+            "Каталог %s %s недоступен для записи",
+            description,
+            candidate,
+        )
+        last_error = PermissionError(
+            f"Каталог {candidate} недоступен для записи"
+        )
+
+    checked = ", ".join(str(p) for p in candidates) if candidates else str(primary)
+    logger.error(
+        "Не удалось подготовить каталог %s. Проверенные пути: %s",
+        description,
+        checked,
+    )
+    if last_error is None:
+        last_error = PermissionError(
+            f"Не удалось подготовить каталог {description}: {checked}"
+        )
+    raise last_error
 
 
 def retry(max_attempts: int, delay_fn: Callable[[float], float]):
