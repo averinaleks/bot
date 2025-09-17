@@ -24,6 +24,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  skip:
+    if: github.event_name != 'pull_request_target' && github.event_name != 'issue_comment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip unsupported event
+        run: |
+          echo "Workflow triggered for ${{ github.event_name }} – no review required."
+
   review:
     if: >
       (
