@@ -5,7 +5,7 @@ import asyncio
 import hmac
 import re
 import secrets
-from typing import List, Mapping
+from typing import Any, List, Mapping
 from contextlib import asynccontextmanager
 
 from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
@@ -83,39 +83,44 @@ class ModelManager:
             )
         cache_dir = os.getenv("MODEL_CACHE_DIR")
 
-        try:
-            tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
-                model_name,
-                revision=model_revision,
+        load_tokenizer = AutoTokenizer.from_pretrained
+        load_model = AutoModelForCausalLM.from_pretrained
+
+        def _load_pair(
+            name: str,
+            revision: str,
+            *,
+            local_only: bool,
+        ) -> tuple[Any, Any]:
+            tokenizer_local = load_tokenizer(
+                name,
+                revision=revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
+                local_files_only=local_only,
             )
-            model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
-                model_name,
-                revision=model_revision,
+            model_local = load_model(
+                name,
+                revision=revision,
                 trust_remote_code=False,
                 cache_dir=cache_dir,
-            ).to(
-                device_local
+                local_files_only=local_only,
+            ).to(device_local)
+            return tokenizer_local, model_local
+
+        try:
+            tokenizer_local, model_local = _load_pair(
+                model_name,
+                model_revision,
+                local_only=False,
             )
         except (OSError, ValueError) as exc:
             logging.exception("Failed to load model '%s': %s", model_name, exc)
             try:
-                tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
+                tokenizer_local, model_local = _load_pair(
                     model_name,
-                    revision=model_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                    local_files_only=True,
-                )
-                model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
-                    model_name,
-                    revision=model_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                    local_files_only=True,
-                ).to(
-                    device_local
+                    model_revision,
+                    local_only=True,
                 )
             except (OSError, ValueError) as exc2:
                 logging.exception(
@@ -136,38 +141,21 @@ class ModelManager:
             return "primary"
 
         try:
-            tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
+            tokenizer_local, model_local = _load_pair(
                 fallback_model,
-                revision=fallback_revision,
-                trust_remote_code=False,
-                cache_dir=cache_dir,
+                fallback_revision,
+                local_only=False,
             )
-            model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
-                fallback_model,
-                revision=fallback_revision,
-                trust_remote_code=False,
-                cache_dir=cache_dir,
-                local_files_only=True,
-            ).to(device_local)
         except (OSError, ValueError) as exc:
             logging.exception(
                 "Failed to load fallback model '%s': %s", fallback_model, exc
             )
             try:
-                tokenizer_local = AutoTokenizer.from_pretrained(  # nosec  # revision validated above
+                tokenizer_local, model_local = _load_pair(
                     fallback_model,
-                    revision=fallback_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                    local_files_only=True,
+                    fallback_revision,
+                    local_only=True,
                 )
-                model_local = AutoModelForCausalLM.from_pretrained(  # nosec  # revision validated above
-                    fallback_model,
-                    revision=fallback_revision,
-                    trust_remote_code=False,
-                    cache_dir=cache_dir,
-                    local_files_only=True,
-                ).to(device_local)
             except (OSError, ValueError) as exc2:
                 logging.exception(
                     "Failed to load fallback model '%s' from local cache: %s",
