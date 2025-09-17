@@ -154,6 +154,37 @@ def test_extract_review_supports_structured_content() -> None:
     assert run_gptoss_review._extract_review(response) == "Привет, мир!"
 
 
+def test_extract_review_supports_dict_content() -> None:
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "content": {
+                        "text": "Привет",
+                        "content": [
+                            {"text": ", "},
+                            {"text": "мир"},
+                            {"content": [{"text": "!"}]},
+                        ],
+                    }
+                }
+            }
+        ]
+    }
+
+    assert run_gptoss_review._extract_review(response) == "Привет, мир!"
+
+
+def test_extract_review_handles_choice_level_content() -> None:
+    response = {
+        "choices": [
+            {"content": [{"text": "А"}, {"content": [{"text": "Б"}]}]},
+        ]
+    }
+
+    assert run_gptoss_review._extract_review(response) == "АБ"
+
+
 def test_parse_args_rejects_unknown_arguments() -> None:
     with pytest.raises(ValueError):
         run_gptoss_review._parse_args(["--unknown"])
