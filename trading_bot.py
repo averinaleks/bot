@@ -20,6 +20,7 @@ from bot.dotenv_utils import load_dotenv
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 from telegram_logger import TelegramLogger
 from utils import retry, suppress_tf_logs
+from services.logging_utils import sanitize_log_value
 
 try:  # pragma: no cover - optional dependency
     import ccxt  # type: ignore
@@ -68,17 +69,26 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
         result = cast(value)
     except (TypeError, ValueError):
         logger.warning(
-            "Invalid %s value '%s', using default %s", env_var, value, default
+            "Invalid %s value '%s', using default %s",
+            sanitize_log_value(env_var),
+            sanitize_log_value(value),
+            default,
         )
         return default
     if isinstance(result, float) and not math.isfinite(result):
         logger.warning(
-            "Invalid %s value '%s', using default %s", env_var, value, default
+            "Invalid %s value '%s', using default %s",
+            sanitize_log_value(env_var),
+            sanitize_log_value(value),
+            default,
         )
         return default
     if result <= 0:
         logger.warning(
-            "Non-positive %s value '%s', using default %s", env_var, value, default
+            "Non-positive %s value '%s', using default %s",
+            sanitize_log_value(env_var),
+            sanitize_log_value(value),
+            default,
         )
         return default
     return result

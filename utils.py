@@ -14,6 +14,8 @@ from typing import Callable, Dict, List, Optional, TypeVar
 
 import httpx
 
+from services.logging_utils import sanitize_log_value
+
 
 logger = logging.getLogger("TradingBot")
 
@@ -77,7 +79,10 @@ def configure_logging() -> None:
     try:
         logger.setLevel(level_name)
     except ValueError:
-        logger.warning("LOG_LEVEL '%s' недопустим, используется INFO", level_name)
+        logger.warning(
+            "LOG_LEVEL '%s' недопустим, используется INFO",
+            sanitize_log_value(level_name),
+        )
         logger.setLevel(logging.INFO)
 
     log_dir = os.getenv("LOG_DIR", "/app/logs")
@@ -245,11 +250,13 @@ def validate_host() -> str:
     except ValueError:
         if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
             raise ValueError(f"Некорректный IP: {host}")
-        logger.warning("HOST '%s' не локальный хост", host)
+        safe_host = sanitize_log_value(host)
+        logger.warning("HOST '%s' не локальный хост", safe_host)
         raise ValueError(f"HOST '{host}' не локальный хост")
     else:
         if not ip.is_loopback:
-            logger.warning("HOST '%s' не локальный хост", host)
+            safe_host = sanitize_log_value(host)
+            logger.warning("HOST '%s' не локальный хост", safe_host)
             raise ValueError(f"HOST '{host}' не локальный хост")
         return str(ip)
 
@@ -271,8 +278,8 @@ def safe_int(
             if env_var:
                 logger.warning(
                     "Non-positive %s value '%s', using default %s",
-                    env_var,
-                    value,
+                    sanitize_log_value(env_var),
+                    sanitize_log_value(value),
                     default,
                 )
             return default
@@ -281,8 +288,8 @@ def safe_int(
         if env_var:
             logger.warning(
                 "Invalid %s value '%s', using default %s",
-                env_var,
-                value,
+                sanitize_log_value(env_var),
+                sanitize_log_value(value),
                 default,
             )
         return default
