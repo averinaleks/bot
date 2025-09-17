@@ -121,6 +121,23 @@ def test_extract_review_handles_unexpected_payload() -> None:
     assert run_gptoss_review._extract_review({"choices": "invalid"}) == ""
 
 
+def test_extract_review_supports_structured_content() -> None:
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "Привет"},
+                        ", мир",
+                        {"type": "text", "text": "!"},
+                    ]
+                }
+            }
+        ]
+    }
+    assert run_gptoss_review._extract_review(response) == "Привет, мир!"
+
+
 def test_parse_args_rejects_unknown_arguments() -> None:
     with pytest.raises(ValueError):
         run_gptoss_review._parse_args(["--unknown"])

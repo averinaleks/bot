@@ -104,6 +104,20 @@ def _extract_review(response: dict[str, Any] | Any) -> str:
             content = message.get("content")
             if isinstance(content, str) and content.strip():
                 return content.strip()
+            if isinstance(content, list):
+                pieces: list[str] = []
+                for part in content:
+                    if isinstance(part, str):
+                        if part:
+                            pieces.append(part)
+                        continue
+                    if isinstance(part, dict):
+                        text = part.get("text")
+                        if isinstance(text, str) and text:
+                            pieces.append(text)
+                combined = "".join(pieces).strip()
+                if combined:
+                    return combined
         text = choice.get("text")
         if isinstance(text, str) and text.strip():
             return text.strip()
