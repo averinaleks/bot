@@ -1,18 +1,17 @@
 import threading
 import time
-from http.server import ThreadingHTTPServer
+from scripts import gptoss_mock_server
 from pathlib import Path
 from urllib import request as urllib_request
 
 import pytest
 
-from scripts import gptoss_mock_server
 from scripts import run_gptoss_review
 
 
 @pytest.fixture()
 def gptoss_server_port():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), gptoss_mock_server._RequestHandler)
+    server = gptoss_mock_server._Server(("127.0.0.1", 0), gptoss_mock_server._RequestHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]
