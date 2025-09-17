@@ -9,40 +9,69 @@ ENV TZ=Etc/UTC
 ENV TF_CPP_MIN_LOG_LEVEL=3
 
 # Установка необходимых пакетов для сборки и обновление критических библиотек
-# Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
-    tzdata \
-    linux-libc-dev \
-    coreutils \
-    build-essential \
-    ca-certificates \
-    wget \
-    curl \
-    python3-dev \
-    python3-venv \
-    python3-pip \
-    libssl-dev \
-    libffi-dev \
-    libpam0g \
-    libpam-modules \
-    libblas-dev \
-    liblapack-dev \
-    tar \
-    && python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0' \
-    && curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz \
-    && echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c - \
-    && (find /usr -type l -lname "*..*" -print 2>/dev/null || true) \
+# Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236.
+# Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 (HIGH).
+COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
+RUN set -eux; \
+    apt-get update; \
+    apt-get dist-upgrade -y; \
+    apt-get install -y --no-install-recommends \
+        tzdata \
+        linux-libc-dev \
+        build-essential \
+        ca-certificates \
+        wget \
+        curl \
+        python3-dev \
+        python3-venv \
+        python3-pip \
+        libssl-dev \
+        libffi-dev \
+        libblas-dev \
+        liblapack-dev \
+        tar \
+        devscripts \
+        equivs; \
+    python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0'; \
+    curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz; \
+    echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c -; \
+    (find /usr -type l -lname "*..*" -print 2>/dev/null || true); \
     # Используем --keep-directory-symlink для предотвращения CVE-2025-45582
-    && tar --keep-directory-symlink --no-overwrite-dir -xf zlib.tar.gz \
-    && cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd .. \
-    && rm -rf zlib.tar.gz zlib-${ZLIB_VERSION} \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && ldconfig \
-    && python3 --version \
-    && openssl version \
-    && curl --version \
-    && gpg --version \
-    && dirmngr --version
+    tar --keep-directory-symlink --no-overwrite-dir -xf zlib.tar.gz; \
+    cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd ..; \
+    rm -rf zlib.tar.gz zlib-${ZLIB_VERSION}; \
+    printf 'deb-src http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse\n' \
+           'deb-src http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse\n' \
+           'deb-src http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse\n' \
+           > /etc/apt/sources.list.d/noble-src.list; \
+    apt-get update; \
+    apt-get build-dep -y pam; \
+    apt-get source -y pam; \
+    cd pam-*; \
+    patch -p1 < /tmp/security/linux-pam-CVE-2024-10963.patch; \
+    python3 - <<'PY'; \
+    from datetime import datetime, timezone \
+    from pathlib import Path \
+    entry = f"""pam (1.5.3-5ubuntu5.4+bot1) noble; urgency=medium\n\n  * Apply upstream fix 940747f to address CVE-2024-10963 in pam_access.\n\n -- Security Bot <security@example.com>  {datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')}\n\n""" \
+    path = Path('debian/changelog') \
+    path.write_text(entry + path.read_text()) \
+PY
+    export DEB_BUILD_OPTIONS=nocheck; \
+    dpkg-buildpackage -b -uc -us; \
+    cd ..; \
+    mkdir -p /tmp/pam-fixed; \
+    cp libpam-modules_* libpam-modules-bin_* libpam-runtime_* libpam0g_* /tmp/pam-fixed/; \
+    dpkg -i /tmp/pam-fixed/*.deb; \
+    rm -rf pam-* /etc/apt/sources.list.d/noble-src.list; \
+    apt-get purge -y --auto-remove devscripts equivs; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    ldconfig; \
+    python3 --version; \
+    openssl version; \
+    curl --version; \
+    gpg --version; \
+    dirmngr --version
 
 WORKDIR /app
 
@@ -79,6 +108,7 @@ WORKDIR /app
 
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
+COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
@@ -88,7 +118,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     zlib1g \
     libpam0g \
     libpam-modules \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && dpkg -i /tmp/pam-fixed/*.deb \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed \
     && ldconfig \
     && /app/venv/bin/python --version \
     && openssl version
