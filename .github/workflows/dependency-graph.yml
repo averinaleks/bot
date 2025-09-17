@@ -26,9 +26,28 @@ jobs:
           python-version: '3.x'
       - name: Prepare requirements
         run: |
-          if [ -f requirements.out ]; then
-            sed -i '/^ccxtpro/d' requirements.out
-          fi
+          python <<'PY'
+          from pathlib import Path
+
+          patterns = ("requirements*.txt", "requirements*.in")
+          for pattern in patterns:
+              for path in Path(".").glob(pattern):
+                  original = path.read_text()
+                  lines = original.splitlines()
+                  filtered = []
+                  for line in lines:
+                      stripped = line.lstrip()
+                      if stripped.startswith("ccxtpro"):
+                          continue
+                      if stripped.startswith("#") and "ccxtpro" in stripped:
+                          continue
+                      filtered.append(line)
+                  if filtered != lines:
+                      updated = "\n".join(filtered)
+                      if original.endswith("\n"):
+                          updated += "\n"
+                      path.write_text(updated)
+          PY
       - name: Component detection
         uses: advanced-security/component-detection-dependency-submission-action@d433c2f467e149a8009c8fbce92cc708ed15ef7b # v0.1.0
         with:
