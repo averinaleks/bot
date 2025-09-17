@@ -22,6 +22,7 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
 import os
 import tempfile
 from bot.dotenv_utils import load_dotenv
+from services.logging_utils import sanitize_log_value
 try:  # optional dependency
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - pandas not installed
@@ -176,10 +177,18 @@ def price(symbol: str) -> ResponseReturnValue:
             return jsonify({'error': 'invalid price'}), 502
         return jsonify({'price': last})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        logging.exception("Network error fetching price for '%s': %s", symbol, exc)
+        logging.exception(
+            "Network error fetching price for %s: %s",
+            sanitize_log_value(symbol),
+            exc,
+        )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
-        logging.exception("Exchange error fetching price for '%s': %s", symbol, exc)
+        logging.exception(
+            "Exchange error fetching price for %s: %s",
+            sanitize_log_value(symbol),
+            exc,
+        )
         return jsonify({'error': 'exchange error fetching price'}), 502
 
 
@@ -226,14 +235,25 @@ def history(symbol: str) -> ResponseReturnValue:
                     history_cache.save_cached_data(symbol, timeframe, df)
                 except Exception as exc:  # pragma: no cover - logging best effort
                     logging.exception(
-                        "Failed to cache history for %s on %s: %s", symbol, timeframe, exc
+                        "Failed to cache history for %s on %s: %s",
+                        sanitize_log_value(symbol),
+                        sanitize_log_value(timeframe),
+                        exc,
                     )
         return jsonify({'history': ohlcv})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        logging.exception("Network error fetching history for '%s': %s", symbol, exc)
+        logging.exception(
+            "Network error fetching history for %s: %s",
+            sanitize_log_value(symbol),
+            exc,
+        )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
-        logging.exception("Exchange error fetching history for '%s': %s", symbol, exc)
+        logging.exception(
+            "Exchange error fetching history for %s: %s",
+            sanitize_log_value(symbol),
+            exc,
+        )
         return jsonify({'error': 'exchange error fetching history'}), 502
 
 @app.route('/ping')
