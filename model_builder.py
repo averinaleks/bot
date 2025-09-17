@@ -242,9 +242,12 @@ except Exception as exc:  # pragma: no cover - stub for tests
 
 try:
     import mlflow
+    from security import harden_mlflow
 except ImportError as e:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
     logger.warning("Не удалось импортировать mlflow: %s", e)
+else:
+    harden_mlflow(mlflow)
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None

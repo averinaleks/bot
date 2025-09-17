@@ -38,6 +38,7 @@ py-modules = [
   "safe_html_parser",
   "server",
   "simulation",
+  "security",
   "strategy_optimizer",
   "telegram_logger",
   "trade_manager",
