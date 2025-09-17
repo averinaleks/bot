@@ -7,6 +7,7 @@ import os
 from collections.abc import Mapping
 
 from bot.config import OFFLINE_MODE
+from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger("TradingBot")
 
@@ -47,7 +48,7 @@ def ensure_offline_env(defaults: Mapping[str, str] | None = None) -> list[str]:
         applied.append(key)
         logger.warning(
             "OFFLINE_MODE=1: переменная %s не задана; используется фиктивное значение",
-            key,
+            sanitize_log_value(key),
         )
     return applied
 
@@ -101,7 +102,7 @@ class OfflineTelegram(logging.Handler):
         self.chat_id = kwargs.get("chat_id")
 
     async def send_telegram_message(self, message: str, urgent: bool = False) -> None:
-        logger.info("[OFFLINE TELEGRAM] %s", message)
+        logger.info("[OFFLINE TELEGRAM] %s", sanitize_log_value(message))
 
     def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - logging
         pass

@@ -9,6 +9,7 @@ from typing import List, Mapping
 from contextlib import asynccontextmanager
 
 from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
+from services.logging_utils import sanitize_log_value
 
 if not DOTENV_AVAILABLE:
     raise RuntimeError(
@@ -261,7 +262,10 @@ port_str = os.getenv("PORT", "8000")
 try:
     port = int(port_str)
 except ValueError:
-    logging.error("Invalid PORT value '%s'; must be an integer", port_str)
+    logging.error(
+        "Invalid PORT value '%s'; must be an integer",
+        sanitize_log_value(port_str),
+    )
     sys.exit(1)
 
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
@@ -290,7 +294,11 @@ def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
         "x-xsrf-token",
     }
     return {
-        k: "***" if k.lower() in sensitive else _sanitize_header_value(v)
+        sanitize_log_value(k): (
+            "***"
+            if k.lower() in sensitive
+            else sanitize_log_value(_sanitize_header_value(v))
+        )
         for k, v in headers.items()
     }
 
@@ -298,11 +306,13 @@ def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
     redacted_headers = _loggable_headers(request.headers)
+    safe_method = sanitize_log_value(request.method)
+    safe_url = sanitize_log_value(str(request.url))
     if not API_KEYS:
         logging.warning(
             "API_KEYS is empty; rejecting request: method=%s url=%s headers=%s",
-            request.method,
-            request.url,
+            safe_method,
+            safe_url,
             redacted_headers,
         )
         return Response(status_code=401)
@@ -310,8 +320,8 @@ async def check_api_key(request: Request, call_next):
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
             "Unauthorized request: method=%s url=%s headers=%s",
-            request.method,
-            request.url,
+            safe_method,
+            safe_url,
             redacted_headers,
         )
         return Response(status_code=401)
@@ -322,8 +332,8 @@ async def check_api_key(request: Request, call_next):
     else:
         logging.warning(
             "Unauthorized request: method=%s url=%s headers=%s",
-            request.method,
-            request.url,
+            safe_method,
+            safe_url,
             redacted_headers,
         )
         return Response(status_code=401)
@@ -341,8 +351,8 @@ async def enforce_csrf(request: Request, call_next):
             except CsrfProtectError:
                 logging.warning(
                     "CSRF validation failed: method=%s url=%s headers=%s",
-                    request.method,
-                    request.url,
+                    sanitize_log_value(request.method),
+                    sanitize_log_value(str(request.url)),
                     _loggable_headers(request.headers),
                 )
                 raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
@@ -456,5 +466,9 @@ if __name__ == "__main__":
     if host in ALLOWED_HOSTS:
         uvicorn.run("server:app", host=host, port=port)
     else:
-        logging.error("Invalid HOST '%s'; allowed values are %s", host, ALLOWED_HOSTS)
+        logging.error(
+            "Invalid HOST '%s'; allowed values are %s",
+            sanitize_log_value(host),
+            ALLOWED_HOSTS,
+        )
         sys.exit(1)

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 import httpx
 
 from bot.utils import retry
+from services.logging_utils import sanitize_log_value
 
 # Use system-level randomness for jitter to avoid predictable retry delays
 _RNG = random.SystemRandom()
@@ -26,7 +27,7 @@ try:
 except ValueError:
     logging.warning(
         "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout 10s",
-        DEFAULT_TIMEOUT_STR,
+        sanitize_log_value(DEFAULT_TIMEOUT_STR),
     )
     DEFAULT_TIMEOUT = 10.0
 
