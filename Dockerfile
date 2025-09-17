@@ -33,7 +33,15 @@ RUN set -eux; \
         tar \
         devscripts \
         equivs; \
-    python3 -m pip install --no-compile --no-cache-dir --break-system-packages 'pip>=24.0'; \
+    python3 -m pip install --no-compile --no-cache-dir --break-system-packages \
+        'pip>=24.0' \
+        'setuptools>=78.1.1,<81' \
+        wheel; \
+    if command -v python3.11 >/dev/null 2>&1; then \
+        python3.11 -m ensurepip --upgrade; \
+        python3.11 -m pip install --no-compile --no-cache-dir --break-system-packages \
+            'setuptools>=78.1.1,<81'; \
+    fi; \
     curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz; \
     echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c -; \
     (find /usr -type l -lname "*..*" -print 2>/dev/null || true); \
@@ -114,6 +122,10 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     libpam0g \
     libpam-modules \
     && dpkg -i /tmp/pam-fixed/*.deb \
+    && if command -v python3.11 >/dev/null 2>&1; then \
+        python3.11 -m ensurepip --upgrade; \
+        python3.11 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81'; \
+    fi \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed \
     && ldconfig \
     && /app/venv/bin/python --version \
