@@ -35,4 +35,5 @@ openai==1.107.3
 jsonschema==4.25.1
 pytest-asyncio>=1.1
 backports-asyncio-runner==1.2.0; python_version < "3.11"
+setuptools>=78.1.1,<81
 
