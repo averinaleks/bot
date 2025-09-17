@@ -83,10 +83,6 @@ jobs:
           echo "LLM_PORT=$port" >> "$GITHUB_ENV"
           echo "port=$port" >> "$GITHUB_OUTPUT"
 
-      - name: Install jq
-        if: steps.validate_event.outputs.skip != 'true'
-        run: sudo apt-get update && sudo apt-get install -y jq
-
       - name: Start mock GPT-OSS server
         if: steps.validate_event.outputs.skip != 'true'
         run: |
@@ -120,19 +116,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          pull_info=$(curl -sSf -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ env.PR_NUMBER }}")
-          base_sha=$(echo "$pull_info" | jq -r .base.sha)
-          base_ref=$(echo "$pull_info" | jq -r .base.ref)
-          [ -n "$base_sha" ] && [ "$base_sha" != "null" ] && [ -n "$base_ref" ] && [ "$base_ref" != "null" ]
-          git fetch --no-tags origin "$base_ref"
-          git diff "$base_sha"...HEAD -- ':(glob)**/*.py' > diff.patch || true
-          if [ ! -s diff.patch ]; then
-            echo "has_diff=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          head -c 200000 diff.patch > diff.patch.trunc && mv diff.patch.trunc diff.patch
-          echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          python scripts/prepare_gptoss_diff.py \
+            --repo "${{ github.repository }}" \
+            --pr-number "${PR_NUMBER}" \
+            --token "${GITHUB_TOKEN}" \
+            --output diff.patch \
+            --path ':(glob)**/*.py'
 
       - name: LLM review
         if: steps.validate_event.outputs.skip != 'true' && steps.generate_diff.outputs.has_diff == 'true'
