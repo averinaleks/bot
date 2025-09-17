@@ -3,7 +3,10 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 HF_HOME=/workspace/hf-cache
 ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
 
-RUN groupadd --system bot \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system bot \
     && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
     && mkdir -p /home/bot \
     && chown -R bot:bot /home/bot
