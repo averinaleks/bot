@@ -1,6 +1,5 @@
 import threading
 import time
-from http.server import ThreadingHTTPServer
 
 import httpx
 import pytest
@@ -10,7 +9,7 @@ from scripts import gptoss_mock_server
 
 @pytest.fixture()
 def mock_gptoss_server():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), gptoss_mock_server._RequestHandler)
+    server = gptoss_mock_server._Server(("127.0.0.1", 0), gptoss_mock_server._RequestHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]

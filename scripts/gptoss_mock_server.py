@@ -162,6 +162,13 @@ def _build_review(stats: DiffStats) -> str:
     return review
 
 
+class _Server(ThreadingHTTPServer):
+    """HTTP server with sane defaults for ephemeral port binding."""
+
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 class _RequestHandler(BaseHTTPRequestHandler):
     server_version = "GptossMock/1.0"
 
@@ -276,7 +283,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    server = ThreadingHTTPServer((args.host, args.port), _RequestHandler)
+    server = _Server((args.host, args.port), _RequestHandler)
     _install_signal_handlers(server)
     try:
         server.serve_forever()
