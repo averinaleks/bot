@@ -448,7 +448,7 @@ python-dotenv==1.1.1
     #   pydantic-settings
 python-multipart==0.0.20
     # via mcp
-python-telegram-bot==22.3
+python-telegram-bot==22.4
     # via -r requirements-core.in
 pytorch-lightning==2.5.5
     # via -r requirements-core.in
