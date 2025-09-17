@@ -12,6 +12,7 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236.
 # Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 (HIGH).
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
+COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 RUN set -eux; \
     apt-get update; \
     apt-get dist-upgrade -y; \
@@ -49,13 +50,7 @@ RUN set -eux; \
     apt-get source -y pam; \
     cd pam-*; \
     patch -p1 < /tmp/security/linux-pam-CVE-2024-10963.patch; \
-    python3 - <<'PY'; \
-    from datetime import datetime, timezone \
-    from pathlib import Path \
-    entry = f"""pam (1.5.3-5ubuntu5.4+bot1) noble; urgency=medium\n\n  * Apply upstream fix 940747f to address CVE-2024-10963 in pam_access.\n\n -- Security Bot <security@example.com>  {datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')}\n\n""" \
-    path = Path('debian/changelog') \
-    path.write_text(entry + path.read_text()) \
-PY
+    python3 /tmp/security/update_pam_changelog.py; \
     export DEB_BUILD_OPTIONS=nocheck; \
     dpkg-buildpackage -b -uc -us; \
     cd ..; \
