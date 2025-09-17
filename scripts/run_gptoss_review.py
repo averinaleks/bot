@@ -88,6 +88,31 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
         raise RuntimeError("Сервер GPT-OSS вернул некорректный JSON") from exc
 
 
+def _flatten_content(content: Any) -> list[str]:
+    """Return textual fragments from arbitrary message content structures."""
+
+    pieces: list[str] = []
+    if isinstance(content, str):
+        if content:
+            pieces.append(content)
+        return pieces
+
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str) and text:
+            pieces.append(text)
+        inner = content.get("content")
+        if isinstance(inner, list):
+            for part in inner:
+                pieces.extend(_flatten_content(part))
+        return pieces
+
+    if isinstance(content, list):
+        for part in content:
+            pieces.extend(_flatten_content(part))
+    return pieces
+
+
 def _extract_review(response: dict[str, Any] | Any) -> str:
     """Pull textual review content from OpenAI-compatible response payloads."""
 
@@ -103,25 +128,19 @@ def _extract_review(response: dict[str, Any] | Any) -> str:
         message = choice.get("message")
         if isinstance(message, dict):
             content = message.get("content")
-            if isinstance(content, str) and content.strip():
-                return content.strip()
-            if isinstance(content, list):
-                pieces: list[str] = []
-                for part in content:
-                    if isinstance(part, str):
-                        if part:
-                            pieces.append(part)
-                        continue
-                    if isinstance(part, dict):
-                        text = part.get("text")
-                        if isinstance(text, str) and text:
-                            pieces.append(text)
-                combined = "".join(pieces).strip()
-                if combined:
-                    return combined
+            fragments = _flatten_content(content)
+            combined = "".join(fragments).strip()
+            if combined:
+                return combined
         text = choice.get("text")
         if isinstance(text, str) and text.strip():
             return text.strip()
+        # Some implementations put the response directly under ``content``.
+        content = choice.get("content")
+        fragments = _flatten_content(content)
+        combined = "".join(fragments).strip()
+        if combined:
+            return combined
     return ""
 
 
