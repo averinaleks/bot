@@ -20,6 +20,7 @@ from flask import Flask, jsonify, request
 from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
+from bot.utils import ensure_writable_directory
 from utils import safe_int, validate_host
 from services.logging_utils import sanitize_log_value
 
@@ -91,8 +92,11 @@ NN_FRAMEWORK = os.getenv("NN_FRAMEWORK", _CFG.get("nn_framework", "sklearn")).lo
 if os.getenv("TEST_MODE") == "1" and "NN_FRAMEWORK" not in os.environ:
     NN_FRAMEWORK = "sklearn"
 MODEL_TYPE = _CFG.get("model_type", "transformer")
-MODEL_DIR = Path(os.getenv("MODEL_DIR", "."))
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
+MODEL_DIR = ensure_writable_directory(
+    Path(os.getenv("MODEL_DIR", ".")),
+    description="моделей",
+    fallback_subdir="trading_bot_models",
+)
 
 _models: Dict[str, Any] = {}
 _scalers: Dict[str, Any] = {}

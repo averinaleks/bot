@@ -28,30 +28,19 @@ from flask import Flask, jsonify, request
 from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
 from bot.dotenv_utils import load_dotenv
-from bot.utils import check_dataframe_empty, is_cuda_available, logger
+from bot.utils import (
+    check_dataframe_empty,
+    ensure_writable_directory,
+    is_cuda_available,
+    logger,
+)
 from models.architectures import KERAS_FRAMEWORKS, create_model
 
-MODEL_DIR = Path(os.getenv("MODEL_DIR", ".")).resolve()
-try:
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-except OSError as exc:
-    logger.error(
-        "Не удалось создать каталог моделей %s: %s. "
-        "Укажите доступный путь через переменную окружения MODEL_DIR.",
-        MODEL_DIR,
-        exc,
-    )
-    raise
-if not os.access(MODEL_DIR, os.W_OK):
-    logger.error(
-        "Каталог моделей %s недоступен для записи. "
-        "Укажите доступный путь через переменную окружения MODEL_DIR.",
-        MODEL_DIR,
-    )
-    raise PermissionError(
-        f"Каталог моделей {MODEL_DIR} недоступен для записи. "
-        "Укажите доступный путь через переменную окружения MODEL_DIR."
-    )
+MODEL_DIR = ensure_writable_directory(
+    Path(os.getenv("MODEL_DIR", ".")),
+    description="моделей",
+    fallback_subdir="trading_bot_models",
+)
 
 def _load_gym() -> tuple[object, object]:
     """Import gymnasium or fall back to lightweight stubs in test mode."""
