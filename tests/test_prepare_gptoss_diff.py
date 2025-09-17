@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import subprocess
+from pathlib import Path
+from typing import Iterator
+from unittest import mock
+
+import pytest
+
+from scripts import prepare_gptoss_diff
+
+
+@pytest.fixture()
+def temp_repo(tmp_path: Path) -> Iterator[Path]:
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True)
+
+    workdir = tmp_path / "work"
+    subprocess.run(["git", "clone", str(remote), str(workdir)], check=True)
+    subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=workdir, check=True)
+    subprocess.run(["git", "config", "user.name", "CI"], cwd=workdir, check=True)
+
+    (workdir / "example.py").write_text("print('hi')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "example.py"], cwd=workdir, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=workdir, check=True)
+    subprocess.run(["git", "branch", "-M", "main"], cwd=workdir, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=workdir, check=True)
+
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=workdir, check=True)
+    (workdir / "example.py").write_text("print('hi')\nprint('bye')\n", encoding="utf-8")
+    subprocess.run(["git", "commit", "-am", "update"], cwd=workdir, check=True)
+
+    yield workdir
+
+
+def test_compute_diff_returns_content(temp_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(temp_repo)
+    base_sha = (
+        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)
+        .stdout.strip()
+    )
+
+    result = prepare_gptoss_diff._compute_diff(base_sha, [":(glob)**/*.py"], truncate=10_000)
+
+    assert result.has_diff is True
+    assert "print('bye')" in result.content
+
+
+def test_prepare_diff_reads_remote_metadata(monkeypatch: pytest.MonkeyPatch, temp_repo: Path) -> None:
+    monkeypatch.chdir(temp_repo)
+
+    pull_payload = {
+        "base": {
+            "sha": subprocess.run(
+                ["git", "rev-parse", "origin/main"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            "ref": "main",
+        }
+    }
+
+    def _fake_urlopen(req, timeout=10):  # type: ignore[override]
+        _ = timeout
+        payload = json.dumps(pull_payload).encode("utf-8")
+        return contextlib.closing(io.BytesIO(payload))
+
+    with mock.patch.object(prepare_gptoss_diff.request, "urlopen", _fake_urlopen):
+        result = prepare_gptoss_diff.prepare_diff(
+            "example/repo",
+            "123",
+            token=None,
+            truncate=50_000,
+        )
+
+    assert result.has_diff is True
+    assert "print('bye')" in result.content
+
+
+def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, tmp_path: Path) -> None:
+    monkeypatch.chdir(temp_repo)
+    base_sha = (
+        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)
+        .stdout.strip()
+    )
+
+    gh_output = tmp_path / "output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(gh_output))
+
+    exit_code = prepare_gptoss_diff.main(
+        [
+            "--repo",
+            "example/repo",
+            "--pr-number",
+            "1",
+            "--base-sha",
+            base_sha,
+            "--base-ref",
+            "main",
+            "--output",
+            str(tmp_path / "diff.patch"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert "has_diff=true" in gh_output.read_text(encoding="utf-8")
+
+
+def test_main_handles_unknown_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    dummy_output = Path("nonexistent")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(dummy_output))
+    exit_code = prepare_gptoss_diff.main(["--unknown"])
+    assert exit_code == 0
+
