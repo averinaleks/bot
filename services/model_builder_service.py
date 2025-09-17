@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
 from utils import safe_int, validate_host
+from services.logging_utils import sanitize_log_value
 
 try:
     from werkzeug.utils import secure_filename
@@ -188,11 +189,15 @@ else:  # scikit-learn fallback used by tests
         # Only allow models that actually exist in the MODEL_DIR.
         allowed_symbols = {p.stem for p in MODEL_DIR.glob("*.pkl")}
         if symbol not in allowed_symbols:
-            app.logger.warning("Refused to load model: %r is not whitelisted", symbol)
+            app.logger.warning(
+                "Refused to load model: %s is not whitelisted",
+                sanitize_log_value(symbol),
+            )
             return
         if not JOBLIB_AVAILABLE:
             app.logger.warning(
-                "joblib недоступен, загрузка состояния модели %s пропущена", symbol
+                "joblib недоступен, загрузка состояния модели %s пропущена",
+                sanitize_log_value(symbol),
             )
             return
         path = _model_path(symbol)
@@ -207,7 +212,8 @@ else:  # scikit-learn fallback used by tests
             return
         if not JOBLIB_AVAILABLE:
             app.logger.warning(
-                "joblib недоступен, состояние модели %s не сохранено", symbol
+                "joblib недоступен, состояние модели %s не сохранено",
+                sanitize_log_value(symbol),
             )
             return
         data = {"model": model, "scaler": _scalers.get(symbol)}
@@ -287,7 +293,10 @@ def train() -> ResponseReturnValue:
     try:
         _save_state(symbol)
     except Exception:
-        app.logger.exception("Failed to save model state for %s", symbol)
+        app.logger.exception(
+            "Failed to save model state for %s",
+            sanitize_log_value(symbol),
+        )
         return jsonify({"error": "invalid model path"}), 400
     return jsonify({"status": "trained"})
 

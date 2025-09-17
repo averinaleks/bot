@@ -31,6 +31,7 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
 
 from bot.dotenv_utils import load_dotenv
 from bot.utils import validate_host, safe_int
+from services.logging_utils import sanitize_log_value
 
 load_dotenv()
 app = Flask(__name__)
@@ -222,7 +223,8 @@ def open_position() -> ResponseReturnValue:
                         time.sleep(delay)
                         delay *= 2
                 if not stop_order or stop_order.get('id') is None:
-                    warn_msg = f"не удалось создать stop loss ордер для {symbol}"
+                    safe_symbol = sanitize_log_value(symbol)
+                    warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                 orders.append(stop_order)
@@ -243,7 +245,8 @@ def open_position() -> ResponseReturnValue:
                         time.sleep(delay)
                         delay *= 2
                 if not tp_order or tp_order.get('id') is None:
-                    warn_msg = f"не удалось создать take profit ордер для {symbol}"
+                    safe_symbol = sanitize_log_value(symbol)
+                    warn_msg = f"не удалось создать take profit ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                 orders.append(tp_order)
