@@ -44,6 +44,8 @@ RUN apt-get update && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends \
         libssl3t64 \
         python3.12-minimal \
+        # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
+        libgomp1 \
         curl \
         python3 \
         # Исключаем tar, чтобы избежать CVE-2025-45582
