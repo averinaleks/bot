@@ -31,6 +31,14 @@ except ImportError:  # pragma: no cover - optional dependency
     TPESampler = None  # type: ignore
     MLflowCallback = None  # type: ignore
 try:
+    import mlflow  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    mlflow = None  # type: ignore
+else:
+    from security import harden_mlflow
+
+    harden_mlflow(mlflow)
+try:
     import torch
 except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
@@ -291,8 +299,10 @@ class ParameterOptimizer:
                 return self.best_params_by_symbol.get(symbol, {}) or self.config.asdict()
 
             if hasattr(ray, "is_initialized") and not ray.is_initialized():
+                from security import apply_ray_security_defaults
+
                 try:  # pragma: no cover - optional ray init
-                    ray.init(ignore_reinit_error=True)
+                    ray.init(**apply_ray_security_defaults({"ignore_reinit_error": True}))
                 except Exception as exc:  # pragma: no cover - log and continue
                     logger.warning("Ray initialization failed: %s", exc)
 
