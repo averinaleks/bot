@@ -29,7 +29,7 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     return hardened
 
 
-_MLFLOW_DISABLED_ATTRS: tuple[tuple[str, ...], str] = (
+_MLFLOW_DISABLED_ATTRS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("pyfunc",), "load_model"),
     (("sklearn",), "load_model"),
     (("pytorch",), "load_model"),
