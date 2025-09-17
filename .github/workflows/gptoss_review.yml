@@ -52,11 +52,7 @@ jobs:
       run:
         shell: bash
     env:
-      PR_NUMBER: ${{
-        (github.event.pull_request && github.event.pull_request.number)
-          || (github.event.issue && github.event.issue.number)
-          || ''
-      }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || '' }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
 
     steps:
@@ -83,14 +79,7 @@ jobs:
         id: choose_port
         run: |
           set -euo pipefail
-          port=$(python - <<'PY'
-import socket
-
-with socket.socket() as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
-          )
+            port=$(python -c "import socket; sock=socket.socket(); sock.bind(('127.0.0.1', 0)); print(sock.getsockname()[1]); sock.close()")
           echo "LLM_PORT=$port" >> "$GITHUB_ENV"
           echo "port=$port" >> "$GITHUB_OUTPUT"
 
