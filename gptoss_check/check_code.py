@@ -108,8 +108,8 @@ else:  # pragma: no cover - import succeeds in fully configured environments
     query_gpt = _query_gpt
 
 
-def _build_completions_url(api_url: str) -> str:
-    """Normalize the GPT-OSS URL so requests always target ``/v1/completions``."""
+def _normalize_api_base(api_url: str) -> str:
+    """Return the base GPT-OSS URL stripped from any ``/v1`` suffix."""
 
     parsed = urlparse(api_url)
     path = parsed.path
@@ -117,22 +117,49 @@ def _build_completions_url(api_url: str) -> str:
     if v1_index != -1:
         path = path[:v1_index]
     base = urlunparse(parsed._replace(path=path.rstrip("/")))
-    return urljoin(base.rstrip("/") + "/", "v1/completions")
+    return base.rstrip("/") + "/"
+
+
+def _build_completions_url(api_url: str) -> str:
+    """Normalize the GPT-OSS URL so requests always target ``/v1/completions``."""
+
+    return urljoin(_normalize_api_base(api_url), "v1/completions")
+
+
+def _build_health_url(api_url: str) -> str:
+    """Normalize the GPT-OSS URL so requests target ``/v1/health``."""
+
+    return urljoin(_normalize_api_base(api_url), "v1/health")
 
 
 def wait_for_api(api_url: str, timeout: int | None = None) -> None:
     """Ожидать готовности сервера GPT-OSS."""
+
     if timeout is None:
         try:
             timeout = int(os.getenv("GPT_OSS_WAIT_TIMEOUT", "300"))
         except ValueError:
             timeout = 300
+
     deadline = time.time() + timeout
+    health_url = _build_health_url(api_url)
+    completions_url = _build_completions_url(api_url)
+
     while time.time() < deadline:
         try:
             with get_httpx_client(timeout=5, trust_env=False) as client:
-                health_url = _build_completions_url(api_url)
-                response = client.post(health_url, json={})
+                response = client.get(health_url)
+                try:
+                    response.raise_for_status()
+                finally:
+                    response.close()
+            return
+        except httpx.HTTPError:
+            pass
+
+        try:
+            with get_httpx_client(timeout=5, trust_env=False) as client:
+                response = client.post(completions_url, json={})
                 try:
                     response.raise_for_status()
                 finally:
@@ -140,6 +167,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
             return
         except httpx.HTTPError:
             time.sleep(1)
+
     raise RuntimeError(f"Сервер GPT-OSS по адресу {api_url} не отвечает")
 
 
