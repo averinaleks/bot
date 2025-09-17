@@ -24,15 +24,20 @@ annotated-types==0.7.0
 anyio==4.10.0
     # via
     #   httpx
+    #   mcp
     #   openai
+    #   sse-starlette
     #   starlette
 async-timeout==5.0.1
     # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
+    #   cyclopts
     #   jsonschema
     #   referencing
+authlib==1.6.3
+    # via fastmcp
 backports-asyncio-runner==1.2.0 ; python_version < "3.11"
     # via
     #   -r requirements-core.in
@@ -79,21 +84,33 @@ contourpy==1.3.2
 cryptography==45.0.7
     # via
     #   -r requirements-core.in
+    #   authlib
     #   ccxt
     #   mlflow
 cycler==0.12.1
     # via matplotlib
+cyclopts==3.24.0
+    # via fastmcp
 databricks-sdk==0.63.0
     # via
     #   mlflow-skinny
     #   mlflow-tracing
 distro==1.9.0
     # via openai
+dnspython==2.8.0
+    # via email-validator
 docker==7.1.0
     # via mlflow
+docstring-parser==0.17.0
+    # via cyclopts
+docutils==0.22
+    # via rich-rst
+email-validator==2.3.0
+    # via pydantic
 exceptiongroup==1.3.0
     # via
     #   anyio
+    #   fastmcp
     #   pytest
 farama-notifications==0.0.4
     # via gymnasium
@@ -101,6 +118,8 @@ fastapi==0.116.1
     # via mlflow-skinny
 fastapi-csrf-protect==1.0.6
     # via -r requirements-core.in
+fastmcp==2.10.6
+    # via mlflow
 filelock==3.19.1
     # via
     #   huggingface-hub
@@ -157,8 +176,12 @@ httpcore==1.0.9
 httpx==0.28.1
     # via
     #   -r requirements-core.in
+    #   fastmcp
+    #   mcp
     #   openai
     #   python-telegram-bot
+httpx-sse==0.4.1
+    # via mcp
 huggingface-hub==0.34.4
     # via
     #   tokenizers
@@ -166,6 +189,7 @@ huggingface-hub==0.34.4
 idna==3.10
     # via
     #   anyio
+    #   email-validator
     #   httpx
     #   requests
     #   yarl
@@ -195,6 +219,7 @@ joblib==1.5.2
 jsonschema==4.25.1
     # via
     #   -r requirements-core.in
+    #   mcp
     #   ray
 jsonschema-specifications==2025.4.1
     # via jsonschema
@@ -208,6 +233,8 @@ llvmlite==0.44.0
     # via numba
 mako==1.3.10
     # via alembic
+markdown-it-py==4.0.0
+    # via rich
 markupsafe==3.0.2
     # via
     #   flask
@@ -218,11 +245,15 @@ matplotlib==3.10.5
     # via
     #   mlflow
     #   stable-baselines3
-mlflow==3.3.2
+mcp==1.14.0
+    # via fastmcp
+mdurl==0.1.2
+    # via markdown-it-py
+mlflow==3.4.0
     # via -r requirements-core.in
-mlflow-skinny==3.3.2
+mlflow-skinny==3.4.0
     # via mlflow
-mlflow-tracing==3.3.2
+mlflow-tracing==3.4.0
     # via mlflow
 mpmath==1.3.0
     # via sympy
@@ -296,12 +327,18 @@ nvidia-nvtx-cu12==12.8.90
     # via torch
 openai==1.107.3
     # via -r requirements-core.in
+openapi-pydantic==0.5.1
+    # via fastmcp
 opentelemetry-api==1.36.0
     # via
     #   mlflow-skinny
     #   mlflow-tracing
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+opentelemetry-proto==1.37.0
+    # via
+    #   mlflow-skinny
+    #   mlflow-tracing
 opentelemetry-sdk==1.36.0
     # via
     #   mlflow-skinny
@@ -347,6 +384,7 @@ protobuf==6.32.0
     # via
     #   mlflow-skinny
     #   mlflow-tracing
+    #   opentelemetry-proto
     #   ray
 psutil==7.0.0
     # via -r requirements-core.in
@@ -372,18 +410,27 @@ pydantic==2.11.7
     # via
     #   fastapi
     #   fastapi-csrf-protect
+    #   fastmcp
+    #   mcp
     #   mlflow-skinny
     #   mlflow-tracing
     #   openai
+    #   openapi-pydantic
     #   pydantic-settings
 pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.10.1
-    # via fastapi-csrf-protect
+    # via
+    #   fastapi-csrf-protect
+    #   mcp
 pygments==2.19.2
-    # via pytest
+    # via
+    #   pytest
+    #   rich
 pyparsing==3.2.3
     # via matplotlib
+pyperclip==1.9.0
+    # via fastmcp
 pytest==8.4.1
     # via pytest-asyncio
 pytest-asyncio==1.1.0
@@ -396,7 +443,11 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
     # via
     #   -r requirements-core.in
+    #   fastmcp
+    #   mlflow-skinny
     #   pydantic-settings
+python-multipart==0.0.20
+    # via mcp
 python-telegram-bot==22.3
     # via -r requirements-core.in
 pytorch-lightning==2.5.5
@@ -428,6 +479,13 @@ requests==2.32.5
     #   pybit
     #   ray
     #   transformers
+rich==14.1.0
+    # via
+    #   cyclopts
+    #   fastmcp
+    #   rich-rst
+rich-rst==1.3.1
+    # via cyclopts
 rpds-py==0.27.0
     # via
     #   jsonschema
@@ -468,12 +526,15 @@ sqlalchemy==2.0.43
     #   mlflow
 sqlparse==0.5.3
     # via mlflow-skinny
+sse-starlette==3.0.2
+    # via mcp
 stable-baselines3==2.7.0
     # via -r requirements-core.in
 starlette==0.47.2
     # via
     #   fastapi
     #   fastapi-csrf-protect
+    #   mcp
 statsmodels==0.14.5
     # via -r requirements-core.in
 sympy==1.14.0
@@ -515,6 +576,7 @@ typing-extensions==4.14.1
     #   alembic
     #   anyio
     #   ccxt
+    #   cyclopts
     #   exceptiongroup
     #   fastapi
     #   graphene
@@ -548,7 +610,9 @@ urllib3==2.5.0
     #   docker
     #   requests
 uvicorn==0.35.0
-    # via mlflow-skinny
+    # via
+    #   mcp
+    #   mlflow-skinny
 websocket-client==1.8.0
     # via pybit
 websockets==15.0.1
