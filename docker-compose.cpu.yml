@@ -20,6 +20,18 @@ services:
     environment:
       VLLM_TARGET_DEVICE: cpu
 
+  model_builder:
+    deploy:
+      resources:
+        reservations:
+          devices: []
+
+  trade_manager:
+    deploy:
+      resources:
+        reservations:
+          devices: []
+
 networks:
   gptoss_net:
     name: gptoss_net
