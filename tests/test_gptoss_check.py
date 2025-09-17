@@ -91,17 +91,24 @@ def test_wait_for_api_http_error(monkeypatch):
                 response=httpx.Response(404),
             )
 
-    response = DummyResponse()
+    responses = []
 
     class DummyClient:
+        def __init__(self) -> None:
+            self.response = DummyResponse()
+            responses.append(self.response)
+
         def __enter__(self):
             return self
 
         def __exit__(self, exc_type, exc, tb):
             return False
 
+        def get(self, url):
+            return self.response
+
         def post(self, url, json):
-            return response
+            return self.response
 
     calls = {"count": 0}
 
@@ -115,30 +122,18 @@ def test_wait_for_api_http_error(monkeypatch):
 
     with pytest.raises(RuntimeError):
         check_code.wait_for_api("http://gptoss:8000", timeout=1)
-    assert response.closed
+    assert all(response.closed for response in responses)
 
 
-@pytest.mark.parametrize(
-    "api_url,expected",
-    [
-        ("http://gptoss:8000/api", "http://gptoss:8000/api/v1/completions"),
-        (
-            "http://gptoss:8000/api/v1/chat/completions",
-            "http://gptoss:8000/api/v1/completions",
-        ),
-    ],
-)
-def test_wait_for_api_uses_completions_endpoint(monkeypatch, api_url, expected):
-    """wait_for_api should query /v1/completions while preserving base paths."""
-
-    called = {}
+def test_wait_for_api_prefers_health_endpoint(monkeypatch):
+    called = []
 
     class DummyResponse:
         def close(self):
-            pass
+            called.append("closed")
 
         def raise_for_status(self):
-            pass
+            called.append("raise")
 
     class DummyClient:
         def __enter__(self):
@@ -147,17 +142,82 @@ def test_wait_for_api_uses_completions_endpoint(monkeypatch, api_url, expected):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, url, json):
-            called["url"] = url
+        def get(self, url):
+            called.append(("get", url))
             return DummyResponse()
 
+        def post(self, url, json):
+            raise AssertionError("POST should not be called when health succeeds")
+
     monkeypatch.setattr(check_code, "get_httpx_client", lambda **kw: DummyClient())
-    # Ensure the loop exits immediately
     monkeypatch.setattr(check_code.time, "time", lambda: 0)
     monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
 
-    check_code.wait_for_api(api_url, timeout=1)
-    assert called["url"] == expected
+    check_code.wait_for_api("http://gptoss:8000/api/v1/chat/completions", timeout=1)
+
+    assert ("get", "http://gptoss:8000/api/v1/health") in called
+    assert "raise" in called
+    assert "closed" in called
+    assert not any(isinstance(item, tuple) and item[0] == "post" for item in called)
+
+
+def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
+    called = []
+
+    class DummyResponse:
+        def __init__(self, should_raise: bool = False) -> None:
+            self.should_raise = should_raise
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+            called.append("closed")
+
+        def raise_for_status(self):
+            called.append("raise")
+            if self.should_raise:
+                raise httpx.HTTPStatusError(
+                    "err",
+                    request=httpx.Request("GET", "http://test"),
+                    response=httpx.Response(404),
+                )
+
+    class GetClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            called.append(("get", url))
+            return DummyResponse(should_raise=True)
+
+    class PostClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, json):
+            called.append(("post", url))
+            return DummyResponse()
+
+    clients = [GetClient(), PostClient()]
+
+    def fake_client(**_):
+        return clients.pop(0)
+
+    monkeypatch.setattr(check_code, "get_httpx_client", fake_client)
+    monkeypatch.setattr(check_code.time, "time", lambda: 0)
+    monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
+
+    check_code.wait_for_api("http://gptoss:8000/api", timeout=1)
+
+    assert ("get", "http://gptoss:8000/api/v1/health") in called
+    assert ("post", "http://gptoss:8000/api/v1/completions") in called
+    assert called.count("closed") >= 2
 
 
 def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
