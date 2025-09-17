@@ -20,6 +20,18 @@ services:
     environment:
       VLLM_TARGET_DEVICE: cpu
 
+  data_handler:
+    profiles: ["gpu-required"]
+
+  model_builder:
+    profiles: ["gpu-required"]
+
+  trade_manager:
+    profiles: ["gpu-required"]
+
+  bot:
+    profiles: ["gpu-required"]
+
 networks:
   gptoss_net:
     name: gptoss_net
