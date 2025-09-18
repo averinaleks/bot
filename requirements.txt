@@ -386,7 +386,7 @@ protobuf==6.32.0
     #   mlflow-tracing
     #   opentelemetry-proto
     #   ray
-psutil==7.0.0
+psutil==7.1.0
     # via -r requirements-core.in
 pyarrow==21.0.0
     # via
@@ -627,5 +627,4 @@ zipp==3.23.0
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools>=78.1.1,<81
-    # via -r requirements-core.in
+# setuptools
