@@ -1,6 +1,7 @@
-# Ray dashboard/job submission API disabled inside security.apply_ray_security_defaults
+# Ray ShadowRay vulnerability mitigated by security.apply_ray_security_defaults()
 CVE-2023-48022
-# MLflow model loading entry points are blocked in security.harden_mlflow
+
+# MLflow model loading RCE vulnerabilities mitigated by security.harden_mlflow()
 CVE-2024-37052
 CVE-2024-37053
 CVE-2024-37054
