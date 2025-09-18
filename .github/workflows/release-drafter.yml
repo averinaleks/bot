@@ -32,13 +32,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          headers=(
-            -H 'Accept: application/vnd.github.v3+json'
-            -H 'X-GitHub-Api-Version: 2022-11-28'
-          )
+          auth_header=()
 
           if [[ -n "${GH_TOKEN:-}" ]]; then
-            headers+=(-H "Authorization: Bearer ${GH_TOKEN}")
+            auth_header=(-H "Authorization: Bearer ${GH_TOKEN}")
           fi
 
           if ! curl \
@@ -50,7 +47,9 @@ jobs:
             --retry-delay 2 \
             --retry-max-time 30 \
             --connect-timeout 5 \
-            "${headers[@]}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${auth_header[@]}" \
             "$REF_URL" >/dev/null; then
             echo "Failed to resolve Release Drafter commit ${RELEASE_DRAFTER_COMMIT}." >&2
             echo "Ensure the workflow pins a valid Release Drafter ref before re-running." >&2
