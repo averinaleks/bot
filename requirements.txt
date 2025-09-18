@@ -325,7 +325,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.107.3
+openai==1.108.0
     # via -r requirements-core.in
 openapi-pydantic==0.5.1
     # via fastmcp
@@ -627,5 +627,4 @@ zipp==3.23.0
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools>=78.1.1,<81
-    # via -r requirements-core.in
+# setuptools
