@@ -18,7 +18,15 @@ def _has_pytest_asyncio_plugin() -> bool:
     we only rely on ``pytest-asyncio`` when it is fully available.
     """
 
-    return importlib.util.find_spec("pytest_asyncio.plugin") is not None
+    try:
+        spec = importlib.util.find_spec("pytest_asyncio.plugin")
+    except ModuleNotFoundError:
+        # ``find_spec`` raises ``ModuleNotFoundError`` when the top-level
+        # ``pytest_asyncio`` package itself is unavailable.  Treat this the
+        # same as the plugin not being installed so the synchronous fallback
+        # below is used instead of crashing during test collection.
+        return False
+    return spec is not None
 
 
 if _has_pytest_asyncio_plugin():  # pragma: no cover - exercised in CI
