@@ -178,6 +178,8 @@ def open_position() -> ResponseReturnValue:
     if not symbol or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     try:
+        protective_failures: list[dict[str, str]] = []
+        mitigation_actions: list[str] = []
         if trailing_stop is not None and hasattr(
             exchange, 'create_order_with_trailing_stop'
         ):
@@ -185,7 +187,6 @@ def open_position() -> ResponseReturnValue:
             order = exchange.create_order_with_trailing_stop(
                 symbol, 'market', side, amount, None, trailing_stop, None
             )
-            orders = [order]
         elif (tp is not None or sl is not None) and hasattr(
             exchange, 'create_order_with_take_profit_and_stop_loss'
         ):
@@ -193,12 +194,9 @@ def open_position() -> ResponseReturnValue:
             order = exchange.create_order_with_take_profit_and_stop_loss(
                 symbol, 'market', side, amount, None, tp, sl, None
             )
-            orders = [order]
         else:
             app.logger.info('using fallback order placement')
-            orders = []
             order = exchange.create_order(symbol, 'market', side, amount)
-            orders.append(order)
             opp_side = 'sell' if side == 'buy' else 'buy'
             if sl is not None:
                 stop_order = None
@@ -227,7 +225,7 @@ def open_position() -> ResponseReturnValue:
                     warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
-                orders.append(stop_order)
+                    protective_failures.append({'type': 'stop_loss', 'message': warn_msg})
             if tp is not None:
                 tp_order = None
                 delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
@@ -249,7 +247,7 @@ def open_position() -> ResponseReturnValue:
                     warn_msg = f"не удалось создать take profit ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
-                orders.append(tp_order)
+                    protective_failures.append({'type': 'take_profit', 'message': warn_msg})
             if trailing_stop is not None and price > 0:
                 tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
                 stop_order = None
@@ -266,9 +264,14 @@ def open_position() -> ResponseReturnValue:
                     except CCXT_BASE_ERROR as exc:
                         app.logger.debug('trailing stop_market failed: %s', exc)
                         stop_order = None
-                orders.append(stop_order)
-        if any(not o or o.get('id') is None for o in orders):
-            app.logger.error('failed to create one or more orders')
+                if not stop_order or stop_order.get('id') is None:
+                    safe_symbol = sanitize_log_value(symbol)
+                    warn_msg = f"не удалось создать trailing stop ордер для {safe_symbol}"
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
+                    protective_failures.append({'type': 'trailing_stop', 'message': warn_msg})
+        if not order or order.get('id') is None:
+            app.logger.error('failed to create primary order')
             return jsonify({'error': 'order creation failed'}), 500
         _record(
             order,
@@ -281,7 +284,62 @@ def open_position() -> ResponseReturnValue:
             sl,
             price if price > 0 else None,
         )
-        return jsonify({'status': 'ok', 'order_id': order.get('id')})
+        response: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
+        if protective_failures:
+            safe_symbol = sanitize_log_value(symbol)
+            app.logger.error(
+                'protective order failures for %s: %s', safe_symbol, protective_failures
+            )
+            cancel_success = False
+            if hasattr(exchange, 'cancel_order'):
+                try:
+                    exchange.cancel_order(order.get('id'), symbol)
+                    cancel_success = True
+                    mitigation_actions.append('primary_order_cancelled')
+                    app.logger.info(
+                        'primary order %s cancelled after protective failure',
+                        order.get('id'),
+                    )
+                except CCXT_BASE_ERROR as exc:
+                    app.logger.warning(
+                        'failed to cancel primary order %s for %s: %s',
+                        order.get('id'),
+                        safe_symbol,
+                        exc,
+                    )
+            if not cancel_success:
+                emergency_close_success = False
+                try:
+                    close_order = exchange.create_order(
+                        symbol,
+                        'market',
+                        'sell' if side == 'buy' else 'buy',
+                        amount,
+                        params={'reduce_only': True},
+                    )
+                    if close_order and close_order.get('id') is not None:
+                        emergency_close_success = True
+                        mitigation_actions.append('emergency_close_submitted')
+                        app.logger.info(
+                            'emergency close order submitted for %s after protective failure',
+                            safe_symbol,
+                        )
+                except CCXT_BASE_ERROR as exc:
+                    app.logger.exception(
+                        'failed to place emergency close order for %s: %s',
+                        safe_symbol,
+                        exc,
+                    )
+                if not emergency_close_success:
+                    mitigation_actions.append('emergency_close_failed')
+        if protective_failures:
+            warnings_payload: dict[str, Any] = {
+                'protective_orders_failed': protective_failures,
+            }
+            if mitigation_actions:
+                warnings_payload['mitigations'] = mitigation_actions
+            response['warnings'] = warnings_payload
+        return jsonify(response)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error creating order: %s', exc)
         return jsonify({'error': 'network error contacting exchange'}), 503
