@@ -101,7 +101,12 @@ def create_httpx_stub() -> SimpleNamespace:
                 content = str(data_payload).encode("utf-8")
             json_data = data_payload
         else:
-            content = content_payload if isinstance(content_payload, bytes) else None
+            if content_payload is None:
+                content = b""
+            elif isinstance(content_payload, bytes):
+                content = content_payload
+            else:
+                content = str(content_payload).encode("utf-8")
             json_data = None
         return Response(
             200,
