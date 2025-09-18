@@ -21,7 +21,9 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 import signal
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
@@ -277,13 +279,30 @@ def _install_signal_handlers(server: ThreadingHTTPServer) -> None:
             signal.signal(sig, _shutdown)
 
 
+def _write_port_file(path: Path | None, port: int) -> None:
+    """Persist the selected ``port`` so other steps can reuse it."""
+
+    if path is None:
+        return
+
+    try:
+        path.write_text(str(port), encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - best-effort logging
+        print(
+            f"::warning::Не удалось записать номер порта в {path}: {exc}",
+            file=sys.stderr,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run mock GPT-OSS server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port-file", type=Path)
     args = parser.parse_args()
 
     server = _Server((args.host, args.port), _RequestHandler)
+    _write_port_file(args.port_file, server.server_address[1])
     _install_signal_handlers(server)
     try:
         server.serve_forever()
