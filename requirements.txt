@@ -51,7 +51,7 @@ cachetools==5.5.2
     #   google-auth
     #   mlflow-skinny
     #   mlflow-tracing
-ccxt==4.5.4
+ccxt==4.5.5
     # via -r requirements-core.in
 ccxtpro==1.0.1
     # via -r requirements-core.in
@@ -627,5 +627,4 @@ zipp==3.23.0
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools>=78.1.1,<81
-    # via -r requirements-core.in
+# setuptools
