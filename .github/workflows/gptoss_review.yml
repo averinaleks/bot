@@ -116,6 +116,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ ! -f scripts/prepare_gptoss_diff.py ]; then
+            echo "::notice::Скрипт scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "has_diff=false" >> "${GITHUB_OUTPUT}"
+            fi
+            exit 0
+          fi
+
           python scripts/prepare_gptoss_diff.py \
             --repo "${{ github.repository }}" \
             --pr-number "${PR_NUMBER}" \
