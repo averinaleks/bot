@@ -11,7 +11,18 @@ from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 
-import httpx
+from services.stubs import create_httpx_stub, is_offline_env
+
+_OFFLINE_ENV = is_offline_env()
+
+try:  # pragma: no cover - exercised when httpx is available
+    if _OFFLINE_ENV:
+        raise ImportError("offline mode uses httpx stub")
+    import httpx as _httpx  # type: ignore
+except Exception:  # noqa: BLE001 - guarantee stub availability
+    httpx = create_httpx_stub()
+else:
+    httpx = _httpx
 
 from bot.utils import retry
 from services.logging_utils import sanitize_log_value
