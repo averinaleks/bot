@@ -391,6 +391,22 @@ def test_trade_manager_service_fallback_failure(ctx):
 
 
 @pytest.mark.integration
+def test_trade_manager_service_invalid_json(ctx):
+    port = get_free_port()
+    p = ctx.Process(target=_run_tm, args=(port,))
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+        resp = httpx.post(
+            f'http://127.0.0.1:{port}/open_position',
+            content='{',
+            timeout=5,
+            trust_env=False,
+            headers={**TOKEN_HEADERS, 'Content-Type': 'application/json'},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {'error': 'invalid json'}
+
+
+@pytest.mark.integration
 def test_trade_manager_ready_route(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_tm, args=(port,))

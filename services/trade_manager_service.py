@@ -6,6 +6,7 @@ environment variables.
 """
 
 from flask import Flask, request, jsonify
+from werkzeug.exceptions import BadRequest
 from typing import Any
 from pathlib import Path
 import json
@@ -158,7 +159,10 @@ def _record(
 
 @app.route('/open_position', methods=['POST'])
 def open_position() -> ResponseReturnValue:
-    data = request.get_json(force=True)
+    try:
+        data = request.get_json(force=True)
+    except BadRequest:
+        return jsonify({'error': 'invalid json'}), 400
     symbol = data.get('symbol')
     side = str(data.get('side', 'buy')).lower()
     price = float(data.get('price', 0) or 0)
@@ -295,7 +299,10 @@ def open_position() -> ResponseReturnValue:
 
 @app.route('/close_position', methods=['POST'])
 def close_position() -> ResponseReturnValue:
-    data = request.get_json(force=True)
+    try:
+        data = request.get_json(force=True)
+    except BadRequest:
+        return jsonify({'error': 'invalid json'}), 400
     order_id = data.get('order_id')
     side = str(data.get('side', '')).lower()
     close_amount = data.get('close_amount')
