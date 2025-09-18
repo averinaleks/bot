@@ -118,13 +118,121 @@ def _save_positions() -> None:
 
 
 def _sync_positions_with_exchange() -> None:
-    """Fetch positions from exchange for verification."""
+    """Fetch open positions from the exchange and drop closed ones locally."""
     if exchange is None or not hasattr(exchange, 'fetch_positions'):
         return
+
     try:
-        exchange.fetch_positions()
+        remote_positions = exchange.fetch_positions()
     except Exception as exc:  # pragma: no cover - network/API issues
         logging.warning('fetch_positions failed: %s', exc)
+        return
+
+    remote_positions = remote_positions or []
+
+    def _extract_from_dict(data: dict, keys: tuple[str, ...]) -> Any:
+        for key in keys:
+            if not isinstance(data, dict):
+                continue
+            value = data.get(key)
+            if value not in (None, ''):
+                return value
+        return None
+
+    def _extract_amount(entry: dict) -> float | None:
+        amount_keys = ('contracts', 'contractSize', 'size', 'amount', 'positionAmt', 'qty')
+        value = _extract_from_dict(entry, amount_keys)
+        if value is None and isinstance(entry.get('info'), dict):
+            value = _extract_from_dict(entry['info'], amount_keys)
+        if value is None:
+            return None
+        try:
+            return abs(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _extract_symbol(entry: dict) -> str | None:
+        symbol = _extract_from_dict(entry, ('symbol', 'market'))
+        if symbol is None and isinstance(entry.get('info'), dict):
+            symbol = _extract_from_dict(entry['info'], ('symbol', 'market'))
+        return str(symbol) if symbol is not None else None
+
+    def _extract_side(entry: dict) -> str:
+        side_value = _extract_from_dict(entry, ('side', 'direction', 'positionSide'))
+        if side_value is None and isinstance(entry.get('info'), dict):
+            side_value = _extract_from_dict(entry['info'], ('side', 'direction', 'positionSide'))
+        if side_value is None:
+            return ''
+        side = str(side_value).lower()
+        if side == 'long':
+            return 'buy'
+        if side == 'short':
+            return 'sell'
+        return side
+
+    def _extract_id(entry: dict) -> str | None:
+        identifier = _extract_from_dict(entry, ('id', 'positionId'))
+        if identifier is None and isinstance(entry.get('info'), dict):
+            identifier = _extract_from_dict(entry['info'], ('id', 'positionId'))
+        return str(identifier) if identifier is not None else None
+
+    active_ids: set[str] = set()
+    active_pairs: set[tuple[str, str]] = set()
+
+    for position in remote_positions:
+        if not isinstance(position, dict):
+            continue
+        amount = _extract_amount(position)
+        symbol = _extract_symbol(position)
+        side = _extract_side(position)
+        identifier = _extract_id(position)
+
+        if identifier is not None:
+            # Treat unknown amounts as active to avoid false removals.
+            if amount is None or amount > 0:
+                active_ids.add(identifier)
+        if symbol and side and (amount is None or amount > 0):
+            active_pairs.add((symbol.upper(), side))
+
+    before_count = len(POSITIONS)
+    filtered: list[dict] = []
+    for record in POSITIONS:
+        if record.get('action') != 'open':
+            filtered.append(record)
+            continue
+
+        record_id = record.get('id')
+        if record_id is not None and str(record_id) in active_ids:
+            filtered.append(record)
+            continue
+
+        record_symbol = record.get('symbol')
+        record_side = str(record.get('side', '')).lower()
+        if record_side == 'long':
+            record_side = 'buy'
+        elif record_side == 'short':
+            record_side = 'sell'
+
+        if (
+            record_symbol
+            and record_side
+            and (str(record_symbol).upper(), record_side) in active_pairs
+        ):
+            filtered.append(record)
+            continue
+
+        # Position missing on the exchange – drop it locally.
+        logger.info(
+            'removing closed position %s %s (%s)',
+            sanitize_log_value(record_symbol),
+            record_side,
+            sanitize_log_value(record_id),
+        )
+
+    removed = before_count - len(filtered)
+    POSITIONS[:] = filtered
+    if removed > 0:
+        _save_positions()
 
 
 _load_positions()
@@ -356,6 +464,7 @@ def close_position() -> ResponseReturnValue:
 
 @app.route('/positions')
 def positions() -> ResponseReturnValue:
+    _sync_positions_with_exchange()
     return jsonify({'positions': POSITIONS})
 
 
