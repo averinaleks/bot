@@ -13,7 +13,19 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 
 from services.stubs import create_httpx_stub, is_offline_env
 
+if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
+    from httpx import AsyncClient as HTTPXAsyncClient
+    from httpx import Client as HTTPXClient
+    from httpx import Headers as HTTPXHeaders
+    from httpx import Request as HTTPXRequest
+    from httpx import Response as HTTPXResponse
+else:  # pragma: no cover - runtime fallback when httpx missing
+    HTTPXAsyncClient = HTTPXClient = HTTPXHeaders = HTTPXRequest = HTTPXResponse = Any
+
+
 _OFFLINE_ENV = is_offline_env()
+
+httpx: Any
 
 try:  # pragma: no cover - exercised when httpx is available
     if _OFFLINE_ENV:
@@ -77,7 +89,7 @@ def get_requests_session(
 @contextmanager
 def get_httpx_client(
     timeout: float = DEFAULT_TIMEOUT, **kwargs
-) -> Generator[httpx.Client, None, None]:
+) -> Generator[HTTPXClient, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
     kwargs.setdefault("timeout", timeout)
     # For consistency with the asynchronous helpers, avoid inheriting proxy
@@ -96,17 +108,17 @@ def get_httpx_client(
 # Asynchronous HTTPX client management
 # ---------------------------------------------------------------------------
 
-_ASYNC_CLIENT: httpx.AsyncClient | None = None
+_ASYNC_CLIENT: HTTPXAsyncClient | None = None
 _ASYNC_CLIENT_LOCK = asyncio.Lock()
 
 # In-memory caches and metrics for HTTP requests
-REFERENCE_CACHE: Dict[str, Tuple[int, httpx.Headers, bytes]] = {}
+REFERENCE_CACHE: Dict[str, Tuple[int, HTTPXHeaders, bytes]] = {}
 RETRY_METRICS: defaultdict[str, int] = defaultdict(int)
 
 
 async def get_async_http_client(
     timeout: float = 10.0, **kwargs
-) -> httpx.AsyncClient:
+) -> HTTPXAsyncClient:
     """Return a shared :class:`httpx.AsyncClient` instance."""
     global _ASYNC_CLIENT
     async with _ASYNC_CLIENT_LOCK:
@@ -136,7 +148,7 @@ async def close_async_http_client() -> None:
 @asynccontextmanager
 async def async_http_client(
     timeout: float = 10.0, **kwargs
-) -> AsyncGenerator[httpx.AsyncClient, None]:
+) -> AsyncGenerator[HTTPXAsyncClient, None]:
     """Context manager providing a temporary :class:`httpx.AsyncClient`."""
     kwargs.setdefault("timeout", timeout)
     kwargs.setdefault("trust_env", False)
@@ -154,8 +166,8 @@ async def async_http_client(
 
 @retry(5, lambda base: min(base, 8) + _RNG.uniform(0, 1))
 async def _send_request(
-    method: str, url: str, *, client: httpx.AsyncClient, **kwargs: Any
-) -> httpx.Response:
+    method: str, url: str, *, client: HTTPXAsyncClient, **kwargs: Any
+) -> HTTPXResponse:
     try:
         resp = await client.request(method, url, **kwargs)
         if resp.status_code in (429,) or resp.status_code >= 500:
@@ -171,9 +183,9 @@ async def request_with_retry(
     method: str,
     url: str,
     *,
-    client: httpx.AsyncClient | None = None,
+    client: HTTPXAsyncClient | None = None,
     **kwargs: Any,
-) -> httpx.Response:
+) -> HTTPXResponse:
     """Perform an HTTP request with retries and caching for reference data."""
 
     cacheable = any(key in url for key in ("limits", "symbols"))
