@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read # required for downloading the pinned Release Drafter action
   contents: write
   pull-requests: write
 
