@@ -1,25 +1,29 @@
+import hashlib
+import hmac
 import logging
 import os
 import re
 
 logger = logging.getLogger(__name__)
 
-try:
-    import bcrypt
-except ImportError as exc:  # pragma: no cover - hard failure without bcrypt
-    logger.critical(
-        "Не удалось импортировать обязательный пакет `bcrypt`. "
-        "Установите его (`pip install bcrypt`) или временно переключитесь на "
-        "упрощённое хэширование PBKDF2 из `hashlib`."
+try:  # pragma: no cover - exercised indirectly via monkeypatch in tests
+    import bcrypt  # type: ignore[import]
+
+    BCRYPT_AVAILABLE = True
+except ImportError:  # pragma: no cover - explicitly simulated in tests
+    bcrypt = None  # type: ignore[assignment]
+    BCRYPT_AVAILABLE = False
+    logger.warning(
+        "Пакет `bcrypt` недоступен. Включён fallback на PBKDF2 из `hashlib`."
     )
-    raise ImportError(
-        "Отсутствует зависимость `bcrypt`, необходимая для безопасного "
-        "хэширования паролей. Установите пакет или реализуйте fallback на PBKDF2."
-    ) from exc
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
 DEFAULT_BCRYPT_ROUNDS = 12
+PBKDF2_PREFIX = "pbkdf2_sha256"
+PBKDF2_ITERATIONS = 240_000
+PBKDF2_SALT_BYTES = 16
+PBKDF2_DIGEST = "sha256"
 
 
 def get_bcrypt_rounds() -> int:
@@ -74,27 +78,83 @@ def validate_password_length(password: str) -> None:
         raise ValueError("Password exceeds maximum length")
 
 
+def _hash_with_bcrypt(password: str) -> str:
+    if not BCRYPT_AVAILABLE or bcrypt is None:
+        raise RuntimeError(
+            "bcrypt недоступен для хэширования, используйте PBKDF2 fallback."
+        )
+    rounds = get_bcrypt_rounds()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=rounds)).decode()
+
+
+def _hash_with_pbkdf2(password: str) -> str:
+    salt = os.urandom(PBKDF2_SALT_BYTES)
+    derived = hashlib.pbkdf2_hmac(
+        PBKDF2_DIGEST, password.encode(), salt, PBKDF2_ITERATIONS
+    )
+    return (
+        f"{PBKDF2_PREFIX}${PBKDF2_ITERATIONS}${salt.hex()}${derived.hex()}"
+    )
+
+
 def hash_password(password: str) -> str:
-    """Хэширует пароль, используя bcrypt."""
+    """Хэширует пароль, используя bcrypt или PBKDF2 fallback."""
     validate_password_length(password)
     validate_password_complexity(password)
-    rounds = get_bcrypt_rounds()
-    return bcrypt.hashpw(
-        password.encode(), bcrypt.gensalt(rounds=rounds)
-    ).decode()
+    if BCRYPT_AVAILABLE and bcrypt is not None:
+        return _hash_with_bcrypt(password)
+    return _hash_with_pbkdf2(password)
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    """Проверяет пароль по сохранённому bcrypt-хэшу."""
+    """Проверяет пароль по сохранённому bcrypt- или PBKDF2-хэшу."""
 
     try:
         validate_password_length(password)
-        return bcrypt.checkpw(password.encode(), stored_hash.encode())
     except ValueError:
-        # ``bcrypt.checkpw`` raises ``ValueError`` when ``stored_hash`` is not a
-        # valid bcrypt hash. Historically this bubbled up to callers, but for a
-        # verification helper it's more convenient to treat such cases as a
-        # failed password check.  We also treat length violations the same way
-        # by reusing the existing ``ValueError`` from ``validate_password_length``.
         return False
+
+    if stored_hash.startswith(f"{PBKDF2_PREFIX}$"):
+        return _verify_with_pbkdf2(password, stored_hash)
+
+    if stored_hash.startswith("pbkdf2_"):
+        raise ValueError("Неподдерживаемый формат PBKDF2-хэша")
+
+    if stored_hash.startswith("$2"):
+        if not BCRYPT_AVAILABLE or bcrypt is None:
+            raise RuntimeError(
+                "bcrypt-хэш не может быть проверен без установленного пакета `bcrypt`."
+            )
+        try:
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        except ValueError as exc:
+            raise ValueError("Повреждён bcrypt-хэш пароля") from exc
+
+    raise ValueError("Неизвестный формат хэша пароля")
+
+
+def _verify_with_pbkdf2(password: str, stored_hash: str) -> bool:
+    try:
+        prefix, iterations_str, salt_hex, derived_hex = stored_hash.split("$")
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise ValueError("PBKDF2-хэш имеет неверный формат") from exc
+
+    if prefix != PBKDF2_PREFIX:
+        raise ValueError("Неподдерживаемый тип PBKDF2-хэша")
+
+    try:
+        iterations = int(iterations_str)
+    except ValueError as exc:
+        raise ValueError("PBKDF2-хэш содержит некорректное число итераций") from exc
+
+    try:
+        salt = bytes.fromhex(salt_hex)
+        derived = bytes.fromhex(derived_hex)
+    except ValueError as exc:
+        raise ValueError("PBKDF2-хэш содержит некорректные шестнадцатеричные данные") from exc
+
+    recalculated = hashlib.pbkdf2_hmac(
+        PBKDF2_DIGEST, password.encode(), salt, iterations
+    )
+    return hmac.compare_digest(recalculated, derived)
 
