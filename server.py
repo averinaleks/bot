@@ -11,10 +11,13 @@ from contextlib import asynccontextmanager
 from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
 from services.logging_utils import sanitize_log_value
 
+logger = logging.getLogger(__name__)
+
 if not DOTENV_AVAILABLE:
-    raise RuntimeError(
-        "python-dotenv is required. Install it with 'pip install python-dotenv'."
-    ) from DOTENV_ERROR
+    logger.warning(
+        "python-dotenv is not installed; continuing without loading .env files (%s)",
+        DOTENV_ERROR,
+    )
 
 from fastapi import FastAPI, HTTPException, Request, Response
 try:
