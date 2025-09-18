@@ -37,6 +37,8 @@ _MLFLOW_DISABLED_ATTRS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("lightgbm",), "load_model"),
     (("xgboost",), "load_model"),
     (("catboost",), "load_model"),
+    (("pmdarima",), "load_model"),
+    (("recipes",), "load_recipe"),
 )
 
 
@@ -58,7 +60,7 @@ def _disable_callable(target: Any, qualname: str) -> Any:
 def harden_mlflow(mlflow_module: ModuleType) -> None:
     """Disable model-loading entry points that lead to remote code execution.
 
-    MLflow 3.4.0 содержит серию RCE-уязвимостей (CVE-2024-37052…37059). Мы не
+    MLflow 3.4.0 содержит серию RCE-уязвимостей (CVE-2024-37052…37060). Мы не
     загружаем сторонние модели внутри проекта, поэтому безопасно блокировать
     соответствующие API, оставив журналы и экспорт в рабочем состоянии.
     """
@@ -96,6 +98,14 @@ def harden_mlflow(mlflow_module: ModuleType) -> None:
             blocked = _disable_callable(model_class.load, "mlflow.models.Model.load")
             if blocked is not None:
                 model_class.load = staticmethod(blocked)
+
+    recipes = getattr(mlflow_module, "recipes", None)
+    if recipes is not None:
+        recipe_class = getattr(recipes, "Recipe", None)
+        if recipe_class is not None and hasattr(recipe_class, "load"):
+            blocked = _disable_callable(recipe_class.load, "mlflow.recipes.Recipe.load")
+            if blocked is not None:
+                recipe_class.load = staticmethod(blocked)
 
     os.environ.setdefault("MLFLOW_ENABLE_MODEL_LOADING", "false")
     logger.info("MLflow hardened: загрузка моделей запрещена для предотвращения RCE")
