@@ -121,6 +121,8 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install
     zlib1g \
     libpam0g \
     libpam-modules \
+    && python3 -m ensurepip --upgrade \
+    && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81' \
     && dpkg -i /tmp/pam-fixed/*.deb \
     && if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
