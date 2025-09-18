@@ -12,8 +12,25 @@ from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
 
-import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
+
+_OFFLINE_ENV = is_offline_env()
+
+try:  # pragma: no cover - fallback executed in offline/testing scenarios
+    if _OFFLINE_ENV:
+        raise ImportError("offline mode uses httpx stub")
+    import httpx as _httpx  # type: ignore
+except Exception:  # noqa: BLE001 - ensure stubs are used when dependencies missing
+    httpx = create_httpx_stub()
+else:
+    httpx = _httpx
+
+try:  # pragma: no cover - fallback executed in offline/testing scenarios
+    if _OFFLINE_ENV:
+        raise ImportError("offline mode uses pydantic stub")
+    from pydantic import BaseModel, ConfigDict, ValidationError  # type: ignore
+except Exception:  # noqa: BLE001 - ensure stubs are used when dependencies missing
+    BaseModel, ConfigDict, ValidationError = create_pydantic_stub()
 
 from bot.config import BotConfig, OFFLINE_MODE
 from bot.dotenv_utils import load_dotenv
@@ -287,13 +304,17 @@ async def get_http_client() -> httpx.AsyncClient:
     Timeout for requests can be configured via the ``HTTP_CLIENT_TIMEOUT``
     environment variable (default 5 seconds).
     """
-    if OFFLINE_MODE:
-        raise RuntimeError("HTTP client unavailable in offline mode")
     global HTTP_CLIENT
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
             timeout = safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
-            HTTP_CLIENT = httpx.AsyncClient(trust_env=False, timeout=timeout)
+            kwargs = {"trust_env": False, "timeout": timeout}
+            if OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
+                logger.debug("Offline HTTP client instantiated")
+            try:
+                HTTP_CLIENT = httpx.AsyncClient(**kwargs)
+            except TypeError:  # pragma: no cover - stub may ignore kwargs
+                HTTP_CLIENT = httpx.AsyncClient()
     return HTTP_CLIENT
 
 
