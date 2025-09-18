@@ -51,7 +51,7 @@ cachetools==5.5.2
     #   google-auth
     #   mlflow-skinny
     #   mlflow-tracing
-ccxt==4.5.4
+ccxt==4.5.5
     # via -r requirements-core.in
 ccxtpro==1.0.1
     # via -r requirements-core.in
