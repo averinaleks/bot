@@ -227,10 +227,10 @@ jobs:
             echo "service_running=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Health check
-        if: steps.start_service.outputs.service_running == 'true'
+        if: ${{ steps.start_service.outputs.service_running == 'true' }}
         run: python scripts/health_check.py
       - name: Cleanup
-        if: always() && steps.start_service.outputs.service_running == 'true'
+        if: ${{ always() && steps.start_service.outputs.service_running == 'true' }}
         run: |
           kill "$(cat "$GITHUB_WORKSPACE/service.pid")" || true
           rm -f "$GITHUB_WORKSPACE/service.pid"
