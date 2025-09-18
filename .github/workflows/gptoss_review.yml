@@ -74,21 +74,33 @@ jobs:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
 
-      - name: Choose free port for GPT-OSS mock
-        if: steps.validate_event.outputs.skip != 'true'
-        id: choose_port
-        run: |
-          set -euo pipefail
-          port=$(python -c "import socket; sock = socket.socket(); sock.bind(('127.0.0.1', 0)); print(sock.getsockname()[1]); sock.close()")
-          echo "LLM_PORT=$port" >> "$GITHUB_ENV"
-          echo "port=$port" >> "$GITHUB_OUTPUT"
-
       - name: Start mock GPT-OSS server
         if: steps.validate_event.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          python scripts/gptoss_mock_server.py --host 127.0.0.1 --port "${LLM_PORT}" &
+          python scripts/gptoss_mock_server.py \
+            --host 127.0.0.1 \
+            --port 0 \
+            --port-file mock_server.port &
           echo $! > mock_server.pid
+
+          ready=0
+          for _ in {1..50}; do
+            if [ -s mock_server.port ]; then
+              port=$(cat mock_server.port)
+              if [[ "$port" =~ ^[0-9]+$ ]]; then
+                echo "LLM_PORT=$port" >> "$GITHUB_ENV"
+                ready=1
+                break
+              fi
+            fi
+            sleep 0.2
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Mock GPT-OSS server did not report a port" >&2
+            exit 1
+          fi
         env:
           MODEL_NAME: ${{ env.MODEL_NAME }}
 
@@ -178,3 +190,4 @@ jobs:
             kill "$(cat mock_server.pid)" || true
             rm -f mock_server.pid
           fi
+          rm -f mock_server.port

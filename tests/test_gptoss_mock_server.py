@@ -1,5 +1,8 @@
+import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 
 import httpx
 import pytest
@@ -107,3 +110,47 @@ def test_signal_handlers_ignore_sighup_and_shutdown(monkeypatch):
         handler(sig, None)
         assert dummy_server.shutdown_calls == 1
         dummy_server.shutdown_calls = 0
+
+
+def test_main_writes_port_file_and_serves_requests(tmp_path: Path):
+    port_file = tmp_path / "port.txt"
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "gptoss_mock_server.py"
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(script_path),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--port-file",
+            str(port_file),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    try:
+        port: int | None = None
+        for _ in range(50):
+            if port_file.exists():
+                content = port_file.read_text(encoding="utf-8").strip()
+                if content.isdigit():
+                    port = int(content)
+                    break
+            time.sleep(0.1)
+
+        if port is None:
+            pytest.fail("mock server did not write port file")
+
+        with httpx.Client(timeout=5) as client:
+            response = client.get(f"http://127.0.0.1:{port}/v1/models")
+            response.raise_for_status()
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
