@@ -4,7 +4,6 @@ import logging
 import asyncio
 import hmac
 import re
-import secrets
 from typing import Any, List, Mapping
 from contextlib import asynccontextmanager
 
@@ -219,27 +218,24 @@ app = FastAPI(lifespan=lifespan)
 class CsrfSettings(BaseModel):
     secret_key: str
 
-
-_EPHEMERAL_CSRF_SECRET: str | None = None
-
-
 def _resolve_csrf_secret() -> str:
     env_secret = os.getenv("CSRF_SECRET")
     if env_secret:
         return env_secret
-    global _EPHEMERAL_CSRF_SECRET
-    if _EPHEMERAL_CSRF_SECRET is None:
-        _EPHEMERAL_CSRF_SECRET = secrets.token_urlsafe(32)
-        logging.warning(
-            "CSRF_SECRET is not set; generated ephemeral secret for this process",
-        )
-    return _EPHEMERAL_CSRF_SECRET
+    logging.error(
+        "CSRF_SECRET is required; set a strong random value for production deployments.",
+    )
+    raise RuntimeError("CSRF_SECRET environment variable is required")
 
 
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
     """Return CSRF settings for FastAPI CsrfProtect."""
     return CsrfSettings(secret_key=_resolve_csrf_secret())
+
+
+# Validate configuration at import time so misconfigured deployments fail fast.
+_resolve_csrf_secret()
 
 
 csrf_protect = CsrfProtect()

@@ -15,6 +15,9 @@ If both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` environment variables are
 defined, a Telegram logger is automatically attached and forwards `ERROR`
 messages to the specified chat.
 
+For production deployments you **must** provide a strong random value in the `CSRF_SECRET` environment variable. Without it the
+FastAPI server refuses to start because CSRF protection cannot be configured safely.
+
 The GPT analysis service should return JSON with the following fields:
 `signal` ("buy"/"sell"/"hold"), `tp_mult` and `sl_mult` — multipliers applied
 to take‑profit and stop‑loss distances.
