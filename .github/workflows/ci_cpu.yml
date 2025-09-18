@@ -74,7 +74,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flake8-log
+          name: flake8-log-${{ matrix.python-version }}-${{ matrix.device }}
           path: flake8.log
           if-no-files-found: ignore
       - name: Run mypy
@@ -91,7 +91,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: pytest-log
+          name: pytest-log-${{ matrix.python-version }}-${{ matrix.device }}
           path: pytest.log
           if-no-files-found: ignore
       - name: Stop mock server
