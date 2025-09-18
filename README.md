@@ -15,6 +15,8 @@
 
 **Disclaimer**: This project is provided for educational purposes only and does not constitute financial advice. Use at your own risk.
 
+В production‑окружении обязательно установите переменную окружения `CSRF_SECRET` в `.env` или системных настройках и используйте криптографически стойкое случайное значение. Без неё HTTP‑сервер с защитой от CSRF не запустится.
+
 ## Зависимости
 
 Основные пакеты устанавливаются из `requirements.txt` и включают, например,
