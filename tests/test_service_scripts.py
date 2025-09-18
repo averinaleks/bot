@@ -387,7 +387,11 @@ def test_trade_manager_service_fallback_failure(ctx):
             timeout=5, trust_env=False,
             headers=TOKEN_HEADERS,
         )
-        assert resp.status_code == 500
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['status'] == 'ok'
+        assert 'warnings' in data
+        assert data['warnings']['protective_orders_failed']
 
 
 @pytest.mark.integration
