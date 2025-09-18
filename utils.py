@@ -14,7 +14,20 @@ from functools import wraps
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, TypeVar
 
-import httpx
+try:  # pragma: no cover - optional dependency for HTTP error handling
+    import httpx
+except Exception as exc:  # pragma: no cover - gracefully degrade when missing
+    class _HttpxStub:
+        class HTTPError(Exception):
+            """Fallback HTTPError used when httpx is unavailable."""
+
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args)
+
+    httpx = _HttpxStub()  # type: ignore[assignment]
+    _HTTPX_IMPORT_ERROR: Exception | None = exc
+else:  # pragma: no cover - executed in environments with httpx installed
+    _HTTPX_IMPORT_ERROR = None
 
 from services.logging_utils import sanitize_log_value
 
