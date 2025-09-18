@@ -22,6 +22,7 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
 import os
 import tempfile
 from bot.dotenv_utils import load_dotenv
+from bot.utils import validate_host
 from services.logging_utils import sanitize_log_value
 try:  # optional dependency
     import pandas as pd
@@ -53,6 +54,28 @@ if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 exchange = None
+
+
+def _require_api_key() -> "ResponseReturnValue | None":
+    """Ensure protected endpoints require a shared token when configured."""
+
+    token = os.getenv("DATA_HANDLER_API_KEY", "").strip()
+    if not token:
+        return None
+
+    provided = (request.headers.get("X-API-KEY") or "").strip()
+    if provided == token:
+        return None
+
+    remote = request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown"
+    logging.getLogger(__name__).warning(
+        "Отклонён запрос к %s от %s: отсутствует или неверный X-API-KEY",
+        sanitize_log_value(request.path),
+        sanitize_log_value(remote),
+    )
+    return jsonify({'error': 'unauthorized'}), 401
+
+
 def _create_history_cache() -> "HistoricalDataCache | None":
     if HistoricalDataCache is None:
         return None
@@ -164,6 +187,9 @@ CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 # Correct price endpoint without trailing whitespace
 @app.route('/price/<symbol>', methods=['GET'])
 def price(symbol: str) -> ResponseReturnValue:
+    auth_error = _require_api_key()
+    if auth_error is not None:
+        return auth_error
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     try:
@@ -195,6 +221,9 @@ def price(symbol: str) -> ResponseReturnValue:
 @app.route('/history/<symbol>', methods=['GET'])
 def history(symbol: str) -> ResponseReturnValue:
     """Return OHLCV history for ``symbol``."""
+    auth_error = _require_api_key()
+    if auth_error is not None:
+        return auth_error
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     timeframe = request.args.get('timeframe', '1m')
@@ -289,11 +318,21 @@ else:
         return jsonify({'error': 'internal server error'}), 500
 
 
-if __name__ == "__main__":
+def get_bind_host() -> str:
+    """Return the validated host value for ``app.run``."""
+
+    return validate_host()
+
+
+def main() -> None:
     from bot.utils import configure_logging
 
     configure_logging()
-    host = os.getenv("HOST", "127.0.0.1")
+    host = get_bind_host()
     port = int(os.getenv("PORT", "8000"))
     app.logger.info('Запуск сервиса DataHandlerService на %s:%s', host, port)
     app.run(host=host, port=port)
+
+
+if __name__ == "__main__":
+    main()

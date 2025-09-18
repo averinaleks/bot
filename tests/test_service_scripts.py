@@ -30,7 +30,7 @@ def _run_dh(port: int):
     sys.modules['ccxt'] = ccxt
     with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1', 'TEST_MODE': '1'}):
         from bot.services import data_handler_service
-        data_handler_service.app.run(host='127.0.0.1', port=port)
+        data_handler_service.app.run(host=data_handler_service.get_bind_host(), port=port)
 
 
 @pytest.mark.integration
@@ -66,7 +66,29 @@ def _run_dh_fail(port: int):
     sys.modules['ccxt'] = ccxt
     with patch.dict(os.environ, {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1', 'TEST_MODE': '1'}):
         from bot.services import data_handler_service
-        data_handler_service.app.run(host='127.0.0.1', port=port)
+        data_handler_service.app.run(host=data_handler_service.get_bind_host(), port=port)
+
+
+def _run_dh_token(port: int):
+    class DummyExchange:
+        def fetch_ticker(self, symbol):
+            return {'last': 42.0}
+
+        def fetch_ohlcv(self, symbol, timeframe='1m', limit=100):
+            return [[1, 1, 1, 1, 1, 1]]
+
+    ccxt = types.ModuleType('ccxt')
+    ccxt.bybit = lambda *a, **kw: DummyExchange()
+    import sys
+
+    sys.modules['ccxt'] = ccxt
+    with patch.dict(
+        os.environ,
+        {'STREAM_SYMBOLS': '', 'HOST': '127.0.0.1', 'TEST_MODE': '1', 'DATA_HANDLER_API_KEY': 'secret'},
+    ):
+        from bot.services import data_handler_service
+
+        data_handler_service.app.run(host=data_handler_service.get_bind_host(), port=port)
 
 
 @pytest.mark.integration
@@ -77,6 +99,55 @@ def test_data_handler_service_price_error(ctx):
         resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
         assert resp.status_code == 503
         assert 'error' in resp.json()
+
+
+def test_data_handler_service_rejects_non_local_host(monkeypatch):
+    class DummyExchange:
+        def fetch_ticker(self, symbol):
+            return {'last': 42.0}
+
+    ccxt = types.ModuleType('ccxt')
+    ccxt.bybit = lambda *a, **kw: DummyExchange()
+    import sys
+
+    monkeypatch.setitem(sys.modules, 'ccxt', ccxt)
+    monkeypatch.setenv('TEST_MODE', '1')
+    monkeypatch.setenv('HOST', '8.8.8.8')
+    monkeypatch.delitem(sys.modules, 'bot.services.data_handler_service', raising=False)
+    import importlib
+
+    module = importlib.import_module('bot.services.data_handler_service')
+
+    with pytest.raises(ValueError):
+        module.get_bind_host()
+
+
+@pytest.mark.integration
+def test_data_handler_service_requires_api_key(ctx):
+    port = get_free_port()
+    p = ctx.Process(target=_run_dh_token, args=(port,))
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
+        assert resp.status_code == 401
+        assert resp.json()['error'] == 'unauthorized'
+
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/price/BTCUSDT',
+            timeout=5,
+            trust_env=False,
+            headers={'X-API-KEY': 'secret'},
+        )
+        assert resp.status_code == 200
+        assert resp.json()['price'] == 42.0
+
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/history/BTCUSDT',
+            timeout=5,
+            trust_env=False,
+            headers={'X-API-KEY': 'secret'},
+        )
+        assert resp.status_code == 200
+        assert resp.json()['history'] == [[1, 1, 1, 1, 1, 1]]
 
 
 def _run_mb(model_dir: str, port: int):
