@@ -21,8 +21,9 @@ from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
 from bot.utils import ensure_writable_directory
-from utils import safe_int, validate_host
 from services.logging_utils import sanitize_log_value
+from security import verify_model_state_signature, write_model_state_signature
+from utils import safe_int, validate_host
 
 try:
     from werkzeug.utils import secure_filename
@@ -293,6 +294,12 @@ else:  # scikit-learn fallback used by tests
                 sanitize_log_value(path),
             )
             return
+        if not verify_model_state_signature(path):
+            app.logger.warning(
+                "Refused to load model %s: signature mismatch",
+                sanitize_log_value(path),
+            )
+            return
         with path.open("rb") as fh:
             data = joblib.load(fh)
         _models[symbol] = data.get("model")
@@ -331,6 +338,14 @@ else:  # scikit-learn fallback used by tests
         try:
             joblib.dump(data, tmp_path)
             os.replace(tmp_path, path)
+            try:
+                write_model_state_signature(path)
+            except OSError as exc:
+                app.logger.warning(
+                    "Failed to persist signature for %s: %s",
+                    sanitize_log_value(path),
+                    exc,
+                )
         except Exception as exc:  # pragma: no cover - dump failures are rare
             app.logger.exception(
                 "Failed to persist model %s: %s",

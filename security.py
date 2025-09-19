@@ -5,12 +5,90 @@ Trivy so that the codebase remains safe without dropping optional features.
 """
 from __future__ import annotations
 
+import functools
+import hmac
+import hashlib
 import logging
 import os
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+_MODEL_STATE_HMAC_ENV = "MODEL_STATE_HMAC_KEY"
+_MODEL_STATE_SIG_SUFFIX = ".sig"
+
+
+@functools.lru_cache
+def _get_model_state_hmac_key() -> bytes | None:
+    """Return the HMAC key for model state integrity checks."""
+
+    key = os.getenv(_MODEL_STATE_HMAC_ENV)
+    if not key:
+        return None
+    try:
+        return key.encode("utf-8")
+    except Exception:  # pragma: no cover - defensive, UTF-8 always supported
+        logger.warning("Не удалось интерпретировать ключ из %s", _MODEL_STATE_HMAC_ENV)
+        return None
+
+
+def _signature_path(path: Path) -> Path:
+    return path.with_name(path.name + _MODEL_STATE_SIG_SUFFIX)
+
+
+def _calculate_hmac(path: Path) -> str | None:
+    key = _get_model_state_hmac_key()
+    if key is None:
+        return None
+    digest = hmac.new(key, digestmod=hashlib.sha256)
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_model_state_signature(path: Path) -> None:
+    """Persist a keyed digest for *path* if signing is configured."""
+
+    signature = _calculate_hmac(path)
+    if signature is None:
+        return
+    sig_path = _signature_path(path)
+    tmp_path = sig_path.with_suffix(sig_path.suffix + ".tmp")
+    sig_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path.write_text(signature, encoding="utf-8")
+    os.replace(tmp_path, sig_path)
+
+
+def verify_model_state_signature(path: Path) -> bool:
+    """Return ``True`` if *path* has a valid integrity signature."""
+
+    key = _get_model_state_hmac_key()
+    if key is None:
+        return True
+    sig_path = _signature_path(path)
+    try:
+        expected = sig_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        logger.warning(
+            "Отсутствует подпись файла модели %s: загрузка отклонена", path
+        )
+        return False
+    actual = _calculate_hmac(path)
+    if actual is None:
+        return False
+    if not hmac.compare_digest(actual, expected):
+        logger.error(
+            "Подпись модели %s не совпадает: ожидалось %s, получено %s",
+            path,
+            expected,
+            actual,
+        )
+        return False
+    return True
 
 
 def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
