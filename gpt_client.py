@@ -19,7 +19,7 @@ from typing import Any, Coroutine
 # NOTE: httpx is imported for exception types only.
 import httpx
 
-from pydantic import BaseModel, Field, ValidationError
+from bot.pydantic_compat import BaseModel, Field, ValidationError
 
 from bot.utils import retry
 # Absolute import ensures the project's own configuration module is used
