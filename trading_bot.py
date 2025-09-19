@@ -12,7 +12,13 @@ from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
 
+from bot.config import BotConfig, OFFLINE_MODE
+from bot.dotenv_utils import load_dotenv
+from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
+from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
+from telegram_logger import TelegramLogger
+from utils import retry, suppress_tf_logs
 
 _OFFLINE_ENV = is_offline_env()
 
@@ -31,13 +37,6 @@ try:  # pragma: no cover - fallback executed in offline/testing scenarios
     from bot.pydantic_compat import BaseModel, ConfigDict, ValidationError
 except Exception:  # noqa: BLE001 - ensure stubs are used when dependencies missing
     BaseModel, ConfigDict, ValidationError = create_pydantic_stub()
-
-from bot.config import BotConfig, OFFLINE_MODE
-from bot.dotenv_utils import load_dotenv
-from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
-from telegram_logger import TelegramLogger
-from utils import retry, suppress_tf_logs
-from services.logging_utils import sanitize_log_value
 
 try:  # pragma: no cover - optional dependency
     import ccxt  # type: ignore

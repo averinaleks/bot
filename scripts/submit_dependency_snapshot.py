@@ -8,9 +8,6 @@ import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 
@@ -101,7 +98,6 @@ def _env(name: str) -> str:
         sys.exit(1)
     return value
 
-
 def submit_dependency_snapshot() -> None:
     repository = _env("GITHUB_REPOSITORY")
     token = _env("GITHUB_TOKEN")
@@ -138,6 +134,9 @@ def submit_dependency_snapshot() -> None:
     }
 
     url = f"https://api.github.com/repos/{repository}/dependency-graph/snapshots"
+    parsed_url = urlparse(url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise RuntimeError("Запрос зависимостей разрешён только по HTTPS")
     body = json.dumps(payload).encode()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -145,15 +144,21 @@ def submit_dependency_snapshot() -> None:
         "Content-Type": "application/json",
         "User-Agent": "dependency-snapshot-script",
     }
-    request = Request(url, data=body, headers=headers, method="POST")
 
     try:
-        with urlopen(request) as response:
-            print(f"Dependency snapshot submitted: HTTP {response.status}")
-    except HTTPError as error:
-        message = error.read().decode() if error.fp else error.reason
-        print(f"Failed to submit dependency snapshot: HTTP {error.code}: {message}", file=sys.stderr)
-        raise
+        response = requests.post(url, data=body, headers=headers, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Не удалось отправить snapshot зависимостей: {exc}") from exc
+
+    if response.status_code >= 400:
+        message = response.text or response.reason
+        print(
+            f"Failed to submit dependency snapshot: HTTP {response.status_code}: {message}",
+            file=sys.stderr,
+        )
+        raise RuntimeError("GitHub отклонил snapshot зависимостей")
+
+    print(f"Dependency snapshot submitted: HTTP {response.status_code}")
 
 
 if __name__ == "__main__":

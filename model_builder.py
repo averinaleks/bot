@@ -34,8 +34,12 @@ from bot.utils import (
     is_cuda_available,
     logger,
 )
-from services.logging_utils import sanitize_log_value
 from models.architectures import KERAS_FRAMEWORKS, create_model
+from security import (
+    verify_model_state_signature,
+    write_model_state_signature,
+)
+from services.logging_utils import sanitize_log_value
 
 MODEL_DIR = ensure_writable_directory(
     Path(os.getenv("MODEL_DIR", ".")),
@@ -287,11 +291,6 @@ except ImportError as e:  # pragma: no cover - optional dependency
     logger.warning("Не удалось импортировать mlflow: %s", e)
 else:
     harden_mlflow(mlflow)
-
-from security import (
-    verify_model_state_signature,
-    write_model_state_signature,
-)
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None

@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   dependabot:
-    # Run this job only for Dependabot PRs.
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    # Run this job only when Dependabot opens or updates a PR.
+    if: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
@@ -34,7 +34,8 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
 
       # Set up a lightweight Python environment and install only the
       # dependencies required to run the unit tests.  This avoids the
@@ -94,7 +95,7 @@ jobs:
   # skipped and GitHub marks the overall workflow as a failure.  Provide a tiny
   # no-op job for those runs so the workflow reports success instead of red X's.
   noop:
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip non-Dependabot runs
