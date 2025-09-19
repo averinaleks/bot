@@ -1,7 +1,6 @@
-# Ray ShadowRay vulnerability mitigated by security.apply_ray_security_defaults()
+# Ray dashboard RCE (CVE-2023-48022) mitigated by security.apply_ray_security_defaults().
 CVE-2023-48022
-
-# MLflow model loading RCE vulnerabilities mitigated by security.harden_mlflow()
+# MLflow model loading RCEs mitigated by security.harden_mlflow() disabling vulnerable entrypoints.
 CVE-2024-37052
 CVE-2024-37053
 CVE-2024-37054
