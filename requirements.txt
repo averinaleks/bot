@@ -229,7 +229,7 @@ lightning-utilities==0.15.2
     # via
     #   pytorch-lightning
     #   torchmetrics
-llvmlite==0.44.0
+llvmlite==0.45.0
     # via numba
 mako==1.3.10
     # via alembic
@@ -265,7 +265,7 @@ multidict==6.6.4
     #   yarl
 networkx==3.4.2
     # via torch
-numba==0.61.2
+numba==0.62.0
     # via
     #   -r requirements-core.in
     #   shap
