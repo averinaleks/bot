@@ -25,9 +25,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+from urllib import error, request as urllib_request
 from urllib.parse import urlparse
 
-import requests
+# ``urllib.request`` is aliased so unit tests can monkeypatch ``urlopen`` via the
+# ``request`` attribute as they previously did when the workflow relied on the
+# standard library implementation.
+request = urllib_request
 
 
 @dataclass
@@ -73,18 +77,24 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
+    req = request.Request(url, headers=headers)
     try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-
-    if response.status_code >= 400:
+        with request.urlopen(req, timeout=timeout) as response:
+            get_status = getattr(response, "getcode", lambda: 200)
+            status = get_status()
+            payload = response.read()
+    except error.HTTPError as exc:
         raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
-        )
+            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
+        ) from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc.reason}") from exc
+
+    if status >= 400:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {status}")
 
     try:
-        return response.json()
+        return json.loads(payload.decode("utf-8"))
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 
