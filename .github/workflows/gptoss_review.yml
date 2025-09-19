@@ -76,8 +76,18 @@ jobs:
 
       - name: Start mock GPT-OSS server
         if: steps.validate_event.outputs.skip != 'true'
+        id: start_llm
         run: |
           set -euo pipefail
+
+          if [ ! -f scripts/gptoss_mock_server.py ]; then
+            echo "::notice::Скрипт scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "started=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
           # Ask the OS to pick a free TCP port and persist it to ``mock_server.port``.
           # Earlier revisions tried to preselect a port in bash, but the gap between
           # reserving the number and binding to it occasionally allowed another
@@ -104,14 +114,26 @@ jobs:
           done
 
           if [ "$ready" -ne 1 ]; then
-            echo "Mock GPT-OSS server did not report a port" >&2
-            exit 1
+            echo "::warning::Mock GPT-OSS server did not report a port – пропускаю генерацию обзора" >&2
+            if [ -f mock_server.pid ]; then
+              kill "$(cat mock_server.pid)" || true
+              rm -f mock_server.pid
+            fi
+            rm -f mock_server.port || true
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "started=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "started=true" >> "$GITHUB_OUTPUT"
           fi
         env:
           MODEL_NAME: ${{ env.MODEL_NAME }}
 
       - name: Wait for GPT-OSS server
-        if: steps.validate_event.outputs.skip != 'true'
+        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true'
         id: wait_llm
         run: |
           set -euo pipefail
@@ -128,7 +150,7 @@ jobs:
           exit 1
 
       - name: Generate diff
-        if: steps.validate_event.outputs.skip != 'true' && steps.wait_llm.conclusion == 'success'
+        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.wait_llm.conclusion == 'success'
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -150,7 +172,7 @@ jobs:
             --path ':(glob)**/*.py'
 
       - name: LLM review
-        if: steps.validate_event.outputs.skip != 'true' && steps.generate_diff.outputs.has_diff == 'true'
+        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
         run: |
           if [ ! -f scripts/run_gptoss_review.py ]; then
