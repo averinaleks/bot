@@ -25,9 +25,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import urlparse
 
-import requests
+# ``tests`` monkeypatch ``prepare_gptoss_diff.request.urlopen`` to simulate network
+# failures.  Expose ``urllib.request`` under the expected attribute while keeping
+# the rest of the module's public surface unchanged.
+request = urllib_request
 
 
 @dataclass
@@ -73,18 +78,30 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
+    request_obj = urllib_request.Request(url, headers=headers)
     try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-
-    if response.status_code >= 400:
+        with request.urlopen(request_obj, timeout=timeout) as response:
+            status = getattr(response, "status", 200)
+            if status >= 400:
+                reason = getattr(response, "reason", "")
+                raise RuntimeError(
+                    f"HTTP запрос {url} завершился ошибкой: {status} {reason}"
+                )
+            raw = response.read()
+    except urllib_error.HTTPError as exc:
         raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
-        )
+            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
+        ) from exc
+    except urllib_error.URLError as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc.reason}") from exc
 
     try:
-        return response.json()
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("GitHub API вернул ответ в неизвестной кодировке") from exc
+
+    try:
+        return json.loads(text)
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 

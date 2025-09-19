@@ -22,9 +22,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib import request as urllib_request
 from urllib.parse import urlparse
 
 import requests
+
+# ``tests`` expect to monkeypatch ``run_gptoss_review.request.urlopen`` in order
+# to simulate network failures.  Provide a module level alias to keep the public
+# API backwards compatible with the previous implementation that relied on
+# ``urllib.request``.
+request = urllib_request
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
 
