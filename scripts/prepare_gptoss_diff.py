@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
-import requests
+from urllib import error as urllib_error
+from urllib import request
 
 
 @dataclass
@@ -73,18 +74,23 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
+    req = request.Request(url, headers=headers)
+
     try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
+        with request.urlopen(req, timeout=timeout) as response:
+            payload = response.read().decode("utf-8", "replace")
+    except urllib_error.HTTPError as exc:
+        message = exc.read().decode("utf-8", "replace") or exc.reason
+        raise RuntimeError(
+            f"HTTP запрос {url} завершился ошибкой: {exc.code} {message}"
+        ) from exc
+    except urllib_error.URLError as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc.reason}") from exc
+    except TimeoutError as exc:  # pragma: no cover - monkeypatched in tests
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
 
-    if response.status_code >= 400:
-        raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
-        )
-
     try:
-        return response.json()
+        return json.loads(payload)
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 
