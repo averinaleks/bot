@@ -325,7 +325,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.108.0
+openai==1.108.1
     # via -r requirements-core.in
 openapi-pydantic==0.5.1
     # via fastmcp
