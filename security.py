@@ -59,6 +59,22 @@ def write_model_state_signature(path: Path) -> None:
     sig_path = _signature_path(path)
     tmp_path = sig_path.with_suffix(sig_path.suffix + ".tmp")
     sig_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if sig_path.is_symlink():
+            logger.warning(
+                "Удаляем символьную ссылку подписи модели %s перед перезаписью",
+                sig_path,
+            )
+            sig_path.unlink()
+        elif sig_path.exists() and not sig_path.is_file():
+            logger.warning(
+                "Подпись модели %s не является обычным файлом: запись пропущена",
+                sig_path,
+            )
+            return
+    except OSError as exc:  # pragma: no cover - крайне редкие ошибки ФС
+        logger.warning("Не удалось подготовить файл подписи %s: %s", sig_path, exc)
+        return
     tmp_path.write_text(signature, encoding="utf-8")
     os.replace(tmp_path, sig_path)
 
@@ -70,11 +86,32 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
+    if sig_path.is_symlink():
+        logger.warning(
+            "Отказ от проверки подписи модели %s: путь является символьной ссылкой",
+            sig_path,
+        )
+        return False
+    if not sig_path.exists():
+        logger.warning(
+            "Отсутствует подпись файла модели %s: загрузка отклонена", path
+        )
+        return False
+    if not sig_path.is_file():
+        logger.warning(
+            "Отказ от проверки подписи модели %s: ожидается обычный файл", sig_path
+        )
+        return False
     try:
         expected = sig_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         logger.warning(
             "Отсутствует подпись файла модели %s: загрузка отклонена", path
+        )
+        return False
+    except OSError as exc:  # pragma: no cover - редкие ошибки чтения
+        logger.warning(
+            "Не удалось прочитать подпись модели %s: %s", sig_path, exc
         )
         return False
     actual = _calculate_hmac(path)
