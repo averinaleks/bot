@@ -15,7 +15,23 @@ import threading
 import time
 from typing import Any, Optional
 
-import httpx
+try:  # pragma: no cover - optional dependency in lightweight environments
+    import httpx
+except Exception as exc:  # pragma: no cover - fallback when httpx absent
+    class _HttpxStub:
+        """Minimal stub providing :class:`HTTPError` when httpx is missing."""
+
+        class HTTPError(Exception):
+            """Fallback HTTPError used to preserve exception handling."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args)
+
+    httpx = _HttpxStub()  # type: ignore[assignment]
+    _HTTPX_IMPORT_ERROR: Exception | None = exc
+else:  # pragma: no cover - executed when httpx installed
+    _HTTPX_IMPORT_ERROR = None
+
 import hashlib
 # Use absolute import to ensure the local configuration module is loaded even
 # when a similarly named module exists on ``PYTHONPATH``.
