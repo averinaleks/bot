@@ -22,7 +22,7 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
 import os
 import tempfile
 from bot.dotenv_utils import load_dotenv
-from bot.utils import validate_host
+from bot.host_utils import validate_host
 from services.logging_utils import sanitize_log_value
 try:  # optional dependency
     import pandas as pd
