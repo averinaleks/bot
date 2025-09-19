@@ -8,6 +8,11 @@ import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, Iterable, TypedDict
+
+from urllib.parse import urlparse
+
+import requests
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 
