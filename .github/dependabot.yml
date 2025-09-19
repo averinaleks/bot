@@ -6,6 +6,19 @@ updates:
     schedule:
       interval: "daily"
     insecure-external-code-execution: allow
+    ignore:
+      # Heavy ML packages routinely fail to resolve in Dependabot's
+      # constrained execution environment.  Skip them so the scheduled
+      # job stops erroring while manual updates continue to happen via
+      # regular PRs.
+      - dependency-name: "mlflow"
+      - dependency-name: "mlflow-skinny"
+      - dependency-name: "mlflow-tracing"
+      - dependency-name: "pytorch-lightning"
+      - dependency-name: "torch"
+      - dependency-name: "torchvision"
+      - dependency-name: "torchaudio"
+      - dependency-name: "vllm"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
