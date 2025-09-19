@@ -8,10 +8,6 @@ import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable
-from urllib.parse import urlparse
-
-import requests
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 
@@ -34,9 +30,26 @@ def _derive_scope(manifest_name: str) -> str:
     return "runtime"
 
 
-def _parse_requirements(path: Path) -> Dict[str, Dict[str, object]]:
+class ResolvedDependency(TypedDict):
+    package_url: str
+    relationship: str
+    scope: str
+    dependencies: list[str]
+
+
+class ManifestFile(TypedDict):
+    source_location: str
+
+
+class Manifest(TypedDict):
+    name: str
+    file: ManifestFile
+    resolved: Dict[str, ResolvedDependency]
+
+
+def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
     scope = _derive_scope(path.name)
-    resolved: Dict[str, Dict[str, object]] = OrderedDict()
+    resolved: Dict[str, ResolvedDependency] = OrderedDict()
     for raw_line in path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -64,8 +77,8 @@ def _parse_requirements(path: Path) -> Dict[str, Dict[str, object]]:
     return resolved
 
 
-def _build_manifests(root: Path) -> Dict[str, Dict[str, object]]:
-    manifests: Dict[str, Dict[str, object]] = OrderedDict()
+def _build_manifests(root: Path) -> Dict[str, Manifest]:
+    manifests: Dict[str, Manifest] = OrderedDict()
     for manifest in _iter_requirement_files(root):
         resolved = _parse_requirements(manifest)
         if not resolved:
