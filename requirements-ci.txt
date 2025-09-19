@@ -28,7 +28,7 @@ scikit-learn==1.7.2; python_version<'3.12'
 joblib>=1.3
 setuptools>=78.1.1
 types-requests
-mypy==1.18.1
+mypy==1.18.2
 hypothesis>=6.90.0
 # Keep numpy aligned with requirements-core.txt and Docker builds
 numpy==2.2.6
