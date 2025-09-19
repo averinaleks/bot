@@ -244,10 +244,19 @@ class TelegramLogger(logging.Handler):
                     self._queue.put_nowait((None, "", False))
                     try:
                         await asyncio.wait_for(self._queue.join(), timeout=5)
-                    except (asyncio.TimeoutError, RuntimeError):
-                        pass
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "Истекло время ожидания очистки очереди TelegramLogger при завершении",
+                        )
+                    except RuntimeError as exc:
+                        logger.debug(
+                            "Цикл событий недоступен при очистке очереди TelegramLogger: %s",
+                            exc,
+                        )
                 except asyncio.QueueFull:
-                    pass
+                    logger.warning(
+                        "Не удалось добавить сигнал завершения в очередь TelegramLogger: очередь переполнена",
+                    )
 
         if self._stop_event is not None:
             self._stop_event.set()
@@ -257,7 +266,7 @@ class TelegramLogger(logging.Handler):
             try:
                 await self._worker_task
             except asyncio.CancelledError:
-                pass
+                logger.debug("Задача TelegramLogger была отменена при завершении")
             self._worker_task = None
 
         if self._worker_thread is not None:
@@ -284,13 +293,23 @@ def _shutdown_all() -> None:
     coro = TelegramLogger.shutdown()
     try:
         asyncio.run(coro)
-    except RuntimeError:
+    except RuntimeError as exc:
         coro.close()
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(TelegramLogger.shutdown())
         except RuntimeError:
-            pass
+            logger.debug(
+                "Не удалось получить активный цикл событий для завершения TelegramLogger: %s",
+                exc,
+            )
+        else:
+            try:
+                loop.create_task(TelegramLogger.shutdown())
+            except RuntimeError as task_exc:
+                logger.debug(
+                    "Не удалось запланировать завершение TelegramLogger в активном цикле: %s",
+                    task_exc,
+                )
 
 
 atexit.register(_shutdown_all)
