@@ -28,7 +28,7 @@ else:
 try:  # pragma: no cover - fallback executed in offline/testing scenarios
     if _OFFLINE_ENV:
         raise ImportError("offline mode uses pydantic stub")
-    from pydantic import BaseModel, ConfigDict, ValidationError  # type: ignore
+    from bot.pydantic_compat import BaseModel, ConfigDict, ValidationError
 except Exception:  # noqa: BLE001 - ensure stubs are used when dependencies missing
     BaseModel, ConfigDict, ValidationError = create_pydantic_stub()
 
