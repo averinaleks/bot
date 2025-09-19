@@ -84,3 +84,5 @@ runs:
           python -m pip install -r requirements-ci.txt -r requirements-cpu.txt
         fi
         echo "/mnt/venv/bin" >> $GITHUB_PATH
+        printf 'VIRTUAL_ENV=%s\n' "/mnt/venv" >> "$GITHUB_ENV"
+        printf 'PATH=%s:%s\n' "/mnt/venv/bin" "$PATH" >> "$GITHUB_ENV"
