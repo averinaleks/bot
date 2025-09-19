@@ -12,7 +12,8 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import urlparse
 
-import requests
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 
@@ -150,20 +151,21 @@ def submit_dependency_snapshot() -> None:
         "User-Agent": "dependency-snapshot-script",
     }
 
-    try:
-        response = requests.post(url, data=body, headers=headers, timeout=30)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Не удалось отправить snapshot зависимостей: {exc}") from exc
+    request = Request(url, data=body, headers=headers, method="POST")
 
-    if response.status_code >= 400:
-        message = response.text or response.reason
+    try:
+        with urlopen(request, timeout=30) as response:
+            status_code = int(response.getcode() or 0)
+            print(f"Dependency snapshot submitted: HTTP {status_code}")
+    except HTTPError as exc:
+        message = exc.read().decode(errors="replace") if exc.fp else exc.reason
         print(
-            f"Failed to submit dependency snapshot: HTTP {response.status_code}: {message}",
+            f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
             file=sys.stderr,
         )
-        raise RuntimeError("GitHub отклонил snapshot зависимостей")
-
-    print(f"Dependency snapshot submitted: HTTP {response.status_code}")
+        raise RuntimeError("GitHub отклонил snapshot зависимостей") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Не удалось отправить snapshot зависимостей: {exc.reason}") from exc
 
 
 if __name__ == "__main__":
