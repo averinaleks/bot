@@ -1,37 +1,161 @@
-"""Асинхронный клиент для взаимодействия с сервисом обучения моделей."""
-
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import socket
+from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import List, Optional, Tuple
+from urllib.parse import urlparse
 
 import httpx
 
 from bot.config import OFFLINE_MODE
+from services.logging_utils import sanitize_log_value
+
 
 logger = logging.getLogger("TradingBot")
+
+
+@dataclass(frozen=True)
+class ServiceEndpoint:
+    """Validated endpoint information for model-related services."""
+
+    scheme: str
+    base_url: str
+    hostname: str
+    allowed_ips: frozenset[str]
+
 
 _MODEL_VERSION = 0
 
 
-async def _fetch_training_data(
-    data_url: str, symbol: str, limit: int = 50
-) -> Tuple[List[List[float]], List[int]]:
-    """Fetch recent OHLCV data and derive direction labels."""
+def _resolve_hostname(hostname: str) -> set[str]:
+    """Return IP addresses resolving *hostname*, respecting ``TEST_MODE``."""
 
-    if OFFLINE_MODE:
-        logger.info(
-            "Offline mode: skipping training data fetch for %s", symbol
+    try:
+        infos = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
+    except socket.gaierror as exc:
+        if os.getenv("TEST_MODE") == "1":
+            return {"127.0.0.1"}
+        raise ValueError(
+            f"Не удалось разрешить имя хоста {sanitize_log_value(hostname)!r}"
+        ) from exc
+    return {info[4][0] for info in infos if info[4] and info[4][0]}
+
+
+def _is_private_ip(ip_text: str) -> bool:
+    address = ip_address(ip_text)
+    return (
+        address.is_loopback
+        or address.is_private
+        or address.is_link_local
+        or address.is_reserved
+    )
+
+
+def _prepare_endpoint(raw_url: str, *, purpose: str) -> ServiceEndpoint | None:
+    """Validate and normalize *raw_url* for the given *purpose*."""
+
+    safe_url = sanitize_log_value(raw_url)
+    parsed = urlparse(raw_url)
+    if not parsed.scheme or not parsed.hostname:
+        logger.error("%s URL %s отклонён: отсутствует схема или хост", purpose, safe_url)
+        return None
+
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        logger.error(
+            "%s URL %s использует неподдерживаемую схему %r", purpose, safe_url, scheme
         )
-        return [], []
+        return None
+
+    try:
+        resolved_ips = _resolve_hostname(parsed.hostname)
+    except ValueError as exc:
+        logger.error("%s URL %s отклонён: %s", purpose, safe_url, exc)
+        return None
+
+    if not resolved_ips:
+        logger.error(
+            "%s URL %s отклонён: имя хоста не разрешилось ни в один IP", purpose, safe_url
+        )
+        return None
+
+    if scheme == "http" and not all(_is_private_ip(ip) for ip in resolved_ips):
+        logger.error(
+            "%s URL %s должен использовать HTTPS или частный адрес", purpose, safe_url
+        )
+        return None
+
+    return ServiceEndpoint(
+        scheme=scheme,
+        base_url=raw_url.rstrip("/"),
+        hostname=parsed.hostname,
+        allowed_ips=frozenset(resolved_ips),
+    )
+
+
+async def _hostname_still_allowed(endpoint: ServiceEndpoint) -> bool:
+    """Detect DNS rebinding by ensuring the host resolves within the allowed set."""
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    try:
+        if loop is None:
+            infos = socket.getaddrinfo(endpoint.hostname, None, family=socket.AF_UNSPEC)
+        else:
+            infos = await loop.getaddrinfo(
+                endpoint.hostname, None, family=socket.AF_UNSPEC
+            )
+    except socket.gaierror as exc:
+        if os.getenv("TEST_MODE") == "1":
+            return True
+        logger.error(
+            "Повторное разрешение %s не удалось: %s",
+            sanitize_log_value(endpoint.hostname),
+            exc,
+        )
+        return False
+
+    current_ips = {info[4][0] for info in infos if info[4] and info[4][0]}
+    if not current_ips:
+        logger.error(
+            "Повторное разрешение %s не вернуло IP-адресов",
+            sanitize_log_value(endpoint.hostname),
+        )
+        return False
+
+    if not current_ips & endpoint.allowed_ips:
+        logger.error(
+            "Обнаружена попытка DNS-rebinding для %s: %s не пересекаются с %s",
+            sanitize_log_value(endpoint.hostname),
+            {sanitize_log_value(ip) for ip in current_ips},
+            {sanitize_log_value(ip) for ip in endpoint.allowed_ips},
+        )
+        return False
+    return True
+
+
+async def _fetch_training_data_from_endpoint(
+    endpoint: ServiceEndpoint, symbol: str, limit: int = 50
+) -> Tuple[List[List[float]], List[int]]:
+    """Fetch recent OHLCV data and derive direction labels from *endpoint*."""
 
     features: List[List[float]] = []
     labels: List[int] = []
+
+    if not await _hostname_still_allowed(endpoint):
+        return features, labels
+
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
             resp = await client.get(
-                f"{data_url.rstrip('/')}/ohlcv/{symbol}",
+                f"{endpoint.base_url}/ohlcv/{symbol}",
                 params={"limit": limit},
                 timeout=5.0,
             )
@@ -63,18 +187,19 @@ async def _fetch_training_data(
     return features, labels
 
 
-async def train(url: str, features: List[List[float]], labels: List[int]) -> bool:
-    """Send training data to the model_builder service."""
+async def _train_with_endpoint(
+    endpoint: ServiceEndpoint, features: List[List[float]], labels: List[int]
+) -> bool:
+    """Send training data to *endpoint* ensuring DNS rebinding protection."""
 
-    if OFFLINE_MODE:
-        logger.info("Offline mode: skipping model training request")
-        return True
+    if not await _hostname_still_allowed(endpoint):
+        return False
 
     payload = {"features": features, "labels": labels}
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
             response = await client.post(
-                f"{url.rstrip('/')}/train", json=payload, timeout=5.0
+                f"{endpoint.base_url}/train", json=payload, timeout=5.0
             )
         if response.status_code == 200:
             return True
@@ -84,19 +209,57 @@ async def train(url: str, features: List[List[float]], labels: List[int]) -> boo
     return False
 
 
-async def retrain(model_url: str, data_url: str, symbol: str = "BTCUSDT") -> Optional[int]:
-    """Retrain the model using data from ``data_url``."""
+async def _fetch_training_data(
+    data_url: str, symbol: str, limit: int = 50
+) -> Tuple[List[List[float]], List[int]]:
+    """Backward compatible wrapper returning training data for *data_url*."""
+
+    if OFFLINE_MODE:
+        logger.info("Offline mode: skipping training data fetch for %s", symbol)
+        return [], []
+
+    endpoint = _prepare_endpoint(data_url, purpose="URL сервиса данных")
+    if endpoint is None:
+        return [], []
+    return await _fetch_training_data_from_endpoint(endpoint, symbol, limit)
+
+
+async def train(url: str, features: List[List[float]], labels: List[int]) -> bool:
+    """Send training data to the model_builder service."""
+
+    if OFFLINE_MODE:
+        logger.info("Offline mode: skipping model training request")
+        return True
+
+    endpoint = _prepare_endpoint(url, purpose="URL сервиса обучения")
+    if endpoint is None:
+        return False
+    return await _train_with_endpoint(endpoint, features, labels)
+
+
+async def retrain(
+    model_url: str, data_url: str, symbol: str = "BTCUSDT"
+) -> Optional[int]:
+    """Retrain the model using data from ``data_url`` with strict URL validation."""
 
     global _MODEL_VERSION
     if OFFLINE_MODE:
         logger.info("Offline mode: retrain skipped")
         return _MODEL_VERSION
 
-    features, labels = await _fetch_training_data(data_url, symbol)
+    data_endpoint = _prepare_endpoint(data_url, purpose="URL сервиса данных")
+    model_endpoint = _prepare_endpoint(model_url, purpose="URL сервиса обучения")
+
+    if data_endpoint is None or model_endpoint is None:
+        logger.error("Ретрайн невозможен: некорректные URL сервисов")
+        return None
+
+    features, labels = await _fetch_training_data_from_endpoint(data_endpoint, symbol)
     if not features or not labels:
         logger.error("No training data available for retrain")
         return None
-    if await train(model_url, features, labels):
+
+    if await _train_with_endpoint(model_endpoint, features, labels):
         _MODEL_VERSION += 1
         logger.info("Model retrained, new version %s", _MODEL_VERSION)
         return _MODEL_VERSION
@@ -120,3 +283,4 @@ def schedule_retrain(
     """Start periodic retraining task."""
 
     return asyncio.create_task(_retrain_loop(model_url, data_url, interval, symbol))
+
