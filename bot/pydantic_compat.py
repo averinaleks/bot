@@ -7,55 +7,70 @@ available the lightweight stubs used in tests are returned instead.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from importlib import import_module
+from typing import Any, Callable, cast
 
 from services.stubs import create_pydantic_stub
 
-try:  # pragma: no cover - simply exercising the import branch
-    from pydantic import BaseModel as _BaseModel, ValidationError as _ValidationError
-    from pydantic import Field as _Field
-except Exception:  # pragma: no cover - executed when pydantic is unavailable
-    _BaseModel, _ConfigDict, _ValidationError = create_pydantic_stub()
+BaseModel: type[Any]
+ValidationError: type[Exception]
+ConfigDict: Any
+Field: Callable[..., Any]
 
-    def _Field(default: Any = None, **_: Any) -> Any:
+try:  # pragma: no cover - simply exercising the import branch
+    from pydantic import BaseModel as _PydanticBaseModel, ValidationError as _PydanticValidationError
+    from pydantic import Field as _pydantic_field
+except Exception:  # pragma: no cover - executed when pydantic is unavailable
+    BaseModel, ConfigDict, ValidationError = create_pydantic_stub()
+
+    def Field(default: Any = None, **_: Any) -> Any:
         return default
 else:
-    try:  # pragma: no cover - ConfigDict only exists in Pydantic v2
-        from pydantic import ConfigDict as _ConfigDict
-    except ImportError:  # pragma: no cover - executed on Pydantic v1
-        def _ConfigDict(**kwargs: Any) -> dict[str, Any]:
+    BaseModel = _PydanticBaseModel
+    ValidationError = _PydanticValidationError
+    Field = cast(Callable[..., Any], _pydantic_field)
+
+    _config_dict = getattr(import_module("pydantic"), "ConfigDict", None)
+    if _config_dict is None:
+        def _fallback_config_dict(**kwargs: Any) -> dict[str, Any]:
             return dict(**kwargs)
+
+        ConfigDict = _fallback_config_dict
+    else:
+        ConfigDict = cast(Any, _config_dict)
 
     def _ensure_method(
         name: str,
-        factory: Callable[[type[_BaseModel]], Callable[..., Any]],
+        factory: Callable[[type[_PydanticBaseModel]], object],
     ) -> None:
-        if hasattr(_BaseModel, name):
+        if hasattr(_PydanticBaseModel, name):
             return
-        setattr(_BaseModel, name, factory(_BaseModel))  # type: ignore[attr-defined]
+        setattr(_PydanticBaseModel, name, factory(_PydanticBaseModel))  # type: ignore[attr-defined]
 
-    def _make_model_validate(_: type[_BaseModel]) -> Callable[..., Any]:
-        def _model_validate(cls: type[_BaseModel], data: Any, *args: Any, **kwargs: Any) -> _BaseModel:
+    def _make_model_validate(_: type[_PydanticBaseModel]) -> object:
+        def _model_validate(
+            cls: type[_PydanticBaseModel], data: Any, *args: Any, **kwargs: Any
+        ) -> _PydanticBaseModel:
             return cls.parse_obj(data)
 
         return classmethod(_model_validate)
 
-    def _make_model_validate_json(_: type[_BaseModel]) -> Callable[..., Any]:
+    def _make_model_validate_json(_: type[_PydanticBaseModel]) -> object:
         def _model_validate_json(
-            cls: type[_BaseModel], data: Any, *args: Any, **kwargs: Any
-        ) -> _BaseModel:
+            cls: type[_PydanticBaseModel], data: Any, *args: Any, **kwargs: Any
+        ) -> _PydanticBaseModel:
             return cls.parse_raw(data, *args, **kwargs)
 
         return classmethod(_model_validate_json)
 
-    def _make_model_dump(_: type[_BaseModel]) -> Callable[..., Any]:
-        def _model_dump(self: _BaseModel, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def _make_model_dump(_: type[_PydanticBaseModel]) -> Callable[..., Any]:
+        def _model_dump(self: _PydanticBaseModel, *args: Any, **kwargs: Any) -> dict[str, Any]:
             return self.dict(*args, **kwargs)
 
         return _model_dump
 
-    def _make_model_dump_json(_: type[_BaseModel]) -> Callable[..., Any]:
-        def _model_dump_json(self: _BaseModel, *args: Any, **kwargs: Any) -> str:
+    def _make_model_dump_json(_: type[_PydanticBaseModel]) -> Callable[..., Any]:
+        def _model_dump_json(self: _PydanticBaseModel, *args: Any, **kwargs: Any) -> str:
             return self.json(*args, **kwargs)
 
         return _model_dump_json
@@ -64,15 +79,5 @@ else:
     _ensure_method("model_validate_json", _make_model_validate_json)
     _ensure_method("model_dump", _make_model_dump)
     _ensure_method("model_dump_json", _make_model_dump_json)
-
-BaseModel = _BaseModel
-ConfigDict = locals().get("_ConfigDict")  # type: ignore[assignment]
-if ConfigDict is None:  # pragma: no cover - defensive safeguard
-    def _fallback_config_dict(**kwargs: Any) -> dict[str, Any]:
-        return dict(**kwargs)
-
-    ConfigDict = _fallback_config_dict
-ValidationError = _ValidationError
-Field = _Field
 
 __all__ = ["BaseModel", "ConfigDict", "ValidationError", "Field"]

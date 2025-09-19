@@ -6,7 +6,7 @@ import os
 import socket
 from dataclasses import dataclass
 from ipaddress import ip_address
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -31,18 +31,36 @@ class ServiceEndpoint:
 _MODEL_VERSION = 0
 
 
+AddressInfo = Tuple[socket.AddressFamily, socket.SocketKind, int, str, Tuple[Any, ...]]
+
+
 def _resolve_hostname(hostname: str) -> set[str]:
     """Return IP addresses resolving *hostname*, respecting ``TEST_MODE``."""
 
     try:
-        infos = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
+        infos = cast(
+            list[AddressInfo],
+            socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC),
+        )
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
             return {"127.0.0.1"}
         raise ValueError(
             f"Не удалось разрешить имя хоста {sanitize_log_value(hostname)!r}"
         ) from exc
-    return {info[4][0] for info in infos if info[4] and info[4][0]}
+    addresses: set[str] = set()
+    for _, _, _, _, sockaddr in infos:
+        if not sockaddr:
+            continue
+        host = sockaddr[0]
+        if isinstance(host, bytes):
+            try:
+                host = host.decode("ascii")
+            except UnicodeDecodeError:
+                continue
+        if isinstance(host, str):
+            addresses.add(host)
+    return addresses
 
 
 def _is_private_ip(ip_text: str) -> bool:
@@ -107,10 +125,16 @@ async def _hostname_still_allowed(endpoint: ServiceEndpoint) -> bool:
 
     try:
         if loop is None:
-            infos = socket.getaddrinfo(endpoint.hostname, None, family=socket.AF_UNSPEC)
+            infos = cast(
+                list[AddressInfo],
+                socket.getaddrinfo(endpoint.hostname, None, family=socket.AF_UNSPEC),
+            )
         else:
-            infos = await loop.getaddrinfo(
-                endpoint.hostname, None, family=socket.AF_UNSPEC
+            infos = cast(
+                list[AddressInfo],
+                await loop.getaddrinfo(
+                    endpoint.hostname, None, family=socket.AF_UNSPEC
+                ),
             )
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
@@ -122,7 +146,18 @@ async def _hostname_still_allowed(endpoint: ServiceEndpoint) -> bool:
         )
         return False
 
-    current_ips = {info[4][0] for info in infos if info[4] and info[4][0]}
+    current_ips: set[str] = set()
+    for _, _, _, _, sockaddr in infos:
+        if not sockaddr:
+            continue
+        host = sockaddr[0]
+        if isinstance(host, bytes):
+            try:
+                host = host.decode("ascii")
+            except UnicodeDecodeError:
+                continue
+        if isinstance(host, str):
+            current_ips.add(host)
     if not current_ips:
         logger.error(
             "Повторное разрешение %s не вернуло IP-адресов",

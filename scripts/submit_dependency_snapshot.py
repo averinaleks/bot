@@ -8,11 +8,28 @@ import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, TypedDict
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
+
+
+class ResolvedDependency(TypedDict):
+    package_url: str
+    relationship: str
+    scope: str
+    dependencies: list[str]
+
+
+class ManifestEntry(TypedDict):
+    name: str
+    file: Dict[str, str]
+    resolved: Dict[str, "ResolvedDependency"]
+
+
+ResolvedDependencies = Dict[str, ResolvedDependency]
+Manifests = Dict[str, ManifestEntry]
 
 
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
@@ -33,9 +50,9 @@ def _derive_scope(manifest_name: str) -> str:
     return "runtime"
 
 
-def _parse_requirements(path: Path) -> Dict[str, Dict[str, object]]:
+def _parse_requirements(path: Path) -> ResolvedDependencies:
     scope = _derive_scope(path.name)
-    resolved: Dict[str, Dict[str, object]] = OrderedDict()
+    resolved: ResolvedDependencies = OrderedDict()
     for raw_line in path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -63,8 +80,8 @@ def _parse_requirements(path: Path) -> Dict[str, Dict[str, object]]:
     return resolved
 
 
-def _build_manifests(root: Path) -> Dict[str, Dict[str, object]]:
-    manifests: Dict[str, Dict[str, object]] = OrderedDict()
+def _build_manifests(root: Path) -> Manifests:
+    manifests: Manifests = OrderedDict()
     for manifest in _iter_requirement_files(root):
         resolved = _parse_requirements(manifest)
         if not resolved:
@@ -115,7 +132,10 @@ def submit_dependency_snapshot() -> None:
             "url": "https://github.com/averinaleks/bot",
         },
         "metadata": {
-            "dependency_count": sum(len(entry["resolved"]) for entry in manifests.values()),
+            "dependency_count": sum(
+                len(entry["resolved"])
+                for entry in manifests.values()
+            ),
         },
         "manifests": manifests,
     }
