@@ -2,7 +2,6 @@
 
 import asyncio
 import inspect
-import ipaddress
 import logging
 import os
 import re
@@ -29,8 +28,11 @@ except Exception as exc:  # pragma: no cover - gracefully degrade when missing
 else:  # pragma: no cover - executed in environments with httpx installed
     _HTTPX_IMPORT_ERROR = None
 
+from bot.host_utils import validate_host as _validate_host
 from services.logging_utils import sanitize_log_value
-from bot.host_utils import validate_host
+
+
+validate_host = _validate_host
 
 
 logger = logging.getLogger("TradingBot")

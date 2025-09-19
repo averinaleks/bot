@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 
+from bot.utils import retry
+from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, is_offline_env
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
@@ -35,9 +37,6 @@ except Exception:  # noqa: BLE001 - guarantee stub availability
     httpx = create_httpx_stub()
 else:
     httpx = _httpx
-
-from bot.utils import retry
-from services.logging_utils import sanitize_log_value
 
 # Use system-level randomness for jitter to avoid predictable retry delays
 _RNG = random.SystemRandom()

@@ -1,11 +1,13 @@
 import os
-import sys
-import logging
 import asyncio
 import hmac
+import logging
 import re
-from typing import Any, List, Mapping
+import sys
 from contextlib import asynccontextmanager
+from typing import Any, List, Mapping
+
+from fastapi import FastAPI, HTTPException, Request, Response
 
 from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
 from services.logging_utils import sanitize_log_value
@@ -17,8 +19,6 @@ if not DOTENV_AVAILABLE:
         "python-dotenv is not installed; continuing without loading .env files (%s)",
         DOTENV_ERROR,
     )
-
-from fastapi import FastAPI, HTTPException, Request, Response
 try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError as exc:  # pragma: no cover - dependency required
