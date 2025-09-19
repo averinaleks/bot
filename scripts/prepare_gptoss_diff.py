@@ -25,7 +25,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
-from urllib import error, request
+from urllib.parse import urlparse
+
+import requests
 
 
 @dataclass
@@ -60,23 +62,29 @@ def _write_github_output(**outputs: str | bool) -> None:
     except OSError as exc:  # pragma: no cover - extremely unlikely on CI
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 
-
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     """Perform a GitHub API request and return the decoded JSON payload."""
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise RuntimeError("Разрешены только HTTPS-запросы к GitHub API")
 
     headers = {"Accept": "application/vnd.github+json"}
     if token:
         headers["Authorization"] = f"token {token}"
 
-    req = request.Request(url, headers=headers)
     try:
-        with request.urlopen(req, timeout=timeout) as resp:
-            payload = resp.read()
-    except (error.HTTPError, error.URLError) as exc:
+        response = requests.get(url, headers=headers, timeout=timeout)
+    except requests.RequestException as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
 
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
+        )
+
     try:
-        return json.loads(payload.decode("utf-8"))
+        return response.json()
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 
