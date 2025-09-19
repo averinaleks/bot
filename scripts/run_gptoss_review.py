@@ -7,9 +7,9 @@ the entire job to exit with a non-zero status.  This module replaces the shell
 logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
-The module keeps dependencies minimal, relying only on the ubiquitous
-``requests`` package that is pre-installed on GitHub runners.  It can also be
-imported from unit tests to validate individual helper functions.
+The module keeps dependencies minimal and sticks to the standard library so it
+can run in restrictive GitHub Actions contexts without extra packages.  It can
+also be imported from unit tests to validate individual helper functions.
 """
 
 from __future__ import annotations
@@ -22,9 +22,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib import error, request
 from urllib.parse import urlparse
-
-import requests
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
 
@@ -82,21 +81,27 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
             if host.lower() != "localhost":
                 raise RuntimeError("Небезопасный HTTP URL для GPT-OSS API")
 
+    data = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    request_obj = request.Request(api_url, data=data, headers=headers, method="POST")
+
     try:
-        response = requests.post(api_url, json=payload, timeout=timeout)
-    except requests.Timeout as exc:
+        with request.urlopen(request_obj, timeout=timeout) as response:
+            raw = response.read()
+    except TimeoutError as exc:
         raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {exc}") from exc
-
-    if response.status_code >= 400:
+    except error.HTTPError as exc:
         raise RuntimeError(
-            f"Сервер GPT-OSS вернул ошибку {response.status_code}: {response.reason}"
-        )
+            f"Сервер GPT-OSS вернул ошибку {exc.code}: {exc.reason}"
+        ) from exc
+    except error.URLError as exc:
+        raise RuntimeError(
+            f"Ошибка при обращении к GPT-OSS ({api_url}): {exc.reason}"
+        ) from exc
 
     try:
-        return response.json()
-    except ValueError as exc:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
         raise RuntimeError("Сервер GPT-OSS вернул некорректный JSON") from exc
 
 
