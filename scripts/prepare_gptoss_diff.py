@@ -25,9 +25,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+from urllib import error, request
 from urllib.parse import urlparse
-
-import requests
 
 
 @dataclass
@@ -73,18 +72,29 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
-    try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    req = request.Request(url, headers=headers)
 
-    if response.status_code >= 400:
+    payload: bytes
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            payload = response.read()
+    except error.HTTPError as exc:
         raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
-        )
+            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
+        ) from exc
+    except TimeoutError as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    except error.URLError as exc:
+        message = getattr(exc, "reason", exc)
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
 
     try:
-        return response.json()
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:  # pragma: no cover - defensive guard
+        raise RuntimeError("GitHub API вернул ответ в неизвестной кодировке") from exc
+
+    try:
+        return json.loads(text)
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 
