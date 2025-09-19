@@ -36,7 +36,27 @@ def _get_model_state_hmac_key() -> bytes | None:
 
 
 def _signature_path(path: Path) -> Path:
-    return path.with_name(path.name + _MODEL_STATE_SIG_SUFFIX)
+    resolved = path.resolve(strict=False)
+    return resolved.with_name(resolved.name + _MODEL_STATE_SIG_SUFFIX)
+
+
+def _canonical_model_path(path: Path, *, context: str, missing_ok: bool) -> Path | None:
+    """Return a resolved non-symlink path for model artefacts."""
+
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError:
+        if missing_ok:
+            logger.warning("%s: файл %s не найден", context, path)
+            return None
+        raise
+    if path.is_symlink():
+        logger.warning("%s: отклонено использование символической ссылки %s", context, path)
+        return None
+    if not resolved.is_file():
+        logger.warning("%s: путь %s не является обычным файлом", context, path)
+        return None
+    return resolved
 
 
 def _calculate_hmac(path: Path) -> str | None:
@@ -53,10 +73,16 @@ def _calculate_hmac(path: Path) -> str | None:
 def write_model_state_signature(path: Path) -> None:
     """Persist a keyed digest for *path* if signing is configured."""
 
-    signature = _calculate_hmac(path)
+    resolved = _canonical_model_path(path, context="Подпись модели", missing_ok=True)
+    if resolved is None:
+        return
+    signature = _calculate_hmac(resolved)
     if signature is None:
         return
-    sig_path = _signature_path(path)
+    sig_path = _signature_path(resolved)
+    if sig_path.exists() and sig_path.is_symlink():
+        logger.warning("Подпись модели не создана: %s является символической ссылкой", sig_path)
+        return
     tmp_path = sig_path.with_suffix(sig_path.suffix + ".tmp")
     sig_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path.write_text(signature, encoding="utf-8")
@@ -69,7 +95,10 @@ def verify_model_state_signature(path: Path) -> bool:
     key = _get_model_state_hmac_key()
     if key is None:
         return True
-    sig_path = _signature_path(path)
+    resolved = _canonical_model_path(path, context="Проверка подписи", missing_ok=True)
+    if resolved is None:
+        return False
+    sig_path = _signature_path(resolved)
     try:
         expected = sig_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
@@ -77,7 +106,10 @@ def verify_model_state_signature(path: Path) -> bool:
             "Отсутствует подпись файла модели %s: загрузка отклонена", path
         )
         return False
-    actual = _calculate_hmac(path)
+    if sig_path.is_symlink():
+        logger.warning("Подпись модели %s является символической ссылкой", sig_path)
+        return False
+    actual = _calculate_hmac(resolved)
     if actual is None:
         return False
     if not hmac.compare_digest(actual, expected):

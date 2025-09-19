@@ -23,13 +23,7 @@ from bot.dotenv_utils import load_dotenv
 from bot.utils import ensure_writable_directory
 from services.logging_utils import sanitize_log_value
 from security import verify_model_state_signature, write_model_state_signature
-from utils import safe_int, validate_host
-
-try:
-    from werkzeug.utils import secure_filename
-except ImportError:
-    def secure_filename(filename: str) -> str:
-        return filename
+from utils import safe_int, sanitize_symbol, validate_host
 
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
@@ -110,18 +104,32 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
     return True
 
 
+_MODEL_FILE_SUFFIXES: tuple[str, ...] = (".pkl", ".joblib")
+
+
 def _resolve_model_file(path_value: str | Path | None) -> Path:
     """Return a sanitised path for pre-trained model artefacts."""
 
     if path_value is None:
         raise ValueError("model path is not set")
+
     candidate = Path(path_value)
-    if not candidate.parts or candidate == Path("."):
-        raise ValueError("model path is empty")
     if candidate.is_absolute():
-        resolved = candidate.resolve(strict=False)
-    else:
-        resolved = (MODEL_DIR / candidate).resolve(strict=False)
+        raise ValueError("model path must be relative")
+
+    if len(candidate.parts) != 1 or candidate in {Path(""), Path(".")}:  # type: ignore[arg-type]
+        raise ValueError("model path must not contain directory components")
+
+    stem = sanitize_symbol(candidate.stem)
+    if not stem:
+        raise ValueError("model path resolves to an empty filename")
+
+    suffix = candidate.suffix or ".pkl"
+    if suffix not in _MODEL_FILE_SUFFIXES:
+        raise ValueError("model path has an invalid extension")
+
+    safe_name = f"{stem}{suffix}"
+    resolved = (MODEL_DIR / safe_name).resolve(strict=False)
     if not _is_within_directory(resolved, MODEL_DIR):
         raise ValueError("model path escapes MODEL_DIR")
     if resolved.exists():
@@ -236,14 +244,10 @@ else:  # scikit-learn fallback used by tests
     def _model_path(symbol: str) -> Path:
         """Return a sanitised path for per-symbol joblib artefacts."""
 
-        if secure_filename is not None:
-            safe = secure_filename(symbol)
-        else:
-            safe = Path(symbol).name
-        safe = safe.strip()
-        if not safe:
+        safe_symbol = sanitize_symbol(symbol)
+        if not safe_symbol:
             raise ValueError("symbol resolves to an empty filename")
-        path = _resolve_model_file(f"{safe}.pkl")
+        path = _resolve_model_file(f"{safe_symbol}.pkl")
         if not _is_within_directory(path, MODEL_DIR):
             raise ValueError("Invalid model path - outside of MODEL_DIR")
         if path.exists() and path.is_symlink():
