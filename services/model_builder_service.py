@@ -13,6 +13,8 @@ import logging
 import os
 import sys
 from pathlib import Path
+import re
+import unicodedata
 from typing import TYPE_CHECKING, Any, Dict
 
 import numpy as np
@@ -25,11 +27,35 @@ from services.logging_utils import sanitize_log_value
 from security import verify_model_state_signature, write_model_state_signature
 from utils import safe_int, validate_host
 
+_FILENAME_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
+_FILENAME_HYPHEN_RE = re.compile(r"[-\s]+")
+
+
+def _fallback_secure_filename(filename: str) -> str:
+    """Return a Werkzeug-compatible safe filename implementation."""
+
+    if not isinstance(filename, str):
+        raise TypeError("filename must be a string")
+    value = unicodedata.normalize("NFKD", filename)
+    # Drop path separators to avoid directory traversal when Werkzeug is absent
+    for sep in (os.path.sep, os.path.altsep):
+        if sep:
+            value = value.replace(sep, " ")
+    # Coerce to ASCII to align with Werkzeug behaviour
+    value = value.encode("ascii", "ignore").decode("ascii")
+    value = value.strip()
+    value = _FILENAME_STRIP_RE.sub("", value)
+    value = _FILENAME_HYPHEN_RE.sub("-", value)
+    value = value.strip("._")
+    return value or "file"
+
+
 try:
-    from werkzeug.utils import secure_filename
+    from werkzeug.utils import secure_filename as _werkzeug_secure_filename
 except ImportError:
-    def secure_filename(filename: str) -> str:
-        return filename
+    secure_filename = _fallback_secure_filename
+else:
+    secure_filename = _werkzeug_secure_filename
 
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
