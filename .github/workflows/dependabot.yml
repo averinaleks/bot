@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   dependabot:
-    # Run this job only for Dependabot PRs.
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    # Run this job only when Dependabot opens or updates a PR.
+    if: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
@@ -94,7 +94,7 @@ jobs:
   # skipped and GitHub marks the overall workflow as a failure.  Provide a tiny
   # no-op job for those runs so the workflow reports success instead of red X's.
   noop:
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip non-Dependabot runs
