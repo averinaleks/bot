@@ -45,8 +45,11 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновляем систему перед установкой зависимостей выполнения
-RUN apt-get update && apt-get dist-upgrade -y \
-    && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    apt-get update; \
+    # Используем upgrade вместо dist-upgrade, чтобы избежать конфликтов зависимостей
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends \
         libssl3t64 \
         python3.12-minimal \
         # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
@@ -54,12 +57,13 @@ RUN apt-get update && apt-get dist-upgrade -y \
         curl \
         python3 \
         # Исключаем tar, чтобы избежать CVE-2025-45582
-        coreutils libgcrypt20 login passwd \
-    && apt-get install -y --no-install-recommends --only-upgrade libpam0g libpam-modules \
-    && python3 -m ensurepip --upgrade \
-    && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81' \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && python3 --version
+        coreutils libgcrypt20 login passwd; \
+    apt-get install -y --no-install-recommends --only-upgrade libpam0g libpam-modules; \
+    python3 -m ensurepip --upgrade; \
+    python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81'; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    python3 --version
 
 WORKDIR /app
 
