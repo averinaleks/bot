@@ -91,7 +91,7 @@ farama-notifications==0.0.4
     # via gymnasium
 fastapi==0.116.1
     # via mlflow-skinny
-fastapi-csrf-protect==1.0.6
+fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
 filelock==3.19.1
     # via
