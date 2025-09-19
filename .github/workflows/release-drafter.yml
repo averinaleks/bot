@@ -22,8 +22,8 @@ jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     concurrency:
-      group: release-drafter-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}
-      cancel-in-progress: false
+      group: release-drafter-${{ replace(github.workflow, ' ', '-') }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref_name }}
+      cancel-in-progress: true
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
