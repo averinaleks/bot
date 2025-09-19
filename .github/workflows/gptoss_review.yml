@@ -78,6 +78,12 @@ jobs:
         if: steps.validate_event.outputs.skip != 'true'
         run: |
           set -euo pipefail
+          # Ask the OS to pick a free TCP port and persist it to ``mock_server.port``.
+          # Earlier revisions tried to preselect a port in bash, but the gap between
+          # reserving the number and binding to it occasionally allowed another
+          # process to claim the same port which crashed the mock server.  Delegating
+          # the selection to the Python helper keeps the operation atomic and
+          # removes the race entirely.
           python scripts/gptoss_mock_server.py \
             --host 127.0.0.1 \
             --port 0 \

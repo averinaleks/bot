@@ -286,7 +286,12 @@ def _write_port_file(path: Path | None, port: int) -> None:
         return
 
     try:
-        path.write_text(str(port), encoding="utf-8")
+        # ``Path.write_text`` truncates the file before writing, so we only
+        # need to ensure the persisted value is newline-terminated.  The GitHub
+        # workflow reads the file with ``cat`` and a trailing newline keeps the
+        # subsequent shell prompt tidy while remaining backwards compatible
+        # with previous behaviour.
+        path.write_text(f"{port}\n", encoding="utf-8")
     except OSError as exc:  # pragma: no cover - best-effort logging
         print(
             f"::warning::Не удалось записать номер порта в {path}: {exc}",
