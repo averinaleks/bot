@@ -61,12 +61,32 @@ jobs:
         if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         run: pytest -m "not integration" -q
 
+      - name: Check auto-merge availability
+        id: auto_merge
+        run: |
+          if [[ "${{ github.event.repository.allow_auto_merge || false }}" == 'true' ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "Auto-merge is disabled for this repository; skipping enablement." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Enable auto-merge for Dependabot PRs
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        id: enable_automerge
+        if: ${{
+          steps.metadata.outputs['update-type'] != 'version-update:semver-major' &&
+          steps.auto_merge.outputs.allowed == 'true'
+        }}
         # v3.0.0
         # yamllint disable-line rule:line-length
         uses: peter-evans/enable-pull-request-automerge@a59ea044f2aeabb1e63839cf06068655c1d70998
+        continue-on-error: true
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report auto-merge failure
+        if: ${{ steps.enable_automerge.conclusion == 'failure' }}
+        run: |
+          echo "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." >> "$GITHUB_STEP_SUMMARY"
