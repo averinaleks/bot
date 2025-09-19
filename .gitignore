@@ -6,3 +6,5 @@ pytest_cache/
 .hypothesis/
 venv/
 .venv/
+default.pkl
+nonexistent
