@@ -2137,6 +2137,20 @@ def _load_model() -> None:
         )
         _model = None
         return
+    if not model_path.is_file():
+        logger.warning(
+            "Отказ от загрузки модели: %s не является обычным файлом",
+            sanitize_log_value(model_path),
+        )
+        _model = None
+        return
+    if not verify_model_state_signature(model_path):
+        logger.warning(
+            "Отказ от загрузки модели %s: подпись не прошла проверку",
+            sanitize_log_value(model_path),
+        )
+        _model = None
+        return
     try:
         _model = joblib.load(model_path)
     except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
@@ -2241,6 +2255,14 @@ def train_route():
     try:
         joblib.dump(model, tmp_path)
         os.replace(tmp_path, model_path)
+        try:
+            write_model_state_signature(model_path)
+        except OSError as exc:  # pragma: no cover - проблемы с ФС крайне редки
+            logger.warning(
+                "Не удалось сохранить подпись модели %s: %s",
+                sanitize_log_value(model_path),
+                exc,
+            )
     except Exception as exc:  # pragma: no cover - dump failures are rare
         logger.exception(
             "Не удалось сохранить модель в %s: %s",
