@@ -7,9 +7,9 @@ the entire job to exit with a non-zero status.  This module replaces the shell
 logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
-The module keeps dependencies minimal, relying only on the ubiquitous
-``requests`` package that is pre-installed on GitHub runners.  It can also be
-imported from unit tests to validate individual helper functions.
+To stay dependency-free the implementation talks to the API using
+``urllib.request`` from the Python standard library.  The module can be imported
+from unit tests to validate individual helper functions.
 """
 
 from __future__ import annotations
@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import requests
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
+
+# Export ``request`` so tests can monkeypatch ``urlopen`` without reaching into
+# private helpers.  This mirrors the previous implementation that used
+# ``urllib.request`` directly in the module namespace.
+request = urllib_request
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
 
@@ -82,20 +88,28 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
             if host.lower() != "localhost":
                 raise RuntimeError("Небезопасный HTTP URL для GPT-OSS API")
 
-    try:
-        response = requests.post(api_url, json=payload, timeout=timeout)
-    except requests.Timeout as exc:
-        raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {exc}") from exc
+    data = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    request_obj = urllib_request.Request(api_url, data=data, headers=headers, method="POST")
 
-    if response.status_code >= 400:
+    try:
+        with urllib_request.urlopen(request_obj, timeout=timeout) as response:
+            body = response.read()
+    except HTTPError as exc:
         raise RuntimeError(
-            f"Сервер GPT-OSS вернул ошибку {response.status_code}: {response.reason}"
-        )
+            f"Сервер GPT-OSS вернул ошибку {exc.code}: {exc.reason}"
+        ) from exc
+    except URLError as exc:
+        raise RuntimeError(
+            f"Ошибка при обращении к GPT-OSS ({api_url}): {exc.reason or exc}"
+        ) from exc
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}"
+        ) from exc
 
     try:
-        return response.json()
+        return json.loads(body.decode("utf-8"))
     except ValueError as exc:
         raise RuntimeError("Сервер GPT-OSS вернул некорректный JSON") from exc
 

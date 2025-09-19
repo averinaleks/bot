@@ -27,7 +27,15 @@ from pathlib import Path
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
-import requests
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
+
+# ``tests/test_prepare_gptoss_diff.py`` monkeypatches ``request.urlopen`` for
+# compatibility with the previous implementation that relied on
+# ``urllib.request``.  Expose the module under the expected name so the tests –
+# and, by extension, the GitHub Actions workflow – can override network calls
+# without touching the function internals.
+request = urllib_request
 
 
 @dataclass
@@ -73,18 +81,24 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
+    request_obj = urllib_request.Request(url, headers=headers)
+
     try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
+        with urllib_request.urlopen(request_obj, timeout=timeout) as response:
+            payload = response.read()
+    except HTTPError as exc:
+        raise RuntimeError(
+            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
+        ) from exc
+    except URLError as exc:
+        raise RuntimeError(
+            f"HTTP запрос {url} завершился ошибкой: {exc.reason or exc}"
+        ) from exc
+    except TimeoutError as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
 
-    if response.status_code >= 400:
-        raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {response.status_code} {response.reason}"
-        )
-
     try:
-        return response.json()
+        return json.loads(payload.decode("utf-8"))
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise RuntimeError("GitHub API вернул некорректный JSON") from exc
 
