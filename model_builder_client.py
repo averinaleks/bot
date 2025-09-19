@@ -1,3 +1,7 @@
+"""Асинхронный клиент для взаимодействия с сервисом обучения моделей."""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import List, Optional, Tuple
