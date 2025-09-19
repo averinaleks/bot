@@ -7,23 +7,24 @@ the entire job to exit with a non-zero status.  This module replaces the shell
 logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
-The module is intentionally free of third-party dependencies so it can run in
-the minimal GitHub runner environment.  It can also be imported from unit tests
-to validate individual helper functions.
+The module keeps dependencies minimal, relying only on the ubiquitous
+``requests`` package that is pre-installed on GitHub runners.  It can also be
+imported from unit tests to validate individual helper functions.
 """
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import socket
-from urllib import error, request
+from urllib.parse import urlparse
 
+import requests
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
 
@@ -69,21 +70,32 @@ def _build_payload(diff_text: str, model: str | None) -> dict[str, Any]:
 
 
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = request.Request(
-        api_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-    except (error.URLError, socket.timeout, TimeoutError) as exc:
-        raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
+    parsed = urlparse(api_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("Недопустимый URL для GPT-OSS API")
+    if parsed.scheme == "http":
+        host = parsed.hostname or ""
+        try:
+            if not ipaddress.ip_address(host).is_loopback:
+                raise ValueError
+        except ValueError:
+            if host.lower() != "localhost":
+                raise RuntimeError("Небезопасный HTTP URL для GPT-OSS API")
 
     try:
-        return json.loads(raw.decode("utf-8"))
+        response = requests.post(api_url, json=payload, timeout=timeout)
+    except requests.Timeout as exc:
+        raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {exc}") from exc
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Сервер GPT-OSS вернул ошибку {response.status_code}: {response.reason}"
+        )
+
+    try:
+        return response.json()
     except ValueError as exc:
         raise RuntimeError("Сервер GPT-OSS вернул некорректный JSON") from exc
 
