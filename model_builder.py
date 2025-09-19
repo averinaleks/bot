@@ -288,6 +288,11 @@ except ImportError as e:  # pragma: no cover - optional dependency
 else:
     harden_mlflow(mlflow)
 
+from security import (
+    verify_model_state_signature,
+    write_model_state_signature,
+)
+
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
 
@@ -1118,6 +1123,13 @@ class ModelBuilder:
             with open(tmp_path, "wb") as f:
                 joblib.dump(state, f)
             os.replace(tmp_path, self.state_file_path)
+            try:
+                write_model_state_signature(self.state_file_path)
+            except OSError as exc:
+                logger.warning(
+                    "Не удалось записать подпись для состояния модели: %s",
+                    exc,
+                )
             self.last_save_time = time.time()
             logger.info("Состояние ModelBuilder сохранено")
         except (OSError, ValueError) as e:
@@ -1153,6 +1165,12 @@ class ModelBuilder:
                     sanitize_log_value(state_path),
                 )
                 return
+            if not verify_model_state_signature(state_path):
+                logger.warning(
+                    "Отказ от загрузки состояния: подпись файла %s недействительна",
+                    sanitize_log_value(state_path),
+                )
+                return
             if not state_path.is_file():
                 logger.warning(
                     "Пропускаем загрузку состояния: %s не является файлом",
@@ -1161,30 +1179,30 @@ class ModelBuilder:
                 return
             with state_path.open("rb") as f:
                 state = joblib.load(f)
-                self.scalers = state.get("scalers", {})
-                if self.nn_framework == "pytorch":
-                    for symbol, sd in state.get("lstm_models", {}).items():
-                        scaler = self.scalers.get(symbol)
-                        input_size = (
-                            len(scaler.mean_)
-                            if scaler
-                            else self.config["lstm_timesteps"]
-                        )
-                        pt = self.config.get("prediction_target", "direction")
-                        model_input = (
-                            input_size * self.config["lstm_timesteps"]
-                            if self.model_type == "mlp"
-                            else input_size
-                        )
-                        model = create_model(
-                            self.model_type,
-                            self.nn_framework,
-                            model_input,
-                            regression=pt == "pnl",
-                        )
-                        model.load_state_dict(sd)
-                        model.to(self.device)
-                        self.predictive_models[symbol] = model
+            self.scalers = state.get("scalers", {})
+            if self.nn_framework == "pytorch":
+                for symbol, sd in state.get("lstm_models", {}).items():
+                    scaler = self.scalers.get(symbol)
+                    input_size = (
+                        len(scaler.mean_)
+                        if scaler
+                        else self.config["lstm_timesteps"]
+                    )
+                    pt = self.config.get("prediction_target", "direction")
+                    model_input = (
+                        input_size * self.config["lstm_timesteps"]
+                        if self.model_type == "mlp"
+                        else input_size
+                    )
+                    model = create_model(
+                        self.model_type,
+                        self.nn_framework,
+                        model_input,
+                        regression=pt == "pnl",
+                    )
+                    model.load_state_dict(sd)
+                    model.to(self.device)
+                    self.predictive_models[symbol] = model
                 else:
                     if self.nn_framework in KERAS_FRAMEWORKS:
                         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
