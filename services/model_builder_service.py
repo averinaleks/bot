@@ -96,7 +96,56 @@ MODEL_DIR = ensure_writable_directory(
     Path(os.getenv("MODEL_DIR", ".")),
     description="моделей",
     fallback_subdir="trading_bot_models",
-)
+).resolve()
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    """Return ``True`` if ``path`` is located within ``directory``."""
+
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_model_file(path_value: str | Path | None) -> Path:
+    """Return a sanitised path for pre-trained model artefacts."""
+
+    if path_value is None:
+        raise ValueError("model path is not set")
+    candidate = Path(path_value)
+    if not candidate.parts or candidate == Path("."):
+        raise ValueError("model path is empty")
+    if candidate.is_absolute():
+        resolved = candidate.resolve(strict=False)
+    else:
+        resolved = (MODEL_DIR / candidate).resolve(strict=False)
+    if not _is_within_directory(resolved, MODEL_DIR):
+        raise ValueError("model path escapes MODEL_DIR")
+    if resolved.exists():
+        if resolved.is_symlink():
+            raise ValueError("model path must not be a symlink")
+        if not resolved.is_file():
+            raise ValueError("model path must reference a regular file")
+    return resolved
+
+
+MODEL_FILE: str | Path | None = os.environ.get("MODEL_FILE")
+
+
+def _get_model_file_path() -> Path | None:
+    if MODEL_FILE in (None, "", Path("")):
+        return None
+    try:
+        return _resolve_model_file(MODEL_FILE)
+    except ValueError as exc:
+        app.logger.warning(
+            "Refusing to use MODEL_FILE %s: %s",
+            sanitize_log_value("<unset>" if MODEL_FILE is None else str(MODEL_FILE)),
+            exc,
+        )
+        return None
 
 _models: Dict[str, Any] = {}
 _scalers: Dict[str, Any] = {}
@@ -106,8 +155,15 @@ _model_builder: ModelBuilder | None = None
 
 def _load_model() -> None:
     """Best-effort loading of a pre-trained model for compatibility tests."""
-    model_file = Path(os.getenv("MODEL_FILE", ""))
-    if not model_file.is_file():  # nothing to load
+
+    model_file = _get_model_file_path()
+    if model_file is None or not model_file.exists():  # nothing to load
+        return
+    if model_file.is_symlink():
+        app.logger.warning(
+            "Refusing to load model from symlink %s",
+            sanitize_log_value(model_file),
+        )
         return
     if not JOBLIB_AVAILABLE:
         app.logger.warning(
@@ -177,17 +233,21 @@ else:  # scikit-learn fallback used by tests
                 return self.transform(X)
 
     def _model_path(symbol: str) -> Path:
-        # Use werkzeug.utils.secure_filename if available, otherwise fallback to basic sanitation
+        """Return a sanitised path for per-symbol joblib artefacts."""
+
         if secure_filename is not None:
             safe = secure_filename(symbol)
         else:
             safe = Path(symbol).name
-        candidate = (MODEL_DIR / f"{safe}.pkl")
-        fullpath = candidate.resolve()
-        # Ensure the full path is within the MODEL_DIR
-        if MODEL_DIR.resolve() not in fullpath.parents:
+        safe = safe.strip()
+        if not safe:
+            raise ValueError("symbol resolves to an empty filename")
+        path = _resolve_model_file(f"{safe}.pkl")
+        if not _is_within_directory(path, MODEL_DIR):
             raise ValueError("Invalid model path - outside of MODEL_DIR")
-        return fullpath
+        if path.exists() and path.is_symlink():
+            raise ValueError("Invalid model path - symlink not allowed")
+        return path
 
     def _load_state(symbol: str) -> None:
         # Only allow models that actually exist in the MODEL_DIR.
@@ -204,11 +264,39 @@ else:  # scikit-learn fallback used by tests
                 sanitize_log_value(symbol),
             )
             return
-        path = _model_path(symbol)
-        if path.exists():
-            data = joblib.load(path)
-            _models[symbol] = data.get("model")
-            _scalers[symbol] = data.get("scaler")
+        try:
+            path = _model_path(symbol)
+        except ValueError as exc:
+            app.logger.warning(
+                "Refused to load model %s: %s",
+                sanitize_log_value(symbol),
+                exc,
+            )
+            return
+        if not path.exists():
+            return
+        if path.is_symlink():
+            app.logger.warning(
+                "Refused to load model %s: path is a symlink",
+                sanitize_log_value(path),
+            )
+            return
+        if not path.is_file():
+            app.logger.warning(
+                "Refused to load model %s: not a regular file",
+                sanitize_log_value(path),
+            )
+            return
+        if not _is_within_directory(path, MODEL_DIR):
+            app.logger.warning(
+                "Refused to load model %s: path escapes MODEL_DIR",
+                sanitize_log_value(path),
+            )
+            return
+        with path.open("rb") as fh:
+            data = joblib.load(fh)
+        _models[symbol] = data.get("model")
+        _scalers[symbol] = data.get("scaler")
 
     def _save_state(symbol: str) -> None:
         model = _models.get(symbol)
@@ -221,7 +309,42 @@ else:  # scikit-learn fallback used by tests
             )
             return
         data = {"model": model, "scaler": _scalers.get(symbol)}
-        joblib.dump(data, _model_path(symbol))
+        try:
+            path = _model_path(symbol)
+        except ValueError as exc:
+            app.logger.warning(
+                "Refused to save model %s: %s",
+                sanitize_log_value(symbol),
+                exc,
+            )
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            app.logger.exception(
+                "Failed to prepare directory for %s: %s",
+                sanitize_log_value(path),
+                exc,
+            )
+            return
+        tmp_path = path.with_name(f"{path.name}.tmp")
+        try:
+            joblib.dump(data, tmp_path)
+            os.replace(tmp_path, path)
+        except Exception as exc:  # pragma: no cover - dump failures are rare
+            app.logger.exception(
+                "Failed to persist model %s: %s",
+                sanitize_log_value(symbol),
+                exc,
+            )
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                # Last-resort cleanup; log at debug level to avoid log spam
+                app.logger.debug(
+                    "Unable to clean up temporary file %s", sanitize_log_value(tmp_path)
+                )
 
 
 def _compute_ema(prices: list[float], span: int = 3) -> np.ndarray:

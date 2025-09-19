@@ -34,13 +34,63 @@ from bot.utils import (
     is_cuda_available,
     logger,
 )
+from services.logging_utils import sanitize_log_value
 from models.architectures import KERAS_FRAMEWORKS, create_model
 
 MODEL_DIR = ensure_writable_directory(
     Path(os.getenv("MODEL_DIR", ".")),
     description="моделей",
     fallback_subdir="trading_bot_models",
-)
+).resolve()
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    """Return ``True`` if ``path`` is located within ``directory``."""
+
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_model_artifact(path_value: str | Path | None) -> Path:
+    """Return a sanitised model path confined to :data:`MODEL_DIR`."""
+
+    if path_value is None:
+        raise ValueError("model path is not set")
+    candidate = Path(path_value)
+    if not candidate.parts or candidate == Path("."):
+        raise ValueError("model path is empty")
+    if candidate.is_absolute():
+        resolved = candidate.resolve(strict=False)
+    else:
+        resolved = (MODEL_DIR / candidate).resolve(strict=False)
+    if not _is_within_directory(resolved, MODEL_DIR):
+        raise ValueError("model path escapes MODEL_DIR")
+    if resolved.exists():
+        if resolved.is_symlink():
+            raise ValueError("model path must not be a symlink")
+        if not resolved.is_file():
+            raise ValueError("model path must reference a regular file")
+    return resolved
+
+
+MODEL_FILE: str | Path | None = os.environ.get("MODEL_FILE", "model.pkl")
+
+
+def _safe_model_file_path() -> Path | None:
+    """Return a validated path for ``MODEL_FILE`` or ``None`` if invalid."""
+
+    try:
+        return _resolve_model_artifact(MODEL_FILE)
+    except ValueError as exc:
+        logger.warning(
+            "Refusing to use MODEL_FILE %s: %s",
+            sanitize_log_value("<unset>" if MODEL_FILE is None else str(MODEL_FILE)),
+            exc,
+        )
+        return None
 
 def _load_gym() -> tuple[object, object]:
     """Import gymnasium or fall back to lightweight stubs in test mode."""
@@ -927,9 +977,15 @@ class ModelBuilder:
         self.cache, resolved_cache_dir = self._prepare_history_cache(
             config.get("cache_dir", "")
         )
-        self.cache_dir = resolved_cache_dir
-        config["cache_dir"] = resolved_cache_dir
-        self.state_file = os.path.join(resolved_cache_dir, "model_builder_state.pkl")
+        self.cache_dir = Path(resolved_cache_dir).resolve()
+        config["cache_dir"] = str(self.cache_dir)
+        self.state_file_path = (self.cache_dir / "model_builder_state.pkl").resolve(
+            strict=False
+        )
+        if not _is_within_directory(self.state_file_path, self.cache_dir):
+            raise ValueError("state file path escapes cache_dir")
+        # Backwards compatibility for tests and consumers accessing ``state_file``
+        self.state_file = self.state_file_path
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.last_save_time = time.time()
         self.save_interval = 900
@@ -1030,6 +1086,21 @@ class ModelBuilder:
                 "joblib недоступен, состояние ModelBuilder не будет сохранено"
             )
             return
+        if not _is_within_directory(self.state_file_path, self.cache_dir):
+            logger.warning(
+                "Пропускаем сохранение состояния: путь %s вне cache_dir",
+                sanitize_log_value(self.state_file_path),
+            )
+            return
+        if self.state_file_path.exists() and self.state_file_path.is_symlink():
+            logger.warning(
+                "Пропускаем сохранение состояния: %s является символьной ссылкой",
+                sanitize_log_value(self.state_file_path),
+            )
+            return
+        tmp_path = self.state_file_path.with_name(
+            f"{self.state_file_path.name}.tmp"
+        )
         try:
             if self.nn_framework == "pytorch":
                 models_state = {k: v.state_dict() for k, v in self.predictive_models.items()}
@@ -1043,20 +1114,22 @@ class ModelBuilder:
                 "base_thresholds": self.base_thresholds,
                 "calibrators": self.calibrators,
             }
-            tmp_file = f"{self.state_file}.tmp"
-            with open(tmp_file, "wb") as f:
+            self.state_file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(tmp_path, "wb") as f:
                 joblib.dump(state, f)
-            os.replace(tmp_file, self.state_file)
+            os.replace(tmp_path, self.state_file_path)
             self.last_save_time = time.time()
             logger.info("Состояние ModelBuilder сохранено")
         except (OSError, ValueError) as e:
             logger.exception("Ошибка сохранения состояния ModelBuilder: %s", e)
             try:
-                if os.path.exists(tmp_file):
-                    os.remove(tmp_file)
+                if tmp_path.exists():
+                    tmp_path.unlink()
             except OSError as cleanup_err:
                 logger.exception(
-                    "Не удалось удалить временный файл %s: %s", tmp_file, cleanup_err
+                    "Не удалось удалить временный файл %s: %s",
+                    sanitize_log_value(tmp_path),
+                    cleanup_err,
                 )
             raise
 
@@ -1065,9 +1138,29 @@ class ModelBuilder:
             logger.warning("joblib недоступен, загрузка состояния пропущена")
             return
         try:
-            if os.path.exists(self.state_file):
-                with open(self.state_file, "rb") as f:
-                    state = joblib.load(f)
+            state_path = self.state_file_path
+            if not state_path.exists():
+                return
+            if not _is_within_directory(state_path, self.cache_dir):
+                logger.warning(
+                    "Пропускаем загрузку состояния из %s: путь выходит за пределы cache_dir",
+                    sanitize_log_value(state_path),
+                )
+                return
+            if state_path.is_symlink():
+                logger.warning(
+                    "Пропускаем загрузку состояния из символьной ссылки %s",
+                    sanitize_log_value(state_path),
+                )
+                return
+            if not state_path.is_file():
+                logger.warning(
+                    "Пропускаем загрузку состояния: %s не является файлом",
+                    sanitize_log_value(state_path),
+                )
+                return
+            with state_path.open("rb") as f:
+                state = joblib.load(f)
                 self.scalers = state.get("scalers", {})
                 if self.nn_framework == "pytorch":
                     for symbol, sd in state.get("lstm_models", {}).items():
@@ -2004,8 +2097,6 @@ class RLAgent:
 # ----------------------------------------------------------------------
 
 api_app = Flask(__name__)
-
-MODEL_FILE = os.environ.get("MODEL_FILE", "model.pkl")
 _model = None
 
 
@@ -2015,12 +2106,24 @@ def _load_model() -> None:
         logger.warning("joblib недоступен, REST API пропускает загрузку модели")
         _model = None
         return
-    if os.path.exists(MODEL_FILE):
-        try:
-            _model = joblib.load(MODEL_FILE)
-        except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
-            logger.exception("Не удалось загрузить модель: %s", e)
-            _model = None
+    model_path = _safe_model_file_path()
+    if model_path is None:
+        _model = None
+        return
+    if not model_path.exists():
+        return
+    if model_path.is_symlink():
+        logger.warning(
+            "Отказ от загрузки модели из символьной ссылки %s",
+            sanitize_log_value(model_path),
+        )
+        _model = None
+        return
+    try:
+        _model = joblib.load(model_path)
+    except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
+        logger.exception("Не удалось загрузить модель: %s", e)
+        _model = None
 
 
 def prepare_features(raw_features, raw_labels):
@@ -2091,7 +2194,50 @@ def train_route():
     model = fit_scaler(features, labels)
     if not JOBLIB_AVAILABLE:
         return jsonify({"error": "joblib unavailable"}), 503
-    joblib.dump(model, MODEL_FILE)
+    model_path = _safe_model_file_path()
+    if model_path is None:
+        return jsonify({"error": "invalid model path"}), 500
+    if model_path.exists():
+        if model_path.is_symlink():
+            logger.warning(
+                "Отказ от сохранения модели: путь %s является символьной ссылкой",
+                sanitize_log_value(model_path),
+            )
+            return jsonify({"error": "model path unavailable"}), 500
+        if not model_path.is_file():
+            logger.warning(
+                "Отказ от сохранения модели: %s не является обычным файлом",
+                sanitize_log_value(model_path),
+            )
+            return jsonify({"error": "model path unavailable"}), 500
+    try:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - filesystem errors are rare
+        logger.exception(
+            "Не удалось подготовить каталог модели %s: %s",
+            sanitize_log_value(model_path),
+            exc,
+        )
+        return jsonify({"error": "model path unavailable"}), 500
+    tmp_path = model_path.with_name(f"{model_path.name}.tmp")
+    try:
+        joblib.dump(model, tmp_path)
+        os.replace(tmp_path, model_path)
+    except Exception as exc:  # pragma: no cover - dump failures are rare
+        logger.exception(
+            "Не удалось сохранить модель в %s: %s",
+            sanitize_log_value(model_path),
+            exc,
+        )
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            logger.debug(
+                "Не удалось удалить временный файл %s",
+                sanitize_log_value(tmp_path),
+            )
+        return jsonify({"error": "model save failed"}), 500
     global _model
     _model = model
     return jsonify({"status": "trained"})
