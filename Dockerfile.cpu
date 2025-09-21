@@ -3,7 +3,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 # Обновляем систему перед установкой зависимостей
-RUN apt-get update && apt-get dist-upgrade -y \
+RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         linux-libc-dev \
         libssl3t64 \

@@ -15,7 +15,7 @@ COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 RUN set -eux; \
     apt-get update; \
-    apt-get dist-upgrade -y; \
+    apt-get upgrade -y; \
     apt-get install -y --no-install-recommends \
         tzdata \
         linux-libc-dev \
@@ -119,7 +119,7 @@ COPY --from=builder /app/venv /app/venv
 COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
 
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
     coreutils \
