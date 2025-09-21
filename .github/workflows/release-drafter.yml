@@ -26,7 +26,7 @@ jobs:
       cancel-in-progress: true
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
+      WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Validate Release Drafter reference
         env:
