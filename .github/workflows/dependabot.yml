@@ -97,8 +97,11 @@ jobs:
   # skipped and GitHub marks the overall workflow as a failure.  Provide a tiny
   # no-op job for those runs so the workflow reports success instead of red X's.
   noop:
-    if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip non-Dependabot runs
+        if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
         run: echo "Dependabot workflow is only relevant to Dependabot PRs; nothing to do for actor '${{ github.actor }}'."
+      - name: Confirm Dependabot execution
+        if: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
+        run: echo "Primary Dependabot job handled this run; noop job completes successfully."
