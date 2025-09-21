@@ -198,6 +198,28 @@ def _auth_schemes(token: str) -> list[str]:
     return ["token", "Bearer"]
 
 
+def _normalise_run_attempt(raw_value: str | None) -> int:
+    """Return a validated run attempt number suitable for submission."""
+
+    if not raw_value:
+        return 1
+    try:
+        value = int(raw_value)
+    except ValueError:
+        print(
+            "Invalid GITHUB_RUN_ATTEMPT value. Using fallback value 1.",
+            file=sys.stderr,
+        )
+        return 1
+    if value < 1:
+        print(
+            "GITHUB_RUN_ATTEMPT must be >= 1. Using fallback value 1.",
+            file=sys.stderr,
+        )
+        return 1
+    return value
+
+
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     host, port, path = _https_components(url)
     last_error: Exception | None = None
@@ -284,7 +306,7 @@ def submit_dependency_snapshot() -> None:
     workflow = os.getenv("GITHUB_WORKFLOW", "dependency-graph")
     job_name = os.getenv("GITHUB_JOB", "submit")
     run_id = os.getenv("GITHUB_RUN_ID", str(int(datetime.now(timezone.utc).timestamp())))
-    run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+    run_attempt = _normalise_run_attempt(os.getenv("GITHUB_RUN_ATTEMPT"))
     correlator = f"{workflow}-{job_name}"
 
     payload = {
