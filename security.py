@@ -14,6 +14,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from packaging.version import InvalidVersion, Version
+
 # Import or define MODEL_DIR and _is_within_directory for signature path security
 try:
     # If running under the full application, import the real MODEL_DIR and checker
@@ -33,6 +35,7 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
 logger = logging.getLogger(__name__)
 
 
+_MIN_RAY_VERSION = Version("2.49.2")
 _MODEL_STATE_HMAC_ENV = "MODEL_STATE_HMAC_KEY"
 _MODEL_STATE_SIG_SUFFIX = ".sig"
 
@@ -181,6 +184,25 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     hardened.setdefault("include_dashboard", False)
     hardened.setdefault("dashboard_host", "127.0.0.1")
     return hardened
+
+
+def ensure_minimum_ray_version(ray_module: ModuleType) -> None:
+    """Raise an error if *ray_module* is older than the patched release."""
+
+    version_str = getattr(ray_module, "__version__", "")
+    try:
+        parsed = Version(version_str)
+    except InvalidVersion:
+        logger.warning(
+            "Не удалось определить версию Ray (%s): пропускаем проверку", version_str
+        )
+        return
+
+    if parsed < _MIN_RAY_VERSION:
+        raise RuntimeError(
+            "Установлена уязвимая версия Ray %s. Обновите пакет до %s или новее "
+            "для устранения CVE-2023-48022." % (version_str, _MIN_RAY_VERSION)
+        )
 
 
 _MLFLOW_DISABLED_ATTRS: tuple[tuple[tuple[str, ...], str], ...] = (

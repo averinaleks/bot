@@ -9,6 +9,8 @@ import pandas as pd
 import os
 from itertools import product
 
+from security import ensure_minimum_ray_version
+
 try:
     import polars as pl  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
@@ -47,6 +49,7 @@ if os.getenv("TEST_MODE") == "1":
     ray.is_initialized = lambda: False
 else:
     import ray
+    ensure_minimum_ray_version(ray)
 
 from bot.utils import logger
 from bot.config import BotConfig

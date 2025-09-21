@@ -14,6 +14,8 @@ import types
 import numpy as np
 import pandas as pd
 
+from security import ensure_minimum_ray_version, harden_mlflow
+
 try:
     import polars as pl  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
@@ -35,8 +37,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
 else:
-    from security import harden_mlflow
-
     harden_mlflow(mlflow)
 try:
     import torch
@@ -97,6 +97,8 @@ else:
         import ray  # type: ignore
     except ImportError:  # pragma: no cover - provide fallback stub
         ray = _create_ray_stub()
+    else:
+        ensure_minimum_ray_version(ray)
 
 
 @ray.remote
