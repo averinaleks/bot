@@ -64,7 +64,10 @@ from bot.http_client import (  # noqa: E402
     get_async_http_client as get_http_client,
     close_async_http_client as close_http_client,
 )
-from services.offline import ensure_offline_env  # noqa: E402
+from services.offline import (  # noqa: E402
+    ensure_offline_env,
+    generate_placeholder_credential,
+)
 
 torch: Any
 try:  # pragma: no cover - optional dependency
@@ -224,8 +227,12 @@ class TradeManager:
         if OFFLINE_MODE:
             ensure_offline_env(
                 {
-                    "TELEGRAM_BOT_TOKEN": "offline-telegram-token",
-                    "TELEGRAM_CHAT_ID": "offline-chat-id",
+                    "TELEGRAM_BOT_TOKEN": lambda: generate_placeholder_credential(
+                        "telegram-token"
+                    ),
+                    "TELEGRAM_CHAT_ID": lambda: generate_placeholder_credential(
+                        "telegram-chat"
+                    ),
                 }
             )
 

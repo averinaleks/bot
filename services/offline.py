@@ -4,21 +4,51 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
+import secrets
+from collections.abc import Callable, Mapping
 
 from bot.config import OFFLINE_MODE
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger("TradingBot")
 
-_OFFLINE_ENV_DEFAULTS: dict[str, str] = {
-    "BYBIT_API_KEY": "offline-bybit-key",
-    "BYBIT_API_SECRET": "offline-bybit-secret",
-    "TRADE_MANAGER_TOKEN": "offline-trade-token",
+_PlaceholderValue = str | Callable[[], str]
+
+
+def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
+    """Return a high-entropy placeholder credential for offline usage.
+
+    The helper avoids embedding hard-coded secrets in the repository by
+    generating a random token every time it is invoked.  The ``name`` is
+    incorporated purely for debugging so operators can distinguish the purpose
+    of the generated value when inspecting environment variables.
+    """
+
+    entropy = max(16, entropy_bytes)
+    token = secrets.token_urlsafe(entropy)
+    suffix = name.replace(" ", "-")
+    return f"offline-{suffix}-{token}"
+
+
+_OFFLINE_ENV_DEFAULTS: dict[str, _PlaceholderValue] = {
+    "BYBIT_API_KEY": lambda: generate_placeholder_credential("bybit-key"),
+    "BYBIT_API_SECRET": lambda: generate_placeholder_credential("bybit-secret"),
+    "TRADE_MANAGER_TOKEN": lambda: generate_placeholder_credential("trade-token"),
 }
 
 
-def ensure_offline_env(defaults: Mapping[str, str] | None = None) -> list[str]:
+def _resolve_placeholder(value: _PlaceholderValue) -> str:
+    result = value() if callable(value) else value
+    if not isinstance(result, str):
+        raise TypeError("placeholder generator must return a string")
+    if not result:
+        raise ValueError("placeholder value must be non-empty")
+    return result
+
+
+def ensure_offline_env(
+    defaults: Mapping[str, _PlaceholderValue] | None = None,
+) -> list[str]:
     """Ensure API credentials have placeholder values in offline mode.
 
     Parameters
@@ -41,10 +71,19 @@ def ensure_offline_env(defaults: Mapping[str, str] | None = None) -> list[str]:
 
     applied: list[str] = []
     mapping = defaults or _OFFLINE_ENV_DEFAULTS
-    for key, value in mapping.items():
+    for key, raw_value in mapping.items():
         if os.getenv(key):
             continue
-        os.environ[key] = value
+        try:
+            resolved = _resolve_placeholder(raw_value)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.error(
+                "OFFLINE_MODE=1: не удалось сгенерировать значение для %s: %s",
+                sanitize_log_value(key),
+                exc,
+            )
+            continue
+        os.environ[key] = resolved
         applied.append(key)
         logger.warning(
             "OFFLINE_MODE=1: переменная %s не задана; используется фиктивное значение",
