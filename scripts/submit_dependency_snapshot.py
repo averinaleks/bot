@@ -279,12 +279,19 @@ def submit_dependency_snapshot() -> None:
             break
 
     if last_error is not None:
-        if isinstance(last_error, DependencySubmissionError) and last_error.status_code in {403, 404}:
-            print(
-                "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
-                file=sys.stderr,
-            )
-            return
+        if isinstance(last_error, DependencySubmissionError):
+            if last_error.status_code == 401:
+                print(
+                    "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
+                    file=sys.stderr,
+                )
+                return
+            if last_error.status_code in {403, 404}:
+                print(
+                    "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
+                    file=sys.stderr,
+                )
+                return
         raise last_error
 
 
