@@ -87,7 +87,9 @@ jobs:
       - name: Report auto-merge failure
         if: ${{ steps.enable_automerge.conclusion == 'failure' }}
         run: |
-          printf '%s\n' "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' \
+            "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
+            >> "$GITHUB_STEP_SUMMARY"
 
   # GitHub still triggers this workflow on pushes to the default branch when the
   # workflow file itself changes.  Those runs use the account that pushed the
