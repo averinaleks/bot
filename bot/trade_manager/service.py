@@ -14,10 +14,9 @@ from typing import Any
 
 import httpx
 import ray
-from security import ensure_minimum_ray_version
-ensure_minimum_ray_version(ray)
 from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request, Response
+from security import ensure_minimum_ray_version
 
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
@@ -30,6 +29,9 @@ from .core import (
     setup_multiprocessing,
 )
 from bot.config import load_config
+
+
+ensure_minimum_ray_version(ray)
 
 
 __all__ = [
