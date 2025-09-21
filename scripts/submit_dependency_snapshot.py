@@ -2,9 +2,11 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
+import socket
 import sys
 import time
 from collections import OrderedDict
@@ -12,9 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
@@ -138,8 +138,20 @@ def _api_base_url() -> str:
     return api_url.rstrip("/")
 
 
-def _build_request(url: str, body: bytes, headers: dict[str, str]) -> Request:
-    return Request(url, data=body, headers=headers, method="POST")
+def _https_components(url: str) -> tuple[str, int, str]:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise DependencySubmissionError(
+            None, "Запрос зависимостей разрешён только по HTTPS"
+        )
+    if parsed.username or parsed.password:
+        raise DependencySubmissionError(
+            None, "URL snapshot не должен содержать учетные данные"
+        )
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    return parsed.hostname, parsed.port or 443, path
 
 
 def _job_metadata(repository: str, run_id: str, correlator: str) -> dict[str, str]:
@@ -160,49 +172,71 @@ def _auth_schemes(token: str) -> list[str]:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    host, port, path = _https_components(url)
     last_error: Exception | None = None
     for attempt in range(1, 4):
-        request = _build_request(url, body, headers)
+        connection = http.client.HTTPSConnection(host, port, timeout=30)
         try:
-            with urlopen(request, timeout=30) as response:
-                status_code = int(response.getcode() or 0)
-                print(f"Dependency snapshot submitted: HTTP {status_code}")
-                return
-        except HTTPError as exc:
-            message = exc.read().decode(errors="replace") if exc.fp else exc.reason
-            if exc.code in _RETRYABLE_STATUS_CODES and attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Received retryable error HTTP {exc.code}. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
-                last_error = exc
-                continue
-            print(
-                f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
-                file=sys.stderr,
-            )
-            raise DependencySubmissionError(
-                exc.code,
-                f"GitHub отклонил snapshot зависимостей: HTTP {exc.code}: {message}",
-                exc,
-            )
-        except URLError as exc:
+            connection.request("POST", path, body=body, headers=headers)
+            response = connection.getresponse()
+            status_code = int(response.status or 0)
+            reason = response.reason or ""
+            payload = response.read()
+        except socket.timeout as exc:
+            message = str(exc) or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
-                    f"Network error '{exc.reason}'. Retrying in {wait_time} s...",
+                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
                     file=sys.stderr,
                 )
                 time.sleep(wait_time)
                 last_error = exc
                 continue
-            raise DependencySubmissionError(
-                None,
-                f"Не удалось отправить snapshot зависимостей: {exc.reason}",
-                exc,
+            last_error = exc
+            break
+        except (OSError, http.client.HTTPException) as exc:
+            message = str(exc) or exc.__class__.__name__
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Network error '{message}'. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            last_error = exc
+            break
+        finally:
+            connection.close()
+
+        if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+            wait_time = 2 ** (attempt - 1)
+            print(
+                f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                file=sys.stderr,
             )
+            time.sleep(wait_time)
+            last_error = DependencySubmissionError(
+                status_code,
+                f"Retryable HTTP {status_code}: {reason}",
+            )
+            continue
+
+        if status_code >= 400:
+            message = payload.decode(errors="replace") or reason
+            print(
+                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                file=sys.stderr,
+            )
+            raise DependencySubmissionError(
+                status_code,
+                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+            )
+
+        print(f"Dependency snapshot submitted: HTTP {status_code}")
+        return
 
     if last_error is not None:
         raise last_error

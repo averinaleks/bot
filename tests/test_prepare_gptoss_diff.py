@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import subprocess
 from pathlib import Path
@@ -65,12 +63,12 @@ def test_prepare_diff_reads_remote_metadata(monkeypatch: pytest.MonkeyPatch, tem
         }
     }
 
-    def _fake_urlopen(req, timeout=10):  # type: ignore[override]
-        _ = timeout
+    def _fake_request(url, headers, timeout):
+        _ = (headers, timeout)
         payload = json.dumps(pull_payload).encode("utf-8")
-        return contextlib.closing(io.BytesIO(payload))
+        return 200, "OK", payload
 
-    with mock.patch.object(prepare_gptoss_diff.request, "urlopen", _fake_urlopen):
+    with mock.patch.object(prepare_gptoss_diff, "_perform_https_request", _fake_request):
         result = prepare_gptoss_diff.prepare_diff(
             "example/repo",
             "123",
