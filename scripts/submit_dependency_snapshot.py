@@ -117,7 +117,7 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         if package_name in _SKIPPED_PACKAGES:
             continue
         package_url = f"pkg:pypi/{package_name}@{_encode_version_for_purl(version)}"
-        resolved[package_name] = {
+        resolved[package_url] = {
             "package_url": package_url,
             "relationship": "direct",
             "scope": scope,
