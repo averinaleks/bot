@@ -1,4 +1,5 @@
-"""Mock GPT-OSS server used in CI to emulate chat completions.
+# -*- coding: utf-8 -*-
+"""Mock GPT-OSS server used by the GitHub Actions workflow.
 
 The implementation intentionally relies only on the Python standard library so
 that it can be executed in GitHub Actions without installing extra
