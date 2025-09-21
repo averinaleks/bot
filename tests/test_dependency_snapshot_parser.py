@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from scripts.submit_dependency_snapshot import (
     _auth_schemes,
     _build_manifests,
     _job_metadata,
+    _normalise_run_attempt,
     _parse_requirements,
 )
 
@@ -62,6 +64,21 @@ def test_auth_schemes_prefers_bearer_for_github_tokens(monkeypatch) -> None:
 def test_auth_schemes_allows_override(monkeypatch) -> None:
     monkeypatch.setenv("DEPENDENCY_SNAPSHOT_AUTH_SCHEME", "token")
     assert _auth_schemes("anything") == ["token"]
+
+
+def test_normalise_run_attempt_handles_invalid_values(capsys) -> None:
+    assert _normalise_run_attempt(None) == 1
+    assert _normalise_run_attempt("3") == 3
+
+    result_invalid = _normalise_run_attempt("not-a-number")
+    assert result_invalid == 1
+    captured = capsys.readouterr()
+    assert "Invalid GITHUB_RUN_ATTEMPT" in captured.err
+
+    result_negative = _normalise_run_attempt("0")
+    assert result_negative == 1
+    captured = capsys.readouterr()
+    assert "must be >= 1" in captured.err
 
 
 def test_build_manifests_supports_multiple_patterns(tmp_path: Path) -> None:
@@ -203,3 +220,44 @@ def test_submit_snapshot_skips_on_validation_issue(monkeypatch, capsys) -> None:
 
     captured = capsys.readouterr()
     assert "ошибки валидации" in captured.err
+
+
+def test_submit_snapshot_uses_numeric_run_attempt(monkeypatch) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    manifests = {
+        "requirements.txt": {
+            "name": "requirements.txt",
+            "file": {"source_location": "requirements.txt"},
+            "resolved": {
+                "pkg:pypi/sample@1.0.0": {
+                    "package_url": "pkg:pypi/sample@1.0.0",
+                    "relationship": "direct",
+                    "scope": "runtime",
+                    "dependencies": [],
+                }
+            },
+        }
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+
+    monkeypatch.setattr(module, "_build_manifests", lambda root: manifests)
+
+    captured_payload: dict | None = None
+
+    def _capture(url: str, body: bytes, headers: dict[str, str]) -> None:
+        nonlocal captured_payload
+        captured_payload = json.loads(body.decode())
+
+    monkeypatch.setattr(module, "_submit_with_headers", _capture)
+
+    module.submit_dependency_snapshot()
+
+    assert captured_payload is not None
+    assert captured_payload["metadata"]["run_attempt"] == 3
