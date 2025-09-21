@@ -6,18 +6,20 @@ import json
 import os
 import re
 import sys
+import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
-from urllib.parse import urlparse
-
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
+_DEFAULT_API_VERSION = "2022-11-28"
+_RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 
 
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
@@ -119,6 +121,16 @@ def _env(name: str) -> str:
         sys.exit(1)
     return value
 
+
+def _api_base_url() -> str:
+    api_url = os.getenv("GITHUB_API_URL") or "https://api.github.com"
+    return api_url.rstrip("/")
+
+
+def _build_request(url: str, body: bytes, headers: dict[str, str]) -> Request:
+    return Request(url, data=body, headers=headers, method="POST")
+
+
 def submit_dependency_snapshot() -> None:
     repository = _env("GITHUB_REPOSITORY")
     token = _env("GITHUB_TOKEN")
@@ -154,7 +166,8 @@ def submit_dependency_snapshot() -> None:
         "manifests": manifests,
     }
 
-    url = f"https://api.github.com/repos/{repository}/dependency-graph/snapshots"
+    base_url = _api_base_url()
+    url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
     parsed_url = urlparse(url)
     if parsed_url.scheme != "https" or not parsed_url.netloc:
         raise RuntimeError("Запрос зависимостей разрешён только по HTTPS")
@@ -163,24 +176,50 @@ def submit_dependency_snapshot() -> None:
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "Content-Type": "application/json",
+        "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
         "User-Agent": "dependency-snapshot-script",
     }
 
-    request = Request(url, data=body, headers=headers, method="POST")
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        request = _build_request(url, body, headers)
+        try:
+            with urlopen(request, timeout=30) as response:
+                status_code = int(response.getcode() or 0)
+                print(f"Dependency snapshot submitted: HTTP {status_code}")
+                return
+        except HTTPError as exc:
+            message = exc.read().decode(errors="replace") if exc.fp else exc.reason
+            if exc.code in _RETRYABLE_STATUS_CODES and attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Received retryable error HTTP {exc.code}. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            print(
+                f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
+                file=sys.stderr,
+            )
+            raise RuntimeError("GitHub отклонил snapshot зависимостей") from exc
+        except URLError as exc:
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Network error '{exc.reason}'. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            raise RuntimeError(
+                f"Не удалось отправить snapshot зависимостей: {exc.reason}"
+            ) from exc
 
-    try:
-        with urlopen(request, timeout=30) as response:
-            status_code = int(response.getcode() or 0)
-            print(f"Dependency snapshot submitted: HTTP {status_code}")
-    except HTTPError as exc:
-        message = exc.read().decode(errors="replace") if exc.fp else exc.reason
-        print(
-            f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
-            file=sys.stderr,
-        )
-        raise RuntimeError("GitHub отклонил snapshot зависимостей") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Не удалось отправить snapshot зависимостей: {exc.reason}") from exc
+    if last_error is not None:
+        raise last_error
 
 
 if __name__ == "__main__":
