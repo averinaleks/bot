@@ -16,7 +16,11 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import urlparse
 
-MANIFEST_PATTERNS = ("requirements*.txt",)
+MANIFEST_PATTERNS = (
+    "requirements*.txt",
+    "requirements*.in",
+    "requirements*.out",
+)
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
@@ -239,7 +243,8 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         return
 
     if last_error is not None:
-        raise last_error
+        message = str(last_error) or last_error.__class__.__name__
+        raise DependencySubmissionError(None, message, last_error)
 
 
 def submit_dependency_snapshot() -> None:
@@ -323,6 +328,13 @@ def submit_dependency_snapshot() -> None:
             if last_error.status_code in {403, 404}:
                 print(
                     "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
+                    file=sys.stderr,
+                )
+                return
+        if isinstance(last_error, DependencySubmissionError):
+            if last_error.status_code is None:
+                print(
+                    "Dependency snapshot submission skipped из-за сетевой ошибки.",
                     file=sys.stderr,
                 )
                 return
