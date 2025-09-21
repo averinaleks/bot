@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -74,6 +74,13 @@ class Manifest(TypedDict):
     resolved: Dict[str, ResolvedDependency]
 
 
+def _encode_version_for_purl(version: str) -> str:
+    """Return a dependency version encoded for use inside a purl."""
+
+    safe_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-~"
+    return quote(version, safe=safe_chars)
+
+
 def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
     scope = _derive_scope(path.name)
     resolved: Dict[str, ResolvedDependency] = OrderedDict()
@@ -109,7 +116,7 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         package_name = _normalise_name(name)
         if package_name in _SKIPPED_PACKAGES:
             continue
-        package_url = f"pkg:pypi/{package_name}@{version}"
+        package_url = f"pkg:pypi/{package_name}@{_encode_version_for_purl(version)}"
         resolved[package_name] = {
             "package_url": package_url,
             "relationship": "direct",
