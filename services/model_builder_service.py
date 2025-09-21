@@ -113,7 +113,62 @@ if hasattr(app, "config"):
 # Determine the project root based on this file's location rather than the
 # current working directory so the service can be launched from anywhere.
 BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
+_CONFIG_DIR = BASE_DIR
+_DEFAULT_CONFIG_PATH = _CONFIG_DIR / "config.json"
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    """Return ``True`` if ``path`` is located within ``directory``."""
+
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
+    if raw in (None, ""):
+        return _DEFAULT_CONFIG_PATH
+
+    try:
+        candidate = Path(raw)
+    except TypeError:
+        LOGGER.warning("Invalid CONFIG_PATH %r; using default", raw)
+        return _DEFAULT_CONFIG_PATH
+
+    if not candidate.is_absolute():
+        candidate = (_CONFIG_DIR / candidate).resolve(strict=False)
+    else:
+        try:
+            candidate = candidate.resolve(strict=False)
+        except OSError as exc:
+            LOGGER.warning(
+                "Failed to resolve CONFIG_PATH %s: %s; using default",
+                sanitize_log_value(str(candidate)),
+                exc,
+            )
+            return _DEFAULT_CONFIG_PATH
+
+    if candidate.is_symlink():
+        LOGGER.warning(
+            "CONFIG_PATH %s is a symlink; using default",
+            sanitize_log_value(str(candidate)),
+        )
+        return _DEFAULT_CONFIG_PATH
+
+    if not _is_within_directory(candidate, _CONFIG_DIR):
+        LOGGER.warning(
+            "CONFIG_PATH %s escapes service directory %s; using default",
+            sanitize_log_value(str(candidate)),
+            sanitize_log_value(str(_CONFIG_DIR)),
+        )
+        return _DEFAULT_CONFIG_PATH
+
+    return candidate
+
+
+CONFIG_PATH = _resolve_config_path(os.getenv("CONFIG_PATH"))
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         _CFG: Dict[str, Any] = json.load(f)
@@ -129,18 +184,6 @@ MODEL_DIR = ensure_writable_directory(
     description="моделей",
     fallback_subdir="trading_bot_models",
 ).resolve()
-
-
-def _is_within_directory(path: Path, directory: Path) -> bool:
-    """Return ``True`` if ``path`` is located within ``directory``."""
-
-    try:
-        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
-    except ValueError:
-        return False
-    return True
-
-
 def _resolve_model_file(path_value: str | Path | None) -> Path:
     """Return a sanitised path for pre-trained model artefacts."""
 
