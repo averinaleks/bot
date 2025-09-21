@@ -260,21 +260,31 @@ else:  # scikit-learn fallback used by tests
                 return self.transform(X)
 
     def _model_path(symbol: str) -> Path:
-        """Return a sanitised path for per-symbol joblib artefacts."""
+        """Return a strictly sanitized and contained path for per-symbol joblib artefacts."""
 
-        if secure_filename is not None:
-            safe = secure_filename(symbol)
-        else:
-            safe = Path(symbol).name
-        safe = safe.strip()
-        if not safe:
+        # Sanitize symbol to prevent path traversal and unsafe characters
+        # Remove any directory components and allow only safe characters.
+        safe = Path(symbol).name  # take only the base name
+        # Remove any unsafe characters (keep only [A-Za-z0-9_.-])
+        safe = _FILENAME_STRIP_RE.sub("", safe)
+        # Replace any runs of hyphens or whitespace with a single hyphen
+        safe = _FILENAME_HYPHEN_RE.sub("-", safe)
+        # Max length restriction (e.g., 64)
+        safe = safe[:64].strip()
+        if not safe or safe in (".", ".."):
             raise ValueError("symbol resolves to an empty filename")
-        path = _resolve_model_file(f"{safe}.pkl")
-        if not _is_within_directory(path, MODEL_DIR):
+        # Ensure no path separators remain
+        if "/" in safe or "\\" in safe:
+            raise ValueError("symbol must not contain path separators")
+        filename = f"{safe}.pkl"
+        # Create candidate path and normalize it
+        candidate_path = MODEL_DIR / filename
+        resolved = candidate_path.resolve(strict=False)
+        if not _is_within_directory(resolved, MODEL_DIR):
             raise ValueError("Invalid model path - outside of MODEL_DIR")
-        if path.exists() and path.is_symlink():
+        if resolved.exists() and resolved.is_symlink():
             raise ValueError("Invalid model path - symlink not allowed")
-        return path
+        return resolved
 
     def _load_state(symbol: str) -> None:
         # Only allow models that actually exist in the MODEL_DIR.
