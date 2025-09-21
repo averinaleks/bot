@@ -16,11 +16,17 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import urlparse
 
-MANIFEST_PATTERNS = ("requirements*.txt",)
+MANIFEST_PATTERNS = (
+    "requirements*.txt",
+    "requirements*.in",
+    "requirements*.out",
+)
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
+
+_SKIPPED_PACKAGES = {"ccxtpro"}
 
 
 class DependencySubmissionError(RuntimeError):
@@ -101,6 +107,8 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         if "[" in name and "]" in name:
             name = name.split("[", 1)[0]
         package_name = _normalise_name(name)
+        if package_name in _SKIPPED_PACKAGES:
+            continue
         package_url = f"pkg:pypi/{package_name}@{version}"
         resolved[package_name] = {
             "package_url": package_url,
