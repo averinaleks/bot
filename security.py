@@ -11,7 +11,6 @@ import hmac
 import hashlib
 import logging
 import os
-import pickle
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Tuple
@@ -77,6 +76,10 @@ _DEFAULT_SAFE_JOBLIB_MODULES: Tuple[str, ...] = (
 )
 
 
+class ArtifactDeserializationError(RuntimeError):
+    """Raised when a joblib artefact cannot be safely deserialised."""
+
+
 def _normalise_allowed_modules(allowed: Iterable[str] | None) -> Tuple[str, ...]:
     """Return a deduplicated tuple of allowed module prefixes."""
 
@@ -131,7 +134,7 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
                     module,
                     name,
                 )
-                raise pickle.UnpicklingError(
+                raise ArtifactDeserializationError(
                     f"Refusing to load object from disallowed module {module}.{name}"
                 )
             return super().find_class(module, name)
@@ -149,7 +152,7 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
                         module,
                         name,
                     )
-                    raise pickle.UnpicklingError(
+                    raise ArtifactDeserializationError(
                         f"Refusing to load object from disallowed module {module}.{name}"
                     )
                 return super().find_class(module, name)
@@ -178,9 +181,16 @@ def safe_joblib_load(
         )
 
     prefixes = _normalise_allowed_modules(allowed_modules)
-    with _restricted_joblib_unpicklers(prefixes):
-        # joblib.load is intentionally wrapped with a strict module allow-list above.
-        return joblib.load(source)  # codeql[py/unsafe-deserialization]
+    try:
+        with _restricted_joblib_unpicklers(prefixes):
+            # joblib.load is intentionally wrapped with a strict module allow-list above.
+            return joblib.load(source)  # codeql[py/unsafe-deserialization]
+    except ArtifactDeserializationError:
+        raise
+    except Exception as exc:  # pragma: no cover - unexpected joblib failure
+        if exc.__class__.__name__ == "UnpicklingError":
+            raise ArtifactDeserializationError(str(exc)) from exc
+        raise
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
     """Return True if `path` is located within `directory`."""

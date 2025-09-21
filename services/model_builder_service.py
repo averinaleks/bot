@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import pickle
 import sys
 from pathlib import Path
 import re
@@ -26,6 +25,7 @@ from bot.dotenv_utils import load_dotenv
 from bot.utils import ensure_writable_directory
 from services.logging_utils import sanitize_log_value
 from security import (
+    ArtifactDeserializationError,
     safe_joblib_load,
     verify_model_state_signature,
     write_model_state_signature,
@@ -349,7 +349,7 @@ else:  # scikit-learn fallback used by tests
             return
         try:
             data = safe_joblib_load(path)
-        except pickle.UnpicklingError:
+        except ArtifactDeserializationError:
             app.logger.warning(
                 "Refused to load model %s: содержит недоверенные объекты", path
             )
