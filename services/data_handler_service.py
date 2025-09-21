@@ -19,6 +19,7 @@ except ImportError as exc:  # pragma: no cover - critical dependency missing
         "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
     ) from exc
 
+import hmac
 import os
 import tempfile
 from bot.dotenv_utils import load_dotenv
@@ -64,14 +65,21 @@ def _require_api_key() -> "ResponseReturnValue | None":
         return None
 
     provided = (request.headers.get("X-API-KEY") or "").strip()
-    if provided == token:
+    reason: str | None = None
+    if not provided:
+        reason = "missing token"
+    elif not hmac.compare_digest(provided, token):
+        reason = "token mismatch"
+
+    if reason is None:
         return None
 
     remote = request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown"
     logging.getLogger(__name__).warning(
-        "Отклонён запрос к %s от %s: отсутствует или неверный X-API-KEY",
+        "Отклонён запрос к %s от %s: отсутствует или неверный X-API-KEY (%s)",
         sanitize_log_value(request.path),
         sanitize_log_value(remote),
+        reason,
     )
     return jsonify({'error': 'unauthorized'}), 401
 
