@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
 
@@ -145,16 +146,22 @@ def _flatten_content(content: Any) -> list[str]:
         return pieces
 
     if isinstance(content, dict):
+        # Contemporary chat APIs may wrap textual responses into nested
+        # dictionaries, e.g. ``{"text": {"value": "..."}}`` or expose both
+        # ``text`` and ``content`` keys simultaneously.  Recursively flatten the
+        # known containers instead of assuming a specific schema.
         text = content.get("text")
-        if isinstance(text, str) and text:
-            pieces.append(text)
+        if text is not None:
+            pieces.extend(_flatten_content(text))
+        value = content.get("value")
+        if value is not None:
+            pieces.extend(_flatten_content(value))
         inner = content.get("content")
-        if isinstance(inner, list):
-            for part in inner:
-                pieces.extend(_flatten_content(part))
+        if inner is not None:
+            pieces.extend(_flatten_content(inner))
         return pieces
 
-    if isinstance(content, list):
+    if isinstance(content, (list, tuple)):
         for part in content:
             pieces.extend(_flatten_content(part))
     return pieces
