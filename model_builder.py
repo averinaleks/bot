@@ -12,6 +12,7 @@ import importlib.metadata
 import json
 import math
 import os
+import pickle
 import platform
 import random
 import re
@@ -38,6 +39,7 @@ from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
     ensure_minimum_ray_version,
     harden_mlflow,
+    safe_joblib_load,
     verify_model_state_signature,
     write_model_state_signature,
 )
@@ -1179,8 +1181,21 @@ class ModelBuilder:
                     sanitize_log_value(state_path),
                 )
                 return
-            with state_path.open("rb") as f:
-                state = joblib.load(f)
+            try:
+                state = safe_joblib_load(state_path)
+            except pickle.UnpicklingError:
+                logger.error(
+                    "Отказ от загрузки состояния из %s: обнаружены недоверенные объекты",
+                    sanitize_log_value(state_path),
+                )
+                return
+            except Exception as exc:
+                logger.exception(
+                    "Не удалось десериализовать состояние модели из %s: %s",
+                    sanitize_log_value(state_path),
+                    exc,
+                )
+                return
             self.scalers = state.get("scalers", {})
             if self.nn_framework == "pytorch":
                 for symbol, sd in state.get("lstm_models", {}).items():
@@ -2154,9 +2169,22 @@ def _load_model() -> None:
         _model = None
         return
     try:
-        _model = joblib.load(model_path)
+        _model = safe_joblib_load(model_path)
+    except pickle.UnpicklingError:
+        logger.error(
+            "Отказ от загрузки модели %s: обнаружены недоверенные объекты",
+            sanitize_log_value(model_path),
+        )
+        _model = None
     except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
         logger.exception("Не удалось загрузить модель: %s", e)
+        _model = None
+    except Exception as exc:  # pragma: no cover - unexpected joblib failure
+        logger.exception(
+            "Неожиданная ошибка десериализации модели %s: %s",
+            sanitize_log_value(model_path),
+            exc,
+        )
         _model = None
 
 

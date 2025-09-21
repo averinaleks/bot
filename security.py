@@ -5,14 +5,16 @@ Trivy so that the codebase remains safe without dropping optional features.
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import hmac
 import hashlib
 import logging
 import os
+import pickle
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Iterable, Tuple
 
 from packaging.version import InvalidVersion, Version
 
@@ -23,6 +25,162 @@ try:
 except ImportError:
     # Fallback for standalone module usage (should set to appropriate directory in application)
     MODEL_DIR = Path(".")
+
+
+try:  # joblib is optional in some environments
+    import joblib  # type: ignore
+    from joblib import numpy_pickle as _joblib_numpy_pickle  # type: ignore
+except Exception:  # pragma: no cover - joblib not available
+    joblib = None  # type: ignore[assignment]
+    _joblib_numpy_pickle = None  # type: ignore[assignment]
+else:  # pragma: no cover - exercised in integration tests
+    try:
+        from joblib import numpy_pickle_compat as _joblib_numpy_pickle_compat  # type: ignore
+    except Exception:  # pragma: no cover - optional compatibility helpers
+        _joblib_numpy_pickle_compat = None  # type: ignore[assignment]
+
+
+_DEFAULT_SAFE_JOBLIB_MODULES: Tuple[str, ...] = (
+    "__main__",
+    "builtins",
+    "collections",
+    "collections.abc",
+    "contextlib",
+    "datetime",
+    "decimal",
+    "functools",
+    "itertools",
+    "math",
+    "numbers",
+    "operator",
+    "pathlib",
+    "pickle",
+    "types",
+    "typing",
+    "weakref",
+    "numpy",
+    "pandas",
+    "joblib",
+    "scipy",
+    "sklearn",
+    "torch",
+    "bot",
+    "services",
+    "tests",
+    "transformers",
+    "statsmodels",
+    "lightgbm",
+    "xgboost",
+    "catboost",
+    "pytz",
+    "dateutil",
+)
+
+
+def _normalise_allowed_modules(allowed: Iterable[str] | None) -> Tuple[str, ...]:
+    """Return a deduplicated tuple of allowed module prefixes."""
+
+    base: list[str] = list(_DEFAULT_SAFE_JOBLIB_MODULES)
+    if allowed is not None:
+        for prefix in allowed:
+            if prefix:
+                base.append(prefix)
+    # Ensure fundamental builtins are always permitted
+    base.extend(["builtins", "collections", "collections.abc"])
+    seen: set[str] = set()
+    normalised: list[str] = []
+    for prefix in base:
+        if prefix not in seen:
+            seen.add(prefix)
+            normalised.append(prefix)
+    return tuple(normalised)
+
+
+def _module_is_allowed(module: str, allowed: Tuple[str, ...]) -> bool:
+    return any(
+        module == prefix or module.startswith(f"{prefix}.")
+        for prefix in allowed
+    )
+
+
+@contextlib.contextmanager
+def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
+    """Temporarily harden joblib's unpicklers with an allow-list."""
+
+    if joblib is None or _joblib_numpy_pickle is None:  # pragma: no cover - defensive
+        raise RuntimeError(
+            "joblib недоступен: установите зависимость для работы с артефактами"
+        )
+
+    original_unpickler = _joblib_numpy_pickle.NumpyUnpickler
+    compat_unpickler = None
+    if _joblib_numpy_pickle_compat is not None:
+        compat_unpickler = getattr(
+            _joblib_numpy_pickle_compat, "NumpyUnpickler", None
+        )
+
+    class _RestrictedUnpickler(original_unpickler):  # type: ignore[misc]
+        def __init__(self, *args, **kwargs):
+            self._allowed_modules = allowed
+            super().__init__(*args, **kwargs)
+
+        def find_class(self, module, name):  # type: ignore[override]
+            if not _module_is_allowed(module, self._allowed_modules):
+                logger.error(
+                    "Отказ от десериализации: модуль %s.%s не входит в список доверенных",
+                    module,
+                    name,
+                )
+                raise pickle.UnpicklingError(
+                    f"Refusing to load object from disallowed module {module}.{name}"
+                )
+            return super().find_class(module, name)
+
+    if compat_unpickler is not None:
+        class _RestrictedCompatUnpickler(compat_unpickler):  # type: ignore[misc]
+            def __init__(self, *args, **kwargs):
+                self._allowed_modules = allowed
+                super().__init__(*args, **kwargs)
+
+            def find_class(self, module, name):  # type: ignore[override]
+                if not _module_is_allowed(module, self._allowed_modules):
+                    logger.error(
+                        "Отказ от десериализации (compat): модуль %s.%s не доверен",
+                        module,
+                        name,
+                    )
+                    raise pickle.UnpicklingError(
+                        f"Refusing to load object from disallowed module {module}.{name}"
+                    )
+                return super().find_class(module, name)
+
+    _joblib_numpy_pickle.NumpyUnpickler = _RestrictedUnpickler
+    if compat_unpickler is not None:
+        _joblib_numpy_pickle_compat.NumpyUnpickler = _RestrictedCompatUnpickler  # type: ignore[attr-defined]
+    try:
+        yield
+    finally:  # pragma: no cover - ensure restoration even on failure
+        _joblib_numpy_pickle.NumpyUnpickler = original_unpickler
+        if compat_unpickler is not None:
+            _joblib_numpy_pickle_compat.NumpyUnpickler = compat_unpickler  # type: ignore[attr-defined]
+
+
+def safe_joblib_load(
+    source: Any,
+    *,
+    allowed_modules: Iterable[str] | None = None,
+) -> Any:
+    """Load a joblib artifact with module-level deserialization restrictions."""
+
+    if joblib is None:  # pragma: no cover - handled in optional dependency tests
+        raise RuntimeError(
+            "joblib недоступен: установите зависимость для работы с артефактами"
+        )
+
+    prefixes = _normalise_allowed_modules(allowed_modules)
+    with _restricted_joblib_unpicklers(prefixes):
+        # joblib.load is intentionally wrapped with a strict module allow-list above.
+        return joblib.load(source)  # codeql[py/unsafe-deserialization]
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
     """Return True if `path` is located within `directory`."""

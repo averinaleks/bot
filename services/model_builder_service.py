@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pickle
 import sys
 from pathlib import Path
 import re
@@ -24,7 +25,11 @@ from numpy.typing import NDArray
 from bot.dotenv_utils import load_dotenv
 from bot.utils import ensure_writable_directory
 from services.logging_utils import sanitize_log_value
-from security import verify_model_state_signature, write_model_state_signature
+from security import (
+    safe_joblib_load,
+    verify_model_state_signature,
+    write_model_state_signature,
+)
 from utils import safe_int, validate_host
 
 _FILENAME_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
@@ -198,7 +203,13 @@ def _load_model() -> None:
         )
         return
     try:  # pragma: no cover - exercised in integration tests
-        _models["default"] = joblib.load(model_file)
+        if not verify_model_state_signature(model_file):
+            app.logger.warning(
+                "Отказ от загрузки неподписанного артефакта модели %s",
+                sanitize_log_value(model_file),
+            )
+            return
+        _models["default"] = safe_joblib_load(model_file)
     except Exception:
         app.logger.exception("Failed to load model from %s", model_file)
 
@@ -336,8 +347,16 @@ else:  # scikit-learn fallback used by tests
                 sanitize_log_value(path),
             )
             return
-        with path.open("rb") as fh:
-            data = joblib.load(fh)
+        try:
+            data = safe_joblib_load(path)
+        except pickle.UnpicklingError:
+            app.logger.warning(
+                "Refused to load model %s: содержит недоверенные объекты", path
+            )
+            return
+        except Exception:
+            app.logger.exception("Failed to load model artefact from %s", path)
+            return
         _models[symbol] = data.get("model")
         _scalers[symbol] = data.get("scaler")
 
