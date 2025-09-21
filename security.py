@@ -17,10 +17,26 @@ from typing import Any
 # Import or define MODEL_DIR and _is_within_directory for signature path security
 try:
     # If running under the full application, import the real MODEL_DIR and checker
-    from services.model_builder_service import MODEL_DIR
+    from services.model_builder_service import MODEL_DIR as _DEFAULT_MODEL_DIR
 except ImportError:
     # Fallback for standalone module usage (should set to appropriate directory in application)
-    MODEL_DIR = Path(".")
+    _DEFAULT_MODEL_DIR = Path(".").resolve()
+
+
+def _resolve_model_dir() -> Path:
+    """Return the effective model directory for signature validation."""
+
+    env_dir = os.getenv("MODEL_DIR")
+    if env_dir:
+        try:
+            return Path(env_dir).resolve(strict=False)
+        except OSError as exc:  # pragma: no cover - unexpected FS issues
+            logger.warning(
+                "Не удалось разрешить MODEL_DIR из окружения (%s): %s",
+                env_dir,
+                exc,
+            )
+    return _DEFAULT_MODEL_DIR
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
     """Return True if `path` is located within `directory`."""
@@ -102,12 +118,31 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
-    # Ensure the signature file stays within the model directory
-    if not _is_within_directory(sig_path, MODEL_DIR):
+    model_dir = _resolve_model_dir()
+    configured_model_dir = os.getenv("MODEL_DIR")
+    try:
+        model_parent = path.parent.resolve(strict=False)
+        sig_parent = sig_path.parent.resolve(strict=False)
+    except OSError as exc:  # pragma: no cover - extremely rare resolution issues
         logger.warning(
-            "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
+            "Отказ от проверки подписи модели %s: не удалось разрешить путь (%s)",
+            path,
+            exc,
+        )
+        return False
+    if sig_parent != model_parent:
+        logger.warning(
+            "Отказ от проверки подписи модели %s: подпись должна находиться рядом (получено %s)",
             path,
             sig_path,
+        )
+        return False
+    if configured_model_dir and not _is_within_directory(model_parent, model_dir):
+        logger.warning(
+            "Отказ от проверки подписи модели %s: каталог %s вне MODEL_DIR (%s)",
+            path,
+            model_parent,
+            model_dir,
         )
         return False
     if sig_path.is_symlink():
