@@ -163,3 +163,40 @@ def test_submit_snapshot_skips_on_network_issue(monkeypatch, capsys) -> None:
 
     captured = capsys.readouterr()
     assert "сетевой ошибки" in captured.err
+
+
+def test_submit_snapshot_skips_on_validation_issue(monkeypatch, capsys) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    manifests = {
+        "requirements.txt": {
+            "name": "requirements.txt",
+            "file": {"source_location": "requirements.txt"},
+            "resolved": {
+                "pkg:pypi/sample@1.0.0": {
+                    "package_url": "pkg:pypi/sample@1.0.0",
+                    "relationship": "direct",
+                    "scope": "runtime",
+                    "dependencies": [],
+                }
+            },
+        }
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+
+    monkeypatch.setattr(module, "_build_manifests", lambda root: manifests)
+
+    def _raise(*args, **kwargs):
+        raise module.DependencySubmissionError(422, "validation failed")
+
+    monkeypatch.setattr(module, "_submit_with_headers", _raise)
+
+    module.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "ошибки валидации" in captured.err
