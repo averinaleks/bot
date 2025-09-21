@@ -137,7 +137,7 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
 def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
     """Return a config path confined to ``_CONFIG_DIR``."""
 
-    if raw in (None, ""):
+    if raw is None or raw == "":
         return _DEFAULT_CONFIG_PATH
 
     try:
