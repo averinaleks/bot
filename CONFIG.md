@@ -131,3 +131,8 @@ to take‑profit and stop‑loss distances.
 | early_stopping_patience | 3 | Epochs with no improvement before early stop. |
 | balance_key | – | Balance key for equity; defaults to symbol quote currency. |
 
+> Примечание: Ray и MLflow больше не ставятся по умолчанию. При их отсутствии
+> используется локальная заглушка (Ray) или функциональность отключается
+> (MLflow). Устанавливайте эти пакеты вручную только в защищённой среде после
+> выхода обновлений, закрывающих CVE-2023-48022 и CVE-2024-37052…37060.
+

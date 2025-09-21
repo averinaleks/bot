@@ -9,12 +9,11 @@ import inspect
 import os
 import time
 from itertools import product
-import types
-
 import numpy as np
 import pandas as pd
 
-from security import ensure_minimum_ray_version, harden_mlflow
+from security import harden_mlflow
+from bot.ray_compat import ray
 
 try:
     import polars as pl  # type: ignore
@@ -58,47 +57,6 @@ except ImportError as exc:  # pragma: no cover - optional dependency
     logger.warning("skopt import failed: %s", exc)
     SkOptimizer = None  # type: ignore
     Integer = Real = None  # type: ignore
-
-
-def _create_ray_stub():
-    """Return a minimal stand-in for Ray when the real package is unavailable."""
-
-    ray_stub = types.ModuleType("ray")
-
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):
-            return self
-
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-            return wrapper
-        return _RayRemoteFunction(func)
-
-    ray_stub.remote = _ray_remote
-    ray_stub.get = lambda x: x
-    ray_stub.init = lambda *a, **k: None
-    ray_stub.is_initialized = lambda: False
-    ray_stub.ObjectRef = type("ObjectRef", (), {})
-    return ray_stub
-
-
-if os.getenv("TEST_MODE") == "1":
-    ray = _create_ray_stub()
-else:
-    try:  # pragma: no cover - optional dependency
-        import ray  # type: ignore
-    except ImportError:  # pragma: no cover - provide fallback stub
-        ray = _create_ray_stub()
-    else:
-        ensure_minimum_ray_version(ray)
 
 
 @ray.remote

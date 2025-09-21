@@ -28,6 +28,7 @@ from flask import Flask, jsonify, request
 from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
 from bot.dotenv_utils import load_dotenv
+from bot.ray_compat import IS_RAY_STUB, ray
 from bot.utils import (
     check_dataframe_empty,
     ensure_writable_directory,
@@ -37,7 +38,6 @@ from bot.utils import (
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
     ArtifactDeserializationError,
-    ensure_minimum_ray_version,
     harden_mlflow,
     safe_joblib_load,
     verify_model_state_signature,
@@ -168,63 +168,38 @@ def _load_gym() -> tuple[object, object]:
 
 gym, spaces = _load_gym()
 
-if os.getenv("TEST_MODE") == "1":
+# ``ray`` предоставляется через bot.ray_compat и может быть как настоящим пакетом,
+# так и заглушкой, если зависимость не установлена.
+if IS_RAY_STUB:
     import types
 
-    ray = types.ModuleType("ray")
+    rllib_base = types.ModuleType("ray.rllib")
+    alg_mod = types.ModuleType("ray.rllib.algorithms")
+    dqn_mod = types.ModuleType("ray.rllib.algorithms.dqn")
+    ppo_mod = types.ModuleType("ray.rllib.algorithms.ppo")
 
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):
+    class _Cfg:
+        def environment(self, *_a, **_k):
             return self
 
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-            return wrapper
-        return _RayRemoteFunction(func)
+        def rollouts(self, *_a, **_k):
+            return self
 
-    ray.remote = _ray_remote
-    ray.get = lambda x: x
-    ray.init = lambda *a, **k: None
-    ray.is_initialized = lambda: False
-else:
-    try:  # pragma: no cover - optional dependency
-        import ray
-    except ImportError:  # provide minimal stub for environments without ray
-        import types
+        def build(self):
+            return self
 
-        ray = types.ModuleType("ray")
+        def train(self):
+            return {}
 
-        class _RayRemoteFunction:
-            def __init__(self, func):
-                self._function = func
-
-            def remote(self, *args, **kwargs):
-                return self._function(*args, **kwargs)
-
-            def options(self, *args, **kwargs):
-                return self
-
-        def _ray_remote(func=None, **_kwargs):
-            if func is None:
-                def wrapper(f):
-                    return _RayRemoteFunction(f)
-                return wrapper
-            return _RayRemoteFunction(func)
-
-        ray.remote = _ray_remote
-        ray.get = lambda x: x
-        ray.init = lambda *a, **k: None
-        ray.is_initialized = lambda: False
-    else:
-        ensure_minimum_ray_version(ray)
+    dqn_mod.DQNConfig = _Cfg
+    ppo_mod.PPOConfig = _Cfg
+    alg_mod.dqn = dqn_mod
+    alg_mod.ppo = ppo_mod
+    rllib_base.algorithms = alg_mod
+    sys.modules.setdefault("ray.rllib", rllib_base)
+    sys.modules.setdefault("ray.rllib.algorithms", alg_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
     from bot.utils import configure_logging
