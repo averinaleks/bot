@@ -342,6 +342,12 @@ def submit_dependency_snapshot() -> None:
                     file=sys.stderr,
                 )
                 return
+            if last_error.status_code == 422:
+                print(
+                    "Dependency snapshot submission skipped из-за ошибки валидации данных (HTTP 422).",
+                    file=sys.stderr,
+                )
+                return
         if isinstance(last_error, DependencySubmissionError):
             if last_error.status_code is None:
                 print(
