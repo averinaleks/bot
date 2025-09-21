@@ -20,6 +20,7 @@ MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
+_TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
@@ -131,55 +132,24 @@ def _build_request(url: str, body: bytes, headers: dict[str, str]) -> Request:
     return Request(url, data=body, headers=headers, method="POST")
 
 
-def submit_dependency_snapshot() -> None:
-    repository = _env("GITHUB_REPOSITORY")
-    token = _env("GITHUB_TOKEN")
-    sha = _env("GITHUB_SHA")
-    ref = _env("GITHUB_REF")
+def _job_metadata(repository: str, run_id: str, correlator: str) -> dict[str, str]:
+    job: dict[str, str] = {"id": run_id, "correlator": correlator}
+    server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    if run_id.isdigit():
+        job["html_url"] = f"{server_url}/{repository}/actions/runs/{run_id}"
+    return job
 
-    manifests = _build_manifests(Path("."))
-    if not manifests:
-        print("No dependency manifests found.")
-        return
 
-    workflow = os.getenv("GITHUB_WORKFLOW", "dependency-graph")
-    job = os.getenv("GITHUB_JOB", "submit")
-    run_id = os.getenv("GITHUB_RUN_ID", str(int(datetime.now(timezone.utc).timestamp())))
-    run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+def _auth_schemes(token: str) -> list[str]:
+    override = os.getenv("DEPENDENCY_SNAPSHOT_AUTH_SCHEME")
+    if override:
+        return [override]
+    if token.startswith(_TOKEN_PREFIXES):
+        return ["Bearer", "token"]
+    return ["token", "Bearer"]
 
-    payload = {
-        "version": 0,
-        "sha": sha,
-        "ref": ref,
-        "job": {
-            "correlator": f"{workflow}-{job}",
-            "id": f"{run_id}-{run_attempt}",
-        },
-        "detector": {
-            "name": "requirements-parser",
-            "version": "1.0.0",
-            "url": "https://github.com/averinaleks/bot",
-        },
-        "metadata": {
-            "dependency_count": sum(len(entry["resolved"]) for entry in manifests.values()),
-        },
-        "manifests": manifests,
-    }
 
-    base_url = _api_base_url()
-    url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
-    parsed_url = urlparse(url)
-    if parsed_url.scheme != "https" or not parsed_url.netloc:
-        raise RuntimeError("Запрос зависимостей разрешён только по HTTPS")
-    body = json.dumps(payload).encode()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
-        "User-Agent": "dependency-snapshot-script",
-    }
-
+def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     last_error: Exception | None = None
     for attempt in range(1, 4):
         request = _build_request(url, body, headers)
@@ -217,6 +187,82 @@ def submit_dependency_snapshot() -> None:
             raise RuntimeError(
                 f"Не удалось отправить snapshot зависимостей: {exc.reason}"
             ) from exc
+
+    if last_error is not None:
+        raise last_error
+
+
+def submit_dependency_snapshot() -> None:
+    repository = _env("GITHUB_REPOSITORY")
+    token = _env("GITHUB_TOKEN")
+    sha = _env("GITHUB_SHA")
+    ref = _env("GITHUB_REF")
+
+    manifests = _build_manifests(Path("."))
+    if not manifests:
+        print("No dependency manifests found.")
+        return
+
+    workflow = os.getenv("GITHUB_WORKFLOW", "dependency-graph")
+    job_name = os.getenv("GITHUB_JOB", "submit")
+    run_id = os.getenv("GITHUB_RUN_ID", str(int(datetime.now(timezone.utc).timestamp())))
+    run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+    correlator = f"{workflow}-{job_name}"
+
+    payload = {
+        "version": 0,
+        "sha": sha,
+        "ref": ref,
+        "job": _job_metadata(repository, run_id, correlator),
+        "detector": {
+            "name": "requirements-parser",
+            "version": "1.0.0",
+            "url": "https://github.com/averinaleks/bot",
+        },
+        "metadata": {
+            "dependency_count": sum(len(entry["resolved"]) for entry in manifests.values()),
+            "run_attempt": run_attempt,
+        },
+        "scanned": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "manifests": manifests,
+    }
+
+    base_url = _api_base_url()
+    url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
+    parsed_url = urlparse(url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise RuntimeError("Запрос зависимостей разрешён только по HTTPS")
+    body = json.dumps(payload).encode()
+    headers_base = {
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
+        "User-Agent": "dependency-snapshot-script",
+    }
+
+    schemes = _auth_schemes(token)
+    last_error: Exception | None = None
+    for index, scheme in enumerate(schemes):
+        headers = dict(headers_base, Authorization=f"{scheme} {token}")
+        try:
+            _submit_with_headers(url, body, headers)
+            return
+        except RuntimeError as exc:
+            cause = exc.__cause__
+            if (
+                isinstance(cause, HTTPError)
+                and cause.code in {401, 403}
+                and index < len(schemes) - 1
+            ):
+                next_scheme = schemes[index + 1]
+                print(
+                    f"Authentication with scheme '{scheme}' failed (HTTP {cause.code}). Trying '{next_scheme}'.",
+                    file=sys.stderr,
+                )
+                last_error = exc
+                continue
+            last_error = exc
+            break
 
     if last_error is not None:
         raise last_error
