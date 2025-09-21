@@ -5,6 +5,10 @@ name: Dependabot Auto Merge
 on:  # yamllint disable-line rule:truthy
   pull_request_target:
     types: [opened, reopened, synchronize]
+  push:
+    branches:
+      - main
+      - 'dependabot/**'
 
 permissions:
   contents: write
@@ -91,11 +95,10 @@ jobs:
             "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
             >> "$GITHUB_STEP_SUMMARY"
 
-  # GitHub still triggers this workflow on pushes to the default branch when the
-  # workflow file itself changes.  Those runs use the account that pushed the
-  # change (usually not Dependabot) as the actor, which means the primary job is
-  # skipped and GitHub marks the overall workflow as a failure.  Provide a tiny
-  # no-op job for those runs so the workflow reports success instead of red X's.
+  # Provide a tiny no-op job for push-triggered runs (for example when this
+  # workflow file changes on the default branch or Dependabot pushes its update
+  # branches).  Without this guard GitHub would create runs with no jobs and
+  # mark them as failures, leaving confusing red X's on commits.
   noop:
     if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
