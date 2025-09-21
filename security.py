@@ -14,13 +14,30 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-# Import or define MODEL_DIR and _is_within_directory for signature path security
+logger = logging.getLogger(__name__)
+
+# Import or define MODEL_DIR helper for signature path security
 try:
-    # If running under the full application, import the real MODEL_DIR and checker
-    from services.model_builder_service import MODEL_DIR
-except ImportError:
-    # Fallback for standalone module usage (should set to appropriate directory in application)
-    MODEL_DIR = Path(".")
+    # If running under the full application, import the real MODEL_DIR
+    from services.model_builder_service import MODEL_DIR as _SERVICE_MODEL_DIR
+except ImportError:  # pragma: no cover - optional dependency during tests
+    _SERVICE_MODEL_DIR: Path | None = None
+
+
+def _effective_model_dir() -> Path:
+    """Return the directory that should contain trusted model artefacts."""
+
+    env_override = os.getenv("MODEL_DIR")
+    if env_override:
+        try:
+            return Path(env_override).resolve(strict=False)
+        except OSError:  # pragma: no cover - invalid paths are extremely rare
+            logger.debug("Не удалось разрешить MODEL_DIR из окружения: %s", env_override)
+            # Fall back to the service-provided directory below.
+    if '_SERVICE_MODEL_DIR' in globals() and _SERVICE_MODEL_DIR is not None:
+        return _SERVICE_MODEL_DIR
+    return Path(".").resolve(strict=False)
+
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
     """Return True if `path` is located within `directory`."""
@@ -30,7 +47,9 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
         return False
     return True
 
-logger = logging.getLogger(__name__)
+# ``MODEL_DIR`` is kept for backwards compatibility with older imports, however the
+# helper above is used whenever signature safety checks are executed.
+MODEL_DIR = _effective_model_dir()
 
 
 _MODEL_STATE_HMAC_ENV = "MODEL_STATE_HMAC_KEY"
@@ -73,6 +92,16 @@ def write_model_state_signature(path: Path) -> None:
     if signature is None:
         return
     sig_path = _signature_path(path)
+    model_dir = _effective_model_dir()
+    if _is_within_directory(path, model_dir) and not _is_within_directory(
+        sig_path, model_dir
+    ):
+        logger.warning(
+            "Отказ от записи подписи модели %s: подпись вне MODEL_DIR (%s)",
+            path,
+            sig_path,
+        )
+        return
     tmp_path = sig_path.with_suffix(sig_path.suffix + ".tmp")
     sig_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -102,8 +131,11 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
+    model_dir = _effective_model_dir()
     # Ensure the signature file stays within the model directory
-    if not _is_within_directory(sig_path, MODEL_DIR):
+    if _is_within_directory(path, model_dir) and not _is_within_directory(
+        sig_path, model_dir
+    ):
         logger.warning(
             "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
             path,
