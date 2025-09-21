@@ -128,14 +128,19 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
 
 
 def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
-    if raw in (None, ""):
+    if raw is None:
         return _DEFAULT_CONFIG_PATH
 
     try:
-        candidate = Path(raw)
+        raw_path = os.fspath(raw)
     except TypeError:
         LOGGER.warning("Invalid CONFIG_PATH %r; using default", raw)
         return _DEFAULT_CONFIG_PATH
+
+    if raw_path == "":
+        return _DEFAULT_CONFIG_PATH
+
+    candidate = Path(raw_path)
 
     if not candidate.is_absolute():
         candidate = (_CONFIG_DIR / candidate).resolve(strict=False)
