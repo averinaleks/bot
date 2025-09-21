@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
+MANIFEST_PATTERNS = ("requirements*.txt",)
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
