@@ -38,9 +38,12 @@ def test_parse_requirements_skips_blocklisted_packages(tmp_path: Path) -> None:
 
     resolved = snapshot._parse_requirements(requirement_file)
 
-    assert "ccxtpro" not in resolved
-    assert "httpx" in resolved
-    assert resolved["httpx"]["package_url"] == "pkg:pypi/httpx@0.27.2"
+    assert "pkg:pypi/ccxtpro@1.0.1" not in resolved
+    assert "pkg:pypi/httpx@0.27.2" in resolved
+    assert (
+        resolved["pkg:pypi/httpx@0.27.2"]["package_url"]
+        == "pkg:pypi/httpx@0.27.2"
+    )
 
 
 def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
@@ -49,4 +52,7 @@ def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
 
     resolved = snapshot._parse_requirements(requirement_file)
 
-    assert resolved["torch"]["package_url"] == "pkg:pypi/torch@2.8.0%2Bcpu"
+    assert (
+        resolved["pkg:pypi/torch@2.8.0%2Bcpu"]["package_url"]
+        == "pkg:pypi/torch@2.8.0%2Bcpu"
+    )
