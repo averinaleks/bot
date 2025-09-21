@@ -122,11 +122,60 @@ except MissingEnvError as exc:
 # Resolve the default configuration file. Test runs should always use the
 # repository's bundled ``config.json`` regardless of any ``CONFIG_PATH`` value
 # defined in the environment (for example via ``.env``).
-CONFIG_PATH = os.getenv(
-    "CONFIG_PATH", os.path.join(os.path.dirname(__file__), "config.json")
-)
-if os.getenv("TEST_MODE") == "1":
-    CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+_CONFIG_DIR = Path(__file__).resolve().parent
+_DEFAULT_CONFIG_PATH = _CONFIG_DIR / "config.json"
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
+    """Return a config path confined to ``_CONFIG_DIR``."""
+
+    if raw in (None, ""):
+        return _DEFAULT_CONFIG_PATH
+
+    try:
+        candidate = Path(raw)
+    except TypeError:
+        logger.warning("Invalid CONFIG_PATH %r; falling back to default", raw)
+        return _DEFAULT_CONFIG_PATH
+
+    if not candidate.is_absolute():
+        candidate = (_CONFIG_DIR / candidate).resolve(strict=False)
+    else:
+        try:
+            candidate = candidate.resolve(strict=False)
+        except OSError as exc:
+            logger.warning(
+                "Failed to resolve CONFIG_PATH %s: %s; using default",
+                candidate,
+                exc,
+            )
+            return _DEFAULT_CONFIG_PATH
+
+    if candidate.is_symlink():
+        logger.warning("CONFIG_PATH %s is a symlink; using default", candidate)
+        return _DEFAULT_CONFIG_PATH
+
+    if not _is_within_directory(candidate, _CONFIG_DIR):
+        logger.warning(
+            "CONFIG_PATH %s escapes %s; using default",
+            candidate,
+            _CONFIG_DIR,
+        )
+        return _DEFAULT_CONFIG_PATH
+
+    return candidate
+
+
+_ENV_CONFIG_PATH = None if os.getenv("TEST_MODE") == "1" else os.getenv("CONFIG_PATH")
+CONFIG_PATH = str(_resolve_config_path(_ENV_CONFIG_PATH))
 # Cached defaults; populated on first load
 DEFAULTS: Optional[Dict[str, Any]] = None
 DEFAULTS_LOCK = threading.Lock()
@@ -142,10 +191,11 @@ def load_defaults() -> Dict[str, Any]:
     with DEFAULTS_LOCK:
         if DEFAULTS is None:
             try:
-                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                path = _resolve_config_path(CONFIG_PATH)
+                with open(path, "r", encoding="utf-8") as f:
                     DEFAULTS = json.load(f)
             except (OSError, json.JSONDecodeError) as exc:
-                logger.error("Failed to load %s: %s", CONFIG_PATH, exc)
+                logger.error("Failed to load %s: %s", path, exc)
                 raise ConfigLoadError from exc
     return DEFAULTS
 
