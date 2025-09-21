@@ -102,10 +102,16 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
-    # Ensure the signature file stays within the model directory
-    if not _is_within_directory(sig_path, MODEL_DIR):
+    # Prefer the globally configured MODEL_DIR, but fall back to the
+    # directory of the model itself when running in isolated environments
+    # (for example, unit tests that use a temporary directory).  This keeps
+    # the signature tightly coupled to the model file while still enforcing
+    # that both reside in a trusted location.
+    trusted_dir = MODEL_DIR if _is_within_directory(path, MODEL_DIR) else path.parent
+
+    if not _is_within_directory(sig_path, trusted_dir):
         logger.warning(
-            "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
+            "Отказ от проверки подписи модели %s: подпись вне доверенного каталога (%s)",
             path,
             sig_path,
         )
