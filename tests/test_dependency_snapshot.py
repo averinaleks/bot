@@ -21,14 +21,13 @@ def test_build_manifests_includes_supported_patterns(tmp_path: Path, filename: s
 
     manifests = snapshot._build_manifests(tmp_path)
 
-    # The manifests use string keys, which are absolute paths when a temporary
-    # directory is used. Normalize via Path for the comparison.
-    manifest_paths = {Path(key) for key in manifests.keys()}
+    assert set(manifests.keys()) == {filename}
 
-    assert requirement_file in manifest_paths
+    manifest_data = manifests[filename]
+    assert manifest_data["file"]["source_location"] == filename
     assert any(
         entry["package_url"] == "pkg:pypi/requests@2.32.3"
-        for entry in manifests[next(iter(manifests))]["resolved"].values()
+        for entry in manifest_data["resolved"].values()
     )
 
 

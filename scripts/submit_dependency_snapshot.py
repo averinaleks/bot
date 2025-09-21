@@ -132,9 +132,21 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
         resolved = _parse_requirements(manifest)
         if not resolved:
             continue
-        manifests[str(manifest)] = {
+        try:
+            relative_path = manifest.relative_to(root)
+        except ValueError:
+            # Fallback for unexpected paths outside of the provided root.
+            relative_path = manifest.name
+
+        relative_str = (
+            relative_path.as_posix()
+            if isinstance(relative_path, Path)
+            else str(relative_path)
+        )
+
+        manifests[relative_str] = {
             "name": manifest.name,
-            "file": {"source_location": str(manifest)},
+            "file": {"source_location": relative_str},
             "resolved": resolved,
         }
     return manifests
