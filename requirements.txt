@@ -17,26 +17,20 @@ aiohttp==3.12.15
     #   fsspec
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.16.4
 annotated-types==0.7.0
     # via pydantic
 anyio==4.10.0
     # via
     #   httpx
-    #   mcp
     #   openai
-    #   sse-starlette
     #   starlette
 async-timeout==5.0.1
     # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
-    #   cyclopts
     #   jsonschema
     #   referencing
-authlib==1.6.3
-    # via fastmcp
 backports-asyncio-runner==1.2.0 ; python_version < "3.11"
     # via
     #   -r requirements-core.in
@@ -45,9 +39,6 @@ bcrypt==4.3.0
     # via -r requirements-core.in
 blinker==1.9.0
     # via flask
-cachetools==5.5.2
-    # via
-    #   google-auth
 ccxt==4.5.5
     # via -r requirements-core.in
 ccxtpro==1.0.1
@@ -65,9 +56,7 @@ cffi==1.17.1
 charset-normalizer==3.4.3
     # via requests
 click==8.2.1
-    # via
-    #   flask
-    #   uvicorn
+    # via flask
 cloudpickle==3.1.1
     # via
     #   gymnasium
@@ -78,44 +67,26 @@ contourpy==1.3.2
 cryptography==45.0.7
     # via
     #   -r requirements-core.in
-    #   authlib
     #   ccxt
 cycler==0.12.1
     # via matplotlib
-cyclopts==3.24.0
-    # via fastmcp
-databricks-sdk==0.63.0
-    # via
 distro==1.9.0
     # via openai
-dnspython==2.8.0
-    # via email-validator
-docker==7.1.0
-docstring-parser==0.17.0
-    # via cyclopts
-docutils==0.22
-    # via rich-rst
-email-validator==2.3.0
-    # via pydantic
 exceptiongroup==1.3.0
     # via
     #   anyio
-    #   fastmcp
     #   pytest
 farama-notifications==0.0.4
     # via gymnasium
-fastapi==0.116.2
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
-fastmcp==2.10.6
 filelock==3.19.1
     # via
     #   huggingface-hub
     #   torch
     #   transformers
 flask==3.1.2
-    # via
-    #   -r requirements-core.in
+    # via -r requirements-core.in
 fonttools==4.59.1
     # via matplotlib
 frozenlist==1.7.0
@@ -127,31 +98,14 @@ fsspec==2025.7.0
     #   huggingface-hub
     #   pytorch-lightning
     #   torch
-gitdb==4.0.12
-    # via gitpython
-gitpython==3.1.45
-google-auth==2.40.3
-    # via databricks-sdk
-graphene==3.4.3
-graphql-core==3.2.6
-    # via
-    #   graphene
-    #   graphql-relay
-graphql-relay==3.2.0
-    # via graphene
-greenlet==3.2.4
-    # via sqlalchemy
 gunicorn==23.0.0
-    # via
-    #   -r requirements-core.in
+    # via -r requirements-core.in
 gymnasium==1.2.0
     # via
     #   -r requirements-core.in
     #   stable-baselines3
 h11==0.16.0
-    # via
-    #   httpcore
-    #   uvicorn
+    # via httpcore
 hf-xet==1.1.8
     # via huggingface-hub
 httpcore==1.0.9
@@ -159,12 +113,8 @@ httpcore==1.0.9
 httpx==0.28.1
     # via
     #   -r requirements-core.in
-    #   fastmcp
-    #   mcp
     #   openai
     #   python-telegram-bot
-httpx-sse==0.4.1
-    # via mcp
 huggingface-hub==0.34.4
     # via
     #   tokenizers
@@ -172,15 +122,11 @@ huggingface-hub==0.34.4
 idna==3.10
     # via
     #   anyio
-    #   email-validator
     #   httpx
     #   requests
     #   yarl
 imbalanced-learn==0.14.0
     # via -r requirements-core.in
-importlib-metadata==8.7.0
-    # via
-    #   opentelemetry-api
 iniconfig==2.1.0
     # via pytest
 itsdangerous==2.2.0
@@ -199,9 +145,7 @@ joblib==1.5.2
     #   imbalanced-learn
     #   scikit-learn
 jsonschema==4.25.1
-    # via
-    #   -r requirements-core.in
-    #   mcp
+    # via -r requirements-core.in
 jsonschema-specifications==2025.4.1
     # via jsonschema
 kiwisolver==1.4.9
@@ -212,27 +156,15 @@ lightning-utilities==0.15.2
     #   torchmetrics
 llvmlite==0.45.0
     # via numba
-mako==1.3.10
-    # via alembic
-markdown-it-py==4.0.0
-    # via rich
 markupsafe==3.0.2
     # via
     #   flask
     #   jinja2
-    #   mako
     #   werkzeug
 matplotlib==3.10.5
-    # via
-    #   stable-baselines3
-mcp==1.14.0
-    # via fastmcp
-mdurl==0.1.2
-    # via markdown-it-py
-    # via -r requirements-core.in
+    # via stable-baselines3
 mpmath==1.3.0
     # via sympy
-msgpack==1.1.1
 multidict==6.6.4
     # via
     #   aiohttp
@@ -300,18 +232,6 @@ nvidia-nvtx-cu12==12.8.90
     # via torch
 openai==1.108.1
     # via -r requirements-core.in
-openapi-pydantic==0.5.1
-    # via fastmcp
-opentelemetry-api==1.36.0
-    # via
-    #   opentelemetry-sdk
-    #   opentelemetry-semantic-conventions
-opentelemetry-proto==1.37.0
-    # via
-opentelemetry-sdk==1.36.0
-    # via
-opentelemetry-semantic-conventions==0.57b0
-    # via opentelemetry-sdk
 packaging==25.0
     # via
     #   gunicorn
@@ -343,20 +263,10 @@ propcache==0.3.2
     # via
     #   aiohttp
     #   yarl
-protobuf==6.32.0
-    # via
-    #   opentelemetry-proto
 psutil==7.1.0
     # via -r requirements-core.in
 pyarrow==21.0.0
-    # via
-    #   -r requirements-core.in
-pyasn1==0.6.1
-    # via
-    #   pyasn1-modules
-    #   rsa
-pyasn1-modules==0.4.2
-    # via google-auth
+    # via -r requirements-core.in
 pybit==5.11.0
     # via -r requirements-core.in
 pycares==4.10.0
@@ -367,43 +277,29 @@ pycryptodome==3.23.0
     # via pybit
 pydantic==2.11.7
     # via
-    #   fastapi
     #   fastapi-csrf-protect
-    #   fastmcp
-    #   mcp
     #   openai
-    #   openapi-pydantic
     #   pydantic-settings
 pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.10.1
-    # via
-    #   fastapi-csrf-protect
-    #   mcp
+    # via fastapi-csrf-protect
 pygments==2.19.2
-    # via
-    #   pytest
-    #   rich
+    # via pytest
 pyparsing==3.2.3
     # via matplotlib
-pyperclip==1.9.0
-    # via fastmcp
 pytest==8.4.1
     # via pytest-asyncio
 pytest-asyncio==1.1.0
     # via -r requirements-core.in
 python-dateutil==2.9.0.post0
     # via
-    #   graphene
     #   matplotlib
     #   pandas
 python-dotenv==1.1.1
     # via
     #   -r requirements-core.in
-    #   fastmcp
     #   pydantic-settings
-python-multipart==0.0.20
-    # via mcp
 python-telegram-bot==22.4
     # via -r requirements-core.in
 pytorch-lightning==2.5.5
@@ -415,7 +311,6 @@ pyyaml==6.0.2
     #   huggingface-hub
     #   pytorch-lightning
     #   transformers
-    # via -r requirements-core.in
 referencing==0.36.2
     # via
     #   jsonschema
@@ -425,24 +320,13 @@ regex==2025.7.34
 requests==2.32.5
     # via
     #   ccxt
-    #   databricks-sdk
-    #   docker
     #   huggingface-hub
     #   pybit
     #   transformers
-rich==14.1.0
-    # via
-    #   cyclopts
-    #   fastmcp
-    #   rich-rst
-rich-rst==1.3.1
-    # via cyclopts
 rpds-py==0.27.0
     # via
     #   jsonschema
     #   referencing
-rsa==4.9.1
-    # via google-auth
 safetensors==0.6.2
     # via transformers
 scikit-learn==1.7.2
@@ -463,25 +347,14 @@ six==1.17.0
     # via python-dateutil
 slicer==0.0.8
     # via shap
-smmap==5.0.2
-    # via gitdb
 sniffio==1.3.1
     # via
     #   anyio
     #   openai
-sqlalchemy==2.0.43
-    # via
-    #   alembic
-sqlparse==0.5.3
-sse-starlette==3.0.2
-    # via mcp
 stable-baselines3==2.7.0
     # via -r requirements-core.in
 starlette==0.47.2
-    # via
-    #   fastapi
-    #   fastapi-csrf-protect
-    #   mcp
+    # via fastapi-csrf-protect
 statsmodels==0.14.5
     # via -r requirements-core.in
 sympy==1.14.0
@@ -495,9 +368,7 @@ threadpoolctl==3.6.0
 tokenizers==0.22.0
     # via transformers
 tomli==2.2.1
-    # via
-    #   alembic
-    #   pytest
+    # via pytest
 torch==2.8.0
     # via
     #   pytorch-lightning
@@ -520,31 +391,22 @@ typing-extensions==4.14.1
     # via
     #   a2wsgi
     #   aiosignal
-    #   alembic
     #   anyio
     #   ccxt
-    #   cyclopts
     #   exceptiongroup
-    #   fastapi
-    #   graphene
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
     #   multidict
     #   openai
-    #   opentelemetry-api
-    #   opentelemetry-sdk
-    #   opentelemetry-semantic-conventions
     #   pydantic
     #   pydantic-core
     #   pytorch-lightning
     #   referencing
     #   shap
-    #   sqlalchemy
     #   starlette
     #   torch
     #   typing-inspection
-    #   uvicorn
 typing-inspection==0.4.1
     # via
     #   pydantic
@@ -552,12 +414,7 @@ typing-inspection==0.4.1
 tzdata==2025.2
     # via pandas
 urllib3==2.5.0
-    # via
-    #   docker
-    #   requests
-uvicorn==0.35.0
-    # via
-    #   mcp
+    # via requests
 websocket-client==1.8.0
     # via pybit
 websockets==15.0.1
@@ -568,8 +425,6 @@ yarl==1.20.1
     # via
     #   aiohttp
     #   ccxt
-zipp==3.23.0
-    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
