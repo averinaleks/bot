@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify
 from werkzeug.exceptions import BadRequest
 from typing import Any
 from pathlib import Path
+import hmac
 import json
 import logging
 import os
@@ -61,7 +62,7 @@ def init_exchange() -> None:
 
 
 # Expected API token for simple authentication
-API_TOKEN = os.getenv('TRADE_MANAGER_TOKEN')
+API_TOKEN = (os.getenv('TRADE_MANAGER_TOKEN') or '').strip()
 
 
 if hasattr(app, "before_first_request"):
@@ -84,7 +85,25 @@ def _require_api_token() -> ResponseReturnValue | None:
             token = token[7:]
         else:
             token = request.headers.get('X-API-KEY', token)
-        if not token or token != API_TOKEN:
+        token = token.strip()
+
+        expected = API_TOKEN
+        reason: str | None = None
+        if not expected:
+            reason = 'server token not configured'
+        elif not token:
+            reason = 'missing token'
+        elif not hmac.compare_digest(token, expected):
+            reason = 'token mismatch'
+
+        if reason is not None:
+            remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
+            logger.warning(
+                'Rejected TradeManager request to %s from %s: %s',
+                sanitize_log_value(request.path),
+                sanitize_log_value(remote),
+                reason,
+            )
             return jsonify({'error': 'unauthorized'}), 401
     return None
 
