@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
+_REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 
 
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
@@ -61,12 +63,25 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         if not line or line.startswith("#"):
             continue
         if line.startswith(("-r", "--", "-c")):
-            # Skip include/constraint directives.
+            # Skip include/constraint directives, hashes and pip options.
             continue
-        requirement_part = line.split(";", 1)[0].strip()
-        if not requirement_part or "==" not in requirement_part:
+
+        while line.endswith("\\"):
+            line = line[:-1].rstrip()
+
+        requirement_part = line.split("#", 1)[0].strip()
+        if not requirement_part:
             continue
-        name, version = (segment.strip() for segment in requirement_part.split("==", 1))
+
+        requirement_part = requirement_part.split(";", 1)[0].strip()
+        if not requirement_part:
+            continue
+
+        match = _REQUIREMENT_RE.match(requirement_part)
+        if not match:
+            continue
+        name = match.group("name")
+        version = match.group("version")
         if not name or not version:
             continue
         # Remove extras if present, e.g. package[extra]==1.0.0
