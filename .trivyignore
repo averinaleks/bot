@@ -1,11 +1,15 @@
-# Ray dashboard RCE (CVE-2023-48022) mitigated by security.apply_ray_security_defaults().
+# We harden Ray against CVE-2023-48022 in security.apply_ray_security_defaults
+# and enforce minimum version 2.49.2 via security.ensure_minimum_ray_version.
 CVE-2023-48022
-# MLflow model loading RCEs mitigated by security.harden_mlflow() disabling vulnerable entrypoints.
+
+# MLflow model loading entry points are disabled in security.harden_mlflow,
+# blocking exploitation of the CVE-2024-37052…CVE-2024-37060 RCE series.
 CVE-2024-37052
 CVE-2024-37053
 CVE-2024-37054
 CVE-2024-37055
 CVE-2024-37056
 CVE-2024-37057
+CVE-2024-37058
 CVE-2024-37059
 CVE-2024-37060
