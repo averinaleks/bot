@@ -26,8 +26,10 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
 
     parsed = _parse_requirements(path)
 
-    assert "pkg:pypi/package@1.2.3" in parsed
-    assert "pkg:pypi/other@4.5.6" in parsed
+    assert "package" in parsed
+    assert parsed["package"]["package_url"] == "pkg:pypi/package@1.2.3"
+    assert "other" in parsed
+    assert parsed["other"]["package_url"] == "pkg:pypi/other@4.5.6"
 
 
 def test_parse_requirements_handles_hash_block(tmp_path: Path) -> None:
@@ -42,7 +44,7 @@ def test_parse_requirements_handles_hash_block(tmp_path: Path) -> None:
 
     parsed = _parse_requirements(path)
 
-    assert list(parsed) == ["pkg:pypi/sample@0.1.0"]
+    assert list(parsed) == ["sample"]
 
 
 def test_auth_schemes_prefers_bearer_for_github_tokens(monkeypatch) -> None:

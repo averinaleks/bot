@@ -102,7 +102,7 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
             name = name.split("[", 1)[0]
         package_name = _normalise_name(name)
         package_url = f"pkg:pypi/{package_name}@{version}"
-        resolved[package_url] = {
+        resolved[package_name] = {
             "package_url": package_url,
             "relationship": "direct",
             "scope": scope,
