@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts.submit_dependency_snapshot import (
     _auth_schemes,
+    _build_manifests,
     _job_metadata,
     _parse_requirements,
 )
@@ -57,6 +58,25 @@ def test_auth_schemes_allows_override(monkeypatch) -> None:
     assert _auth_schemes("anything") == ["token"]
 
 
+def test_build_manifests_supports_multiple_patterns(tmp_path: Path) -> None:
+    files = {
+        "requirements.txt": "package==1.0.0",
+        "requirements-dev.in": "devpkg==2.0.0",
+        "requirements-full.out": "fullpkg==3.0.0",
+    }
+
+    for name, contents in files.items():
+        (tmp_path / name).write_text(contents)
+
+    manifests = _build_manifests(tmp_path)
+
+    assert set(manifests) == {
+        str(tmp_path / "requirements.txt"),
+        str(tmp_path / "requirements-dev.in"),
+        str(tmp_path / "requirements-full.out"),
+    }
+
+
 def test_job_metadata_adds_html_url_when_run_id_numeric(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_SERVER_URL", "https://example.com")
     job = _job_metadata("owner/repo", "12345", "corr")
@@ -100,3 +120,40 @@ def test_submit_snapshot_skips_on_unauthorised_token(monkeypatch, capsys) -> Non
 
     captured = capsys.readouterr()
     assert "ошибки авторизации" in captured.err
+
+
+def test_submit_snapshot_skips_on_network_issue(monkeypatch, capsys) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    manifests = {
+        "requirements.txt": {
+            "name": "requirements.txt",
+            "file": {"source_location": "requirements.txt"},
+            "resolved": {
+                "pkg:pypi/sample@1.0.0": {
+                    "package_url": "pkg:pypi/sample@1.0.0",
+                    "relationship": "direct",
+                    "scope": "runtime",
+                    "dependencies": [],
+                }
+            },
+        }
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+
+    monkeypatch.setattr(module, "_build_manifests", lambda root: manifests)
+
+    def _raise(*args, **kwargs):
+        raise module.DependencySubmissionError(None, "network down")
+
+    monkeypatch.setattr(module, "_submit_with_headers", _raise)
+
+    module.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "сетевой ошибки" in captured.err
