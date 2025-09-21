@@ -63,3 +63,40 @@ def test_job_metadata_adds_html_url_when_run_id_numeric(monkeypatch) -> None:
     assert job["html_url"] == "https://example.com/owner/repo/actions/runs/12345"
     job_no_url = _job_metadata("owner/repo", "run-1", "corr")
     assert "html_url" not in job_no_url
+
+
+def test_submit_snapshot_skips_on_unauthorised_token(monkeypatch, capsys) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    manifests = {
+        "requirements.txt": {
+            "name": "requirements.txt",
+            "file": {"source_location": "requirements.txt"},
+            "resolved": {
+                "pkg:pypi/sample@1.0.0": {
+                    "package_url": "pkg:pypi/sample@1.0.0",
+                    "relationship": "direct",
+                    "scope": "runtime",
+                    "dependencies": [],
+                }
+            },
+        }
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+
+    monkeypatch.setattr(module, "_build_manifests", lambda root: manifests)
+
+    def _raise(*args, **kwargs):
+        raise module.DependencySubmissionError(401, "bad credentials")
+
+    monkeypatch.setattr(module, "_submit_with_headers", _raise)
+
+    module.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "ошибки авторизации" in captured.err
