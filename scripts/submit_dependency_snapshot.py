@@ -342,26 +342,38 @@ def submit_dependency_snapshot() -> None:
 
     if last_error is not None:
         if isinstance(last_error, DependencySubmissionError):
-            if last_error.status_code == 401:
+            status_code = last_error.status_code
+            if status_code == 401:
                 print(
                     "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
                     file=sys.stderr,
                 )
                 return
-            if last_error.status_code in {403, 404}:
+            if status_code in {403, 404}:
                 print(
                     "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
                     file=sys.stderr,
                 )
                 return
-            if last_error.status_code == 422:
+            if status_code == 422:
                 print(
                     "Dependency snapshot submission skipped из-за ошибки валидации данных (HTTP 422).",
                     file=sys.stderr,
                 )
                 return
-        if isinstance(last_error, DependencySubmissionError):
-            if last_error.status_code is None:
+            if status_code in _RETRYABLE_STATUS_CODES:
+                print(
+                    "Dependency snapshot submission skipped из-за временной ошибки сервера GitHub.",
+                    file=sys.stderr,
+                )
+                return
+            if status_code == 413:
+                print(
+                    "Dependency snapshot submission skipped из-за превышения допустимого размера snapshot (HTTP 413).",
+                    file=sys.stderr,
+                )
+                return
+            if status_code is None:
                 print(
                     "Dependency snapshot submission skipped из-за сетевой ошибки.",
                     file=sys.stderr,
