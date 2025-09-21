@@ -80,6 +80,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "started=false" >> "${GITHUB_OUTPUT}"
+          fi
+
           if [ ! -f scripts/gptoss_mock_server.py ]; then
             echo "::notice::Скрипт scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -156,6 +160,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "has_diff=false" >> "${GITHUB_OUTPUT}"
+          fi
+
           if [ ! -f scripts/prepare_gptoss_diff.py ]; then
             echo "::notice::Скрипт scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -164,17 +173,30 @@ jobs:
             exit 0
           fi
 
-          python scripts/prepare_gptoss_diff.py \
+          if ! python scripts/prepare_gptoss_diff.py \
             --repo "${{ github.repository }}" \
             --pr-number "${PR_NUMBER}" \
             --token "${GITHUB_TOKEN}" \
             --output diff.patch \
-            --path ':(glob)**/*.py'
+            --path ':(glob)**/*.py'; then
+            echo "::warning::Не удалось подготовить diff – пропускаю обзор"
+            exit 0
+          fi
+
+          if [ -s diff.patch ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "has_diff=true" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: LLM review
         if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
         run: |
+          set -euo pipefail
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "has_content=false" >> "${GITHUB_OUTPUT}"
+          fi
+
           if [ ! -f scripts/run_gptoss_review.py ]; then
             echo "::notice::Скрипт scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -183,11 +205,18 @@ jobs:
             exit 0
           fi
 
-          python scripts/run_gptoss_review.py \
+          if ! python scripts/run_gptoss_review.py \
             --diff diff.patch \
             --output review.md \
             --model "${MODEL_NAME}" \
-            --api-url "http://127.0.0.1:${LLM_PORT}/v1/chat/completions"
+            --api-url "http://127.0.0.1:${LLM_PORT}/v1/chat/completions"; then
+            echo "::warning::Не удалось сгенерировать обзор"
+            exit 0
+          fi
+
+          if [ -s review.md ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "has_content=true" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Upload review artifact
         if: steps.validate_event.outputs.skip != 'true' && steps.llm_review.outputs.has_content == 'true'
