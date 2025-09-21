@@ -28,6 +28,20 @@ for ecosystem in pip github-actions; do
     rm -f "${tmp_response}"
     continue
   fi
+  if [[ ${http_status} -eq 422 ]]; then
+    echo "Dependabot did not queue an update for ${ecosystem} (status 422)." >&2
+    cat "${tmp_response}" >&2
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+      {
+        echo "### ${ecosystem}"
+        echo "Dependabot did not queue an update (status 422)."
+        cat "${tmp_response}"
+        echo
+      } >> "${GITHUB_STEP_SUMMARY}"
+    fi
+    rm -f "${tmp_response}"
+    continue
+  fi
   if [[ ${http_status} -ge 400 ]]; then
     echo "Failed to trigger Dependabot for ${ecosystem} (status ${http_status})" >&2
     cat "${tmp_response}" >&2
