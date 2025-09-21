@@ -13,6 +13,9 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 # Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 (HIGH).
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
+
+WORKDIR /tmp/build
+
 RUN set -eux; \
     apt-get update; \
     apt-get upgrade -y; \
@@ -49,11 +52,9 @@ RUN set -eux; \
     # Распаковываем tar в пустой временный каталог и удаляем симлинки перед переносом,
     # чтобы исключить повторное использование каталога (mitigation CVE-2025-45582).
     tar --keep-directory-symlink --no-overwrite-dir -xf zlib.tar.gz -C "$SAFE_TAR_DIR"; \
-    rm -rf "zlib-${ZLIB_VERSION}"; \
-    mv "$SAFE_TAR_DIR"/"zlib-${ZLIB_VERSION}" ./; \
+    rm -rf zlib-src; \
+    mv "$SAFE_TAR_DIR"/"zlib-${ZLIB_VERSION}" zlib-src; \
     rm -rf "$SAFE_TAR_DIR"; \
-    cd zlib-${ZLIB_VERSION} && ./configure --prefix=/usr && make -j"$(nproc)" && make install && cd ..; \
-    rm -rf zlib.tar.gz zlib-${ZLIB_VERSION}; \
     printf 'deb-src http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse\n' \
            'deb-src http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse\n' \
            'deb-src http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse\n' \
@@ -61,16 +62,36 @@ RUN set -eux; \
     apt-get update; \
     apt-get build-dep -y pam; \
     apt-get source -y pam; \
-    cd pam-*; \
+    pam_src_dir=$(find . -maxdepth 1 -type d -name 'pam-*' | head -n 1); \
+    rm -rf pam-src; \
+    mv "$pam_src_dir" pam-src
+
+WORKDIR /tmp/build/zlib-src
+
+RUN set -eux; \
+    ./configure --prefix=/usr; \
+    make -j"$(nproc)"; \
+    make install
+
+WORKDIR /tmp/build
+
+RUN rm -rf zlib.tar.gz zlib-src
+
+WORKDIR /tmp/build/pam-src
+
+RUN set -eux; \
     patch -p1 < /tmp/security/linux-pam-CVE-2024-10963.patch; \
     python3 /tmp/security/update_pam_changelog.py; \
     export DEB_BUILD_OPTIONS=nocheck; \
-    dpkg-buildpackage -b -uc -us; \
-    cd ..; \
+    dpkg-buildpackage -b -uc -us
+
+WORKDIR /tmp/build
+
+RUN set -eux; \
     mkdir -p /tmp/pam-fixed; \
     cp libpam-modules_* libpam-modules-bin_* libpam-runtime_* libpam0g_* /tmp/pam-fixed/; \
     dpkg -i /tmp/pam-fixed/*.deb; \
-    rm -rf pam-* /etc/apt/sources.list.d/noble-src.list; \
+    rm -rf pam-src /etc/apt/sources.list.d/noble-src.list; \
     apt-get purge -y --auto-remove devscripts equivs; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*; \
@@ -146,6 +167,9 @@ ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Добавляем PYTHONPATH, чтобы модуль bot был доступен
 ENV PYTHONPATH=/app
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD /app/venv/bin/python -c "import bot" || exit 1
 
 # Optionally enable TensorFlow checks during build
 ARG ENABLE_TF=0
