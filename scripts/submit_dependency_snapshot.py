@@ -23,6 +23,16 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 
+class DependencySubmissionError(RuntimeError):
+    """Raised when submitting a dependency snapshot fails."""
+
+    def __init__(self, status_code: int | None, message: str, cause: Exception | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        if cause is not None:
+            self.__cause__ = cause
+
+
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
     for pattern in MANIFEST_PATTERNS:
         for path in sorted(root.glob(pattern)):
@@ -173,7 +183,11 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
                 file=sys.stderr,
             )
-            raise RuntimeError("GitHub отклонил snapshot зависимостей") from exc
+            raise DependencySubmissionError(
+                exc.code,
+                f"GitHub отклонил snapshot зависимостей: HTTP {exc.code}: {message}",
+                exc,
+            )
         except URLError as exc:
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -184,9 +198,11 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 time.sleep(wait_time)
                 last_error = exc
                 continue
-            raise RuntimeError(
-                f"Не удалось отправить snapshot зависимостей: {exc.reason}"
-            ) from exc
+            raise DependencySubmissionError(
+                None,
+                f"Не удалось отправить snapshot зависимостей: {exc.reason}",
+                exc,
+            )
 
     if last_error is not None:
         raise last_error
@@ -247,16 +263,14 @@ def submit_dependency_snapshot() -> None:
         try:
             _submit_with_headers(url, body, headers)
             return
-        except RuntimeError as exc:
-            cause = exc.__cause__
+        except DependencySubmissionError as exc:
             if (
-                isinstance(cause, HTTPError)
-                and cause.code in {401, 403}
+                exc.status_code in {401, 403}
                 and index < len(schemes) - 1
             ):
                 next_scheme = schemes[index + 1]
                 print(
-                    f"Authentication with scheme '{scheme}' failed (HTTP {cause.code}). Trying '{next_scheme}'.",
+                    f"Authentication with scheme '{scheme}' failed (HTTP {exc.status_code}). Trying '{next_scheme}'.",
                     file=sys.stderr,
                 )
                 last_error = exc
@@ -265,6 +279,12 @@ def submit_dependency_snapshot() -> None:
             break
 
     if last_error is not None:
+        if isinstance(last_error, DependencySubmissionError) and last_error.status_code in {403, 404}:
+            print(
+                "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
+                file=sys.stderr,
+            )
+            return
         raise last_error
 
 
