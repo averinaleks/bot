@@ -77,10 +77,13 @@ def test_build_manifests_supports_multiple_patterns(tmp_path: Path) -> None:
     manifests = _build_manifests(tmp_path)
 
     assert set(manifests) == {
-        str(tmp_path / "requirements.txt"),
-        str(tmp_path / "requirements-dev.in"),
-        str(tmp_path / "requirements-full.out"),
+        "requirements.txt",
+        "requirements-dev.in",
+        "requirements-full.out",
     }
+
+    for name, manifest in manifests.items():
+        assert manifest["file"]["source_location"] == name
 
 
 def test_job_metadata_adds_html_url_when_run_id_numeric(monkeypatch) -> None:
