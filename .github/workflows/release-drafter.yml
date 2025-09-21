@@ -4,93 +4,22 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
+  pull_request:
     branches:
       - main
     types: [opened, reopened, synchronize, labeled, unlabeled, edited]
   workflow_dispatch:
 
 permissions:
-  actions: read # required for downloading the pinned Release Drafter action
   contents: write
   pull-requests: write
-
-env:
-  RELEASE_DRAFTER_COMMIT: b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
 
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
-    concurrency:
-      group: release-drafter-${{ replace(github.workflow, ' ', '-') }}-${{ github.head_ref || github.ref_name }}
-      cancel-in-progress: true
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-      WORKFLOW_REPOSITORY: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
     steps:
-      - name: Validate Release Drafter reference
-        env:
-          REF_URL: https://api.github.com/repos/release-drafter/release-drafter/git/commits/${{ env.RELEASE_DRAFTER_COMMIT }}
-        run: |
-          set -euo pipefail
-
-          auth_header=()
-
-          if [[ -n "${GH_TOKEN:-}" ]]; then
-            auth_header=(-H "Authorization: Bearer ${GH_TOKEN}")
-          fi
-
-          workflow_url="https://raw.githubusercontent.com/${WORKFLOW_REPOSITORY}/${WORKFLOW_REF}/.github/workflows/release-drafter.yml"
-          workflow_file="$(mktemp)"
-          trap 'rm -f "${workflow_file}"' EXIT
-
-          if ! curl \
-            --fail \
-            --silent \
-            --show-error \
-            --location \
-            --retry 5 \
-            --retry-delay 2 \
-            --retry-max-time 30 \
-            --connect-timeout 5 \
-            -H "Accept: text/plain" \
-            "${auth_header[@]}" \
-            "${workflow_url}" \
-            --output "${workflow_file}"; then
-            echo "Failed to download Release Drafter workflow definition at ${workflow_url}." >&2
-            echo "Ensure the workflow file is accessible before re-running." >&2
-            exit 1
-          fi
-
-          expected_ref="uses: release-drafter/release-drafter@${RELEASE_DRAFTER_COMMIT}"
-
-          if ! grep -F "${expected_ref}" "${workflow_file}" >/dev/null; then
-            echo "Release Drafter workflow must pin the action to ${RELEASE_DRAFTER_COMMIT}." >&2
-            echo "Update the 'uses' reference so it matches the RELEASE_DRAFTER_COMMIT environment value before re-running." >&2
-            exit 1
-          fi
-
-          if ! curl \
-            --fail \
-            --silent \
-            --show-error \
-            --location \
-            --retry 5 \
-            --retry-delay 2 \
-            --retry-max-time 30 \
-            --connect-timeout 5 \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${auth_header[@]}" \
-            "$REF_URL" >/dev/null; then
-            echo "Failed to resolve Release Drafter commit ${RELEASE_DRAFTER_COMMIT}." >&2
-            echo "Ensure the workflow pins a valid Release Drafter ref before re-running." >&2
-            exit 1
-          fi
       - name: Update release draft
-        # Pin to the latest v6 release (v6.1.0). Release Drafter does not publish a v7 tag yet.
-        uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5
+        uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
         with:
           config-name: release-drafter.yml
         env:
