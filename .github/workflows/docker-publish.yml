@@ -152,7 +152,6 @@ jobs:
           context: .
           file: ${{ matrix.file }}
           push: ${{ env.PUBLISH_IMAGES == 'true' }}
-          load: ${{ env.PUBLISH_IMAGES != 'true' }}
           tags: ${{ steps.tags.outputs.list }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
