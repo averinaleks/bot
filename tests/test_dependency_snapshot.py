@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts import submit_dependency_snapshot as snapshot
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "requirements.txt",
+        "requirements.in",
+        "requirements.out",
+    ],
+)
+def test_build_manifests_includes_supported_patterns(tmp_path: Path, filename: str) -> None:
+    requirement_file = tmp_path / filename
+    requirement_file.write_text("requests==2.32.3\n")
+
+    manifests = snapshot._build_manifests(tmp_path)
+
+    # The manifests use string keys, which are absolute paths when a temporary
+    # directory is used. Normalize via Path for the comparison.
+    manifest_paths = {Path(key) for key in manifests.keys()}
+
+    assert requirement_file in manifest_paths
+    assert any(
+        entry["package_url"] == "pkg:pypi/requests@2.32.3"
+        for entry in manifests[next(iter(manifests))]["resolved"].values()
+    )
+
+
+def test_parse_requirements_skips_blocklisted_packages(tmp_path: Path) -> None:
+    requirement_file = tmp_path / "requirements.txt"
+    requirement_file.write_text("ccxtpro==1.0.1\nhttpx==0.27.2\n")
+
+    resolved = snapshot._parse_requirements(requirement_file)
+
+    assert "ccxtpro" not in resolved
+    assert "httpx" in resolved
+    assert resolved["httpx"]["package_url"] == "pkg:pypi/httpx@0.27.2"
