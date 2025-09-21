@@ -18,14 +18,15 @@ job when the diff cannot be produced.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
-from urllib import error, request
 from urllib.parse import urlparse
 
 
@@ -61,31 +62,51 @@ def _write_github_output(**outputs: str | bool) -> None:
     except OSError as exc:  # pragma: no cover - extremely unlikely on CI
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 
-def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
-    """Perform a GitHub API request and return the decoded JSON payload."""
+def _perform_https_request(
+    url: str, headers: dict[str, str], timeout: float
+) -> tuple[int, str, bytes]:
+    """Return status, reason and payload for a validated HTTPS request."""
 
     parsed = urlparse(url)
-    if parsed.scheme != "https" or not parsed.netloc:
+    if parsed.scheme != "https" or not parsed.hostname:
         raise RuntimeError("Разрешены только HTTPS-запросы к GitHub API")
+    if parsed.username or parsed.password:
+        raise RuntimeError("URL GitHub API не должен содержать учетные данные")
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    connection = http.client.HTTPSConnection(
+        parsed.hostname,
+        parsed.port or 443,
+        timeout=timeout,
+    )
+    try:
+        connection.request("GET", path, headers=headers)
+        response = connection.getresponse()
+        payload = response.read()
+        return response.status, response.reason or "", payload
+    except socket.timeout as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    finally:
+        connection.close()
+
+
+def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
+    """Perform a GitHub API request and return the decoded JSON payload."""
 
     headers = {"Accept": "application/vnd.github+json"}
     if token:
         headers["Authorization"] = f"token {token}"
 
-    req = request.Request(url, headers=headers)
-
-    try:
-        with request.urlopen(req, timeout=timeout) as response:
-            payload = response.read()
-    except TimeoutError as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    except error.HTTPError as exc:
+    status, reason, payload = _perform_https_request(url, headers, timeout)
+    if status >= 400:
         raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
-        ) from exc
-    except error.URLError as exc:
-        reason = getattr(exc, "reason", exc)
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {reason}") from exc
+            f"HTTP запрос {url} завершился ошибкой: {status} {reason}"
+        )
 
     try:
         return json.loads(payload.decode("utf-8"))

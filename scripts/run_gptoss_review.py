@@ -15,14 +15,15 @@ validate individual helper functions.
 from __future__ import annotations
 
 import argparse
+import http.client
 import ipaddress
 import json
 import os
+import socket
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib import error, request
 from urllib.parse import urlparse
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
@@ -68,6 +69,40 @@ def _build_payload(diff_text: str, model: str | None) -> dict[str, Any]:
     return payload
 
 
+def _perform_http_request(
+    parsed, data: bytes, headers: dict[str, str], timeout: float
+) -> tuple[int, str, bytes]:
+    """Execute an HTTP(S) request and return status, reason and body."""
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    if parsed.scheme == "https":
+        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
+            parsed.hostname,
+            parsed.port or 443,
+            timeout=timeout,
+        )
+    else:
+        connection = http.client.HTTPConnection(
+            parsed.hostname,
+            parsed.port or 80,
+            timeout=timeout,
+        )
+
+    try:
+        connection.request("POST", path, body=data, headers=headers)
+        response = connection.getresponse()
+        return response.status, response.reason or "", response.read()
+    except socket.timeout as exc:
+        raise TimeoutError(str(exc) or "timed out") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
+    finally:
+        connection.close()
+
+
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
     parsed = urlparse(api_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -83,20 +118,16 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
 
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    req = request.Request(api_url, data=data, headers=headers)
 
     try:
-        with request.urlopen(req, timeout=timeout) as response:
-            body = response.read()
+        status, reason, body = _perform_http_request(parsed, data, headers, timeout)
     except TimeoutError as exc:
         raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
-    except error.HTTPError as exc:
-        raise RuntimeError(
-            f"Сервер GPT-OSS вернул ошибку {exc.code}: {exc.reason}"
-        ) from exc
-    except error.URLError as exc:
-        reason = getattr(exc, "reason", exc)
-        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {reason}") from exc
+    except ConnectionError as exc:
+        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {exc}") from exc
+
+    if status >= 400:
+        raise RuntimeError(f"Сервер GPT-OSS вернул ошибку {status}: {reason}")
 
     try:
         return json.loads(body.decode("utf-8"))
