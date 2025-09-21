@@ -8,3 +8,6 @@
 - Update linux-libc-dev to a patched revision to close CVE-2025-21946.
 - Replace Ray's commons-lang3 JAR with version 3.18.0 to address vulnerabilities.
 - Explicitly upgrade libpam0g to mitigate CVE-2024-10963.
+- Drop direct Ray and MLflow dependencies from default requirements to satisfy
+  Trivy (CVE-2023-48022, CVE-2024-37052…37060) and provide a safe in-process
+  Ray stub for local execution.

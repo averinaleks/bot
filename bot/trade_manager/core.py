@@ -36,9 +36,7 @@ import numpy as np  # type: ignore
 from bot import test_stubs
 test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
-import ray  # noqa: E402
-from security import ensure_minimum_ray_version  # noqa: E402
-ensure_minimum_ray_version(ray)
+from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 from bot.utils import retry  # noqa: E402
 import inspect  # noqa: E402

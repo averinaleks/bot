@@ -115,9 +115,26 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Устанавливаем зависимости (pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает свежие уязвимости)
 RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
-    RAY_JARS_DIR=$($VIRTUAL_ENV/bin/python -c "import os, ray; print(os.path.join(os.path.dirname(ray.__file__), 'jars'))") && \
-    rm -f "$RAY_JARS_DIR"/commons-lang3-*.jar && \
-    curl --retry 5 --retry-delay 5 -fsSL https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar -o "$RAY_JARS_DIR"/commons-lang3-3.18.0.jar && \
+    $VIRTUAL_ENV/bin/python - <<'PY' && \
+from __future__ import annotations
+import os
+from pathlib import Path
+from urllib.request import urlretrieve
+
+try:
+    import ray  # type: ignore
+except Exception:
+    print("Ray отсутствует, пропускаем обновление commons-lang3")
+else:
+    jars_dir = Path(ray.__file__).resolve().parent / "jars"
+    jars_dir.mkdir(parents=True, exist_ok=True)
+    for jar in jars_dir.glob("commons-lang3-*.jar"):
+        jar.unlink()
+    urlretrieve(
+        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar",
+        jars_dir / "commons-lang3-3.18.0.jar",
+    )
+PY
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete && \
     pip uninstall -y pip setuptools wheel && \

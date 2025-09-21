@@ -6,10 +6,9 @@ import asyncio
 
 import numpy as np
 import pandas as pd
-import os
 from itertools import product
 
-from security import ensure_minimum_ray_version
+from bot.ray_compat import ray
 
 try:
     import polars as pl  # type: ignore
@@ -20,36 +19,6 @@ try:
     import optuna  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
     optuna = None  # type: ignore
-
-if os.getenv("TEST_MODE") == "1":
-    import types
-
-    ray = types.ModuleType("ray")
-
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):
-            return self
-
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-            return wrapper
-        return _RayRemoteFunction(func)
-
-    ray.remote = _ray_remote
-    ray.get = lambda x: x
-    ray.init = lambda *a, **k: None
-    ray.is_initialized = lambda: False
-else:
-    import ray
-    ensure_minimum_ray_version(ray)
 
 from bot.utils import logger
 from bot.config import BotConfig

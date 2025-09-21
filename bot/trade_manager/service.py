@@ -13,10 +13,9 @@ import threading
 from typing import Any
 
 import httpx
-import ray
+from bot.ray_compat import ray
 from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request, Response
-from security import ensure_minimum_ray_version
 
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
@@ -31,7 +30,6 @@ from .core import (
 from bot.config import load_config
 
 
-ensure_minimum_ray_version(ray)
 
 
 __all__ = [
