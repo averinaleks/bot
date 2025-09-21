@@ -74,6 +74,43 @@ class Manifest(TypedDict):
     resolved: Dict[str, ResolvedDependency]
 
 
+class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
+    """Mapping of dependency identifiers with support for alias lookups."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._aliases: dict[str, str] = {}
+
+    def _resolve_alias(self, key: str) -> str:
+        alias = self._aliases.get(key)
+        if alias is not None:
+            return alias
+        normalised = _normalise_name(key)
+        alias = self._aliases.get(normalised)
+        if alias is not None:
+            return alias
+        return key
+
+    def add(self, name: str, package_url: str, dependency: ResolvedDependency) -> None:
+        if not super().__contains__(package_url):
+            super().__setitem__(package_url, dependency)
+        self._aliases[name] = package_url
+        self._aliases[_normalise_name(name)] = package_url
+
+    def __getitem__(self, key: str) -> ResolvedDependency:  # type: ignore[override]
+        return super().__getitem__(self._resolve_alias(key))
+
+    def __contains__(self, key: object) -> bool:  # type: ignore[override]
+        if isinstance(key, str):
+            key = self._resolve_alias(key)
+        return super().__contains__(key)
+
+    def get(  # type: ignore[override]
+        self, key: str, default: ResolvedDependency | None = None
+    ) -> ResolvedDependency | None:
+        return super().get(self._resolve_alias(key), default)
+
+
 def _encode_version_for_purl(version: str) -> str:
     """Return a dependency version encoded for use inside a purl."""
 
@@ -83,7 +120,7 @@ def _encode_version_for_purl(version: str) -> str:
 
 def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
     scope = _derive_scope(path.name)
-    resolved: Dict[str, ResolvedDependency] = OrderedDict()
+    resolved = ResolvedDependencies()
     for raw_line in path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -106,23 +143,25 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         match = _REQUIREMENT_RE.match(requirement_part)
         if not match:
             continue
-        name = match.group("name")
+        matched_name = match.group("name")
         version = match.group("version")
-        if not name or not version:
+        if not matched_name or not version:
             continue
         # Remove extras if present, e.g. package[extra]==1.0.0
+        name = matched_name
         if "[" in name and "]" in name:
             name = name.split("[", 1)[0]
         package_name = _normalise_name(name)
         if package_name in _SKIPPED_PACKAGES:
             continue
         package_url = f"pkg:pypi/{package_name}@{_encode_version_for_purl(version)}"
-        resolved[package_name] = {
+        dependency: ResolvedDependency = {
             "package_url": package_url,
             "relationship": "direct",
             "scope": scope,
             "dependencies": [],
         }
+        resolved.add(name, package_url, dependency)
     return resolved
 
 
@@ -321,6 +360,11 @@ def submit_dependency_snapshot() -> None:
         },
         "scanned": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "manifests": manifests,
+        "metadata": {
+            "run_attempt": run_attempt,
+            "job": job_name,
+            "workflow": workflow,
+        },
     }
 
     payload["job"]["correlator"] = f"{correlator}:attempt-{run_attempt}"
