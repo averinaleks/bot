@@ -14,6 +14,22 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+# Import or define MODEL_DIR and _is_within_directory for signature path security
+try:
+    # If running under the full application, import the real MODEL_DIR and checker
+    from services.model_builder_service import MODEL_DIR
+except ImportError:
+    # Fallback for standalone module usage (should set to appropriate directory in application)
+    MODEL_DIR = Path(".")
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    """Return True if `path` is located within `directory`."""
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,6 +102,14 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
+    # Ensure the signature file stays within the model directory
+    if not _is_within_directory(sig_path, MODEL_DIR):
+        logger.warning(
+            "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
+            path,
+            sig_path,
+        )
+        return False
     if sig_path.is_symlink():
         logger.warning(
             "Отказ от проверки подписи модели %s: путь является символьной ссылкой",
