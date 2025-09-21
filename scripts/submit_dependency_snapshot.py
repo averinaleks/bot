@@ -307,7 +307,7 @@ def submit_dependency_snapshot() -> None:
     job_name = os.getenv("GITHUB_JOB", "submit")
     run_id = os.getenv("GITHUB_RUN_ID", str(int(datetime.now(timezone.utc).timestamp())))
     run_attempt = _normalise_run_attempt(os.getenv("GITHUB_RUN_ATTEMPT"))
-    correlator = f"{workflow}-{job_name}"
+    correlator = f"{workflow}:{job_name}"
 
     payload = {
         "version": 0,
@@ -319,13 +319,11 @@ def submit_dependency_snapshot() -> None:
             "version": "1.0.0",
             "url": "https://github.com/averinaleks/bot",
         },
-        "metadata": {
-            "dependency_count": sum(len(entry["resolved"]) for entry in manifests.values()),
-            "run_attempt": run_attempt,
-        },
         "scanned": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "manifests": manifests,
     }
+
+    payload["job"]["correlator"] = f"{correlator}:attempt-{run_attempt}"
 
     base_url = _api_base_url()
     url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
