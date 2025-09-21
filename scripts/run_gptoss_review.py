@@ -8,8 +8,8 @@ logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
 The module keeps dependencies minimal by using only the standard-library
-``urllib`` helpers for HTTP access.  It can also be imported from unit tests to
-validate individual helper functions.
+HTTP client helpers.  It can also be imported from unit tests to validate
+individual helper functions.
 """
 
 from __future__ import annotations
@@ -18,11 +18,12 @@ import argparse
 import ipaddress
 import json
 import os
+import socket
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from http.client import HTTPConnection, HTTPSConnection
 from urllib.parse import urlparse
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 
@@ -83,20 +84,33 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
 
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    req = request.Request(api_url, data=data, headers=headers)
+    target = parsed.path or "/"
+    if parsed.params:
+        target = f"{target};{parsed.params}"
+    if parsed.query:
+        target = f"{target}?{parsed.query}"
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    connection_cls = HTTPSConnection if parsed.scheme == "https" else HTTPConnection
+    connection = connection_cls(host, port=port, timeout=timeout)
 
     try:
-        with request.urlopen(req, timeout=timeout) as response:
-            body = response.read()
-    except TimeoutError as exc:
+        connection.request("POST", target, body=data, headers=headers)
+        response = connection.getresponse()
+        status_code = int(response.status or 0)
+        reason_text = response.reason or ""
+        body = response.read()
+    except (TimeoutError, socket.timeout) as exc:
         raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
-    except error.HTTPError as exc:
+    except OSError as exc:
+        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {exc}") from exc
+    finally:
+        connection.close()
+
+    if status_code >= 400:
         raise RuntimeError(
-            f"Сервер GPT-OSS вернул ошибку {exc.code}: {exc.reason}"
-        ) from exc
-    except error.URLError as exc:
-        reason = getattr(exc, "reason", exc)
-        raise RuntimeError(f"Ошибка при обращении к GPT-OSS ({api_url}): {reason}") from exc
+            f"Сервер GPT-OSS вернул ошибку {status_code}: {reason_text}"
+        )
 
     try:
         return json.loads(body.decode("utf-8"))

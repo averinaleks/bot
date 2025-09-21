@@ -25,7 +25,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
-from urllib import error, request
+import socket
+from http.client import HTTPSConnection
 from urllib.parse import urlparse
 
 
@@ -72,20 +73,31 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
 
-    req = request.Request(url, headers=headers)
-
+    host = parsed.hostname or ""
+    port = parsed.port or 443
+    target = parsed.path or "/"
+    if parsed.params:
+        target = f"{target};{parsed.params}"
+    if parsed.query:
+        target = f"{target}?{parsed.query}"
+    connection = HTTPSConnection(host, port=port, timeout=timeout)
     try:
-        with request.urlopen(req, timeout=timeout) as response:
-            payload = response.read()
-    except TimeoutError as exc:
+        connection.request("GET", target, headers=headers)
+        response = connection.getresponse()
+        status = int(response.status or 0)
+        reason_text = response.reason or ""
+        payload = response.read()
+    except (TimeoutError, socket.timeout) as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    except error.HTTPError as exc:
+    except OSError as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    finally:
+        connection.close()
+
+    if status >= 400:
         raise RuntimeError(
-            f"HTTP запрос {url} завершился ошибкой: {exc.code} {exc.reason}"
-        ) from exc
-    except error.URLError as exc:
-        reason = getattr(exc, "reason", exc)
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {reason}") from exc
+            f"HTTP запрос {url} завершился ошибкой: {status} {reason_text}"
+        )
 
     try:
         return json.loads(payload.decode("utf-8"))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -12,9 +13,7 @@ from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import urlparse
-
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from http.client import HTTPSConnection
 
 MANIFEST_PATTERNS = ("requirements*.txt", "requirements*.in", "requirements*.out")
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
@@ -166,21 +165,42 @@ def submit_dependency_snapshot() -> None:
         "User-Agent": "dependency-snapshot-script",
     }
 
-    request = Request(url, data=body, headers=headers, method="POST")
+    host = parsed_url.hostname or ""
+    port = parsed_url.port or 443
+    target = parsed_url.path or "/"
+    if parsed_url.params:
+        target = f"{target};{parsed_url.params}"
+    if parsed_url.query:
+        target = f"{target}?{parsed_url.query}"
+
+    connection = HTTPSConnection(host, port=port, timeout=30)
 
     try:
-        with urlopen(request, timeout=30) as response:
-            status_code = int(response.getcode() or 0)
-            print(f"Dependency snapshot submitted: HTTP {status_code}")
-    except HTTPError as exc:
-        message = exc.read().decode(errors="replace") if exc.fp else exc.reason
+        connection.request("POST", target, body=body, headers=headers)
+        response = connection.getresponse()
+        status_code = int(response.status or 0)
+        reason_text = response.reason or ""
+        response_body = response.read()
+    except (TimeoutError, socket.timeout) as exc:
+        raise RuntimeError(
+            f"Не удалось отправить snapshot зависимостей: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            f"Не удалось отправить snapshot зависимостей: {exc}"
+        ) from exc
+    finally:
+        connection.close()
+
+    if status_code >= 400:
+        message = response_body.decode(errors="replace") if response_body else reason_text
         print(
-            f"Failed to submit dependency snapshot: HTTP {exc.code}: {message}",
+            f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
             file=sys.stderr,
         )
-        raise RuntimeError("GitHub отклонил snapshot зависимостей") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Не удалось отправить snapshot зависимостей: {exc.reason}") from exc
+        raise RuntimeError("GitHub отклонил snapshot зависимостей")
+
+    print(f"Dependency snapshot submitted: HTTP {status_code}")
 
 
 if __name__ == "__main__":
