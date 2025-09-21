@@ -102,14 +102,29 @@ def verify_model_state_signature(path: Path) -> bool:
     if key is None:
         return True
     sig_path = _signature_path(path)
-    # Ensure the signature file stays within the model directory
-    if not _is_within_directory(sig_path, MODEL_DIR):
-        logger.warning(
-            "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
-            path,
-            sig_path,
-        )
-        return False
+
+    model_dir = Path(MODEL_DIR)
+    path_resolved = path.resolve(strict=False)
+    sig_resolved = sig_path.resolve(strict=False)
+
+    if _is_within_directory(path_resolved, model_dir):
+        # Ensure signatures for models stored in MODEL_DIR never escape it
+        if not _is_within_directory(sig_resolved, model_dir):
+            logger.warning(
+                "Отказ от проверки подписи модели %s: подпись вне MODEL_DIR (%s)",
+                path,
+                sig_path,
+            )
+            return False
+    else:
+        # For temporary or test directories, require the signature next to the model
+        if sig_resolved.parent != path_resolved.parent:
+            logger.warning(
+                "Отказ от проверки подписи модели %s: подпись должна находиться рядом с файлом (%s)",
+                path,
+                sig_path,
+            )
+            return False
     if sig_path.is_symlink():
         logger.warning(
             "Отказ от проверки подписи модели %s: путь является символьной ссылкой",
