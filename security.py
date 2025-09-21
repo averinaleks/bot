@@ -14,7 +14,7 @@ import os
 import pickle
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable, Tuple, cast
 
 from packaging.version import InvalidVersion, Version
 
@@ -112,14 +112,18 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             "joblib недоступен: установите зависимость для работы с артефактами"
         )
 
-    original_unpickler = _joblib_numpy_pickle.NumpyUnpickler
-    compat_unpickler = None
+    original_unpickler = cast(
+        type[pickle.Unpickler], _joblib_numpy_pickle.NumpyUnpickler
+    )
+    compat_unpickler: type[pickle.Unpickler] | None = None
     if _joblib_numpy_pickle_compat is not None:
-        compat_unpickler = getattr(
+        compat_candidate = getattr(
             _joblib_numpy_pickle_compat, "NumpyUnpickler", None
         )
+        if isinstance(compat_candidate, type):
+            compat_unpickler = cast(type[pickle.Unpickler], compat_candidate)
 
-    class _RestrictedUnpickler(original_unpickler):  # type: ignore[misc]
+    class _RestrictedUnpickler(_joblib_numpy_pickle.NumpyUnpickler):  # type: ignore[misc, valid-type]
         def __init__(self, *args, **kwargs):
             self._allowed_modules = allowed
             super().__init__(*args, **kwargs)
@@ -137,7 +141,7 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             return super().find_class(module, name)
 
     if compat_unpickler is not None:
-        class _RestrictedCompatUnpickler(compat_unpickler):  # type: ignore[misc]
+        class _RestrictedCompatUnpickler(compat_unpickler):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
                 self._allowed_modules = allowed
                 super().__init__(*args, **kwargs)
