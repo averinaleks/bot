@@ -12,7 +12,6 @@ import importlib.metadata
 import json
 import math
 import os
-import pickle
 import platform
 import random
 import re
@@ -37,6 +36,7 @@ from bot.utils import (
 )
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
+    ArtifactDeserializationError,
     ensure_minimum_ray_version,
     harden_mlflow,
     safe_joblib_load,
@@ -1183,7 +1183,7 @@ class ModelBuilder:
                 return
             try:
                 state = safe_joblib_load(state_path)
-            except pickle.UnpicklingError:
+            except ArtifactDeserializationError:
                 logger.error(
                     "Отказ от загрузки состояния из %s: обнаружены недоверенные объекты",
                     sanitize_log_value(state_path),
@@ -2170,7 +2170,7 @@ def _load_model() -> None:
         return
     try:
         _model = safe_joblib_load(model_path)
-    except pickle.UnpicklingError:
+    except ArtifactDeserializationError:
         logger.error(
             "Отказ от загрузки модели %s: обнаружены недоверенные объекты",
             sanitize_log_value(model_path),
