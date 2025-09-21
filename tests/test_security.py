@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import os
+import sys
 
 import pytest
 
 from security import (
     _MLFLOW_DISABLED_ATTRS,
+    ArtifactDeserializationError,
     apply_ray_security_defaults,
     ensure_minimum_ray_version,
     harden_mlflow,
+    safe_joblib_load,
 )
 
 
@@ -128,3 +132,36 @@ def test_ensure_minimum_ray_version_rejects_legacy_release() -> None:
         ensure_minimum_ray_version(ray_stub)
 
     assert "Ray" in str(exc.value)
+
+
+def test_safe_joblib_load_enforces_module_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    joblib = pytest.importorskip("joblib")
+
+    allowed_path = tmp_path / "allowed.joblib"
+    payload = {"value": 42}
+    joblib.dump(payload, allowed_path)
+    assert safe_joblib_load(allowed_path) == payload
+
+    malicious_module = ModuleType("malicious_mod")
+    exec(
+        "class Payload:\n    def __init__(self, value):\n        self.value = value",
+        malicious_module.__dict__,
+    )
+    monkeypatch.setitem(sys.modules, "malicious_mod", malicious_module)
+    disallowed_payload = malicious_module.Payload(99)
+    disallowed_path = tmp_path / "disallowed.joblib"
+    joblib.dump(disallowed_payload, disallowed_path)
+
+    with pytest.raises(ArtifactDeserializationError):
+        safe_joblib_load(disallowed_path)
+
+    # Verify the restriction does not leak between calls
+    assert safe_joblib_load(allowed_path) == payload
+
+    permitted = safe_joblib_load(
+        disallowed_path, allowed_modules=("malicious_mod",)
+    )
+    assert isinstance(permitted, malicious_module.Payload)
+    assert permitted.value == 99
