@@ -32,9 +32,9 @@ def _sanitize_timeframe(timeframe: str) -> str:
     """Sanitize timeframe string using utility helper."""
 
     try:  # pragma: no cover - import style depends on caller
-        from .utils import sanitize_timeframe  # type: ignore  # noqa: WPS433
+        from .utils import sanitize_timeframe  # type: ignore  # noqa: E402
     except ImportError:  # pragma: no cover
-        from utils import sanitize_timeframe  # type: ignore  # noqa: WPS433
+        from utils import sanitize_timeframe  # type: ignore  # noqa: E402
 
     return sanitize_timeframe(timeframe)
 
