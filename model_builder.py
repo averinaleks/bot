@@ -36,6 +36,8 @@ from bot.utils import (
 )
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
+    ensure_minimum_ray_version,
+    harden_mlflow,
     verify_model_state_signature,
     write_model_state_signature,
 )
@@ -219,6 +221,8 @@ else:
         ray.get = lambda x: x
         ray.init = lambda *a, **k: None
         ray.is_initialized = lambda: False
+    else:
+        ensure_minimum_ray_version(ray)
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
     from bot.utils import configure_logging
@@ -285,7 +289,6 @@ except Exception as exc:  # pragma: no cover - stub for tests
 
 try:
     import mlflow
-    from security import harden_mlflow
 except ImportError as e:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
     logger.warning("Не удалось импортировать mlflow: %s", e)

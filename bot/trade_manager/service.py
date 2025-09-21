@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 import ray
+from security import ensure_minimum_ray_version
+ensure_minimum_ray_version(ray)
 from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request, Response
 

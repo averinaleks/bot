@@ -9,7 +9,12 @@ import os
 
 import pytest
 
-from security import _MLFLOW_DISABLED_ATTRS, apply_ray_security_defaults, harden_mlflow
+from security import (
+    _MLFLOW_DISABLED_ATTRS,
+    apply_ray_security_defaults,
+    ensure_minimum_ray_version,
+    harden_mlflow,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -106,3 +111,20 @@ def test_harden_mlflow_disables_all_loaders() -> None:
         recipe_cls.load()
 
     assert os.environ["MLFLOW_ENABLE_MODEL_LOADING"] == "false"
+
+
+def test_ensure_minimum_ray_version_accepts_safe_release() -> None:
+    ray_stub = ModuleType("ray")
+    ray_stub.__version__ = "2.49.2"
+
+    ensure_minimum_ray_version(ray_stub)
+
+
+def test_ensure_minimum_ray_version_rejects_legacy_release() -> None:
+    ray_stub = ModuleType("ray")
+    ray_stub.__version__ = "2.49.1"
+
+    with pytest.raises(RuntimeError) as exc:
+        ensure_minimum_ray_version(ray_stub)
+
+    assert "Ray" in str(exc.value)
