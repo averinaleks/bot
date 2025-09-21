@@ -27,6 +27,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+      WORKFLOW_REPOSITORY: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
     steps:
       - name: Validate Release Drafter reference
         env:
@@ -40,7 +41,7 @@ jobs:
             auth_header=(-H "Authorization: Bearer ${GH_TOKEN}")
           fi
 
-          workflow_url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${WORKFLOW_REF}/.github/workflows/release-drafter.yml"
+          workflow_url="https://raw.githubusercontent.com/${WORKFLOW_REPOSITORY}/${WORKFLOW_REF}/.github/workflows/release-drafter.yml"
           workflow_file="$(mktemp)"
           trap 'rm -f "${workflow_file}"' EXIT
 
