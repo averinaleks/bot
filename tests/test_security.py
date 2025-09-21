@@ -120,11 +120,27 @@ def test_ensure_minimum_ray_version_accepts_safe_release() -> None:
     ensure_minimum_ray_version(ray_stub)
 
 
-def test_ensure_minimum_ray_version_rejects_legacy_release() -> None:
+def test_ensure_minimum_ray_version_rejects_legacy_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ray_stub = ModuleType("ray")
     ray_stub.__version__ = "2.49.1"
+    monkeypatch.delenv("TEST_MODE", raising=False)
 
     with pytest.raises(RuntimeError) as exc:
         ensure_minimum_ray_version(ray_stub)
 
     assert "Ray" in str(exc.value)
+
+
+def test_ensure_minimum_ray_version_allows_legacy_in_test_mode(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    ray_stub = ModuleType("ray")
+    ray_stub.__version__ = "2.49.1"
+    monkeypatch.setenv("TEST_MODE", "1")
+
+    with caplog.at_level("WARNING"):
+        ensure_minimum_ray_version(ray_stub)
+
+    assert "пропущено в тестовом режиме" in caplog.text
