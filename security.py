@@ -13,7 +13,7 @@ import logging
 import os
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable, Tuple, cast
 
 from packaging.version import InvalidVersion, Version
 
@@ -115,8 +115,8 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             "joblib недоступен: установите зависимость для работы с артефактами"
         )
 
-    original_unpickler = _joblib_numpy_pickle.NumpyUnpickler
-    compat_unpickler = None
+    original_unpickler: type[Any] = _joblib_numpy_pickle.NumpyUnpickler
+    compat_unpickler: type[Any] | None = None
     if _joblib_numpy_pickle_compat is not None:
         compat_unpickler = getattr(
             _joblib_numpy_pickle_compat, "NumpyUnpickler", None
@@ -140,7 +140,9 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             return super().find_class(module, name)
 
     if compat_unpickler is not None:
-        class _RestrictedCompatUnpickler(compat_unpickler):  # type: ignore[misc]
+        compat_unpickler_cls = cast(type[Any], compat_unpickler)
+
+        class _RestrictedCompatUnpickler(compat_unpickler_cls):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
                 self._allowed_modules = allowed
                 super().__init__(*args, **kwargs)
