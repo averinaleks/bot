@@ -125,8 +125,12 @@ jobs:
             if [ -s mock_server.port ]; then
               port=$(cat mock_server.port)
               if [[ "$port" =~ ^[0-9]+$ ]]; then
-                echo "LLM_PORT=$port" >> "$GITHUB_ENV"
-                ready=1
+                if [ -n "${GITHUB_ENV:-}" ]; then
+                  echo "LLM_PORT=$port" >> "$GITHUB_ENV"
+                  ready=1
+                else
+                  echo "::warning::Переменная GITHUB_ENV не задана – не удалось экспортировать порт LLM" >&2
+                fi
                 break
               fi
             fi
