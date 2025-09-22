@@ -9,6 +9,7 @@ import re
 import socket
 import sys
 import time
+import traceback
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,14 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
+
+
+def _log_unexpected_error(context: str, exc: BaseException) -> None:
+    """Log unexpected exceptions to stderr with a helpful context."""
+
+    message = f"Неожиданная ошибка {context}: {exc}"
+    print(message, file=sys.stderr)
+    traceback.print_exception(exc, file=sys.stderr)
 
 
 class MissingEnvironmentVariableError(RuntimeError):
@@ -367,7 +376,15 @@ def submit_dependency_snapshot() -> None:
         )
         return
 
-    manifests = _build_manifests(Path("."))
+    try:
+        manifests = _build_manifests(Path("."))
+    except Exception as exc:  # noqa: BLE001
+        _log_unexpected_error("при сборе манифестов зависимостей", exc)
+        print(
+            "Dependency snapshot submission skipped из-за непредвиденной ошибки при сборе манифестов.",
+            file=sys.stderr,
+        )
+        return
     if not manifests:
         print("No dependency manifests found.")
         return
@@ -434,6 +451,13 @@ def submit_dependency_snapshot() -> None:
                 continue
             last_error = exc
             break
+        except Exception as exc:  # noqa: BLE001
+            _log_unexpected_error("при отправке snapshot зависимостей", exc)
+            print(
+                "Dependency snapshot submission skipped из-за непредвиденной ошибки при отправке данных.",
+                file=sys.stderr,
+            )
+            return
 
     if last_error is not None:
         if isinstance(last_error, DependencySubmissionError):

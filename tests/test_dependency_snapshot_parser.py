@@ -264,6 +264,66 @@ def test_submit_snapshot_skips_on_other_http_error(monkeypatch, capsys) -> None:
     assert "HTTP 400" in captured.err
 
 
+def test_submit_snapshot_handles_manifest_exception(monkeypatch, capsys) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+
+    def _boom(root: Path) -> dict[str, object]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(module, "_build_manifests", _boom)
+
+    module.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "непредвиденной ошибки при сборе манифестов" in captured.err
+    assert "Неожиданная ошибка при сборе манифестов зависимостей" in captured.err
+    assert "Traceback" in captured.err
+
+
+def test_submit_snapshot_handles_unexpected_submission_exception(monkeypatch, capsys) -> None:
+    from scripts import submit_dependency_snapshot as module
+
+    manifests = {
+        "requirements.txt": {
+            "name": "requirements.txt",
+            "file": {"source_location": "requirements.txt"},
+            "resolved": {
+                "pkg:pypi/sample@1.0.0": {
+                    "package_url": "pkg:pypi/sample@1.0.0",
+                    "relationship": "direct",
+                    "scope": "runtime",
+                    "dependencies": [],
+                }
+            },
+        }
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+
+    monkeypatch.setattr(module, "_build_manifests", lambda root: manifests)
+
+    def _boom(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise ValueError("submit failed")
+
+    monkeypatch.setattr(module, "_submit_with_headers", _boom)
+
+    module.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "непредвиденной ошибки при отправке данных" in captured.err
+    assert "Неожиданная ошибка при отправке snapshot зависимостей" in captured.err
+    assert "Traceback" in captured.err
+
+
 def test_submit_snapshot_uses_numeric_run_attempt(monkeypatch) -> None:
     from scripts import submit_dependency_snapshot as module
 
