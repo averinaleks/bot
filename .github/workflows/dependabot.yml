@@ -78,7 +78,7 @@ jobs:
 
       - name: Enable auto-merge for Dependabot PRs
         id: enable_automerge
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' && steps.auto_merge.outputs.allowed == 'true' }}
+        if: ${{ steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v3.0.0
         # yamllint disable-line rule:line-length
         uses: peter-evans/enable-pull-request-automerge@a59ea044f2aeabb1e63839cf06068655c1d70998
