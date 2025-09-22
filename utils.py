@@ -123,6 +123,8 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]):
                 while True:
                     try:
                         return await func(*args, **kwargs)
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
                         if attempt >= max_attempts:
                             raise
@@ -138,6 +140,8 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]):
             while True:
                 try:
                     return func(*args, **kwargs)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     if attempt >= max_attempts:
                         raise

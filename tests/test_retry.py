@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from bot.utils import retry
@@ -67,3 +69,23 @@ async def test_retry_exhaust_async():
     with pytest.raises(RuntimeError):
         await always_fail()
     assert calls["count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_retry_does_not_swallow_cancellation():
+    calls = {"count": 0, "delays": []}
+
+    def delay(base):
+        calls["delays"].append(base)
+        return 0
+
+    @retry(5, delay)
+    async def cancelled():
+        calls["count"] += 1
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled()
+
+    assert calls["count"] == 1
+    assert calls["delays"] == []
