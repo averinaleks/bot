@@ -22,7 +22,7 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
     path = _write_requirements(
         tmp_path,
         """\
-        package==1.2.3  # pinned for compatibility
+        package[extra]==1.2.3  # pinned for compatibility
         other==4.5.6
         """,
     )
@@ -34,6 +34,10 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
         parsed["pkg:pypi/package@1.2.3"]["package_url"]
         == "pkg:pypi/package@1.2.3"
     )
+    # Aliases allow lookups by the original requirement including extras and
+    # by normalised variations such as uppercase names.
+    assert parsed["package[extra]"]["package_url"] == "pkg:pypi/package@1.2.3"
+    assert parsed["PACKAGE"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert "pkg:pypi/other@4.5.6" in parsed
     assert (
         parsed["pkg:pypi/other@4.5.6"]["package_url"]

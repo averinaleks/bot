@@ -91,11 +91,25 @@ class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
             return alias
         return key
 
-    def add(self, name: str, package_url: str, dependency: ResolvedDependency) -> None:
+    def add(
+        self,
+        original_name: str,
+        base_name: str,
+        package_url: str,
+        dependency: ResolvedDependency,
+    ) -> None:
         if not super().__contains__(package_url):
             super().__setitem__(package_url, dependency)
-        self._aliases[name] = package_url
-        self._aliases[_normalise_name(name)] = package_url
+
+        alias_candidates = {
+            original_name,
+            base_name,
+            _normalise_name(original_name),
+            _normalise_name(base_name),
+        }
+        for alias in alias_candidates:
+            if alias:
+                self._aliases[alias] = package_url
 
     def __getitem__(self, key: str) -> ResolvedDependency:  # type: ignore[override]
         return super().__getitem__(self._resolve_alias(key))
@@ -140,6 +154,7 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         if not requirement_part:
             continue
 
+        raw_name = requirement_part.split("==", 1)[0].strip()
         match = _REQUIREMENT_RE.match(requirement_part)
         if not match:
             continue
@@ -148,10 +163,10 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
         if not matched_name or not version:
             continue
         # Remove extras if present, e.g. package[extra]==1.0.0
-        name = matched_name
-        if "[" in name and "]" in name:
-            name = name.split("[", 1)[0]
-        package_name = _normalise_name(name)
+        base_name = matched_name
+        if "[" in base_name and "]" in base_name:
+            base_name = base_name.split("[", 1)[0]
+        package_name = _normalise_name(base_name)
         if package_name in _SKIPPED_PACKAGES:
             continue
         package_url = f"pkg:pypi/{package_name}@{_encode_version_for_purl(version)}"
@@ -161,7 +176,7 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
             "scope": scope,
             "dependencies": [],
         }
-        resolved.add(name, package_url, dependency)
+        resolved.add(raw_name, base_name, package_url, dependency)
     return resolved
 
 
