@@ -1,8 +1,10 @@
+import http.client
 import threading
 import time
-from scripts import gptoss_mock_server
+from contextlib import closing
 from pathlib import Path
-from urllib import request as urllib_request
+
+from scripts import gptoss_mock_server
 
 import pytest
 
@@ -18,11 +20,14 @@ def gptoss_server_port():
 
     for _ in range(50):
         try:
-            with urllib_request.urlopen(
-                f"http://127.0.0.1:{port}/v1/models", timeout=0.2
-            ):
+            with closing(
+                http.client.HTTPConnection("127.0.0.1", port, timeout=0.2)
+            ) as conn:
+                conn.request("GET", "/v1/models")
+                response = conn.getresponse()
+                response.read()
                 break
-        except Exception:
+        except (OSError, http.client.HTTPException):
             time.sleep(0.05)
     else:  # pragma: no cover - extremely unlikely when server starts correctly
         server.shutdown()
