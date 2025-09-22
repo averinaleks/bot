@@ -11,13 +11,14 @@ import time
 from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
+from pathlib import Path
 
 from bot.config import BotConfig, OFFLINE_MODE
 from bot.dotenv_utils import load_dotenv
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
-from telegram_logger import TelegramLogger
+from telegram_logger import TelegramLogger, resolve_unsent_path
 from utils import retry, suppress_tf_logs
 
 _OFFLINE_ENV = is_offline_env()
@@ -49,6 +50,21 @@ NetworkError = getattr(ccxt, "NetworkError", BybitError)
 CFG = BotConfig()
 
 logger = logging.getLogger("TradingBot")
+
+if CFG.save_unsent_telegram:
+    try:
+        _UNSENT_FALLBACK_PATH: Path | None = resolve_unsent_path(
+            CFG.log_dir, CFG.unsent_telegram_path
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Ignoring unsafe unsent_telegram_path %s: %s",
+            sanitize_log_value(CFG.unsent_telegram_path),
+            exc,
+        )
+        _UNSENT_FALLBACK_PATH = None
+else:
+    _UNSENT_FALLBACK_PATH = None
 
 
 class GPTAdviceModel(BaseModel):
@@ -167,8 +183,8 @@ async def send_telegram_alert(message: str) -> None:
                     max_attempts,
                     message,
                 )
-                if CFG.save_unsent_telegram:
-                    _logger = type("_TL", (), {"unsent_path": CFG.unsent_telegram_path})()
+                if CFG.save_unsent_telegram and _UNSENT_FALLBACK_PATH is not None:
+                    _logger = type("_TL", (), {"unsent_path": _UNSENT_FALLBACK_PATH})()
                     TelegramLogger._save_unsent(_logger, chat_id, message)
                 return
             await asyncio.sleep(delay)

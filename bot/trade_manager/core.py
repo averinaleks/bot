@@ -57,6 +57,8 @@ except ImportError:  # pragma: no cover - заглушка
         """Stubbed logging configurator."""
         pass
 from bot.config import BotConfig, OFFLINE_MODE  # noqa: E402
+from services.logging_utils import sanitize_log_value  # noqa: E402
+from telegram_logger import resolve_unsent_path  # noqa: E402
 import contextlib  # noqa: E402
 from bot.http_client import (  # noqa: E402
     get_async_http_client as get_http_client,
@@ -257,9 +259,19 @@ class TradeManager:
         else:
             unsent_path = None
             if config.save_unsent_telegram:
-                unsent_path = os.path.join(
-                    config.log_dir, config.unsent_telegram_path
-                )
+                try:
+                    unsent_path = str(
+                        resolve_unsent_path(
+                            config.log_dir, config.unsent_telegram_path
+                        )
+                    )
+                except ValueError as exc:
+                    logger.warning(
+                        "Ignoring unsafe unsent_telegram_path %s: %s",
+                        sanitize_log_value(config.unsent_telegram_path),
+                        exc,
+                    )
+                    unsent_path = None
             try:
                 self.telegram_logger = TelegramLogger(
                     telegram_bot,
