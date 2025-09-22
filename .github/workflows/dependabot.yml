@@ -68,8 +68,10 @@ jobs:
 
       - name: Check auto-merge availability
         id: auto_merge
+        env:
+          ALLOW_AUTO_MERGE: ${{ github.event.repository.allow_auto_merge == true }}
         run: |
-          if [[ "${{ github.event.repository.allow_auto_merge || false }}" == 'true' ]]; then
+          if [[ "${ALLOW_AUTO_MERGE}" == 'true' ]]; then
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
