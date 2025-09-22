@@ -21,13 +21,20 @@ import argparse
 import http.client
 import json
 import os
+import re
 import socket
-import subprocess
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
+
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_GIT_REF_RE = re.compile(r"^(?!-)(?!.*\.\.)(?!.*//)(?!.*@\{)(?!.*\\0)[\w./-]+$")
+_INVALID_PATH_CHARS = {"\x00", "\n", "\r"}
+_ALLOWED_GIT_OPTIONS = {"--no-tags"}
 
 
 @dataclass
@@ -44,6 +51,44 @@ class DiffComputation:
 
     content: str
     has_diff: bool
+
+
+def _validate_git_sha(sha: str) -> str:
+    """Return *sha* if it is a valid 40-character hexadecimal commit hash."""
+
+    if not _SHA_RE.match(sha):
+        raise RuntimeError("Получен некорректный SHA коммита")
+    return sha
+
+
+def _validate_git_ref(ref: str) -> str:
+    """Ensure *ref* is a safe Git refname.
+
+    The validation mirrors the rules enforced by ``git-check-ref-format``.  It
+    rejects refnames containing dangerous sequences such as ``..``, ``//`` or
+    ``@{`` which could be interpreted specially by Git.
+    """
+
+    if not ref:
+        raise RuntimeError("Не указан base_ref для diff")
+    if not _GIT_REF_RE.match(ref) or ref.endswith(".lock") or ref.endswith("/"):
+        raise RuntimeError("Получен недопустимый git ref")
+    return ref
+
+
+def _validate_path_argument(path: str) -> str:
+    """Return a sanitised Git pathspec argument."""
+
+    if not path:
+        raise RuntimeError("Путь для diff не может быть пустым")
+    if path[0] == "-":
+        raise RuntimeError("Путь не должен начинаться с '-' (интерпретируется как опция)")
+    if any(char in path for char in _INVALID_PATH_CHARS):
+        raise RuntimeError("Путь содержит недопустимые символы")
+    # Reject absolute paths to avoid leaking files outside the repository
+    if Path(path).is_absolute():
+        raise RuntimeError("Путь должен быть относительным")
+    return path
 
 
 def _write_github_output(**outputs: str | bool) -> None:
@@ -135,10 +180,46 @@ def _fetch_pull_request(
 
 
 def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess.CompletedProcess:
-    """Execute a git command and return the completed process."""
+    """Execute a validated git command and return the completed process."""
 
-    return subprocess.run(  # noqa: PLW1510 - we want ``check`` to raise
-        args,
+    argv = list(args)
+    if not argv or argv[0] != "git":
+        raise RuntimeError("Команда должна начинаться с 'git'")
+    if len(argv) < 2:
+        raise RuntimeError("Не указана подкоманда git")
+
+    subcommand = argv[1]
+    if subcommand == "fetch":
+        if len(argv) < 4:
+            raise RuntimeError("Недостаточно аргументов для 'git fetch'")
+        options = argv[2:-2]
+        for option in options:
+            if option not in _ALLOWED_GIT_OPTIONS:
+                raise RuntimeError(f"Недопустимая опция git fetch: {option}")
+        remote = argv[-2]
+        if remote != "origin":
+            raise RuntimeError("Разрешён только fetch из origin")
+        _validate_git_ref(argv[-1])
+    elif subcommand == "diff":
+        if len(argv) < 3:
+            raise RuntimeError("Недостаточно аргументов для 'git diff'")
+        range_arg = argv[2]
+        if "..." not in range_arg:
+            raise RuntimeError("Диапазон diff должен содержать '...'")
+        base_sha, _, rest = range_arg.partition("...")
+        if rest != "HEAD":
+            raise RuntimeError("diff допускает сравнение только с HEAD")
+        _validate_git_sha(base_sha)
+        if "--" in argv[3:]:
+            marker_index = argv.index("--", 3)
+            for path in argv[marker_index + 1 :]:
+                _validate_path_argument(path)
+    else:
+        raise RuntimeError(f"Недопустимая команда git: {subcommand}")
+
+    # Аргументы команды валидируются перед выполнением, поэтому запуск безопасен.
+    return subprocess.run(  # nosec B603
+        argv,
         check=True,
         text=True,
         capture_output=capture_output,
@@ -148,18 +229,18 @@ def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess
 def _ensure_base_available(base_ref: str) -> None:
     """Ensure that the base reference is available locally."""
 
-    if not base_ref:
-        raise RuntimeError("Не указан base_ref для diff")
+    safe_ref = _validate_git_ref(base_ref)
 
     try:
-        _run_git(["git", "fetch", "--no-tags", "origin", base_ref])
+        _run_git(["git", "fetch", "--no-tags", "origin", safe_ref])
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"git fetch origin {base_ref} завершился с ошибкой") from exc
 
 
 def _build_diff_args(base_sha: str, paths: Iterable[str]) -> list[str]:
-    args = ["git", "diff", f"{base_sha}...HEAD"]
-    path_list = list(paths)
+    safe_sha = _validate_git_sha(base_sha)
+    path_list = [_validate_path_argument(path) for path in paths]
+    args = ["git", "diff", f"{safe_sha}...HEAD"]
     if path_list:
         args.append("--")
         args.extend(path_list)
@@ -210,9 +291,13 @@ def prepare_diff(
         base_sha = base_sha or info.base_sha
         base_ref = base_ref or info.base_ref
 
+    if base_sha is None or base_ref is None:
+        raise RuntimeError("Не удалось определить base_sha/base_ref")
+
+    safe_sha = _validate_git_sha(base_sha)
     _ensure_base_available(base_ref)
     monitored_paths: Sequence[str] = paths or [":(glob)**/*.py"]
-    return _compute_diff(base_sha, monitored_paths, truncate=truncate)
+    return _compute_diff(safe_sha, monitored_paths, truncate=truncate)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
