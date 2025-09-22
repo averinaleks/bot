@@ -13,6 +13,7 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 # Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 (HIGH).
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
+COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
 
 WORKDIR /tmp/build
 
@@ -46,25 +47,9 @@ RUN set -eux; \
             'setuptools>=78.1.1,<81'; \
     fi; \
     curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz; \
-    echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c -; \
-    (find /usr -type l -lname "*..*" -print 2>/dev/null || true); \
-    SAFE_TAR_DIR="$(mktemp -d)"; \
-    # Распаковываем tar в пустой временный каталог и удаляем симлинки перед переносом,
-    # чтобы исключить повторное использование каталога (mitigation CVE-2025-45582).
-    tar --keep-directory-symlink --no-overwrite-dir -xf zlib.tar.gz -C "$SAFE_TAR_DIR"; \
-    rm -rf zlib-src; \
-    mv "$SAFE_TAR_DIR"/"zlib-${ZLIB_VERSION}" zlib-src; \
-    rm -rf "$SAFE_TAR_DIR"; \
-    printf 'deb-src http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse\n' \
-           'deb-src http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse\n' \
-           'deb-src http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse\n' \
-           > /etc/apt/sources.list.d/noble-src.list; \
-    apt-get update; \
-    apt-get build-dep -y pam; \
-    apt-get source -y pam; \
-    pam_src_dir=$(find . -maxdepth 1 -type d -name 'pam-*' | head -n 1); \
-    rm -rf pam-src; \
-    mv "$pam_src_dir" pam-src
+    echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c -
+
+RUN /bin/bash /tmp/security/setup_zlib_and_pam.sh
 
 WORKDIR /tmp/build/zlib-src
 
