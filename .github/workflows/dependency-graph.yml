@@ -111,8 +111,8 @@ jobs:
                   if is_excluded(path.parent):
                       continue
                   original = path.read_text()
-                  lines = original.splitlines()
-                  filtered = []
+                  lines = original.splitlines(keepends=True)
+                  filtered: list[str] = []
                   for line in lines:
                       stripped = line.lstrip()
                       if stripped.startswith("ccxtpro"):
@@ -121,9 +121,7 @@ jobs:
                           continue
                       filtered.append(line)
                   if filtered != lines:
-                      updated = "\n".join(filtered)
-                      if original.endswith("\n"):
-                          updated += "\n"
+                      updated = "".join(filtered)
                       path.write_text(updated)
           PY
       - name: Submit dependency snapshot
