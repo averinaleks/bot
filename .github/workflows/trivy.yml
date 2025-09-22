@@ -38,21 +38,42 @@ jobs:
           # Fail workflow when vulnerabilities of specified severity are found
           exit-code: 1
 
+      - name: Parse Trivy results
+        id: parse_trivy
+        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        run: |
+          if [ ! -f trivy-results.sarif ]; then
+            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
+            echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          count=$(jq '[.runs[].results[]] | length' trivy-results.sarif)
+          echo "sarif_exists=true" >> "$GITHUB_OUTPUT"
+          echo "vulnerability_count=${count}" >> "$GITHUB_OUTPUT"
+
       - name: Upload Trivy scan results to GitHub Security tab
-        if: ${{ github.event_name != 'pull_request' && always() }}
+        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' && always() }}
         uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3
         # v3.30.3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
           name: trivy-results
           path: trivy-results.sarif
 
+      - name: Fail if Trivy scan failed unexpectedly
+        if: ${{ steps.trivy.conclusion == 'failure' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
+        run: |
+          echo "::error::Trivy scan failed before producing a SARIF report."
+          exit 1
+
       - name: Fail if vulnerabilities found
-        if: ${{ steps.trivy.conclusion == 'failure' }}
-        run: exit 1
+        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && steps.parse_trivy.outputs.vulnerability_count != '0' }}
+        run: |
+          echo "::error::Trivy detected ${{ steps.parse_trivy.outputs.vulnerability_count }} high or critical vulnerabilities."
+          exit 1
