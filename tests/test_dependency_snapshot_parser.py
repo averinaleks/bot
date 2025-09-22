@@ -37,6 +37,7 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
     # Aliases allow lookups by the original requirement including extras and
     # by normalised variations such as uppercase names.
     assert parsed["package[extra]"]["package_url"] == "pkg:pypi/package@1.2.3"
+    assert parsed["package[extra]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert parsed["PACKAGE"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert "pkg:pypi/other@4.5.6" in parsed
     assert (
