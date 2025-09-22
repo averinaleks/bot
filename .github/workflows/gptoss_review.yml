@@ -160,20 +160,42 @@ jobs:
         id: wait_llm
         run: |
           set -euo pipefail
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          ready=0
           for _ in {1..60}; do
             if curl -sSf "http://127.0.0.1:${LLM_PORT}/v1/models" >/dev/null; then
-              exit 0
+              ready=1
+              break
             fi
             sleep 1
           done
-          echo "LLM server failed to start" >&2
-          if [ -f mock_server.pid ]; then
-            kill "$(cat mock_server.pid)" || true
+
+          if [ "$ready" -ne 1 ]; then
+            echo "::warning::LLM server failed to start" >&2
+            if [ -f mock_server.pid ]; then
+              kill "$(cat mock_server.pid)" || true
+              rm -f mock_server.pid
+            fi
+            rm -f mock_server.port mock_server.log || true
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
           fi
-          exit 1
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Generate diff
-        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.wait_llm.conclusion == 'success'
+        if: >-
+          steps.validate_event.outputs.skip != 'true' &&
+          steps.start_llm.outputs.started == 'true' &&
+          steps.wait_llm.outputs.ready == 'true'
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -207,7 +229,11 @@ jobs:
           fi
 
       - name: LLM review
-        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.generate_diff.outputs.has_diff == 'true'
+        if: >-
+          steps.validate_event.outputs.skip != 'true' &&
+          steps.start_llm.outputs.started == 'true' &&
+          steps.wait_llm.outputs.ready == 'true' &&
+          steps.generate_diff.outputs.has_diff == 'true'
         id: llm_review
         run: |
           set -euo pipefail
@@ -238,14 +264,20 @@ jobs:
           fi
 
       - name: Upload review artifact
-        if: steps.validate_event.outputs.skip != 'true' && steps.llm_review.outputs.has_content == 'true'
+        if: >-
+          steps.validate_event.outputs.skip != 'true' &&
+          steps.wait_llm.outputs.ready == 'true' &&
+          steps.llm_review.outputs.has_content == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: gptoss-review-${{ env.PR_NUMBER }}
           path: review.md
 
       - name: Comment PR
-        if: steps.validate_event.outputs.skip != 'true' && steps.llm_review.outputs.has_content == 'true'
+        if: >-
+          steps.validate_event.outputs.skip != 'true' &&
+          steps.wait_llm.outputs.ready == 'true' &&
+          steps.llm_review.outputs.has_content == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
         with:
           script: |
