@@ -58,6 +58,54 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
 
+      # Ensure the tests exercise the exact versions proposed by Dependabot
+      # even when the manifest being updated is not part of the lean
+      # requirements set we install above (for example, updates targeting
+      # requirements.txt or pyproject.toml).  The metadata action provides the
+      # dependency names and versions so we can install them explicitly without
+      # resolving the entire environment from scratch, keeping the job fast
+      # while still validating the new packages.
+      - name: Install Dependabot updates
+        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        env:
+          DEPENDENCIES_JSON: ${{ steps.metadata.outputs['updated-dependencies-json'] }}
+        run: |
+          python <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          raw = os.environ.get("DEPENDENCIES_JSON", "").strip()
+          if not raw:
+              print("No dependency metadata provided; skipping targeted installs.")
+              raise SystemExit(0)
+
+          try:
+              dependencies = json.loads(raw)
+          except json.JSONDecodeError as exc:  # pragma: no cover - workflow safety
+              print(f"Failed to parse Dependabot metadata: {exc}")
+              raise SystemExit(1)
+
+          if not dependencies:
+              print("Dependabot metadata did not list dependencies; skipping.")
+              raise SystemExit(0)
+
+          for dependency in dependencies:
+              name = dependency.get("dependency-name")
+              version = dependency.get("new-version")
+              if not name or not version:
+                  print(f"Skipping entry without name/version: {dependency}")
+                  continue
+
+              spec = f"{name}=={version}"
+              print(f"Installing updated dependency {spec}")
+              subprocess.run(
+                  [sys.executable, "-m", "pip", "install", spec],
+                  check=True,
+              )
+          PY
+
       # Run the unit tests against the Dependabot update.  Integration
       # tests are excluded here to keep the workflow fast; they run in
       # the main CI.  If any test fails this step will surface the
