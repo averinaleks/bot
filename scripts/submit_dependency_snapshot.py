@@ -175,7 +175,7 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
             relative_path = manifest.relative_to(root)
         except ValueError:
             # Fallback for unexpected paths outside of the provided root.
-            relative_path = manifest.name
+            relative_path = Path(manifest.name)
 
         relative_str = (
             relative_path.as_posix()
@@ -348,11 +348,14 @@ def submit_dependency_snapshot() -> None:
     run_attempt = _normalise_run_attempt(os.getenv("GITHUB_RUN_ATTEMPT"))
     correlator = f"{workflow}:{job_name}"
 
+    job_metadata = _job_metadata(repository, run_id, correlator)
+    job_metadata["correlator"] = f"{correlator}:attempt-{run_attempt}"
+
     payload = {
         "version": 0,
         "sha": sha,
         "ref": ref,
-        "job": _job_metadata(repository, run_id, correlator),
+        "job": job_metadata,
         "detector": {
             "name": "requirements-parser",
             "version": "1.0.0",
@@ -366,8 +369,6 @@ def submit_dependency_snapshot() -> None:
             "workflow": workflow,
         },
     }
-
-    payload["job"]["correlator"] = f"{correlator}:attempt-{run_attempt}"
 
     base_url = _api_base_url()
     url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"

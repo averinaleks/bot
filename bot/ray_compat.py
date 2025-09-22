@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
 from security import ensure_minimum_ray_version
@@ -19,7 +19,7 @@ from security import ensure_minimum_ray_version
 __all__ = ["ray", "IS_RAY_STUB"]
 
 
-def _create_stub() -> tuple[SimpleNamespace, bool]:
+def _create_stub() -> tuple[ModuleType, bool]:
     """Вернуть заглушку Ray с минимально необходимым API."""
 
     class _ObjectRef:
@@ -74,15 +74,18 @@ def _create_stub() -> tuple[SimpleNamespace, bool]:
     def _is_initialized() -> bool:
         return state["initialized"]
 
-    stub = SimpleNamespace(
-        __version__="0.0.0-stub",
-        __ray_stub__=True,
-        remote=_remote,
-        get=_unwrap,
-        init=_init,
-        shutdown=lambda **_k: _shutdown(),
-        is_initialized=_is_initialized,
-        ObjectRef=_ObjectRef,
+    stub = ModuleType("ray")
+    stub.__dict__.update(
+        {
+            "__version__": "0.0.0-stub",
+            "__ray_stub__": True,
+            "remote": _remote,
+            "get": _unwrap,
+            "init": _init,
+            "shutdown": lambda **_k: _shutdown(),
+            "is_initialized": _is_initialized,
+            "ObjectRef": _ObjectRef,
+        }
     )
     return stub, True
 
