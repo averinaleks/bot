@@ -160,6 +160,8 @@ class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
         base_name: str,
         package_url: str,
         dependency: ResolvedDependency,
+        *,
+        extra_aliases: Iterable[str] = (),
     ) -> None:
         if not super().__contains__(package_url):
             super().__setitem__(package_url, dependency)
@@ -170,6 +172,7 @@ class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
             _normalise_name(original_name),
             _normalise_name(base_name),
         }
+        alias_candidates.update(extra_aliases)
         for alias in alias_candidates:
             if alias:
                 self._aliases[alias] = package_url
@@ -239,7 +242,13 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
             "scope": scope,
             "dependencies": [],
         }
-        resolved.add(raw_name, base_name, package_url, dependency)
+        resolved.add(
+            raw_name,
+            base_name,
+            package_url,
+            dependency,
+            extra_aliases=(requirement_part,),
+        )
     return resolved
 
 
