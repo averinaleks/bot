@@ -145,10 +145,16 @@ def test_safe_joblib_load_enforces_module_allowlist(
     assert safe_joblib_load(allowed_path) == payload
 
     malicious_module = ModuleType("malicious_mod")
-    exec(
-        "class Payload:\n    def __init__(self, value):\n        self.value = value",
-        malicious_module.__dict__,
+
+    def _payload_init(self, value):
+        self.value = value
+
+    Payload = type(
+        "Payload",
+        (),
+        {"__module__": malicious_module.__name__, "__init__": _payload_init},
     )
+    malicious_module.Payload = Payload
     monkeypatch.setitem(sys.modules, "malicious_mod", malicious_module)
     disallowed_payload = malicious_module.Payload(99)
     disallowed_path = tmp_path / "disallowed.joblib"
