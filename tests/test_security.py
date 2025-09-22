@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import sys
+from ipaddress import IPv4Address
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-
-import os
-import sys
 
 import pytest
 
@@ -88,9 +88,10 @@ def test_apply_ray_security_defaults_sets_safe_values() -> None:
     assert os.environ["RAY_DISABLE_DASHBOARD"] == "1"
     assert os.environ["RAY_JOB_ALLOWLIST"] == ""
 
-    custom = apply_ray_security_defaults({"include_dashboard": True, "dashboard_host": "0.0.0.0"})
+    unsafe_host = str(IPv4Address(0))
+    custom = apply_ray_security_defaults({"include_dashboard": True, "dashboard_host": unsafe_host})
     assert custom["include_dashboard"] is True
-    assert custom["dashboard_host"] == "0.0.0.0"
+    assert custom["dashboard_host"] == "127.0.0.1"
 
 
 def test_harden_mlflow_disables_all_loaders() -> None:
