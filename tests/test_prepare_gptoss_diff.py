@@ -132,7 +132,9 @@ def test_main_handles_unknown_args(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_prepare_diff_rejects_invalid_sha(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(prepare_gptoss_diff, "_ensure_base_available", lambda ref: None)
+    monkeypatch.setattr(
+        prepare_gptoss_diff, "_ensure_base_available", lambda ref, sha: None
+    )
     with pytest.raises(RuntimeError):
         prepare_gptoss_diff.prepare_diff(
             "example/repo",
@@ -153,4 +155,79 @@ def test_prepare_diff_rejects_invalid_ref(monkeypatch: pytest.MonkeyPatch) -> No
             base_sha="a" * 40,
             base_ref="bad ref",
         )
+
+
+def test_ensure_base_available_skips_fetch_when_commit_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, ...], bool]] = []
+
+    def _fake_run_git(args, *, capture_output: bool = False):
+        calls.append((tuple(args), capture_output))
+        if args[1] == "cat-file":
+            return subprocess.CompletedProcess(args, 0)
+        pytest.fail(f"unexpected git command: {args}")
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    prepare_gptoss_diff._ensure_base_available("main", "a" * 40)
+
+    assert any(cmd[0][1] == "cat-file" for cmd in calls)
+    assert not any(cmd[0][1] == "fetch" for cmd in calls)
+
+
+def test_ensure_base_available_fetches_when_missing_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, ...], bool]] = []
+
+    def _fake_run_git(args, *, capture_output: bool = False):
+        calls.append((tuple(args), capture_output))
+        if args[1] == "cat-file":
+            raise subprocess.CalledProcessError(returncode=1, cmd=args)
+        if args[1] == "fetch":
+            return subprocess.CompletedProcess(args, 0)
+        pytest.fail(f"unexpected git command: {args}")
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    prepare_gptoss_diff._ensure_base_available("main", "a" * 40)
+
+    assert any(cmd[0][1] == "fetch" for cmd in calls)
+
+
+def test_ensure_base_available_allows_fetch_failure_if_commit_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"cat": 0}
+
+    def _fake_run_git(args, *, capture_output: bool = False):
+        if args[1] == "cat-file":
+            attempts["cat"] += 1
+            if attempts["cat"] == 1:
+                raise subprocess.CalledProcessError(returncode=1, cmd=args)
+            return subprocess.CompletedProcess(args, 0)
+        if args[1] == "fetch":
+            raise subprocess.CalledProcessError(returncode=128, cmd=args)
+        pytest.fail(f"unexpected git command: {args}")
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    prepare_gptoss_diff._ensure_base_available("main", "a" * 40)
+
+    assert attempts["cat"] == 2
+
+
+def test_ensure_base_available_raises_if_fetch_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run_git(args, *, capture_output: bool = False):
+        if args[1] == "cat-file":
+            raise subprocess.CalledProcessError(returncode=1, cmd=args)
+        if args[1] == "fetch":
+            raise subprocess.CalledProcessError(returncode=128, cmd=args)
+        pytest.fail(f"unexpected git command: {args}")
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff._ensure_base_available("main", "a" * 40)
 
