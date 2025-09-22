@@ -157,6 +157,35 @@ def test_prepare_diff_rejects_invalid_ref(monkeypatch: pytest.MonkeyPatch) -> No
         )
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/module.py",
+        "nested/dir/file.txt",
+        ":(glob)**/*.py",
+    ],
+)
+def test_validate_path_argument_allows_safe_inputs(path: str) -> None:
+    assert prepare_gptoss_diff._validate_path_argument(path) == path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "../secret.txt",
+        "dir/../secret.txt",
+        "..\\windows\\system32",
+        "C:/absolute/path",
+        "C\\windows\\system32",
+        "\x00bad",
+        ":(literal)danger",  # unsupported pathspec prefix
+    ],
+)
+def test_validate_path_argument_rejects_unsafe_inputs(path: str) -> None:
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff._validate_path_argument(path)
+
+
 def test_ensure_base_available_skips_fetch_when_commit_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

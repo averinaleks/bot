@@ -26,7 +26,7 @@ import socket
 import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
@@ -34,6 +34,8 @@ from urllib.parse import urlparse
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _GIT_REF_RE = re.compile(r"^(?!-)(?!.*\.\.)(?!.*//)(?!.*@\{)(?!.*\\0)[\w./-]+$")
 _INVALID_PATH_CHARS = {"\x00", "\n", "\r"}
+_SAFE_PATH_CHARS_RE = re.compile(r"^[A-Za-z0-9_./*?\[\]-]+$")
+_ALLOWED_PATHSPEC_PREFIXES = ("", ":(glob)")
 _ALLOWED_GIT_OPTIONS = {"--no-tags"}
 
 
@@ -83,12 +85,38 @@ def _validate_path_argument(path: str) -> str:
         raise RuntimeError("Путь для diff не может быть пустым")
     if path[0] == "-":
         raise RuntimeError("Путь не должен начинаться с '-' (интерпретируется как опция)")
-    if any(char in path for char in _INVALID_PATH_CHARS):
+    if any(ord(char) < 32 or char in _INVALID_PATH_CHARS for char in path):
         raise RuntimeError("Путь содержит недопустимые символы")
-    # Reject absolute paths to avoid leaking files outside the repository
-    if Path(path).is_absolute():
+
+    prefix = ""
+    remainder = path
+    for allowed in _ALLOWED_PATHSPEC_PREFIXES:
+        if allowed and remainder.startswith(allowed):
+            prefix = allowed
+            remainder = remainder[len(allowed) :]
+            if remainder.startswith("/"):
+                remainder = remainder[1:]
+            break
+    else:
+        if ":" in path:
+            raise RuntimeError("Путь содержит недопустимый префикс pathspec")
+
+    if not remainder:
+        raise RuntimeError("Путь pathspec должен содержать сегменты после префикса")
+    if remainder[0] == "-":
+        raise RuntimeError("Путь не должен начинаться с '-' (интерпретируется как опция)")
+    if "\\" in remainder:
+        raise RuntimeError("Путь не должен использовать обратные слэши")
+    if Path(remainder).is_absolute():
         raise RuntimeError("Путь должен быть относительным")
-    return path
+    if not _SAFE_PATH_CHARS_RE.match(remainder):
+        raise RuntimeError("Путь содержит недопустимые символы")
+
+    posix = PurePosixPath(remainder)
+    if any(part in {"", ".", ".."} for part in posix.parts):
+        raise RuntimeError("Путь содержит недопустимые сегменты")
+
+    return f"{prefix}{remainder}" if prefix else remainder
 
 
 def _write_github_output(**outputs: str | bool) -> None:
