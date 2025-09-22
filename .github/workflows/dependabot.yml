@@ -103,7 +103,11 @@ jobs:
 
           for dependency in dependencies:
               name = dependency.get("dependency-name")
-              version = dependency.get("new-version")
+              # Dependabot uses "new-version" for regular updates and
+              # "dependency-version" for security advisories.  Support both so
+              # the workflow always installs the proposed version before
+              # running the tests.
+              version = dependency.get("new-version") or dependency.get("dependency-version")
               if not name or not version:
                   print(f"Skipping entry without name/version: {dependency}")
                   continue
