@@ -143,7 +143,10 @@ def _perform_https_request(
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
     """Perform a GitHub API request and return the decoded JSON payload."""
 
-    headers = {"Accept": "application/vnd.github+json"}
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gptoss-review-workflow/1.0 (+https://github.com/averinaleks/bot)",
+    }
     if token:
         headers["Authorization"] = f"token {token}"
 
