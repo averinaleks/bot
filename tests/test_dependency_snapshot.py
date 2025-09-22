@@ -12,7 +12,6 @@ from scripts import submit_dependency_snapshot as snapshot
     [
         "requirements.txt",
         "requirements.in",
-        "requirements.out",
     ],
 )
 def test_build_manifests_includes_supported_patterns(tmp_path: Path, filename: str) -> None:
@@ -123,3 +122,12 @@ def test_submit_dependency_snapshot_reports_submission_error(
     captured = capsys.readouterr()
     assert "Dependency snapshot submission skipped из-за ошибки GitHub API." in captured.err
     assert "HTTP 400" in captured.err
+
+
+def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").write_text("httpx==0.27.2\n")
+    (tmp_path / "requirements.out").write_text("httpx==0.27.2\n")
+
+    manifests = snapshot._build_manifests(tmp_path)
+
+    assert set(manifests.keys()) == {"requirements.txt"}
