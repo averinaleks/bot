@@ -4,24 +4,87 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "requirements*.txt"
-      - "requirements*.in"
-      - "requirements*.out"
   workflow_dispatch:
 
 permissions:
   contents: write
+  dependency-graph: write
 
 jobs:
   submit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: '3.11'
+      - name: Detect dependency manifest changes
+        id: detect
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          python <<'PY'
+          from __future__ import annotations
+
+          import fnmatch
+          import os
+          import subprocess
+
+          patterns = ("requirements*.txt", "requirements*.in", "requirements*.out")
+          before = os.environ.get("BEFORE") or ""
+          after = os.environ.get("AFTER") or ""
+
+          if not after:
+              raise SystemExit("Missing GITHUB_SHA value")
+
+          if not before or set(before) == {"0"}:
+              before = f"{after}^"
+
+          try:
+              completed = subprocess.run(
+                  ["git", "diff", "--name-only", before, after],
+                  check=True,
+                  stdout=subprocess.PIPE,
+                  text=True,
+              )
+          except subprocess.CalledProcessError as exc:
+              print(f"::warning::Unable to determine diff: {exc}")
+              diff_failed = True
+              changed: list[str] = []
+          else:
+              diff_failed = False
+              files = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+              changed = [
+                  file
+                  for file in files
+                  if any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
+              ]
+
+          changed_flag = "true" if diff_failed or changed else "false"
+          output_path = os.environ.get("GITHUB_OUTPUT")
+          if not output_path:
+              raise SystemExit("Missing GITHUB_OUTPUT")
+
+          with open(output_path, "a", encoding="utf-8") as stream:
+              stream.write(f"changed={changed_flag}\n")
+              if changed:
+                  stream.write("files<<EOF\n")
+                  stream.write("\n".join(changed))
+                  stream.write("\nEOF\n")
+          if changed_flag == "true" and not changed and diff_failed:
+              print("Diff calculation failed; proceeding with dependency snapshot submission.")
+          elif changed:
+              print("Dependency manifest changes detected:")
+              for path in changed:
+                  print(f"  - {path}")
+          else:
+              print("No dependency manifest changes detected.")
+          PY
       - name: Prepare requirements
+        if: steps.detect.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           python <<'PY'
           from pathlib import Path
@@ -64,6 +127,7 @@ jobs:
                       path.write_text(updated)
           PY
       - name: Submit dependency snapshot
+        if: steps.detect.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/submit_dependency_snapshot.py
