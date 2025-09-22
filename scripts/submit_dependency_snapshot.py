@@ -443,6 +443,19 @@ def submit_dependency_snapshot() -> None:
                     file=sys.stderr,
                 )
                 return
+            print(
+                "Dependency snapshot submission skipped из-за ошибки GitHub API.",
+                file=sys.stderr,
+            )
+            message = str(last_error) or ""
+            if status_code:
+                print(
+                    f"Получен код ответа HTTP {status_code}: {message}",
+                    file=sys.stderr,
+                )
+            else:
+                print(message, file=sys.stderr)
+            return
         raise last_error
 
 
