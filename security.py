@@ -9,6 +9,7 @@ import contextlib
 import functools
 import hmac
 import hashlib
+import ipaddress
 import logging
 import os
 from pathlib import Path
@@ -340,6 +341,42 @@ def verify_model_state_signature(path: Path) -> bool:
     return True
 
 
+_LOOPBACK_HOST = "127.0.0.1"
+
+
+def _sanitize_dashboard_host(raw_host: Any) -> str:
+    """Return a safe dashboard host limited to the loopback interface."""
+
+    if raw_host is None:
+        return _LOOPBACK_HOST
+
+    host_text = str(raw_host).strip()
+    if not host_text:
+        return _LOOPBACK_HOST
+
+    try:
+        parsed = ipaddress.ip_address(host_text)
+    except ValueError:
+        if host_text.lower() == "localhost":
+            return "localhost"
+        logger.warning(
+            "Небезопасное значение dashboard_host %s: устанавливаем %s",
+            host_text,
+            _LOOPBACK_HOST,
+        )
+        return _LOOPBACK_HOST
+
+    if parsed.is_loopback:
+        return host_text
+
+    logger.warning(
+        "Небезопасное значение dashboard_host %s: устанавливаем %s",
+        host_text,
+        _LOOPBACK_HOST,
+    )
+    return _LOOPBACK_HOST
+
+
 def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     """Return Ray initialisation kwargs hardened against CVE-2023-48022.
 
@@ -352,7 +389,9 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     os.environ.setdefault("RAY_JOB_ALLOWLIST", "")
     hardened = dict(params)
     hardened.setdefault("include_dashboard", False)
-    hardened.setdefault("dashboard_host", "127.0.0.1")
+    hardened["dashboard_host"] = _sanitize_dashboard_host(
+        hardened.get("dashboard_host", _LOOPBACK_HOST)
+    )
     return hardened
 
 
