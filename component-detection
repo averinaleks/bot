@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Fallback implementation of the component-detection CLI used by GitHub."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+try:
+    from scripts.submit_dependency_snapshot import _build_manifests
+except ModuleNotFoundError as exc:  # pragma: no cover - defensive guard
+    raise SystemExit(f"Unable to import dependency parser: {exc}") from exc
+
+
+def _package_url_parts(package_url: str) -> tuple[dict[str, Any], str]:
+    """Return a PackageURL mapping and component identifier for ``package_url``."""
+
+    if not package_url.startswith("pkg:"):
+        raise ValueError(f"Unsupported package URL: {package_url}")
+    try:
+        _, remainder = package_url.split(":", 1)
+        pkg_type, rest = remainder.split("/", 1)
+        name_part, version = rest.rsplit("@", 1)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise ValueError(f"Malformed package URL: {package_url}") from exc
+
+    return (
+        {
+            "Scheme": "pkg",
+            "Type": pkg_type,
+            "Namespace": None,
+            "Name": name_part,
+            "Version": version,
+            "Qualifiers": {},
+            "Subpath": None,
+        },
+        f"{name_part}@{version}",
+    )
+
+
+def _build_components(root: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    manifests = _build_manifests(root)
+    components: list[dict[str, Any]] = []
+    manifest_paths = list(manifests.keys())
+
+    for manifest_path, manifest in manifests.items():
+        resolved = manifest["resolved"]
+        for dependency in resolved.values():
+            package_url = dependency["package_url"]
+            scope = dependency.get("scope", "runtime")
+            purl_parts, component_id = _package_url_parts(package_url)
+            component = {
+                "locationsFoundAt": [manifest_path],
+                "component": {
+                    "type": "Pip",
+                    "id": component_id,
+                    "packageUrl": purl_parts,
+                },
+                "detectorId": "CustomPythonRequirements",
+                "isDevelopmentDependency": scope != "runtime",
+                "dependencyScope": None,
+                "topLevelReferrers": [],
+                "containerDetailIds": [],
+                "containerLayerIds": {},
+            }
+            components.append(component)
+
+    return components, manifest_paths
+
+
+def run_scan(args: argparse.Namespace) -> int:
+    source_directory = Path(args.SourceDirectory or ".").resolve()
+    if not source_directory.exists():
+        print(f"Source directory not found: {source_directory}", file=sys.stderr)
+        return 1
+
+    components, manifest_paths = _build_components(source_directory)
+
+    result = {
+        "componentsFound": components,
+        "detectorsInScan": [
+            {
+                "detectorId": "CustomPythonRequirements",
+                "isExperimental": False,
+                "version": 1,
+                "supportedComponentTypes": ["Pip"],
+            }
+        ],
+        "containerDetailsMap": {},
+        "resultCode": "Success",
+        "sourceDirectory": str(source_directory),
+    }
+
+    if args.ManifestFile:
+        output_path = Path(args.ManifestFile)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        serialized = json.dumps(result, indent=2, ensure_ascii=False)
+        output_path.write_text(f"{serialized}\n")
+    if args.PrintManifest:
+        json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+
+    if not components:
+        print("No components detected by fallback detector.")
+    else:
+        print(
+            f"Detected {len(components)} components across {len(manifest_paths)} manifests",
+        )
+
+    return 0
+
+
+def run_list_detectors() -> int:
+    detectors = [
+        {
+            "detectorId": "CustomPythonRequirements",
+            "description": "Parses Python requirements-style manifests",
+        }
+    ]
+    json.dump(detectors, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="component-detection")
+    subparsers = parser.add_subparsers(dest="command")
+
+    scan_parser = subparsers.add_parser("scan")
+    scan_parser.add_argument("--SourceDirectory", default=".")
+    scan_parser.add_argument("--ManifestFile")
+    scan_parser.add_argument("--PrintManifest", action="store_true")
+    scan_parser.add_argument("--DirectoryExclusionList")
+    scan_parser.add_argument("--DetectorArgs")
+    scan_parser.add_argument("--DetectorCategories")
+    scan_parser.add_argument("--NoSummary", action="store_true")
+    scan_parser.add_argument("--SourceFileRoot")
+    scan_parser.add_argument("--CleanupCreatedFiles")
+    scan_parser.add_argument("--LogLevel")
+    scan_parser.add_argument("--Timeout")
+    scan_parser.add_argument("--DockerImagesToScan")
+    scan_parser.set_defaults(func=run_scan)
+
+    list_parser = subparsers.add_parser("list-detectors")
+    list_parser.set_defaults(func=lambda args: run_list_detectors())
+
+    args = parser.parse_args(argv)
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
