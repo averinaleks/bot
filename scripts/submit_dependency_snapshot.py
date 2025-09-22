@@ -242,12 +242,17 @@ def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
             "scope": scope,
             "dependencies": [],
         }
+        normalised_requirement = requirement_part
+        if "==" in requirement_part:
+            name_part, version_part = requirement_part.split("==", 1)
+            normalised_requirement = f"{_normalise_name(name_part)}=={version_part}"
+
         resolved.add(
             raw_name,
             base_name,
             package_url,
             dependency,
-            extra_aliases=(requirement_part,),
+            extra_aliases=(requirement_part, normalised_requirement),
         )
     return resolved
 

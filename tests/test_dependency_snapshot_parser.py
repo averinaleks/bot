@@ -46,6 +46,15 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
     )
 
 
+def test_parse_requirements_adds_normalised_requirement_alias(tmp_path: Path) -> None:
+    path = _write_requirements(tmp_path, "PACKAGE[EXTRA]==1.2.3\n")
+
+    parsed = _parse_requirements(path)
+
+    assert parsed["PACKAGE[EXTRA]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
+    assert parsed["package[extra]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
+
+
 def test_parse_requirements_handles_hash_block(tmp_path: Path) -> None:
     path = _write_requirements(
         tmp_path,
