@@ -115,3 +115,27 @@ def test_main_handles_unknown_args(monkeypatch: pytest.MonkeyPatch) -> None:
     exit_code = prepare_gptoss_diff.main(["--unknown"])
     assert exit_code == 0
 
+
+def test_prepare_diff_rejects_invalid_sha(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(prepare_gptoss_diff, "_ensure_base_available", lambda ref: None)
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff.prepare_diff(
+            "example/repo",
+            "123",
+            token=None,
+            base_sha="not-a-sha",
+            base_ref="main",
+        )
+
+
+def test_prepare_diff_rejects_invalid_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(prepare_gptoss_diff, "_compute_diff", lambda sha, paths, truncate: None)
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff.prepare_diff(
+            "example/repo",
+            "123",
+            token=None,
+            base_sha="a" * 40,
+            base_ref="bad ref",
+        )
+
