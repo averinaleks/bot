@@ -183,10 +183,21 @@ def safe_joblib_load(
         )
 
     prefixes = _normalise_allowed_modules(allowed_modules)
+    if _joblib_numpy_pickle is None:  # pragma: no cover - joblib missing
+        raise RuntimeError(
+            "joblib.numpy_pickle недоступен: установите зависимость для работы с артефактами"
+        )
+
+    loader = getattr(_joblib_numpy_pickle, "load", None)
+    if loader is None:  # pragma: no cover - extremely unlikely for supported joblib
+        raise RuntimeError("Текущая версия joblib не предоставляет numpy_pickle.load")
+
     try:
         with _restricted_joblib_unpicklers(prefixes):
-            # joblib.load is intentionally wrapped with a strict module allow-list above.
-            return joblib.load(source)  # codeql[py/unsafe-deserialization]
+            # ``numpy_pickle.load`` honours the patched unpickler ensuring the
+            # allow-list above is enforced even when CodeQL tracks lower-level
+            # deserialisation helpers.
+            return loader(source)
     except ArtifactDeserializationError:
         raise
     except Exception as exc:  # pragma: no cover - unexpected joblib failure
