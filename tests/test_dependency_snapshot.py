@@ -60,9 +60,11 @@ def test_submit_dependency_snapshot_skips_when_env_missing(
 
     captured = capsys.readouterr()
     assert "Missing required environment variable: GITHUB_REPOSITORY" in captured.err
-    assert (
-        "Dependency snapshot submission skipped из-за отсутствия переменных окружения." in captured.err
+    expected_message = (
+        "Dependency snapshot submission skipped "
+        "из-за отсутствия переменных окружения."
     )
+    assert expected_message in captured.err
 
 
 def test_submit_dependency_snapshot_handles_manifest_errors(
@@ -81,9 +83,11 @@ def test_submit_dependency_snapshot_handles_manifest_errors(
     snapshot.submit_dependency_snapshot()
 
     captured = capsys.readouterr()
-    assert (
-        "Dependency snapshot submission skipped из-за непредвиденной ошибки." in captured.err
+    expected_message = (
+        "Dependency snapshot submission skipped "
+        "из-за непредвиденной ошибки."
     )
+    assert expected_message in captured.err
     assert "manifest failure" in captured.err
 
 
