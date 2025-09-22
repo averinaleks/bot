@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -28,22 +30,26 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
     $VIRTUAL_ENV/bin/python - <<'PY'
-from pathlib import Path
-from urllib.request import urlretrieve
+import textwrap
 
-try:
-    import ray  # type: ignore
-except Exception:
-    print("Ray отсутствует, пропускаем обновление commons-lang3")
-else:
-    jars_dir = Path(ray.__file__).resolve().parent / "jars"
-    jars_dir.mkdir(parents=True, exist_ok=True)
-    for jar in jars_dir.glob("commons-lang3-*.jar"):
-        jar.unlink()
-    urlretrieve(
-        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar",
-        jars_dir / "commons-lang3-3.18.0.jar",
-    )
+exec(textwrap.dedent("""
+    import pathlib
+    import urllib.request
+
+    try:
+        import ray  # type: ignore
+    except Exception:
+        print("Ray отсутствует, пропускаем обновление commons-lang3")
+    else:
+        jars_dir = pathlib.Path(ray.__file__).resolve().parent / "jars"
+        jars_dir.mkdir(parents=True, exist_ok=True)
+        for jar in jars_dir.glob("commons-lang3-*.jar"):
+            jar.unlink()
+        urllib.request.urlretrieve(
+            "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar",
+            jars_dir / "commons-lang3-3.18.0.jar",
+        )
+"""))
 PY
     && nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)" && \
     if [ -n "$nvidia_packages" ]; then \
@@ -92,27 +98,37 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # we report its status without failing the build when it's not installed.
 RUN echo "Checking package versions..." && \
     $VIRTUAL_ENV/bin/python - <<'PY'
-from importlib import import_module
+import textwrap
 
-required_modules = (
-    ("torch", "Torch"),
-    ("stable_baselines3", "SB3"),
-    ("pytorch_lightning", "Lightning"),
-)
+exec(textwrap.dedent("""
+    import importlib
 
-for module_name, label in required_modules:
-    module = import_module(module_name)
-    version = getattr(module, "__version__", "<unknown>")
-    print(f"{label}: {version}")
+    required_modules = (
+        ("torch", "Torch"),
+        ("stable_baselines3", "SB3"),
+        ("pytorch_lightning", "Lightning"),
+    )
 
-try:
-    mlflow = import_module("mlflow")
-except ModuleNotFoundError:
-    print("MLflow: not installed (optional)")
-else:
-    print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
+    for module_name, label in required_modules:
+        module = importlib.import_module(module_name)
+        version = getattr(module, "__version__", "<unknown>")
+        print(f"{label}: {version}")
+
+    try:
+        mlflow = importlib.import_module("mlflow")
+    except ModuleNotFoundError:
+        print("MLflow: not installed (optional)")
+    else:
+        print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
+"""))
 PY
-    && if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi
+
+RUN if /app/venv/bin/pip freeze | grep -qi nvidia; then \
+        echo 'Unexpected NVIDIA packages found' >&2; \
+        exit 1; \
+    else \
+        echo 'No NVIDIA packages installed'; \
+    fi
 
 # Use a dedicated non-root user for runtime
 RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
