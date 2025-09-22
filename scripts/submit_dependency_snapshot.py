@@ -536,7 +536,10 @@ def submit_dependency_snapshot() -> None:
                 ):
                     next_scheme = schemes[index + 1]
                     print(
-                        f"Authentication with scheme '{scheme}' failed (HTTP {exc.status_code}). Trying '{next_scheme}'.",
+                        (
+                            f"Authentication with scheme '{scheme}' failed "
+                            f"(HTTP {exc.status_code}). Trying '{next_scheme}'."
+                        ),
                         file=sys.stderr,
                     )
                     last_error = exc
