@@ -259,6 +259,17 @@ def _auth_schemes(token: str) -> list[str]:
     return ["token", "Bearer"]
 
 
+def _log_unexpected_error(exc: Exception) -> None:
+    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+        raise
+    print(
+        "Dependency snapshot submission skipped из-за непредвиденной ошибки.",
+        file=sys.stderr,
+    )
+    message = str(exc).strip() or exc.__class__.__name__
+    print(message, file=sys.stderr)
+
+
 def _normalise_run_attempt(raw_value: str | None) -> int:
     """Return a validated run attempt number suitable for submission."""
 
@@ -353,6 +364,58 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         raise DependencySubmissionError(None, message, last_error)
 
 
+def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
+    status_code = error.status_code
+    if status_code == 401:
+        print(
+            "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
+            file=sys.stderr,
+        )
+        return
+    if status_code in {403, 404}:
+        print(
+            "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
+            file=sys.stderr,
+        )
+        return
+    if status_code == 422:
+        print(
+            "Dependency snapshot submission skipped из-за ошибки валидации данных (HTTP 422).",
+            file=sys.stderr,
+        )
+        return
+    if status_code in _RETRYABLE_STATUS_CODES:
+        print(
+            "Dependency snapshot submission skipped из-за временной ошибки сервера GitHub.",
+            file=sys.stderr,
+        )
+        return
+    if status_code == 413:
+        print(
+            "Dependency snapshot submission skipped из-за превышения допустимого размера snapshot (HTTP 413).",
+            file=sys.stderr,
+        )
+        return
+    if status_code is None:
+        print(
+            "Dependency snapshot submission skipped из-за сетевой ошибки.",
+            file=sys.stderr,
+        )
+        return
+    print(
+        "Dependency snapshot submission skipped из-за ошибки GitHub API.",
+        file=sys.stderr,
+    )
+    message = str(error).strip()
+    if status_code:
+        print(
+            f"Получен код ответа HTTP {status_code}: {message}",
+            file=sys.stderr,
+        )
+    elif message:
+        print(message, file=sys.stderr)
+
+
 def submit_dependency_snapshot() -> None:
     try:
         repository = _env("GITHUB_REPOSITORY")
@@ -367,7 +430,11 @@ def submit_dependency_snapshot() -> None:
         )
         return
 
-    manifests = _build_manifests(Path("."))
+    try:
+        manifests = _build_manifests(Path("."))
+    except Exception as exc:
+        _log_unexpected_error(exc)
+        return
     if not manifests:
         print("No dependency manifests found.")
         return
@@ -400,94 +467,48 @@ def submit_dependency_snapshot() -> None:
         },
     }
 
-    base_url = _api_base_url()
-    url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
-    parsed_url = urlparse(url)
-    if parsed_url.scheme != "https" or not parsed_url.netloc:
-        raise RuntimeError("Запрос зависимостей разрешён только по HTTPS")
-    body = json.dumps(payload).encode()
-    headers_base = {
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
-        "User-Agent": "dependency-snapshot-script",
-    }
+    try:
+        base_url = _api_base_url()
+        url = f"{base_url}/repos/{repository}/dependency-graph/snapshots"
+        body = json.dumps(payload).encode()
+        headers_base = {
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
+            "User-Agent": "dependency-snapshot-script",
+        }
 
-    schemes = _auth_schemes(token)
-    last_error: Exception | None = None
-    for index, scheme in enumerate(schemes):
-        headers = dict(headers_base, Authorization=f"{scheme} {token}")
-        try:
-            _submit_with_headers(url, body, headers)
-            return
-        except DependencySubmissionError as exc:
-            if (
-                exc.status_code in {401, 403}
-                and index < len(schemes) - 1
-            ):
-                next_scheme = schemes[index + 1]
-                print(
-                    f"Authentication with scheme '{scheme}' failed (HTTP {exc.status_code}). Trying '{next_scheme}'.",
-                    file=sys.stderr,
-                )
+        schemes = _auth_schemes(token)
+        last_error: DependencySubmissionError | None = None
+        for index, scheme in enumerate(schemes):
+            headers = dict(headers_base, Authorization=f"{scheme} {token}")
+            try:
+                _submit_with_headers(url, body, headers)
+                return
+            except DependencySubmissionError as exc:
+                if (
+                    exc.status_code in {401, 403}
+                    and index < len(schemes) - 1
+                ):
+                    next_scheme = schemes[index + 1]
+                    print(
+                        f"Authentication with scheme '{scheme}' failed (HTTP {exc.status_code}). Trying '{next_scheme}'.",
+                        file=sys.stderr,
+                    )
+                    last_error = exc
+                    continue
                 last_error = exc
-                continue
-            last_error = exc
-            break
+                break
 
-    if last_error is not None:
-        if isinstance(last_error, DependencySubmissionError):
-            status_code = last_error.status_code
-            if status_code == 401:
-                print(
-                    "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
-                    file=sys.stderr,
-                )
-                return
-            if status_code in {403, 404}:
-                print(
-                    "Dependency snapshot submission skipped из-за ограниченных прав доступа.",
-                    file=sys.stderr,
-                )
-                return
-            if status_code == 422:
-                print(
-                    "Dependency snapshot submission skipped из-за ошибки валидации данных (HTTP 422).",
-                    file=sys.stderr,
-                )
-                return
-            if status_code in _RETRYABLE_STATUS_CODES:
-                print(
-                    "Dependency snapshot submission skipped из-за временной ошибки сервера GitHub.",
-                    file=sys.stderr,
-                )
-                return
-            if status_code == 413:
-                print(
-                    "Dependency snapshot submission skipped из-за превышения допустимого размера snapshot (HTTP 413).",
-                    file=sys.stderr,
-                )
-                return
-            if status_code is None:
-                print(
-                    "Dependency snapshot submission skipped из-за сетевой ошибки.",
-                    file=sys.stderr,
-                )
-                return
-            print(
-                "Dependency snapshot submission skipped из-за ошибки GitHub API.",
-                file=sys.stderr,
-            )
-            message = str(last_error) or ""
-            if status_code:
-                print(
-                    f"Получен код ответа HTTP {status_code}: {message}",
-                    file=sys.stderr,
-                )
-            else:
-                print(message, file=sys.stderr)
-            return
-        raise last_error
+        if last_error is not None:
+            _report_dependency_submission_error(last_error)
+        return
+    except DependencySubmissionError as exc:
+        _report_dependency_submission_error(exc)
+        return
+    except Exception as exc:
+        _log_unexpected_error(exc)
+        return
 
 
 if __name__ == "__main__":
