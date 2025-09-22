@@ -63,7 +63,7 @@ jobs:
                   if any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
               ]
 
-          changed_flag = "true" if diff_failed or changed else "false"
+          changed_flag = "true" if diff_failed or bool(changed) else "false"
           output_path = os.environ.get("GITHUB_OUTPUT")
           if not output_path:
               raise SystemExit("Missing GITHUB_OUTPUT")
