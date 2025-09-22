@@ -1,14 +1,15 @@
 import asyncio
+import hashlib
 import logging
 import os
+from pathlib import Path
 import pytest
 import sys
 import threading
 import types
-import hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from bot.telegram_logger import TelegramLogger
+from bot.telegram_logger import TelegramLogger, resolve_unsent_path
 
 class DummyBot:
     async def send_message(self, chat_id, text):
@@ -190,3 +191,56 @@ async def test_hash_filter(monkeypatch):
 
     assert len(bot.sent) == 1
     assert tl.last_hash == first_hash
+
+
+def test_resolve_unsent_path_confines_to_log_dir(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    assert resolved == log_dir / "unsent.log"
+
+
+def test_resolve_unsent_path_rejects_escape(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    with pytest.raises(ValueError):
+        resolve_unsent_path(log_dir, "../unsent.log")
+
+
+def test_resolve_unsent_path_rejects_absolute(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    with pytest.raises(ValueError):
+        resolve_unsent_path(log_dir, tmp_path / "unsent.log")
+
+
+def test_save_unsent_writes_to_resolved_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
+    tl._save_unsent(42, "payload")
+    assert resolved.read_text(encoding="utf-8").strip() == "42\tpayload"
+    asyncio.run(TelegramLogger.shutdown())
+
+
+def test_save_unsent_rejects_symlink(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    target = tmp_path / "outside.txt"
+    target.write_text("sentinel", encoding="utf-8")
+    if resolved.exists():
+        resolved.unlink()
+    resolved.symlink_to(target)
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
+    caplog.set_level(logging.WARNING)
+    tl._save_unsent(24, "payload")
+    assert target.read_text(encoding="utf-8") == "sentinel"
+    assert any(
+        "Refusing to write Telegram fallback message" in rec.message
+        for rec in caplog.records
+    )
+    asyncio.run(TelegramLogger.shutdown())

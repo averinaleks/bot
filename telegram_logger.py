@@ -13,6 +13,7 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 try:  # pragma: no cover - optional dependency in lightweight environments
@@ -36,6 +37,7 @@ import hashlib
 # Use absolute import to ensure the local configuration module is loaded even
 # when a similarly named module exists on ``PYTHONPATH``.
 from bot.config import OFFLINE_MODE
+from services.logging_utils import sanitize_log_value
 if OFFLINE_MODE:
     from services.offline import OfflineTelegram
 try:  # pragma: no cover - optional dependency
@@ -52,6 +54,24 @@ except Exception as exc:  # pragma: no cover - missing telegram
 logger = logging.getLogger("TradingBot")
 
 
+def resolve_unsent_path(
+    log_dir: str | os.PathLike[str],
+    candidate: str | os.PathLike[str],
+) -> Path:
+    """Return an absolute path for unsent Telegram messages confined to *log_dir*."""
+
+    base = Path(log_dir).expanduser().resolve(strict=False)
+    if not str(candidate):
+        raise ValueError("unsent_telegram_path must not be empty")
+    path = Path(candidate)
+    if path.is_absolute():
+        raise ValueError("unsent_telegram_path must be relative to log_dir")
+    resolved = (base / path).resolve(strict=False)
+    if not resolved.is_relative_to(base):
+        raise ValueError("unsent_telegram_path escapes log_dir")
+    return resolved
+
+
 class TelegramLogger(logging.Handler):
     """Handler для пересылки логов и сообщений в Telegram."""
 
@@ -63,12 +83,12 @@ class TelegramLogger(logging.Handler):
         chat_id,
         level: int = logging.NOTSET,
         max_queue_size: int | None = None,
-        unsent_path: Optional[str] = None,
+        unsent_path: Optional[str | os.PathLike[str]] = None,
     ) -> None:
         super().__init__(level)
         self.bot = bot
         self.chat_id = chat_id
-        self.unsent_path = unsent_path
+        self.unsent_path = Path(unsent_path) if unsent_path is not None else None
         self.last_message_time = 0.0
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()
@@ -192,7 +212,15 @@ class TelegramLogger(logging.Handler):
         if self.unsent_path is None:
             return
         try:
-            with open(self.unsent_path, "a", encoding="utf-8") as f:
+            path = self.unsent_path
+            if path.exists() and path.is_symlink():
+                logger.warning(
+                    "Refusing to write Telegram fallback message to symlink %s",
+                    sanitize_log_value(str(path)),
+                )
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
                 f.write(f"{chat_id}\t{text}\n")
         except OSError as exc:  # pragma: no cover - file system errors
             logger.error("Не удалось сохранить сообщение Telegram: %s", exc)
