@@ -38,6 +38,14 @@ jobs:
           # Fail workflow when vulnerabilities of specified severity are found
           exit-code: 1
 
+      - name: Ensure jq is available
+        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
       - name: Parse Trivy results
         id: parse_trivy
         if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
@@ -47,7 +55,7 @@ jobs:
             echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          count=$(jq '[.runs[].results[]] | length' trivy-results.sarif)
+          count=$(jq '[.runs[]?.results[]?] | length' trivy-results.sarif)
           echo "sarif_exists=true" >> "$GITHUB_OUTPUT"
           echo "vulnerability_count=${count}" >> "$GITHUB_OUTPUT"
 
