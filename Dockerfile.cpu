@@ -25,11 +25,11 @@ WORKDIR /app
 COPY requirements-core.txt .
 
 ENV VIRTUAL_ENV=/app/venv
-RUN python3 -m venv $VIRTUAL_ENV && \
+RUN python3 -m venv "$VIRTUAL_ENV" && \
     # pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает актуальные уязвимости и подходит для сборки gymnasium
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
-    $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
-    $VIRTUAL_ENV/bin/python - <<'PY'
+    "$VIRTUAL_ENV"/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
+    "$VIRTUAL_ENV"/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
+    "$VIRTUAL_ENV"/bin/python - <<'PY'
 import textwrap
 
 exec(textwrap.dedent("""
@@ -51,14 +51,16 @@ exec(textwrap.dedent("""
         )
 """))
 PY
-    && nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)" && \
+
+RUN set -eu; \
+    nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)"; \
     if [ -n "$nvidia_packages" ]; then \
-        printf '%s\n' "$nvidia_packages" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; \
+        printf '%s\n' "$nvidia_packages" | cut -d= -f1 | xargs -r "$VIRTUAL_ENV"/bin/pip uninstall -y; \
     else \
         echo "No NVIDIA packages detected in the virtual environment"; \
-    fi && \
-    find $VIRTUAL_ENV -type d -name '__pycache__' -exec rm -rf {} + && \
-    find $VIRTUAL_ENV -type f -name '*.pyc' -delete
+    fi; \
+    find "$VIRTUAL_ENV" -type d -name '__pycache__' -exec rm -rf {} +; \
+    find "$VIRTUAL_ENV" -type f -name '*.pyc' -delete
 
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
