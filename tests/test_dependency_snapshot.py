@@ -48,7 +48,10 @@ def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
     assert resolved["torch"]["package_url"] == "pkg:pypi/torch@2.8.0%2Bcpu"
 
 
-def test_submit_dependency_snapshot_skips_when_env_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_submit_dependency_snapshot_skips_when_env_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_SHA", raising=False)
