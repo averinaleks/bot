@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import os
 import sys
-import types
+import http.client
+import json as _json
 import logging
+import types
 from importlib.machinery import ModuleSpec
 from types import ModuleType, TracebackType
 from typing import Any, Protocol, cast
+from urllib import parse as _urllib_parse
 
 
 class RayModule(Protocol):
@@ -208,8 +211,61 @@ def apply() -> None:
             async def aread(self) -> bytes:
                 return self.content
 
-        def _return_response(*_a: Any, **_k: Any) -> _HTTPXResponse:
-            return _HTTPXResponse()
+            def raise_for_status(self) -> None:
+                """Mimic :meth:`httpx.Response.raise_for_status`."""
+
+                if 400 <= self.status_code:
+                    raise Exception(f"HTTP error {self.status_code}")
+
+        def _return_response(method: str, url: str, *, timeout: Any | None = None, **kwargs: Any) -> _HTTPXResponse:
+            """Fallback network client using :mod:`http.client`."""
+
+            parsed = _urllib_parse.urlsplit(url)
+            if parsed.scheme not in {"http", "https"}:
+                raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+
+            connection_cls = (
+                http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+            )
+            host = parsed.hostname or "localhost"
+            port = parsed.port
+
+            path = parsed.path or "/"
+            if parsed.query:
+                path = f"{path}?{parsed.query}"
+
+            headers = {"Accept": "application/json"}
+            headers.update(kwargs.pop("headers", {}) or {})
+
+            body = kwargs.pop("data", None)
+            if "json" in kwargs:
+                body = _json.dumps(kwargs.pop("json")).encode("utf-8")
+                headers.setdefault("Content-Type", "application/json")
+
+            if body is not None and not isinstance(body, (bytes, bytearray)):
+                body = str(body).encode("utf-8")
+
+            connection = connection_cls(host, port, timeout=timeout)
+            try:
+                connection.request(method.upper(), path, body=body, headers=headers)
+                response = connection.getresponse()
+                content = response.read()
+            finally:
+                connection.close()
+
+            text = content.decode("utf-8", errors="replace")
+            try:
+                parsed_json: Any | None = _json.loads(text)
+            except ValueError:
+                parsed_json = None
+
+            return _HTTPXResponse(
+                status_code=response.status,
+                text=text,
+                json=parsed_json,
+                content=content,
+                headers=dict(response.headers),
+            )
 
         class _CookieJar(dict):  # pragma: no cover - minimal cookie jar
             """Simplified cookie jar supporting assignment via ``set``.
@@ -256,11 +312,18 @@ def apply() -> None:
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.trust_env = kwargs.get("trust_env", False)
                 self.cookies = _CookieJar()
+                self._timeout = kwargs.get("timeout")
 
-            def request(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
-                return _return_response()
+            def request(self, method: str, url: str, **kwargs: Any) -> _HTTPXResponse:
+                if "timeout" not in kwargs:
+                    kwargs["timeout"] = self._timeout
+                return _return_response(method, url, **kwargs)
 
-            get = post = request
+            def get(self, url: str, **kwargs: Any) -> _HTTPXResponse:
+                return self.request("GET", url, **kwargs)
+
+            def post(self, url: str, **kwargs: Any) -> _HTTPXResponse:
+                return self.request("POST", url, **kwargs)
 
             def __enter__(self) -> "_HTTPXClient":  # pragma: no cover - simple helper
                 return self
@@ -275,6 +338,13 @@ def apply() -> None:
                 return False
 
             def close(self) -> None:  # pragma: no cover - simple no-op
+                return None
+
+            def __enter__(self) -> "_HTTPXClient":  # pragma: no cover - simple
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
+                self.close()
                 return None
 
         class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
@@ -297,8 +367,8 @@ def apply() -> None:
         )
 
         setattr(httpx_mod, "Response", _HTTPXResponse)
-        setattr(httpx_mod, "get", _return_response)
-        setattr(httpx_mod, "post", _return_response)
+        setattr(httpx_mod, "get", lambda url, *a, **k: _return_response("GET", url, *a, **k))
+        setattr(httpx_mod, "post", lambda url, *a, **k: _return_response("POST", url, *a, **k))
         setattr(httpx_mod, "AsyncClient", _AsyncClient)
         setattr(httpx_mod, "HTTPError", Exception)
         setattr(httpx_mod, "TimeoutException", _TimeoutException)
