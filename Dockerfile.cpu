@@ -87,11 +87,32 @@ COPY . .
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Verify that all heavy packages were installed and no GPU libraries remain
+# Verify that all heavy packages were installed and no GPU libraries remain.
+# ``mlflow`` is an optional dependency and may be absent in the base image, so
+# we report its status without failing the build when it's not installed.
 RUN echo "Checking package versions..." && \
-    $VIRTUAL_ENV/bin/python -c "import torch; print('Torch:', torch.__version__)" && \
-    if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi && \
-    $VIRTUAL_ENV/bin/python -c "import stable_baselines3 as sb3, mlflow, pytorch_lightning as pl; print('SB3:', sb3.__version__, 'MLflow:', mlflow.__version__, 'Lightning:', pl.__version__)"
+    $VIRTUAL_ENV/bin/python - <<'PY' && \
+    if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi
+from importlib import import_module
+
+required_modules = (
+    ("torch", "Torch"),
+    ("stable_baselines3", "SB3"),
+    ("pytorch_lightning", "Lightning"),
+)
+
+for module_name, label in required_modules:
+    module = import_module(module_name)
+    version = getattr(module, "__version__", "<unknown>")
+    print(f"{label}: {version}")
+
+try:
+    mlflow = import_module("mlflow")
+except ModuleNotFoundError:
+    print("MLflow: not installed (optional)")
+else:
+    print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
+PY
 
 # Use a dedicated non-root user for runtime
 RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
