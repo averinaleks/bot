@@ -31,8 +31,26 @@ jobs:
           from pathlib import Path
 
           patterns = ("requirements*.txt", "requirements*.in", "requirements*.out")
+          excluded = {
+              ".git",
+              ".hg",
+              ".nox",
+              ".tox",
+              ".venv",
+              "__pycache__",
+              "env",
+              "node_modules",
+              "site-packages",
+              "venv",
+          }
+
+          def is_excluded(target: Path) -> bool:
+              return any(part in excluded for part in target.parts)
+
           for pattern in patterns:
-              for path in Path(".").glob(pattern):
+              for path in Path(".").rglob(pattern):
+                  if is_excluded(path.parent):
+                      continue
                   original = path.read_text()
                   lines = original.splitlines()
                   filtered = []
