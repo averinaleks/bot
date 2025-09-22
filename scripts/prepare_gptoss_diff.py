@@ -203,6 +203,14 @@ def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess
         if remote != "origin":
             raise RuntimeError("Разрешён только fetch из origin")
         _validate_git_ref(argv[-1])
+    elif subcommand == "cat-file":
+        if len(argv) != 4 or argv[2] != "-e":
+            raise RuntimeError("Недопустимая команда git cat-file")
+        object_spec = argv[3]
+        commit, sep, suffix = object_spec.partition("^{")
+        _validate_git_sha(commit)
+        if sep and suffix.rstrip("}") != "commit":
+            raise RuntimeError("Поддерживается только проверка существования коммита")
     elif subcommand == "diff":
         if len(argv) < 3:
             raise RuntimeError("Недостаточно аргументов для 'git diff'")
@@ -229,14 +237,32 @@ def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess
     )
 
 
-def _ensure_base_available(base_ref: str) -> None:
+def _commit_exists(sha: str) -> bool:
+    """Return ``True`` if *sha* resolves to a commit in the local repository."""
+
+    try:
+        _run_git(
+            ["git", "cat-file", "-e", f"{_validate_git_sha(sha)}^{{commit}}"],
+            capture_output=False,
+        )
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
+def _ensure_base_available(base_ref: str, base_sha: str) -> None:
     """Ensure that the base reference is available locally."""
 
     safe_ref = _validate_git_ref(base_ref)
 
+    if _commit_exists(base_sha):
+        return
+
     try:
         _run_git(["git", "fetch", "--no-tags", "origin", safe_ref])
     except subprocess.CalledProcessError as exc:
+        if _commit_exists(base_sha):
+            return
         raise RuntimeError(f"git fetch origin {base_ref} завершился с ошибкой") from exc
 
 
@@ -298,7 +324,7 @@ def prepare_diff(
         raise RuntimeError("Не удалось определить base_sha/base_ref")
 
     safe_sha = _validate_git_sha(base_sha)
-    _ensure_base_available(base_ref)
+    _ensure_base_available(base_ref, safe_sha)
     monitored_paths: Sequence[str] = paths or [":(glob)**/*.py"]
     return _compute_diff(safe_sha, monitored_paths, truncate=truncate)
 
