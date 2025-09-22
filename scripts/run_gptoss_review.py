@@ -1,4 +1,4 @@
-"""Utility script used by the GPT-OSS review GitHub workflow.
+"""Utility helpers for generating GPT-OSS code review comments on CI.
 
 The workflow previously relied on shell pipelines with ``jq`` and ``curl`` to
 prepare the request payload and parse responses from the mock GPT-OSS server.
