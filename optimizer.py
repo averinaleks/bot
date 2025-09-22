@@ -6,7 +6,6 @@ Sharpe ratio and supports an optional grid search refinement step.
 
 import asyncio
 import inspect
-import os
 import time
 from itertools import product
 import numpy as np
