@@ -29,6 +29,14 @@ _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _SKIPPED_PACKAGES = {"ccxtpro"}
 
 
+class MissingEnvironmentVariableError(RuntimeError):
+    """Raised when a required GitHub environment variable is missing."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Missing required environment variable: {name}")
+        self.name = name
+
+
 class DependencySubmissionError(RuntimeError):
     """Raised when submitting a dependency snapshot fails."""
 
@@ -194,8 +202,7 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
 def _env(name: str) -> str:
     value = os.getenv(name)
     if not value:
-        print(f"Missing required environment variable: {name}", file=sys.stderr)
-        sys.exit(1)
+        raise MissingEnvironmentVariableError(name)
     return value
 
 
@@ -332,10 +339,18 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
 
 def submit_dependency_snapshot() -> None:
-    repository = _env("GITHUB_REPOSITORY")
-    token = _env("GITHUB_TOKEN")
-    sha = _env("GITHUB_SHA")
-    ref = _env("GITHUB_REF")
+    try:
+        repository = _env("GITHUB_REPOSITORY")
+        token = _env("GITHUB_TOKEN")
+        sha = _env("GITHUB_SHA")
+        ref = _env("GITHUB_REF")
+    except MissingEnvironmentVariableError as exc:
+        print(str(exc), file=sys.stderr)
+        print(
+            "Dependency snapshot submission skipped из-за отсутствия переменных окружения.",
+            file=sys.stderr,
+        )
+        return
 
     manifests = _build_manifests(Path("."))
     if not manifests:
