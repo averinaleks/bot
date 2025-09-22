@@ -107,6 +107,15 @@ def test_build_manifests_supports_multiple_patterns(tmp_path: Path) -> None:
         assert manifest["file"]["source_location"] == name
 
 
+def test_build_manifests_discovers_nested_requirement_files(tmp_path: Path) -> None:
+    nested_dir = tmp_path / "nested" / "configs"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "requirements-extra.txt").write_text("pkg==1.0.0\n")
+
+    manifests = _build_manifests(tmp_path)
+
+    assert set(manifests) == {"nested/configs/requirements-extra.txt"}
+
 def test_job_metadata_adds_html_url_when_run_id_numeric(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_SERVER_URL", "https://example.com")
     job = _job_metadata("owner/repo", "12345", "corr")

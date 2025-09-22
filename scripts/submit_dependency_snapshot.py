@@ -2,6 +2,7 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
+import fnmatch
 import http.client
 import json
 import os
@@ -21,6 +22,24 @@ MANIFEST_PATTERNS = (
     "requirements*.in",
     "requirements*.out",
 )
+_EXCLUDED_DIR_NAMES = {
+    ".git",
+    ".hg",
+    ".nox",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "env",
+    "node_modules",
+    "site-packages",
+    "venv",
+}
+_ALLOWED_HIDDEN_DIR_NAMES = {".github"}
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
@@ -47,11 +66,36 @@ class DependencySubmissionError(RuntimeError):
             self.__cause__ = cause
 
 
+def _should_include_dir(dirname: str) -> bool:
+    if dirname in _EXCLUDED_DIR_NAMES:
+        return False
+    if dirname.startswith(".") and dirname not in _ALLOWED_HIDDEN_DIR_NAMES:
+        return False
+    return True
+
+
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
-    for pattern in MANIFEST_PATTERNS:
-        for path in sorted(root.glob(pattern)):
-            if path.is_file():
-                yield path
+    matches: list[Path] = []
+    for current_root, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(
+            dirname for dirname in dirnames if _should_include_dir(dirname)
+        )
+        for filename in filenames:
+            if not any(
+                fnmatch.fnmatch(filename, pattern) for pattern in MANIFEST_PATTERNS
+            ):
+                continue
+            path = Path(current_root, filename)
+            if not path.is_file():
+                continue
+            matches.append(path)
+
+    seen: set[Path] = set()
+    for path in sorted(matches, key=lambda item: item.relative_to(root).as_posix()):
+        if path in seen:
+            continue
+        seen.add(path)
+        yield path
 
 
 def _normalise_name(name: str) -> str:
