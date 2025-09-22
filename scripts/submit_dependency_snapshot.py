@@ -48,6 +48,17 @@ _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _SKIPPED_PACKAGES = {"ccxtpro"}
 
 
+def _should_skip_manifest(name: str, available: set[str]) -> bool:
+    """Return ``True`` when the manifest is redundant and can be dropped."""
+
+    path = Path(name)
+    if path.suffix == ".out":
+        candidate = path.with_suffix(".txt").as_posix()
+        if candidate in available:
+            return True
+    return False
+
+
 class MissingEnvironmentVariableError(RuntimeError):
     """Raised when a required GitHub environment variable is missing."""
 
@@ -255,6 +266,17 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
             "file": {"source_location": relative_str},
             "resolved": resolved,
         }
+
+    if manifests:
+        available = set(manifests.keys())
+        manifests = OrderedDict(
+            (
+                name,
+                manifest,
+            )
+            for name, manifest in manifests.items()
+            if not _should_skip_manifest(name, available)
+        )
     return manifests
 
 
