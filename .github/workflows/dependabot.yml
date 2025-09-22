@@ -16,24 +16,34 @@ permissions:
 
 jobs:
   dependabot:
-    # Run this job only when Dependabot opens or updates a PR.
-    if: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
+    env:
+      IS_DEPENDABOT_PR: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
     steps:
+      - name: Skip non-Dependabot runs
+        if: ${{ env.IS_DEPENDABOT_PR != 'true' }}
+        run: |
+          printf '%s\n' \
+            "Dependabot workflow is only relevant to Dependabot pull_request_target events." \
+            "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action." \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 0
       - name: Dependabot metadata
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' }}
         id: metadata
         # v2.5.0
         uses: dependabot/fetch-metadata@46cfd663b8c18cab02928a3fa963cf0e73994bb1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v4.0.0
         uses: hmarr/auto-approve-action@8f929096a962e83ccdfa8afcf855f39f12d4dac7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
       - name: Checkout code
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' }}
         # v5.0.0
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -46,14 +56,14 @@ jobs:
       # heavier setup used in the main CI workflow which was causing
       # Dependabot update checks to fail.
       - name: Setup Python
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         # v6.0.0
         uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.11'
           cache: 'pip'
       - name: Install dependencies
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
@@ -66,7 +76,7 @@ jobs:
       # resolving the entire environment from scratch, keeping the job fast
       # while still validating the new packages.
       - name: Install Dependabot updates
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         env:
           DEPENDENCIES_JSON: ${{ steps.metadata.outputs['updated-dependencies-json'] }}
         run: |
@@ -111,10 +121,11 @@ jobs:
       # the main CI.  If any test fails this step will surface the
       # error and prevent automatic merging of the pull request.
       - name: Run unit tests
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.metadata.outputs['package-ecosystem'] == 'pip' }}
         run: pytest -m "not integration" -q
 
       - name: Check auto-merge availability
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' }}
         id: auto_merge
         env:
           ALLOW_AUTO_MERGE: ${{ github.event.repository.allow_auto_merge == true }}
@@ -128,7 +139,7 @@ jobs:
 
       - name: Enable auto-merge for Dependabot PRs
         id: enable_automerge
-        if: ${{ steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
         # v3.0.0
         # yamllint disable-line rule:line-length
         uses: peter-evans/enable-pull-request-automerge@a59ea044f2aeabb1e63839cf06068655c1d70998
@@ -139,22 +150,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Report auto-merge failure
-        if: ${{ steps.enable_automerge.conclusion == 'failure' }}
+        if: ${{ env.IS_DEPENDABOT_PR == 'true' && steps.enable_automerge.conclusion == 'failure' }}
         run: |
           printf '%s\n' \
             "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
             >> "$GITHUB_STEP_SUMMARY"
-
-  # Provide a tiny no-op job for push-triggered runs (for example when this
-  # workflow file changes on the default branch or Dependabot pushes its update
-  # branches).  Without this guard GitHub would create runs with no jobs and
-  # mark them as failures, leaving confusing red X's on commits.
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Skip non-Dependabot runs
-        if: ${{ github.event_name != 'pull_request_target' || github.actor != 'dependabot[bot]' }}
-        run: echo "Dependabot workflow is only relevant to Dependabot PRs; nothing to do for actor '${{ github.actor }}'."
-      - name: Confirm Dependabot execution
-        if: ${{ github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' }}
-        run: echo "Primary Dependabot job handled this run; noop job completes successfully."
