@@ -27,7 +27,7 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     # pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает актуальные уязвимости и подходит для сборки gymnasium
     $VIRTUAL_ENV/bin/pip install --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-core.txt && \
-    $VIRTUAL_ENV/bin/python - <<'PY' && \
+    $VIRTUAL_ENV/bin/python - <<'PY'
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -45,7 +45,7 @@ else:
         jars_dir / "commons-lang3-3.18.0.jar",
     )
 PY
-    nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)" && \
+    && nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)" && \
     if [ -n "$nvidia_packages" ]; then \
         printf '%s\n' "$nvidia_packages" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; \
     else \
@@ -91,8 +91,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # ``mlflow`` is an optional dependency and may be absent in the base image, so
 # we report its status without failing the build when it's not installed.
 RUN echo "Checking package versions..." && \
-    $VIRTUAL_ENV/bin/python - <<'PY' && \
-    if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi
+    $VIRTUAL_ENV/bin/python - <<'PY'
 from importlib import import_module
 
 required_modules = (
@@ -113,6 +112,7 @@ except ModuleNotFoundError:
 else:
     print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
 PY
+    && if /app/venv/bin/pip freeze | grep -qi nvidia; then echo 'Unexpected NVIDIA packages found' >&2; exit 1; else echo 'No NVIDIA packages installed'; fi
 
 # Use a dedicated non-root user for runtime
 RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
