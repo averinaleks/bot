@@ -55,12 +55,14 @@ try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
     asgi_app = api_app.asgi_app  # type: ignore[attr-defined]
 except AttributeError:  # pragma: no cover - older Flask versions
     try:
-        from a2wsgi import WSGIMiddleware  # type: ignore
+        from a2wsgi import WSGIMiddleware as A2WSGIMiddleware  # type: ignore
     except ImportError as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
         logger.exception("Не удалось импортировать a2wsgi (%s): %s", type(exc).__name__, exc)
-        from uvicorn.middleware.wsgi import WSGIMiddleware
+        from uvicorn.middleware.wsgi import WSGIMiddleware as UvicornWSGIMiddleware
 
-        asgi_app = WSGIMiddleware(api_app)  # type: ignore[arg-type]
+        asgi_app = UvicornWSGIMiddleware(api_app)  # type: ignore[arg-type]
+    else:
+        asgi_app = A2WSGIMiddleware(api_app)  # type: ignore[arg-type]
 
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
