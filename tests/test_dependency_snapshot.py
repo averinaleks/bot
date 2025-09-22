@@ -61,3 +61,62 @@ def test_submit_dependency_snapshot_skips_when_env_missing(monkeypatch: pytest.M
     assert (
         "Dependency snapshot submission skipped из-за отсутствия переменных окружения." in captured.err
     )
+
+
+def test_submit_dependency_snapshot_handles_manifest_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+
+    def boom(_: Path) -> dict[str, snapshot.Manifest]:
+        raise RuntimeError("manifest failure")
+
+    monkeypatch.setattr(snapshot, "_build_manifests", boom)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert (
+        "Dependency snapshot submission skipped из-за непредвиденной ошибки." in captured.err
+    )
+    assert "manifest failure" in captured.err
+
+
+def test_submit_dependency_snapshot_reports_submission_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123456")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "pkg:pypi/httpx@0.27.2": {
+                "package_url": "pkg:pypi/httpx@0.27.2",
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    def raise_submission_error(*_: object, **__: object) -> None:
+        raise snapshot.DependencySubmissionError(400, "Bad Request")
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", raise_submission_error)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "Dependency snapshot submission skipped из-за ошибки GitHub API." in captured.err
+    assert "HTTP 400" in captured.err
