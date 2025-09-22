@@ -14,7 +14,7 @@ from urllib.parse import urlparse, urljoin
 from ipaddress import ip_address
 import asyncio
 import threading
-from typing import Any, Coroutine
+from typing import Any, Coroutine, Mapping
 
 # NOTE: httpx is imported for exception types only.
 import httpx
@@ -266,13 +266,71 @@ def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
 
 def _parse_gpt_response(content: bytes) -> str:
     """Parse GPT OSS API JSON *content* and return the first completion text."""
+
+    def _extract_text(choice: Any) -> str | None:
+        """Return textual content from a completion *choice* if available."""
+
+        if not isinstance(choice, Mapping):
+            return None
+
+        text = choice.get("text")
+        if isinstance(text, str):
+            return text
+
+        def _coalesce_content(value: Any) -> str | None:
+            if isinstance(value, str):
+                return value
+            if isinstance(value, list):
+                parts: list[str] = []
+                for item in value:
+                    if isinstance(item, str):
+                        parts.append(item)
+                        continue
+                    if isinstance(item, Mapping):
+                        part = item.get("text")
+                        if isinstance(part, str):
+                            parts.append(part)
+                            continue
+                        if isinstance(part, Mapping):
+                            nested = part.get("value")
+                            if isinstance(nested, str):
+                                parts.append(nested)
+                                continue
+                        value_field = item.get("value")
+                        if isinstance(value_field, str):
+                            parts.append(value_field)
+                if parts:
+                    return "".join(parts)
+            if isinstance(value, Mapping):
+                nested_value = value.get("value")
+                if isinstance(nested_value, str):
+                    return nested_value
+            return None
+
+        for key in ("message", "delta", "content"):
+            container = choice.get(key)
+            if isinstance(container, Mapping):
+                content_value = container.get("content")
+                extracted = _coalesce_content(content_value)
+                if extracted is not None:
+                    return extracted
+            else:
+                extracted = _coalesce_content(container)
+                if extracted is not None:
+                    return extracted
+        return None
+
     try:
         data = json.loads(content)
     except ValueError as exc:
         logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
         raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
+
     try:
-        return data["choices"][0]["text"]
+        choices = data["choices"]
+        if not isinstance(choices, list) or not choices:
+            raise KeyError("choices")
+        choice = choices[0]
     except (KeyError, IndexError, TypeError) as exc:
         logger.warning(
             "Unexpected response structure from GPT OSS API: %s | data: %r",
@@ -280,9 +338,20 @@ def _parse_gpt_response(content: bytes) -> str:
             data,
         )
         raise GPTClientResponseError(
-            "Unexpected response structure from GPT OSS API"
+            "Unexpected response structure from GPT OSS API",
         ) from exc
 
+    extracted = _extract_text(choice)
+    if extracted is not None:
+        return extracted
+
+    logger.warning(
+        "Unexpected response structure from GPT OSS API: missing completion text | data: %r",
+        data,
+    )
+    raise GPTClientResponseError(
+        "Unexpected response structure from GPT OSS API",
+    )
 
 def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.

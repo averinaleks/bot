@@ -66,6 +66,30 @@ def test_parse_gpt_response_success():
     assert _parse_gpt_response(content) == "ok"
 
 
+def test_parse_gpt_response_message_content():
+    content = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
+    assert _parse_gpt_response(content) == "ok"
+
+
+def test_parse_gpt_response_message_content_list():
+    content = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"text": "hello"},
+                            {"text": {"value": " world"}},
+                            {"value": "!"},
+                        ]
+                    }
+                }
+            ]
+        }
+    ).encode()
+    assert _parse_gpt_response(content) == "hello world!"
+
+
 def test_parse_gpt_response_invalid_json():
     with pytest.raises(GPTClientJSONError):
         _parse_gpt_response(b"not json")
