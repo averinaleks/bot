@@ -7,20 +7,19 @@ the entire job to exit with a non-zero status.  This module replaces the shell
 logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
-The module keeps dependencies minimal by using only the standard-library
-``urllib`` helpers for HTTP access.  It can also be imported from unit tests to
-validate individual helper functions.
+The module keeps dependencies minimal by delegating HTTP access to
+``requests``.  It can also be imported from unit tests to validate individual
+helper functions.
 """
 
 from __future__ import annotations
 
 import argparse
-import http.client
 import ipaddress
 import json
 import os
-import socket
 import sys
+import requests
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -79,29 +78,30 @@ def _perform_http_request(
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    if parsed.scheme == "https":
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            parsed.hostname,
-            parsed.port or 443,
-            timeout=timeout,
-        )
-    else:
-        connection = http.client.HTTPConnection(
-            parsed.hostname,
-            parsed.port or 80,
-            timeout=timeout,
-        )
+    netloc = parsed.hostname or ""
+    if parsed.port and (
+        (parsed.scheme == "https" and parsed.port != 443)
+        or (parsed.scheme == "http" and parsed.port != 80)
+    ):
+        netloc = f"{netloc}:{parsed.port}"
+
+    target_url = f"{parsed.scheme}://{netloc}{path}"
 
     try:
-        connection.request("POST", path, body=data, headers=headers)
-        response = connection.getresponse()
-        return response.status, response.reason or "", response.read()
-    except socket.timeout as exc:
+        response = requests.post(
+            target_url,
+            data=data,
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.Timeout as exc:
         raise TimeoutError(str(exc) or "timed out") from exc
-    except (OSError, http.client.HTTPException) as exc:
+    except requests.RequestException as exc:
         raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
-    finally:
-        connection.close()
+
+    status = int(response.status_code)
+    reason = response.reason or ""
+    return status, reason, response.content
 
 
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
