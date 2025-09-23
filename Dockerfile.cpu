@@ -118,31 +118,28 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Verify that all heavy packages were installed and no GPU libraries remain.
 # ``mlflow`` is an optional dependency and may be absent in the base image, so
 # we report its status without failing the build when it's not installed.
-RUN echo "Checking package versions..." && \
-    $VIRTUAL_ENV/bin/python - <<'PY'
-import textwrap
+RUN $VIRTUAL_ENV/bin/python - <<'PY'
+import importlib
 
-exec(textwrap.dedent("""
-    import importlib
+print("Checking package versions...")
 
-    required_modules = (
-        ("torch", "Torch"),
-        ("stable_baselines3", "SB3"),
-        ("pytorch_lightning", "Lightning"),
-    )
+required_modules = (
+    ("torch", "Torch"),
+    ("stable_baselines3", "SB3"),
+    ("pytorch_lightning", "Lightning"),
+)
 
-    for module_name, label in required_modules:
-        module = importlib.import_module(module_name)
-        version = getattr(module, "__version__", "<unknown>")
-        print(f"{label}: {version}")
+for module_name, label in required_modules:
+    module = importlib.import_module(module_name)
+    version = getattr(module, "__version__", "<unknown>")
+    print(f"{label}: {version}")
 
-    try:
-        mlflow = importlib.import_module("mlflow")
-    except ModuleNotFoundError:
-        print("MLflow: not installed (optional)")
-    else:
-        print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
-"""))
+try:
+    mlflow = importlib.import_module("mlflow")
+except ModuleNotFoundError:
+    print("MLflow: not installed (optional)")
+else:
+    print(f"MLflow: {getattr(mlflow, '__version__', '<unknown>')}")
 PY
 
 RUN if /app/venv/bin/pip freeze | grep -qi nvidia; then \
