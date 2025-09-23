@@ -1,11 +1,14 @@
 import os
+import secrets
+
 import pytest
 pytest.importorskip("transformers")
 pytest.importorskip("httpx")
 pytest.importorskip("fastapi")
 pytest.importorskip("fastapi_csrf_protect")
 
-os.environ.setdefault("CSRF_SECRET", "testsecret")
+if "CSRF_SECRET" not in os.environ:
+    os.environ["CSRF_SECRET"] = secrets.token_hex(32)
 try:
     import server
 except RuntimeError:

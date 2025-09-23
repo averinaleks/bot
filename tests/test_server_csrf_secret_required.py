@@ -1,4 +1,5 @@
 import importlib
+import secrets
 import sys
 
 import pytest
@@ -16,10 +17,11 @@ def test_import_requires_csrf_secret(monkeypatch):
 
 
 def test_calling_resolve_without_secret_raises(monkeypatch):
-    monkeypatch.setenv("CSRF_SECRET", "static-test-secret")
+    secret = secrets.token_hex(32)
+    monkeypatch.setenv("CSRF_SECRET", secret)
     sys.modules.pop("server", None)
     server = importlib.import_module("server")
-    assert server._resolve_csrf_secret() == "static-test-secret"
+    assert server._resolve_csrf_secret() == secret
     monkeypatch.delenv("CSRF_SECRET", raising=False)
     with pytest.raises(RuntimeError, match="CSRF_SECRET environment variable is required"):
         server._resolve_csrf_secret()

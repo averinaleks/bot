@@ -2,6 +2,7 @@ import os
 import importlib.util
 import sys
 import asyncio
+import secrets
 
 import pytest
 
@@ -84,7 +85,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 @pytest.fixture
 def csrf_secret(monkeypatch):
-    secret = "testsecret"
+    secret = secrets.token_hex(32)
     monkeypatch.setenv("CSRF_SECRET", secret)
     return secret
 
