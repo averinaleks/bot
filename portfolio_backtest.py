@@ -250,10 +250,14 @@ def portfolio_backtest(
             denom = np.std(neg) + 1e-6
         else:
             denom = np.std(returns_np) + 1e-6
+        seconds = float(pd.Timedelta(timeframe).total_seconds())
+        if seconds <= 0:
+            raise ValueError("timeframe must represent a positive duration")
+        periods_per_year = (365 * 24 * 60 * 60) / seconds
         ratio = (
             np.mean(returns_np)
             / denom
-            * np.sqrt(365 * 24 * 60 / pd.Timedelta(timeframe).total_seconds())
+            * np.sqrt(periods_per_year)
         )
         return float(ratio) if np.isfinite(ratio) else 0.0
     except Exception as e:  # pragma: no cover - log
