@@ -36,6 +36,8 @@ MAX_PROMPT_BYTES = 10000
 MAX_RESPONSE_BYTES = 10000
 # Maximum number of retries for network requests
 MAX_RETRIES = 3
+# Marker stored in allowed IP sets when DNS resolution failed in TEST_MODE.
+_TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
 
 
 def _allow_insecure_url() -> bool:
@@ -135,7 +137,7 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
             resolution_failed = True
-            resolved_ips = {"127.0.0.1"}
+            resolved_ips = {"127.0.0.1", _TEST_MODE_DNS_FALLBACK}
         else:
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
@@ -178,6 +180,17 @@ async def _fetch_response(
     allowed_ips: set[str],
 ) -> bytes:
     """Resolve hostname, verify IP and return response bytes."""
+    skip_ip_verification = False
+    allowed_for_check = allowed_ips
+    if (
+        os.getenv("TEST_MODE") == "1"
+        and _TEST_MODE_DNS_FALLBACK in allowed_ips
+    ):
+        skip_ip_verification = True
+        allowed_for_check = {
+            ip for ip in allowed_ips if ip != _TEST_MODE_DNS_FALLBACK
+        }
+
     try:
         loop = asyncio.get_running_loop()
         current_ips = {
@@ -197,7 +210,9 @@ async def _fetch_response(
             )
             raise GPTClientNetworkError("Failed to resolve GPT_OSS_API host") from exc
 
-    if not current_ips & allowed_ips:
+    if not current_ips & allowed_for_check:
+        if skip_ip_verification:
+            return await _stream_response(client, prompt, url)
         logger.error(
             "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
             hostname,
@@ -205,6 +220,16 @@ async def _fetch_response(
             allowed_ips,
         )
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
+
+    return await _stream_response(client, prompt, url)
+
+
+async def _stream_response(
+    client: httpx.Client | httpx.AsyncClient,
+    prompt: str,
+    url: str,
+) -> bytes:
+    """Stream response content regardless of client type."""
 
     if isinstance(client, httpx.AsyncClient):
         async with client.stream("POST", url, json={"prompt": prompt}) as response:
@@ -218,18 +243,18 @@ async def _fetch_response(
                 if len(content) > MAX_RESPONSE_BYTES:
                     raise GPTClientError("Response exceeds maximum length")
             return bytes(content)
-    else:
-        with client.stream("POST", url, json={"prompt": prompt}) as response:
-            response.raise_for_status()
-            content_type = response.headers.get("Content-Type", "")
-            if not content_type.startswith("application/json"):
-                raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
-            content = bytearray()
-            for chunk in response.iter_bytes():
-                content.extend(chunk)
-                if len(content) > MAX_RESPONSE_BYTES:
-                    raise GPTClientError("Response exceeds maximum length")
-            return bytes(content)
+
+    with client.stream("POST", url, json={"prompt": prompt}) as response:
+        response.raise_for_status()
+        content_type = response.headers.get("Content-Type", "")
+        if not content_type.startswith("application/json"):
+            raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
+        content = bytearray()
+        for chunk in response.iter_bytes():
+            content.extend(chunk)
+            if len(content) > MAX_RESPONSE_BYTES:
+                raise GPTClientError("Response exceeds maximum length")
+        return bytes(content)
 
 
 def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:

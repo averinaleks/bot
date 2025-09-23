@@ -337,6 +337,40 @@ async def test_retry_success(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_retry_success_dns_fallback(monkeypatch, func, client_cls):
+    monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    stream_calls = {"count": 0}
+
+    def fake_stream(self, *args, **kwargs):
+        stream_calls["count"] += 1
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(client_cls, "stream", fake_stream)
+
+    def flaky_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if flaky_getaddrinfo.calls == 0:
+            flaky_getaddrinfo.calls += 1
+            raise socket.gaierror("resolution failed")
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("203.0.113.10", 0))
+        ]
+
+    flaky_getaddrinfo.calls = 0
+
+    async def async_getaddrinfo(self, host, port, family=0, type=0, proto=0, flags=0):
+        return flaky_getaddrinfo(host, port, family, type, proto, flags)
+
+    monkeypatch.setattr(socket, "getaddrinfo", flaky_getaddrinfo)
+    monkeypatch.setattr(asyncio.AbstractEventLoop, "getaddrinfo", async_getaddrinfo)
+
+    assert await run_query(func, "hi") == "ok"
+    assert stream_calls["count"] >= 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_retry_failure(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
     calls = {"count": 0}
