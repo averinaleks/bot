@@ -15,7 +15,7 @@ import logging
 import types
 from importlib.machinery import ModuleSpec
 from types import ModuleType, TracebackType
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from urllib import parse as _urllib_parse
 
 
@@ -203,11 +203,6 @@ def apply() -> None:
             def text(self) -> str:
                 return self._text
 
-            def raise_for_status(self) -> None:  # pragma: no cover - simple helper
-                if 200 <= self.status_code < 400:
-                    return None
-                raise Exception(f"HTTP {self.status_code}")
-
             async def aread(self) -> bytes:
                 return self.content
 
@@ -296,10 +291,10 @@ def apply() -> None:
             async def stream(self, *args: Any, **kwargs: Any):  # pragma: no cover - patched in tests
                 raise NotImplementedError
 
-            async def get(self, *args: Any, **kwargs: Any) -> _HTTPXResponse:
+            async def get(self, url: str, **kwargs: Any) -> _HTTPXResponse:
                 if self.is_closed:
                     raise RuntimeError("Client closed")
-                return _return_response()
+                return _return_response("GET", url, **kwargs)
 
             post = get
 
@@ -328,24 +323,17 @@ def apply() -> None:
             def __enter__(self) -> "_HTTPXClient":  # pragma: no cover - simple helper
                 return self
 
+            def close(self) -> None:  # pragma: no cover - simple no-op
+                return None
+
             def __exit__(
                 self,
                 exc_type: type[BaseException] | None,
                 exc: BaseException | None,
                 tb: TracebackType | None,
-            ) -> bool:
+            ) -> Literal[False]:
                 self.close()
                 return False
-
-            def close(self) -> None:  # pragma: no cover - simple no-op
-                return None
-
-            def __enter__(self) -> "_HTTPXClient":  # pragma: no cover - simple
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
-                self.close()
-                return None
 
         class _HTTPXBaseTransport:  # pragma: no cover - minimal placeholder
             ...
