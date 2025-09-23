@@ -30,15 +30,18 @@ COPY requirements-core.txt .
 ENV VIRTUAL_ENV=/app/venv
 # pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает актуальные уязвимости
 # и подходит для сборки gymnasium.
-RUN python3 -m venv "$VIRTUAL_ENV" && \
-    "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
+RUN python3 -m venv "$VIRTUAL_ENV"
+
+RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         'pip>=24.0' \
         'setuptools>=78.1.1,<81' \
-        wheel && \
-    "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
+        wheel
+
+RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cpu \
-        -r requirements-core.txt && \
-    "$VIRTUAL_ENV"/bin/python - <<'PY'
+        -r requirements-core.txt
+
+RUN "$VIRTUAL_ENV"/bin/python - <<'PY'
 import textwrap
 
 exec(textwrap.dedent("""
@@ -142,9 +145,9 @@ RUN if /app/venv/bin/pip freeze | grep -qi nvidia; then \
     fi
 
 # Use a dedicated non-root user for runtime
-RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
-    && mkdir -p /home/bot \
-    && chown -R bot:bot /app /home/bot
+RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot && \
+    mkdir -p /home/bot && \
+    chown -R bot:bot /app /home/bot
 
 USER bot
 
