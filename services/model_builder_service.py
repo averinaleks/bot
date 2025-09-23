@@ -27,6 +27,7 @@ from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
     safe_joblib_load,
+    set_model_dir,
     verify_model_state_signature,
     write_model_state_signature,
 )
@@ -189,6 +190,7 @@ MODEL_DIR = ensure_writable_directory(
     description="моделей",
     fallback_subdir="trading_bot_models",
 ).resolve()
+set_model_dir(MODEL_DIR)
 def _resolve_model_file(path_value: str | Path | None) -> Path:
     """Return a sanitised path for pre-trained model artefacts."""
 
