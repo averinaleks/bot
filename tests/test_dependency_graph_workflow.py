@@ -45,3 +45,11 @@ def test_dependency_graph_permissions_are_valid() -> None:
 
     assert permissions.get("contents") == "read"
     assert permissions.get("security-events") == "write"
+
+
+def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+    assert "from pathlib import Path" in workflow
+    assert "Path(file).name" in workflow
+    assert "fnmatch(filename, pattern)" in workflow

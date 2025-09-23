@@ -32,6 +32,7 @@ jobs:
           import fnmatch
           import os
           import subprocess
+          from pathlib import Path
           from typing import Sequence
 
           patterns: Sequence[str] = (
@@ -81,11 +82,20 @@ jobs:
                       for line in completed.stdout.splitlines()
                       if line.strip()
                   ]
-                  changed = [
-                      file
-                      for file in files
-                      if any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
-                  ]
+                  changed = []
+                  for file in files:
+                      if not file:
+                          continue
+                      try:
+                          filename = Path(file).name
+                      except Exception:
+                          filename = file
+                      if any(
+                          fnmatch.fnmatch(file, pattern)
+                          or fnmatch.fnmatch(filename, pattern)
+                          for pattern in patterns
+                      ):
+                          changed.append(file)
 
           changed_flag = "true" if diff_failed or bool(changed) else "false"
           output_path = os.environ.get("GITHUB_OUTPUT")
