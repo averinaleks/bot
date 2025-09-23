@@ -19,7 +19,9 @@ import ipaddress
 import json
 import os
 import sys
-import requests
+import http.client
+import socket
+import ssl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,30 +80,32 @@ def _perform_http_request(
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    netloc = parsed.hostname or ""
-    if parsed.port and (
-        (parsed.scheme == "https" and parsed.port != 443)
-        or (parsed.scheme == "http" and parsed.port != 80)
-    ):
-        netloc = f"{netloc}:{parsed.port}"
-
-    target_url = f"{parsed.scheme}://{netloc}{path}"
+    host = parsed.hostname or ""
+    port = parsed.port
+    if parsed.scheme == "https":
+        context = ssl.create_default_context()
+        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
+            host, port=port or 443, timeout=timeout, context=context
+        )
+    else:
+        connection = http.client.HTTPConnection(host, port=port or 80, timeout=timeout)
 
     try:
-        response = requests.post(
-            target_url,
-            data=data,
-            headers=headers,
-            timeout=timeout,
-        )
-    except requests.Timeout as exc:
+        connection.request("POST", path, body=data, headers=headers)
+        response = connection.getresponse()
+        body = response.read()
+        status = int(response.status)
+        reason = response.reason or ""
+        return status, reason, body
+    except socket.timeout as exc:
         raise TimeoutError(str(exc) or "timed out") from exc
-    except requests.RequestException as exc:
+    except (OSError, http.client.HTTPException) as exc:
         raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
-
-    status = int(response.status_code)
-    reason = response.reason or ""
-    return status, reason, response.content
+    finally:
+        try:
+            connection.close()
+        except OSError:
+            pass
 
 
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
