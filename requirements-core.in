@@ -1,7 +1,9 @@
 numpy>=2.2.6  # core numeric library
 pandas>=2.2.2
 ccxt==4.5.5
-ccxtpro>=0.9.0
+# ccxtpro is distributed under a commercial license and cannot be installed
+# automatically in CI. Install it manually in production environments if
+# real-time WebSocket support is required.
 python-telegram-bot>=20.7
 aiohttp>=3.12.15
 websockets>=12.0

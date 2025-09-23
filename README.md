@@ -950,7 +950,7 @@ The test suite relies on the following packages:
 - pandas
 - torch
 - ccxt
-- ccxtpro
+- ccxtpro (опционально, требуется коммерческая лицензия и ручная установка)
 - pybit
 - python-telegram-bot
 - aiohttp

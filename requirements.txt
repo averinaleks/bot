@@ -41,7 +41,7 @@ blinker==1.9.0
     # via flask
 ccxt==4.5.5
     # via -r requirements-core.in
-ccxtpro==1.0.1
+# ccxtpro==1.0.1  # install manually if you have a commercial license
     # via -r requirements-core.in
 certifi==2025.8.3
     # via
