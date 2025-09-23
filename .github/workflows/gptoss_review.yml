@@ -98,7 +98,7 @@ jobs:
           # process to claim the same port which crashed the mock server.  Delegating
           # the selection to the Python helper keeps the operation atomic and
           # removes the race entirely.
-          python scripts/gptoss_mock_server.py \
+          python3 scripts/gptoss_mock_server.py \
             --host 127.0.0.1 \
             --port 0 \
             --port-file mock_server.port \
@@ -218,7 +218,7 @@ jobs:
             exit 0
           fi
 
-          if ! python scripts/prepare_gptoss_diff.py \
+          if ! python3 scripts/prepare_gptoss_diff.py \
             --repo "${{ github.repository }}" \
             --pr-number "${PR_NUMBER}" \
             --token "${GITHUB_TOKEN}" \
@@ -254,7 +254,7 @@ jobs:
             exit 0
           fi
 
-          if ! python scripts/run_gptoss_review.py \
+          if ! python3 scripts/run_gptoss_review.py \
             --diff diff.patch \
             --output review.md \
             --model "${MODEL_NAME}" \
