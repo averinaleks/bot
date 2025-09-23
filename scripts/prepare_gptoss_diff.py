@@ -23,7 +23,9 @@ import os
 import re
 import subprocess  # nosec B404
 import sys
-import requests
+import http.client
+import socket
+import ssl
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -149,21 +151,25 @@ def _perform_https_request(
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    netloc = parsed.hostname
+    host = parsed.hostname
     port = parsed.port or 443
-    if port != 443:
-        netloc = f"{netloc}:{port}"
-    target_url = f"https://{netloc}{path}"
-    try:
-        response = requests.get(target_url, headers=headers, timeout=timeout)
-    except requests.Timeout as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    except requests.RequestException as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
 
-    reason = response.reason or ""
-    payload = response.content
-    return int(response.status_code), reason, payload
+    context = ssl.create_default_context()
+    connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
+    try:
+        connection.request("GET", path, headers=headers)
+        response = connection.getresponse()
+        body = response.read()
+        status = int(response.status)
+        reason = response.reason or ""
+        return status, reason, body
+    except (socket.timeout, OSError, http.client.HTTPException) as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    finally:
+        try:
+            connection.close()
+        except OSError:
+            pass
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
