@@ -64,7 +64,14 @@ exec(textwrap.dedent("""
 """))
 PY
 
-RUN set -eu; \
+# NOTE: keep the cleanup below in a dedicated RUN step. When this block was
+# accidentally chained to the heredoc above, Docker tried to interpret the next
+# line as a top-level instruction ("&&"/"nvidia_packages=..."), which broke the
+# docker-publish workflow with a "dockerfile parse error". See
+# https://github.com/averinaleks/bot/actions/workflows/docker-publish.yml for the
+# historical failures.
+
+RUN set -euo pipefail; \
     nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)"; \
     if [ -n "$nvidia_packages" ]; then \
         printf '%s\n' "$nvidia_packages" | cut -d= -f1 | xargs -r "$VIRTUAL_ENV"/bin/pip uninstall -y; \
