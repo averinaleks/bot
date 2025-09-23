@@ -7,7 +7,7 @@ from typing import Any
 _CONTROL_MAP: dict[int, str] = {
     ord("\n"): "\\n",
     ord("\r"): "\\r",
-    ord("\t"): "\t",
+    ord("\t"): "\\t",
 }
 for _code_point in range(32):
     if _code_point in (10, 13, 9):  # already handled newlines, carriage return, tab
