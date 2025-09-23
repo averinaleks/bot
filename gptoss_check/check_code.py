@@ -77,7 +77,14 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
             def __init__(self, timeout: float = 10.0) -> None:
                 self.timeout = timeout
 
-            def _request(self, method: str, url: str, *, body: bytes | None, headers: dict[str, str]) -> _SimpleResponse:
+            def _request(
+                self,
+                method: str,
+                url: str,
+                *,
+                body: bytes | None,
+                headers: dict[str, str],
+            ) -> _SimpleResponse:
                 parsed = urlparse(url)
                 if parsed.scheme not in {"http", "https"}:
                     raise HTTPError(f"Unsupported URL scheme: {parsed.scheme}")
