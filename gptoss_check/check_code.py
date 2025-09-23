@@ -1,11 +1,13 @@
+import json
 import logging
 import os
+import socket
 import time
 from contextlib import contextmanager
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urljoin, urlparse, urlunparse
-
-import httpx
 
 from services.logging_utils import sanitize_log_value
 
@@ -15,22 +17,145 @@ logger = logging.getLogger(__name__)
 try:  # pragma: no cover - exercised via docker compose integration
     from http_client import get_httpx_client as _get_httpx_client
 except Exception as import_error:  # pragma: no cover - fallback for CI container
+    _http_client_error = import_error
+    try:
+        import httpx as _httpx  # type: ignore[import-not-found]
+    except Exception as httpx_error:  # pragma: no cover - fallback when httpx missing
+        _httpx = None
+        _httpx_error = httpx_error
+    else:  # pragma: no cover - executed when httpx import succeeds
+        _httpx_error = None
 
-    @contextmanager
-    def get_httpx_client(timeout: float = 10.0, **kwargs):
-        """Provide a minimal ``httpx.Client`` when the shared helper is unavailable."""
+    if _httpx is not None:  # pragma: no cover - executed when httpx is installed
 
-        kwargs.setdefault("timeout", timeout)
-        kwargs.setdefault("trust_env", False)
-        client = httpx.Client(**kwargs)
-        try:
-            yield client
-        finally:
-            client.close()
+        @contextmanager
+        def get_httpx_client(timeout: float = 10.0, **kwargs):
+            """Provide the project-wide HTTPX client helper."""
 
-    logger.debug("Using fallback httpx client for GPT-OSS check: %s", import_error)
+            kwargs.setdefault("timeout", timeout)
+            kwargs.setdefault("trust_env", False)
+            client = _httpx.Client(**kwargs)
+            try:
+                yield client
+            finally:
+                client.close()
+
+        HTTPError = _httpx.HTTPError
+        httpx = _httpx
+        _fallback_reason = _http_client_error
+    else:  # pragma: no cover - executed when httpx is unavailable
+
+        class HTTPError(RuntimeError):
+            """Base error raised by the lightweight HTTP client."""
+
+        class _SimpleResponse:
+            """Lightweight response object mimicking :class:`httpx.Response`."""
+
+            def __init__(self, status_code: int, headers: dict[str, str], body: bytes) -> None:
+                self.status_code = status_code
+                self.headers = headers
+                self._body = body
+
+            def json(self) -> object:
+                if not self._body:
+                    return {}
+                try:
+                    return json.loads(self._body.decode("utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Response is not valid JSON") from exc
+
+            def close(self) -> None:  # pragma: no cover - no resources to release
+                return
+
+            def raise_for_status(self) -> None:
+                if self.status_code >= 400:
+                    raise HTTPError(f"HTTP request failed with status {self.status_code}")
+
+        class _SimpleClient:
+            """Minimal HTTP client that uses the standard library."""
+
+            def __init__(self, timeout: float = 10.0) -> None:
+                self.timeout = timeout
+
+            def _request(self, method: str, url: str, *, body: bytes | None, headers: dict[str, str]) -> _SimpleResponse:
+                parsed = urlparse(url)
+                if parsed.scheme not in {"http", "https"}:
+                    raise HTTPError(f"Unsupported URL scheme: {parsed.scheme}")
+
+                connection_cls = HTTPConnection if parsed.scheme == "http" else HTTPSConnection
+                host = parsed.hostname or ""
+                port = parsed.port
+                path = parsed.path or "/"
+                if parsed.query:
+                    path = f"{path}?{parsed.query}"
+
+                try:
+                    connection = connection_cls(host, port, timeout=self.timeout)  # type: ignore[arg-type]
+                    connection.request(method.upper(), path, body=body, headers=headers)
+                    response = connection.getresponse()
+                    payload = response.read()
+                    header_map = {key: value for key, value in response.getheaders()}
+                    status = response.status
+                except (HTTPException, OSError, ValueError, socket.error) as exc:
+                    raise HTTPError(str(exc)) from exc
+                finally:
+                    try:
+                        connection.close()  # type: ignore[has-type]
+                    except Exception:  # pragma: no cover - best effort cleanup
+                        pass
+
+                return _SimpleResponse(status, header_map, payload)
+
+            def request(self, method: str, url: str, **kwargs) -> _SimpleResponse:
+                headers = {str(k): str(v) for k, v in (kwargs.get("headers") or {}).items()}
+                json_payload = kwargs.get("json")
+                data_payload = kwargs.get("data")
+                body: bytes | None = None
+                if json_payload is not None:
+                    body = json.dumps(json_payload).encode("utf-8")
+                    headers.setdefault("Content-Type", "application/json")
+                elif data_payload is not None:
+                    if isinstance(data_payload, bytes):
+                        body = data_payload
+                    else:
+                        body = str(data_payload).encode("utf-8")
+                return self._request(method, url, body=body, headers=headers)
+
+            def get(self, url: str, **kwargs) -> _SimpleResponse:
+                return self.request("GET", url, **kwargs)
+
+            def post(self, url: str, **kwargs) -> _SimpleResponse:
+                return self.request("POST", url, **kwargs)
+
+            def close(self) -> None:  # pragma: no cover - nothing to close
+                return
+
+            def __enter__(self) -> "_SimpleClient":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                self.close()
+
+        @contextmanager
+        def get_httpx_client(timeout: float = 10.0, **kwargs):
+            """Provide a minimal HTTP client backed by the standard library."""
+
+            client = _SimpleClient(timeout=timeout)
+            try:
+                yield client
+            finally:
+                client.close()
+
+        httpx = SimpleNamespace(HTTPError=HTTPError)
+        _fallback_reason = _httpx_error or _http_client_error
+
+    logger.debug("Using fallback HTTP client for GPT-OSS check: %s", _fallback_reason)
 else:  # pragma: no cover - import succeeds in fully configured environments
+    import httpx as _httpx
+
     get_httpx_client = _get_httpx_client
+    HTTPError = _httpx.HTTPError
+    httpx = _httpx
 
 try:  # pragma: no cover - exercised via docker compose integration
     from gpt_client import GPTClientError as _GPTClientError, query_gpt as _query_gpt
@@ -156,7 +281,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                 finally:
                     response.close()
             return
-        except httpx.HTTPError:
+        except HTTPError:
             pass
 
         try:
@@ -167,7 +292,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                 finally:
                     response.close()
             return
-        except httpx.HTTPError:
+        except HTTPError:
             time.sleep(1)
 
     raise RuntimeError(f"Сервер GPT-OSS по адресу {api_url} не отвечает")
@@ -208,7 +333,7 @@ def send_telegram(msg: str) -> None:
                     data={"chat_id": chat_id, "text": msg[:4000]},
                 )
                 response.close()
-        except httpx.HTTPError as err:
+        except HTTPError as err:
             logger.warning("⚠️ Failed to send Telegram message: %s", err)
 
 
