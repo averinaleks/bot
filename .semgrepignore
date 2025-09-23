@@ -1,0 +1,2 @@
+# Allow requested static demo credentials in sample environment configuration
+.env

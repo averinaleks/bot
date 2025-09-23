@@ -30,6 +30,9 @@ def _load_skip_flag(config_path: Path) -> bool:
     return False
 
 
+PACKAGE_NAME = "gptoss_check"
+
+
 def main(config_path: Optional[Path] = None) -> None:
     logging.basicConfig(level=logging.INFO)
     if config_path is None:
@@ -46,11 +49,14 @@ def main(config_path: Optional[Path] = None) -> None:
         from . import check_code  # package execution
     except ImportError:  # script execution
         module_dir = Path(__file__).resolve().parent
-        package_name = module_dir.name
         parent_dir = module_dir.parent
+        if module_dir.name != PACKAGE_NAME:
+            raise RuntimeError(
+                f"Unexpected package directory name: {module_dir.name!r}"
+            )
         if str(parent_dir) not in sys.path:
             sys.path.insert(0, str(parent_dir))
-        check_code = importlib.import_module(f"{package_name}.check_code")
+        check_code = importlib.import_module(f"{PACKAGE_NAME}.check_code")
     logger.info("Running GPT-OSS check...")
     check_code.run()
     logger.info("GPT-OSS check completed")

@@ -315,58 +315,23 @@ except ValueError:
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
-_TOKEN_RE = re.compile(r"(?i)(bearer\s+)[^\s,]+")
-_SENSITIVE_RE = re.compile(r"(?i)(token|cookie|x-api-key)=([^;\s]+)")
-
-
-def _sanitize_header_value(value: str) -> str:
-    """Mask sensitive data within a header value."""
-    value = _TOKEN_RE.sub(r"\1***", value)
-    value = _SENSITIVE_RE.sub(lambda m: f"{m.group(1)}=***", value)
-    return value
-
-
-def _loggable_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    sensitive = {
-        "authorization",
-        "cookie",
-        "set-cookie",
-        "x-api-key",
-        "proxy-authorization",
-        "x-auth-token",
-        "x-csrf-token",
-        "x-xsrf-token",
-    }
-    return {
-        sanitize_log_value(k): (
-            "***"
-            if k.lower() in sensitive
-            else sanitize_log_value(_sanitize_header_value(v))
-        )
-        for k, v in headers.items()
-    }
-
-
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
-    redacted_headers = _loggable_headers(request.headers)
     safe_method = sanitize_log_value(request.method)
     safe_url = sanitize_log_value(str(request.url))
     if not API_KEYS:
         logging.warning(
-            "API_KEYS is empty; rejecting request: method=%s url=%s headers=%s",
+            "Rejecting request: authentication configuration is missing. method=%s url=%s",
             safe_method,
             safe_url,
-            redacted_headers,
         )
         return Response(status_code=401)
     auth = request.headers.get("Authorization")
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
-            "Unauthorized request: method=%s url=%s headers=%s",
+            "Unauthorized request: method=%s url=%s",
             safe_method,
             safe_url,
-            redacted_headers,
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -375,10 +340,9 @@ async def check_api_key(request: Request, call_next):
             break
     else:
         logging.warning(
-            "Unauthorized request: method=%s url=%s headers=%s",
+            "Unauthorized request: method=%s url=%s",
             safe_method,
             safe_url,
-            redacted_headers,
         )
         return Response(status_code=401)
     return await call_next(request)
@@ -394,10 +358,9 @@ async def enforce_csrf(request: Request, call_next):
                 await csrf_protect.validate_csrf(request)
             except CsrfProtectError:
                 logging.warning(
-                    "CSRF validation failed: method=%s url=%s headers=%s",
+                    "CSRF validation failed: method=%s url=%s",
                     sanitize_log_value(request.method),
                     sanitize_log_value(str(request.url)),
-                    _loggable_headers(request.headers),
                 )
                 raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     return await call_next(request)
