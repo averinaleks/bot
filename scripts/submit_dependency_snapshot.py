@@ -6,14 +6,16 @@ import fnmatch
 import json
 import os
 import re
+import socket
 import sys
 import time
-import requests
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import quote, urlparse
 
 MANIFEST_PATTERNS = (
@@ -408,14 +410,15 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     target_url = f"https://{netloc}{path}"
     last_error: Exception | None = None
     for attempt in range(1, 4):
+        request = urllib_request.Request(
+            target_url, data=body, headers=headers, method="POST"
+        )
         try:
-            response = requests.post(
-                target_url,
-                data=body,
-                headers=headers,
-                timeout=30,
-            )
-        except requests.Timeout as exc:
+            with urllib_request.urlopen(request, timeout=30) as response:
+                status_code = int(response.status)
+                reason = response.reason or ""
+                payload = response.read()
+        except (TimeoutError, socket.timeout) as exc:
             message = str(exc) or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -428,8 +431,34 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        except requests.RequestException as exc:
-            message = str(exc) or exc.__class__.__name__
+        except urllib_error.HTTPError as exc:
+            status_code = int(exc.code)
+            reason = exc.reason or ""
+            payload = exc.read() if hasattr(exc, "read") else b""
+            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = DependencySubmissionError(
+                    status_code,
+                    f"Retryable HTTP {status_code}: {reason}",
+                )
+                continue
+            message = payload.decode(errors="replace") or reason
+            print(
+                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                file=sys.stderr,
+            )
+            raise DependencySubmissionError(
+                status_code,
+                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+            )
+        except urllib_error.URLError as exc:
+            reason = getattr(exc, "reason", exc)
+            message = str(reason).strip() or exc.__class__.__name__
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
@@ -442,10 +471,6 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             last_error = exc
             break
         else:
-            status_code = int(response.status_code)
-            reason = response.reason or ""
-            payload = response.content
-
             if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
@@ -474,7 +499,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             return
 
     if last_error is not None:
-        message = str(last_error) or last_error.__class__.__name__
+        message = str(last_error).strip() or last_error.__class__.__name__
         raise DependencySubmissionError(None, message, last_error)
 
 
