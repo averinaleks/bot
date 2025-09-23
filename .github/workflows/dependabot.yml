@@ -171,6 +171,15 @@ jobs:
         run: |
           set -uo pipefail
 
+          write_summary() {
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              mkdir -p "$(dirname "$GITHUB_STEP_SUMMARY")"
+              printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' "$1"
+            fi
+          }
+
           api_url="https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/auto-merge"
           payload='{"merge_method":"squash"}'
 
