@@ -7,7 +7,7 @@ on:
   pull_request_target:
     branches:
       - main
-    types: [opened, reopened, synchronize, labeled, unlabeled, edited]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
   workflow_dispatch:
 
 permissions:
