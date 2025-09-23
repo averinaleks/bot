@@ -47,6 +47,21 @@ def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
     assert resolved["torch"]["package_url"] == "pkg:pypi/torch@2.8.0%2Bcpu"
 
 
+def test_parse_requirements_handles_decode_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "requirements.txt"
+    manifest.write_bytes(b"\xff\xfeinvalid")
+
+    resolved = snapshot._parse_requirements(manifest)
+
+    assert not resolved
+
+    captured = capsys.readouterr()
+    assert "encoding error" in captured.err
+    assert "requirements.txt" in captured.err
+
+
 def test_submit_dependency_snapshot_skips_when_env_missing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
