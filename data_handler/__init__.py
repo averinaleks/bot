@@ -8,17 +8,20 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - Flask not installed
     api_app = None  # type: ignore[assignment]
 from .storage import DEFAULT_PRICE
-from bot import http_client as _http_client
 
 
 async def get_http_client():
     """Expose the shared async HTTP client used across the project."""
+
+    from bot import http_client as _http_client  # Local import avoids import side-effects
 
     return await _http_client.get_async_http_client()
 
 
 async def close_http_client() -> None:
     """Close the shared async HTTP client if it exists."""
+
+    from bot import http_client as _http_client  # Imported on demand to prevent env validation on import
 
     await _http_client.close_async_http_client()
 
