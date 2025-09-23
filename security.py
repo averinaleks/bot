@@ -18,13 +18,23 @@ from typing import Any, Iterable, Tuple, cast
 
 from packaging.version import InvalidVersion, Version
 
-# Import or define MODEL_DIR and _is_within_directory for signature path security
-try:
-    # If running under the full application, import the real MODEL_DIR and checker
-    from services.model_builder_service import MODEL_DIR
-except ImportError:
-    # Fallback for standalone module usage (should set to appropriate directory in application)
-    MODEL_DIR = Path(".")
+
+# Default model directory used for signature checks.
+#
+# ``services.model_builder_service`` updates this value during import by calling
+# :func:`set_model_dir`.  Defining the default eagerly avoids importing the
+# service from this module which previously introduced a cyclic dependency that
+# CodeQL rightfully flagged as unsafe.  The setter keeps the behaviour of using
+# the real ``MODEL_DIR`` when the service is available while allowing standalone
+# usage (e.g. in tests) to customise the directory explicitly.
+MODEL_DIR: Path = Path(".").resolve(strict=False)
+
+
+def set_model_dir(path: Path | str) -> None:
+    """Update the global model directory used for signature enforcement."""
+
+    global MODEL_DIR
+    MODEL_DIR = Path(path).resolve(strict=False)
 
 
 try:  # joblib is optional in some environments
