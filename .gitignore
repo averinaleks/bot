@@ -8,3 +8,5 @@ venv/
 .venv/
 default.pkl
 nonexistent
+
+default.pkl.sig
