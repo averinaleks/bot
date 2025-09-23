@@ -33,56 +33,94 @@ jobs:
           import fnmatch
           import os
           import subprocess
+          from typing import Sequence
 
-          patterns = ("requirements*.txt", "requirements*.in", "requirements*.out")
+          patterns: Sequence[str] = (
+              "requirements*.txt",
+              "requirements*.in",
+              "requirements*.out",
+          )
           before = os.environ.get("BEFORE") or ""
           after = os.environ.get("AFTER") or ""
 
+          diff_failed = False
+          changed: list[str]
+
           if not after:
-              raise SystemExit("Missing GITHUB_SHA value")
-
-          if not before or set(before) == {"0"}:
-              before = f"{after}^"
-
-          try:
-              completed = subprocess.run(
-                  ["git", "diff", "--name-only", before, after],
-                  check=True,
-                  stdout=subprocess.PIPE,
-                  text=True,
+              print(
+                  "::warning::Missing GITHUB_SHA value; assuming dependency manifests changed.",
+                  flush=True,
               )
-          except subprocess.CalledProcessError as exc:
-              print(f"::warning::Unable to determine diff: {exc}")
               diff_failed = True
-              changed: list[str] = []
+              changed = []
           else:
-              diff_failed = False
-              files = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
-              changed = [
-                  file
-                  for file in files
-                  if any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
-              ]
+              if not before or set(before) == {"0"}:
+                  before = f"{after}^"
+
+              try:
+                  completed = subprocess.run(
+                      ["git", "diff", "--name-only", before, after],
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      text=True,
+                  )
+              except subprocess.CalledProcessError as exc:
+                  print(f"::warning::Unable to determine diff: {exc}", flush=True)
+                  diff_failed = True
+                  changed = []
+              except Exception as exc:  # pragma: no cover - defensive guard for CI
+                  print(
+                      "::warning::Unexpected error while detecting manifest changes:",
+                      exc,
+                      flush=True,
+                  )
+                  diff_failed = True
+                  changed = []
+              else:
+                  files = [
+                      line.strip()
+                      for line in completed.stdout.splitlines()
+                      if line.strip()
+                  ]
+                  changed = [
+                      file
+                      for file in files
+                      if any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
+                  ]
 
           changed_flag = "true" if diff_failed or bool(changed) else "false"
           output_path = os.environ.get("GITHUB_OUTPUT")
           if not output_path:
-              raise SystemExit("Missing GITHUB_OUTPUT")
-
-          with open(output_path, "a", encoding="utf-8") as stream:
-              stream.write(f"changed={changed_flag}\n")
-              if changed:
-                  stream.write("files<<EOF\n")
-                  stream.write("\n".join(changed))
-                  stream.write("\nEOF\n")
-          if changed_flag == "true" and not changed and diff_failed:
-              print("Diff calculation failed; proceeding with dependency snapshot submission.")
-          elif changed:
-              print("Dependency manifest changes detected:")
-              for path in changed:
-                  print(f"  - {path}")
+              print(
+                  "::warning::GITHUB_OUTPUT is not available; downstream steps will be skipped.",
+                  flush=True,
+              )
           else:
-              print("No dependency manifest changes detected.")
+              try:
+                  with open(output_path, "a", encoding="utf-8") as stream:
+                      stream.write(f"changed={changed_flag}\n")
+                      if changed:
+                          stream.write("files<<EOF\n")
+                          stream.write("\n".join(changed))
+                          stream.write("\nEOF\n")
+              except OSError as exc:  # pragma: no cover - filesystem guard for CI
+                  print(
+                      "::warning::Unable to write change detection outputs:",
+                      exc,
+                      flush=True,
+                  )
+
+          if changed_flag == "true" and not changed and diff_failed:
+              print(
+                  "Diff calculation failed; proceeding with dependency snapshot submission.",
+                  flush=True,
+              )
+          elif changed:
+              print("Dependency manifest changes detected:", flush=True)
+              for path in changed:
+                  print(f"  - {path}", flush=True)
+          else:
+              print("No dependency manifest changes detected.", flush=True)
           PY
       - name: Prepare requirements
         if: steps.detect.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
