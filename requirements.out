@@ -379,7 +379,7 @@ protobuf==6.32.0
     # via
     #   -r requirements.txt
     #   tensorboardx
-psutil==7.0.0
+psutil==7.1.0
     # via -r requirements.txt
 pyarrow==21.0.0
     # via
