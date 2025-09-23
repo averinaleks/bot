@@ -164,8 +164,6 @@ services:
         soft: 65536
         hard: 65536
   gptoss_check:
-    image: python:3.11-slim
-    command: python3 gptoss_check/main.py
     working_dir: /workspace
     volumes:
       - .:/workspace
