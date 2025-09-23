@@ -34,6 +34,7 @@ from bot.utils import (
     ensure_writable_directory,
     is_cuda_available,
     logger,
+    validate_host,
 )
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
@@ -2330,7 +2331,7 @@ def ping():
 if __name__ == "__main__":
     configure_logging()
     load_dotenv()
-    host = os.getenv("HOST", "127.0.0.1")
+    host = validate_host()
     port = int(os.getenv("MODEL_BUILDER_PORT", "8001"))
     _load_model()
     logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
