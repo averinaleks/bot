@@ -301,20 +301,74 @@ if NN_FRAMEWORK != "sklearn":
         app.logger.exception("Failed to load ModelBuilder state")
 
 else:  # scikit-learn fallback used by tests
-    from sklearn.linear_model import LogisticRegression
+    try:
+        from sklearn.linear_model import LogisticRegression
+    except Exception as exc:  # pragma: no cover - missing sklearn in tests
+        LOGGER.warning("Не удалось импортировать sklearn.linear_model: %s", exc)
+
+        class LogisticRegression:  # type: ignore
+            """Упрощённая замена LogisticRegression для тестового режима."""
+
+            def __init__(self) -> None:
+                self.coef_: np.ndarray | None = None
+                self.intercept_: float = 0.0
+
+            def fit(self, X, y):  # pragma: no cover - simple heuristic
+                features = np.asarray(X, dtype=float)
+                labels = np.asarray(y, dtype=float)
+                if features.ndim == 1:
+                    features = features.reshape(-1, 1)
+                if features.size == 0:
+                    raise ValueError("training data is empty")
+                if labels.shape[0] != features.shape[0]:
+                    raise ValueError("labels size mismatch")
+                positive = features[labels >= 0.5]
+                negative = features[labels < 0.5]
+                if positive.size == 0 or negative.size == 0:
+                    self.coef_ = np.zeros((1, features.shape[1]))
+                    self.intercept_ = 0.0
+                else:
+                    pos_mean = positive.mean(axis=0)
+                    neg_mean = negative.mean(axis=0)
+                    weights = pos_mean - neg_mean
+                    self.coef_ = weights.reshape(1, -1)
+                    midpoint = (pos_mean + neg_mean) / 2
+                    self.intercept_ = -float(np.dot(weights, midpoint))
+                return self
+
+            def predict_proba(self, X):  # pragma: no cover - simple heuristic
+                features = np.asarray(X, dtype=float)
+                if features.ndim == 1:
+                    features = features.reshape(-1, 1)
+                if self.coef_ is None:
+                    probs = np.full((features.shape[0], 1), 0.5)
+                else:
+                    logits = features @ self.coef_.T + self.intercept_
+                    logits = np.clip(logits, -50.0, 50.0)
+                    probs = 1.0 / (1.0 + np.exp(-logits))
+                probs = probs.reshape(-1)
+                return np.column_stack((1.0 - probs, probs))
 
     try:  # optional dependency
         from sklearn.preprocessing import StandardScaler
-    except Exception:  # pragma: no cover - fallback when sklearn missing
+    except Exception as exc:  # pragma: no cover - fallback when sklearn missing
+        LOGGER.warning("Не удалось импортировать sklearn.preprocessing: %s", exc)
+
         class StandardScaler:  # type: ignore
             def fit(self, X):
-                self.mean_ = np.mean(X, axis=0)
-                self.scale_ = np.std(X, axis=0)
+                values = np.asarray(X, dtype=float)
+                if values.ndim == 1:
+                    values = values.reshape(-1, 1)
+                self.mean_ = np.mean(values, axis=0)
+                self.scale_ = np.std(values, axis=0)
                 return self
 
             def transform(self, X):
+                values = np.asarray(X, dtype=float)
+                if values.ndim == 1:
+                    values = values.reshape(-1, 1)
                 scale = np.where(self.scale_ == 0, 1, self.scale_)
-                return (X - self.mean_) / scale
+                return (values - self.mean_) / scale
 
             def fit_transform(self, X):
                 self.fit(X)
