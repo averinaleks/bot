@@ -737,19 +737,20 @@ def _train_model_lightning(
                 if hasattr(torch.cuda, "empty_cache"):
                     torch.cuda.empty_cache()
                 device = torch.device("cpu")
+                pin_memory = device.type == "cuda"
                 train_loader = DataLoader(
                     train_ds,
                     batch_size=actual_batch_size,
                     shuffle=False,
                     num_workers=num_workers,
-                    pin_memory=False,
+                    pin_memory=pin_memory,
                 )
                 val_loader = DataLoader(
                     val_ds,
                     batch_size=actual_batch_size,
                     shuffle=False,
                     num_workers=num_workers,
-                    pin_memory=False,
+                    pin_memory=pin_memory,
                 )
                 trainer = pl.Trainer(
                     max_epochs=epochs,

@@ -76,10 +76,9 @@ def _require_api_key() -> "ResponseReturnValue | None":
 
     remote = request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown"
     logging.getLogger(__name__).warning(
-        "Отклонён запрос к %s от %s: отсутствует или неверный X-API-KEY (%s)",
+        "Запрос к %s от %s отклонён: проверка API-ключа не пройдена",
         sanitize_log_value(request.path),
         sanitize_log_value(remote),
-        reason,
     )
     return jsonify({'error': 'unauthorized'}), 401
 

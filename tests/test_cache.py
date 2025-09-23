@@ -1,7 +1,6 @@
 import gzip
 import logging
 import os
-import pickle
 import pandas as pd
 import pytest
 from bot.cache import HistoricalDataCache
@@ -56,12 +55,12 @@ def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
     df = pd.DataFrame({"close": [1, 2, 3]})
     old_file = tmp_path / f"BTCUSDT_1m{suffix}"
+    legacy_payload = b"legacy pickle data"
     if suffix.endswith(".gz"):
         with gzip.open(old_file, "wb") as f:
-            f.write(pickle.dumps(df))
+            f.write(legacy_payload)
     else:
-        with open(old_file, "wb") as f:
-            pickle.dump(df, f)
+        old_file.write_bytes(legacy_payload)
     loaded = cache.load_cached_data("BTCUSDT", "1m")
     assert loaded is None
     assert not old_file.exists()

@@ -6,15 +6,15 @@ import config
 
 
 def test_env_list_parsing_json(monkeypatch):
-    monkeypatch.setenv("BACKUP_WS_URLS", '["ws://a", "ws://b"]')
+    monkeypatch.setenv("BACKUP_WS_URLS", '["wss://a", "wss://b"]')
     cfg = config.load_config()
-    assert cfg.backup_ws_urls == ["ws://a", "ws://b"]
+    assert cfg.backup_ws_urls == ["wss://a", "wss://b"]
 
 
 def test_env_list_parsing_csv(monkeypatch):
-    monkeypatch.setenv("BACKUP_WS_URLS", 'ws://a,ws://b')
+    monkeypatch.setenv("BACKUP_WS_URLS", 'wss://a,wss://b')
     cfg = config.load_config()
-    assert cfg.backup_ws_urls == ["ws://a", "ws://b"]
+    assert cfg.backup_ws_urls == ["wss://a", "wss://b"]
 
 
 def test_convert_list_int():

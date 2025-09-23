@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import os
 from typing import Tuple, TypedDict
-
-import numpy as np
 
 KERAS_FRAMEWORKS = {"tensorflow", "keras"}
 PYTORCH_FRAMEWORKS = {"pytorch", "lightning"}
@@ -140,9 +139,9 @@ def _torch_architectures():
             self.dropout = nn.Dropout(p=dropout)
             pe = torch.zeros(max_len, d_model)
             position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+            decay = -math.log(10000.0) / d_model
             div_term = torch.exp(
-                torch.arange(0, d_model, 2, dtype=torch.float)
-                * (-(np.log(10000.0) / d_model))
+                torch.arange(0, d_model, 2, dtype=torch.float) * decay
             )
             pe[:, 0::2] = torch.sin(position * div_term)
             pe[:, 1::2] = torch.cos(position * div_term)

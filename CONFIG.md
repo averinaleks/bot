@@ -5,8 +5,8 @@ Each option corresponds to a field in `config.json` and the `BotConfig`
 dataclass.  Default values are shown for reference.
 
 List parameters supplied via environment variables must be provided either as
-JSON arrays (e.g. `["ws://a", "ws://b"]`) or as comma-separated values such as
-`ws://a,ws://b`.
+JSON arrays (e.g. `["wss://a", "wss://b"]`) or as comma-separated values such as
+`wss://a,wss://b`.
 
 Boolean parameters are case-insensitive and accept `1`/`true`/`yes`/`on` for
 enabled and `0`/`false`/`no`/`off` for disabled values.
