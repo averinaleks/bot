@@ -291,14 +291,21 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
         except HTTPError:
             pass
 
+        payload = {"prompt": "ping"}
+        model = os.getenv("GPT_OSS_MODEL")
+        if model:
+            payload["model"] = model
+
         try:
             with get_httpx_client(timeout=5, trust_env=False) as client:
-                response = client.post(completions_url, json={})
+                response = client.post(completions_url, json=payload)
                 try:
+                    status_code = getattr(response, "status_code", None)
+                    if isinstance(status_code, int) and status_code < 500:
+                        return
                     response.raise_for_status()
                 finally:
                     response.close()
-            return
         except HTTPError:
             time.sleep(1)
 

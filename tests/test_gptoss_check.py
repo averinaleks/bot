@@ -103,8 +103,9 @@ def test_run_handles_unexpected_query_error(monkeypatch, caplog):
 
 def test_wait_for_api_http_error(monkeypatch):
     class DummyResponse:
-        def __init__(self) -> None:
+        def __init__(self, status_code: int) -> None:
             self.closed = False
+            self.status_code = status_code
 
         def close(self) -> None:
             self.closed = True
@@ -113,14 +114,14 @@ def test_wait_for_api_http_error(monkeypatch):
             raise httpx.HTTPStatusError(
                 "err",
                 request=httpx.Request("GET", "http://test"),
-                response=httpx.Response(404),
+                response=httpx.Response(self.status_code),
             )
 
     responses = []
 
     class DummyClient:
         def __init__(self) -> None:
-            self.response = DummyResponse()
+            self.response = DummyResponse(status_code=503)
             responses.append(self.response)
 
         def __enter__(self):
@@ -190,9 +191,10 @@ def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
     called = []
 
     class DummyResponse:
-        def __init__(self, should_raise: bool = False) -> None:
+        def __init__(self, should_raise: bool = False, status_code: int = 200) -> None:
             self.should_raise = should_raise
             self.closed = False
+            self.status_code = status_code
 
         def close(self):
             self.closed = True
@@ -204,7 +206,7 @@ def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
                 raise httpx.HTTPStatusError(
                     "err",
                     request=httpx.Request("GET", "http://test"),
-                    response=httpx.Response(404),
+                    response=httpx.Response(self.status_code),
                 )
 
     class GetClient:
@@ -216,7 +218,7 @@ def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
 
         def get(self, url):
             called.append(("get", url))
-            return DummyResponse(should_raise=True)
+            return DummyResponse(should_raise=True, status_code=503)
 
     class PostClient:
         def __enter__(self):
@@ -226,7 +228,7 @@ def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
             return False
 
         def post(self, url, json):
-            called.append(("post", url))
+            called.append(("post", url, json))
             return DummyResponse()
 
     clients = [GetClient(), PostClient()]
@@ -241,7 +243,66 @@ def test_wait_for_api_falls_back_to_completions_endpoint(monkeypatch):
     check_code.wait_for_api("http://gptoss:8000/api", timeout=1)
 
     assert ("get", "http://gptoss:8000/api/v1/health") in called
-    assert ("post", "http://gptoss:8000/api/v1/completions") in called
+    assert ("post", "http://gptoss:8000/api/v1/completions", {"prompt": "ping"}) in called
+    assert called.count("closed") >= 2
+
+
+def test_wait_for_api_accepts_client_errors(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_MODEL", "test-model")
+    called = []
+
+    class DummyResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+            called.append("closed")
+
+        def raise_for_status(self):
+            called.append("raise")
+            raise httpx.HTTPStatusError(
+                "err",
+                request=httpx.Request("POST", "http://test"),
+                response=httpx.Response(self.status_code),
+            )
+
+    class GetClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            called.append(("get", url))
+            return DummyResponse(status_code=503)
+
+    class PostClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, json):
+            called.append(("post", url, json))
+            return DummyResponse(status_code=400)
+
+    clients = [GetClient(), PostClient()]
+
+    def fake_client(**_):
+        return clients.pop(0)
+
+    monkeypatch.setattr(check_code, "get_httpx_client", fake_client)
+    monkeypatch.setattr(check_code.time, "time", lambda: 0)
+    monkeypatch.setattr(check_code.time, "sleep", lambda s: None)
+
+    check_code.wait_for_api("http://gptoss:8000/api", timeout=1)
+
+    assert ("post", "http://gptoss:8000/api/v1/completions", {"prompt": "ping", "model": "test-model"}) in called
+    assert "raise" in called
     assert called.count("closed") >= 2
 
 
