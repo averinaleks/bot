@@ -198,10 +198,31 @@ def _encode_version_for_purl(version: str) -> str:
     return quote(version, safe=safe_chars)
 
 
+def _read_manifest_text(path: Path) -> str | None:
+    """Return the decoded contents of a requirements file or ``None`` on error."""
+
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        relative = path.as_posix()
+        print(
+            (
+                f"Skipping manifest '{relative}' due to encoding error: {exc}. "
+                "File contents must be valid UTF-8."
+            ),
+            file=sys.stderr,
+        )
+        return None
+
+
 def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:
     scope = _derive_scope(path.name)
     resolved = ResolvedDependencies()
-    for raw_line in path.read_text().splitlines():
+    contents = _read_manifest_text(path)
+    if contents is None:
+        return resolved
+
+    for raw_line in contents.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
