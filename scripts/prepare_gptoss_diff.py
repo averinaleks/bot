@@ -18,13 +18,12 @@ job when the diff cannot be produced.
 from __future__ import annotations
 
 import argparse
-import http.client
 import json
 import os
 import re
-import socket
 import subprocess  # nosec B404
 import sys
+import requests
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -150,22 +149,21 @@ def _perform_https_request(
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    connection = http.client.HTTPSConnection(
-        parsed.hostname,
-        parsed.port or 443,
-        timeout=timeout,
-    )
+    netloc = parsed.hostname
+    port = parsed.port or 443
+    if port != 443:
+        netloc = f"{netloc}:{port}"
+    target_url = f"https://{netloc}{path}"
     try:
-        connection.request("GET", path, headers=headers)
-        response = connection.getresponse()
-        payload = response.read()
-        return response.status, response.reason or "", payload
-    except socket.timeout as exc:
+        response = requests.get(target_url, headers=headers, timeout=timeout)
+    except requests.Timeout as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    except (OSError, http.client.HTTPException) as exc:
+    except requests.RequestException as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    finally:
-        connection.close()
+
+    reason = response.reason or ""
+    payload = response.content
+    return int(response.status_code), reason, payload
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:

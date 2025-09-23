@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import fnmatch
-import http.client
 import json
 import os
 import re
-import socket
 import sys
 import time
+import requests
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -405,16 +404,18 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     host, port, path = _https_components(url)
+    netloc = host if port == 443 else f"{host}:{port}"
+    target_url = f"https://{netloc}{path}"
     last_error: Exception | None = None
     for attempt in range(1, 4):
-        connection = http.client.HTTPSConnection(host, port, timeout=30)
         try:
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-            status_code = int(response.status or 0)
-            reason = response.reason or ""
-            payload = response.read()
-        except socket.timeout as exc:
+            response = requests.post(
+                target_url,
+                data=body,
+                headers=headers,
+                timeout=30,
+            )
+        except requests.Timeout as exc:
             message = str(exc) or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -427,7 +428,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        except (OSError, http.client.HTTPException) as exc:
+        except requests.RequestException as exc:
             message = str(exc) or exc.__class__.__name__
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -440,35 +441,37 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        finally:
-            connection.close()
+        else:
+            status_code = int(response.status_code)
+            reason = response.reason or ""
+            payload = response.content
 
-        if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
-            wait_time = 2 ** (attempt - 1)
-            print(
-                f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
-                file=sys.stderr,
-            )
-            time.sleep(wait_time)
-            last_error = DependencySubmissionError(
-                status_code,
-                f"Retryable HTTP {status_code}: {reason}",
-            )
-            continue
+            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = DependencySubmissionError(
+                    status_code,
+                    f"Retryable HTTP {status_code}: {reason}",
+                )
+                continue
 
-        if status_code >= 400:
-            message = payload.decode(errors="replace") or reason
-            print(
-                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
-                file=sys.stderr,
-            )
-            raise DependencySubmissionError(
-                status_code,
-                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-            )
+            if status_code >= 400:
+                message = payload.decode(errors="replace") or reason
+                print(
+                    f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                    file=sys.stderr,
+                )
+                raise DependencySubmissionError(
+                    status_code,
+                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+                )
 
-        print(f"Dependency snapshot submitted: HTTP {status_code}")
-        return
+            print(f"Dependency snapshot submitted: HTTP {status_code}")
+            return
 
     if last_error is not None:
         message = str(last_error) or last_error.__class__.__name__
