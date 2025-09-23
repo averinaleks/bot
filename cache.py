@@ -1,53 +1,64 @@
 import errno
 import gzip
+import importlib
 import json
 import os
 import shutil
 import time
+from functools import lru_cache
 from io import BytesIO, StringIO
 from pathlib import Path
+from types import ModuleType
 import logging
 
 logger = logging.getLogger("TradingBot")
 
 
+@lru_cache(maxsize=1)
+def _utils_module() -> ModuleType:
+    """Return the project utilities module regardless of import style."""
+
+    try:
+        return importlib.import_module("bot.utils")
+    except ModuleNotFoundError as exc:  # pragma: no cover - depends on install
+        if exc.name not in {"bot", "bot.utils"}:
+            raise
+    return importlib.import_module("utils")
+
+
 def _sanitize_symbol(symbol: str) -> str:
-    """Sanitize symbol string using utility helper.
+    """Sanitize symbol string using utility helper."""
 
-    The import is performed lazily to avoid circular dependencies with
-    ``bot.utils``.  Some callers import this module as ``bot.cache`` while
-    others may import it as the top level ``cache`` module.  A purely
-    relative import fails in the latter case (``ImportError: attempted
-    relative import with no known parent package``).  To support both usage
-    styles we try the relative import first and fall back to an absolute
-    import if necessary.
-    """
-    try:  # pragma: no cover - import style depends on caller
-        from .utils import sanitize_symbol  # type: ignore  # noqa: E402
-    except ImportError:  # pragma: no cover
-        from utils import sanitize_symbol  # type: ignore  # noqa: E402
-
+    utils = _utils_module()
+    sanitize_symbol = getattr(utils, "sanitize_symbol")
     return sanitize_symbol(symbol)
 
 
 def _sanitize_timeframe(timeframe: str) -> str:
     """Sanitize timeframe string using utility helper."""
 
-    try:  # pragma: no cover - import style depends on caller
-        from .utils import sanitize_timeframe  # type: ignore  # noqa: E402
-    except ImportError:  # pragma: no cover
-        from utils import sanitize_timeframe  # type: ignore  # noqa: E402
-
+    utils = _utils_module()
+    sanitize_timeframe = getattr(utils, "sanitize_timeframe")
     return sanitize_timeframe(timeframe)
+
+
+@lru_cache(maxsize=1)
+def _data_handler_utils() -> ModuleType:
+    """Return the data handler utilities module regardless of import style."""
+
+    try:
+        return importlib.import_module("bot.data_handler.utils")
+    except ModuleNotFoundError as exc:  # pragma: no cover - depends on install
+        if exc.name not in {"bot", "bot.data_handler", "bot.data_handler.utils"}:
+            raise
+    return importlib.import_module("data_handler.utils")
 
 
 def _ensure_utc(ts):
     """Import ``ensure_utc`` lazily to support multiple import styles."""
-    try:  # pragma: no cover - import style depends on caller
-        from .data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: E402
-    except ImportError:  # pragma: no cover
-        from data_handler.utils import ensure_utc as _ensure_utc  # type: ignore  # noqa: E402
-    return _ensure_utc(ts)
+    module = _data_handler_utils()
+    ensure_utc = getattr(module, "ensure_utc")
+    return ensure_utc(ts)
 
 
 class HistoricalDataCache:
