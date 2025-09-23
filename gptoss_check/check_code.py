@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
+from services.logging_utils import sanitize_log_value
+
 
 logger = logging.getLogger(__name__)
 
@@ -235,8 +237,16 @@ def run() -> None:
             send_telegram(warning)
             continue
 
-        with open(path, encoding="utf-8") as f:
-            code = f.read()
+        try:
+            code = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            warning = (
+                f"⚠️ Не удалось прочитать {filename}: "
+                f"{exc}".replace(str(path), sanitize_log_value(str(path)))
+            )
+            logger.warning(warning)
+            send_telegram(warning)
+            continue
 
         prompt = (
             "Проанализируй код Python. Выяви ошибки, уязвимости, улучшения. "
@@ -247,6 +257,15 @@ def run() -> None:
         except RuntimeError as err:
             logger.error("\n📄 %s\n%s\n", filename, err)
             send_telegram(f"📄 {filename}\n{err}")
+            continue
+        except Exception as err:  # pragma: no cover - unexpected GPT errors
+            message = (
+                f"Непредвиденная ошибка GPT-OSS: {err}".replace(
+                    os.getenv("GPT_OSS_API", ""), "<redacted>"
+                )
+            )
+            logger.error("\n📄 %s\n%s\n", filename, message)
+            send_telegram(f"📄 {filename}\n{message}")
             continue
 
         logger.info("\n📄 %s\n%s\n", filename, result)
