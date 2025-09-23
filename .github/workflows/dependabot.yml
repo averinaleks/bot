@@ -143,17 +143,53 @@ jobs:
       - name: Enable auto-merge for Dependabot PRs
         id: enable_automerge
         if: ${{ steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
-        # v3.0.0
-        # yamllint disable-line rule:line-length
-        uses: peter-evans/enable-pull-request-automerge@a59ea044f2aeabb1e63839cf06068655c1d70998
-        continue-on-error: true
-        with:
-          pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: squash
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          api_url="https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/auto-merge"
+          payload='{"merge_method":"squash"}'
+
+          if ! status=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --output response.json \
+            --write-out '%{http_code}' \
+            --request PUT "${api_url}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --data "${payload}"); then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "status=transport-error" >> "$GITHUB_OUTPUT"
+            printf '%s\n' \
+              "Unable to contact the GitHub API to enable auto-merge." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ "${status}" =~ ^2 ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "Auto-merge enabled successfully (HTTP ${status})." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "status=${status}" >> "$GITHUB_OUTPUT"
+            printf '%s\n' \
+              "Unable to enable auto-merge automatically (HTTP ${status})." \
+              "Response from the GitHub API:" \
+              >> "$GITHUB_STEP_SUMMARY"
+            cat response.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          rm -f response.json
 
       - name: Report auto-merge failure
-        if: ${{ steps.enable_automerge.conclusion == 'failure' }}
+        if: ${{ steps.enable_automerge.outputs.enabled == 'false' }}
         run: |
           printf '%s\n' \
             "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
