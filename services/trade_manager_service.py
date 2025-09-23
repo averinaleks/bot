@@ -13,6 +13,8 @@ import hmac
 import json
 import logging
 import os
+import stat
+import tempfile
 import threading
 import time
 try:  # optional dependency
@@ -116,9 +118,53 @@ POSITIONS: list[dict] = []
 POSITIONS_FILE = Path('cache/positions.json')
 
 
+def _positions_directory_is_safe(path: Path) -> bool:
+    directory = path.parent
+    if directory.exists():
+        if directory.is_symlink():
+            logger.warning(
+                'Отказ записи позиций: каталог %s является символьной ссылкой',
+                sanitize_log_value(str(directory)),
+            )
+            return False
+        if not directory.is_dir():
+            logger.warning(
+                'Отказ записи позиций: путь %s не является каталогом',
+                sanitize_log_value(str(directory)),
+            )
+            return False
+    return True
+
+
+def _positions_file_is_safe(path: Path) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return True
+    if stat.S_ISLNK(info.st_mode):
+        logger.warning(
+            'Отказ доступа к кэшу позиций: файл %s является символьной ссылкой',
+            sanitize_log_value(str(path)),
+        )
+        return False
+    if not stat.S_ISREG(info.st_mode):
+        logger.warning(
+            'Отказ доступа к кэшу позиций: путь %s не является обычным файлом',
+            sanitize_log_value(str(path)),
+        )
+        return False
+    return True
+
+
 def _load_positions() -> None:
     """Load positions list from on-disk cache."""
     global POSITIONS
+    if not _positions_directory_is_safe(POSITIONS_FILE):
+        POSITIONS = []
+        return
+    if not _positions_file_is_safe(POSITIONS_FILE):
+        POSITIONS = []
+        return
     try:
         with POSITIONS_FILE.open('r', encoding='utf-8') as fh:
             POSITIONS = json.load(fh)
@@ -128,12 +174,49 @@ def _load_positions() -> None:
 
 def _save_positions() -> None:
     """Persist positions list to on-disk cache."""
+    directory = POSITIONS_FILE.parent
+    if not _positions_directory_is_safe(POSITIONS_FILE):
+        return
     try:
-        POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with POSITIONS_FILE.open('w', encoding='utf-8') as fh:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - disk errors
+        logging.warning(
+            'Failed to create positions cache directory %s: %s',
+            sanitize_log_value(str(directory)),
+            exc,
+        )
+        return
+    if directory.is_symlink() or not directory.is_dir():
+        logger.warning(
+            'Refusing to persist positions: %s is not a regular directory',
+            sanitize_log_value(str(directory)),
+        )
+        return
+    if not _positions_file_is_safe(POSITIONS_FILE):
+        return
+
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(directory), prefix='.positions.', suffix='.tmp'
+        )
+    except OSError as exc:  # pragma: no cover - tmp creation failures
+        logging.warning('Failed to create temporary positions cache: %s', exc)
+        return
+
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
             json.dump(POSITIONS, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, POSITIONS_FILE)
     except OSError as exc:  # pragma: no cover - disk errors
         logging.warning('Failed to save positions cache: %s', exc)
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
 
 
 def _sync_positions_with_exchange() -> None:
