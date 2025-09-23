@@ -1,9 +1,11 @@
+import errno
 import gzip
 import json
 import os
 import shutil
 import time
 from io import BytesIO, StringIO
+from pathlib import Path
 import logging
 
 logger = logging.getLogger("TradingBot")
@@ -52,7 +54,9 @@ class HistoricalDataCache:
     """Manage on-disk storage for historical OHLCV data."""
 
     def __init__(self, cache_dir="/app/cache", min_free_disk_gb=0.1):
-        self.cache_dir = cache_dir
+        base_path = Path(cache_dir)
+        self.cache_dir = str(base_path)
+        self._base_path = base_path.resolve(strict=False)
         self.min_free_disk_gb = min_free_disk_gb
         os.makedirs(self.cache_dir, exist_ok=True)
         if not os.access(self.cache_dir, os.W_OK):
@@ -73,6 +77,8 @@ class HistoricalDataCache:
         for dirpath, _, filenames in os.walk(self.cache_dir):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
+                if os.path.islink(fp):
+                    continue
                 try:
                     total_size += os.path.getsize(fp)
                 except FileNotFoundError:
@@ -113,40 +119,80 @@ class HistoricalDataCache:
 
     def _delete_cache_file(self, path):
         """Remove a cache file and adjust the cached size value."""
-        if not os.path.exists(path):
+        target = Path(path)
+        try:
+            target.relative_to(self._base_path)
+        except ValueError:
+            logger.warning("Пропуск удаления файла вне каталога кэша: %s", target)
+            return
+        if not target.exists():
             return
         try:
-            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+            file_size_mb = target.stat().st_size / (1024 * 1024)
         except OSError:
             file_size_mb = 0
         try:
-            os.remove(path)
+            target.unlink()
             # Guard against negative cache sizes in case accounting drifts
             self.current_cache_size_mb = max(
                 self.current_cache_size_mb - file_size_mb,
                 0,
             )
         except OSError as e:  # pragma: no cover - unexpected deletion failure
-            logger.error("Ошибка удаления файла кэша %s: %s", path, e)
+            logger.error("Ошибка удаления файла кэша %s: %s", target, e)
+
+    def _cache_file(self, safe_symbol: str, safe_timeframe: str, suffix: str) -> Path:
+        filename = f"{safe_symbol}_{safe_timeframe}{suffix}"
+        return self._base_path / filename
+
+    def _ensure_not_symlink(self, path: Path) -> bool:
+        try:
+            if path.is_symlink():
+                logger.warning(
+                    "Обнаружена символическая ссылка в каталоге кэша: %s", path
+                )
+                self._delete_cache_file(path)
+                return False
+        except OSError as exc:
+            logger.warning("Не удалось проверить символическую ссылку %s: %s", path, exc)
+            return False
+        return True
+
+    def _open_secure_for_write(self, path: Path):
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        if nofollow:
+            flags |= nofollow
+        try:
+            fd = os.open(path, flags, 0o600)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.EPERM):
+                logger.warning(
+                    "Отказ записи в кэш: путь %s является символической ссылкой", path
+                )
+            raise
+        return os.fdopen(fd, "wb")
 
     def _aggressive_clean(self):
         try:
-            files = [
-                (f, os.path.getmtime(os.path.join(self.cache_dir, f)))
-                for f in os.listdir(self.cache_dir)
-                if os.path.isfile(os.path.join(self.cache_dir, f))
-            ]
+            files = []
+            for entry in self._base_path.iterdir():
+                try:
+                    if not entry.is_file() or entry.is_symlink():
+                        continue
+                    files.append((entry, entry.stat().st_mtime))
+                except OSError:
+                    continue
             if not files:
                 return
             files.sort(key=lambda x: x[1])
             target_size = self.max_cache_size_mb * 0.5
             while self.current_cache_size_mb > target_size and files:
-                file_name, _ = files.pop(0)
-                file_path = os.path.join(self.cache_dir, file_name)
+                file_path, _ = files.pop(0)
                 self._delete_cache_file(file_path)
                 logger.info(
                     "Удален файл кэша (агрессивная очистка): %s",
-                    file_name,
+                    file_path.name,
                 )
         except OSError as e:
             logger.error("Ошибка агрессивной очистки кэша: %s", e)
@@ -186,7 +232,7 @@ class HistoricalDataCache:
                 timeframe,
             )
             return
-        filename = os.path.join(self.cache_dir, f"{safe_symbol}_{safe_timeframe}.parquet")
+        filename = self._cache_file(safe_symbol, safe_timeframe, ".parquet")
         start_time = time.time()
         try:
             buffer = BytesIO()
@@ -220,14 +266,17 @@ class HistoricalDataCache:
                     return
             self._check_buffer_size()
             old_size_mb = 0
-            if os.path.exists(filename):
+            if filename.exists() and self._ensure_not_symlink(filename):
                 try:
-                    old_size_mb = os.path.getsize(filename) / (1024 * 1024)
+                    old_size_mb = filename.stat().st_size / (1024 * 1024)
                 except OSError:
                     old_size_mb = 0
-            with open(filename, "wb") as f:
-                f.write(parquet_bytes)
-            compressed_size_mb = os.path.getsize(filename) / (1024 * 1024)
+            with self._open_secure_for_write(filename) as fh:
+                fh.write(parquet_bytes)
+            try:
+                compressed_size_mb = filename.stat().st_size / (1024 * 1024)
+            except OSError:
+                compressed_size_mb = len(parquet_bytes) / (1024 * 1024)
             self.current_cache_size_mb += compressed_size_mb - old_size_mb
             elapsed_time = time.time() - start_time
             if elapsed_time > 0.5:
@@ -264,20 +313,14 @@ class HistoricalDataCache:
                     symbol,
                 )
                 return None
-            filename = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.parquet"
-            )
-            legacy_json = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.json.gz"
-            )
-            old_gzip = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.pkl.gz"
-            )
-            old_filename = os.path.join(
-                self.cache_dir, f"{safe_symbol}_{safe_timeframe}.pkl"
-            )
-            if os.path.exists(filename):
-                if time.time() - os.path.getmtime(filename) > self.cache_ttl:
+            filename = self._cache_file(safe_symbol, safe_timeframe, ".parquet")
+            legacy_json = self._cache_file(safe_symbol, safe_timeframe, ".json.gz")
+            old_gzip = self._cache_file(safe_symbol, safe_timeframe, ".pkl.gz")
+            old_filename = self._cache_file(safe_symbol, safe_timeframe, ".pkl")
+            if filename.exists():
+                if not self._ensure_not_symlink(filename):
+                    return None
+                if time.time() - filename.stat().st_mtime > self.cache_ttl:
                     logger.info("Кэш для %s_%s устарел, удаление", symbol, timeframe)
                     self._delete_cache_file(filename)
                     return None
@@ -290,7 +333,7 @@ class HistoricalDataCache:
                         "Parquet read failed, attempting JSON: %s",
                         exc,
                     )
-                    with open(filename, "r", encoding="utf-8") as f:
+                    with filename.open("r", encoding="utf-8") as f:
                         data = pd.read_json(f, orient="split")
                     fmt = "json"
                 elapsed_time = time.time() - start_time
@@ -323,7 +366,7 @@ class HistoricalDataCache:
                     elif isinstance(data.index, pd.DatetimeIndex):
                         data.index = _ensure_utc(data.index)
                 return data
-            if os.path.exists(legacy_json):
+            if legacy_json.exists() and self._ensure_not_symlink(legacy_json):
                 logger.info(
                     "Обнаружен старый кэш для %s_%s, конвертация в Parquet",
                     symbol,
@@ -352,7 +395,7 @@ class HistoricalDataCache:
                 return data
             found_pickle = False
             for legacy in (old_gzip, old_filename):
-                if os.path.exists(legacy):
+                if legacy.exists() and self._ensure_not_symlink(legacy):
                     logger.warning(
                         "Обнаружен небезопасный pickle кэш для %s_%s, файл удалён: %s",
                         symbol,
