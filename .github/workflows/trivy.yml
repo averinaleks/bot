@@ -57,7 +57,7 @@ jobs:
           exit-code: 1
 
       - name: Ensure jq is available
-        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
         run: |
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update
@@ -66,7 +66,7 @@ jobs:
 
       - name: Parse Trivy results
         id: parse_trivy
-        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
         run: |
           set -euo pipefail
           if [ ! -f trivy-results.sarif ]; then
@@ -87,7 +87,7 @@ jobs:
           echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
 
       - name: Summarize Trivy scan
-        if: ${{ steps.trivy.conclusion != 'skipped' && always() }}
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
         run: |
           if [ "${{ steps.parse_trivy.outputs.sarif_exists }}" != 'true' ]; then
             printf '### Trivy scan summary\n\n* No SARIF report was generated.\n' >> "$GITHUB_STEP_SUMMARY"
@@ -97,14 +97,14 @@ jobs:
           fi
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' && always() }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' }}
         uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3
         # v3.30.3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && always() }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
