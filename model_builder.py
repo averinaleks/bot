@@ -40,6 +40,7 @@ from security import (
     ArtifactDeserializationError,
     harden_mlflow,
     safe_joblib_load,
+    set_model_dir,
     verify_model_state_signature,
     write_model_state_signature,
 )
@@ -50,6 +51,14 @@ MODEL_DIR = ensure_writable_directory(
     description="моделей",
     fallback_subdir="trading_bot_models",
 ).resolve()
+
+# Keep the security module in sync with the resolved model directory so that
+# signature enforcement reuses the same canonical path regardless of which
+# module imported :mod:`security` first.  Previously ``security`` imported
+# ``MODEL_DIR`` from this module which CodeQL flagged as an unsafe cyclic
+# dependency.  The setter preserves the original behaviour without reintroducing
+# the import cycle.
+set_model_dir(MODEL_DIR)
 
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
