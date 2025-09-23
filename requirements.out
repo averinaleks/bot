@@ -57,7 +57,7 @@ cachetools==5.5.2
     # via -r requirements.txt
 ccxt==4.5.3
     # via -r requirements.txt
-ccxtpro==1.0.1
+# ccxtpro==1.0.1  # install manually if you have a commercial license
     # via -r requirements.txt
 certifi==2025.8.3
     # via
