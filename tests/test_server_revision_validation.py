@@ -1,6 +1,8 @@
 import os
+import secrets
 import sys
 import types
+
 import pytest
 
 
@@ -30,7 +32,7 @@ def test_invalid_model_revision(monkeypatch):
         torch.cuda = types.SimpleNamespace(is_available=lambda: False)
         m.setitem(sys.modules, "torch", torch)
 
-        os.environ["CSRF_SECRET"] = "testsecret"
+        os.environ["CSRF_SECRET"] = secrets.token_hex(32)
         os.environ["GPT_MODEL_REVISION"] = "invalid"
 
         import server
