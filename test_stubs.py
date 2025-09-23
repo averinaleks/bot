@@ -203,14 +203,14 @@ def apply() -> None:
             def text(self) -> str:
                 return self._text
 
-            async def aread(self) -> bytes:
-                return self.content
-
             def raise_for_status(self) -> None:
                 """Mimic :meth:`httpx.Response.raise_for_status`."""
 
                 if 400 <= self.status_code:
                     raise Exception(f"HTTP error {self.status_code}")
+
+            async def aread(self) -> bytes:
+                return self.content
 
         def _return_response(method: str, url: str, *, timeout: Any | None = None, **kwargs: Any) -> _HTTPXResponse:
             """Fallback network client using :mod:`http.client`."""
