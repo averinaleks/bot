@@ -49,7 +49,7 @@ certifi==2025.8.3
     #   httpcore
     #   httpx
     #   requests
-cffi==1.17.1
+cffi==2.0.0
     # via
     #   cryptography
     #   pycares
@@ -393,6 +393,7 @@ typing-extensions==4.14.1
     #   aiosignal
     #   anyio
     #   ccxt
+    #   cryptography
     #   exceptiongroup
     #   gymnasium
     #   huggingface-hub
