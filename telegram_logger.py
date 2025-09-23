@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import errno
 import logging
 import os
+import stat
 import threading
 import time
 from pathlib import Path
@@ -134,13 +136,24 @@ class TelegramLogger(logging.Handler):
                 return
             try:
                 await self._send(text, chat_id, urgent)
-            except (RetryAfter, Forbidden, BadRequest, httpx.HTTPError) as exc:
+            except (RetryAfter, Forbidden, BadRequest) as exc:
                 logger.error("Ошибка отправки сообщения в Telegram: %s", exc)
                 if self.unsent_path:
                     self._save_unsent(chat_id, text)
-            except Exception:
-                logger.exception("Непредвиденная ошибка отправки Telegram")
-                raise
+            except Exception as exc:
+                is_httpx_error = isinstance(exc, httpx.HTTPError)
+                httpx_is_generic = httpx.HTTPError is Exception or getattr(
+                    getattr(httpx.HTTPError, "__module__", ""),
+                    "lower",
+                    lambda: "",
+                )().startswith("builtins")
+                if is_httpx_error and not httpx_is_generic:
+                    logger.error("Ошибка отправки сообщения в Telegram: %s", exc)
+                    if self.unsent_path:
+                        self._save_unsent(chat_id, text)
+                else:
+                    logger.exception("Непредвиденная ошибка отправки Telegram")
+                    raise
             finally:
                 queue.task_done()
             await asyncio.sleep(1)
@@ -211,6 +224,29 @@ class TelegramLogger(logging.Handler):
     def _save_unsent(self, chat_id: int | str, text: str) -> None:
         if self.unsent_path is None:
             return
+
+        def _append_secure(path: Path, payload: str) -> None:
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+            flags |= getattr(os, "O_CLOEXEC", 0)
+            nofollow = getattr(os, "O_NOFOLLOW", 0)
+            if nofollow:
+                flags |= nofollow
+
+            fd = os.open(path, flags, 0o600)
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode):
+                    raise OSError(
+                        errno.EPERM, "unsent message path must be a regular file"
+                    )
+
+                data = payload.encode("utf-8")
+                written = os.write(fd, data)
+                if written != len(data):
+                    raise OSError(errno.EIO, "failed to persist Telegram message")
+            finally:
+                os.close(fd)
+
         try:
             path = self.unsent_path
             if path.exists() and path.is_symlink():
@@ -219,9 +255,19 @@ class TelegramLogger(logging.Handler):
                     sanitize_log_value(str(path)),
                 )
                 return
+
             path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as f:
-                f.write(f"{chat_id}\t{text}\n")
+            try:
+                _append_secure(path, f"{chat_id}\t{text}\n")
+            except OSError as exc:
+                if exc.errno in {errno.ELOOP, errno.EPERM}:
+                    logger.warning(
+                        "Refusing to write Telegram fallback message to %s: %s",
+                        sanitize_log_value(str(path)),
+                        exc,
+                    )
+                    return
+                raise
         except OSError as exc:  # pragma: no cover - file system errors
             logger.error("Не удалось сохранить сообщение Telegram: %s", exc)
 
