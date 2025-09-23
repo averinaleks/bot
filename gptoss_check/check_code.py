@@ -96,6 +96,7 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
                 if parsed.query:
                     path = f"{path}?{parsed.query}"
 
+                connection = None
                 try:
                     connection = connection_cls(host, port, timeout=self.timeout)  # type: ignore[arg-type]
                     connection.request(method.upper(), path, body=body, headers=headers)
@@ -106,10 +107,14 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
                 except (HTTPException, OSError, ValueError, socket.error) as exc:
                     raise HTTPError(str(exc)) from exc
                 finally:
-                    try:
-                        connection.close()  # type: ignore[has-type]
-                    except Exception:  # pragma: no cover - best effort cleanup
-                        pass
+                    if connection is not None:
+                        try:
+                            connection.close()  # type: ignore[has-type]
+                        except Exception as close_exc:  # pragma: no cover - best effort cleanup
+                            logger.debug(
+                                "Failed to close HTTP connection: %s",
+                                sanitize_log_value(str(close_exc)),
+                            )
 
                 return _SimpleResponse(status, header_map, payload)
 
