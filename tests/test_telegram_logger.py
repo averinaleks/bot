@@ -1,13 +1,17 @@
 import asyncio
+import errno
 import hashlib
 import logging
 import os
-import pytest
+import stat
 import sys
 import threading
 import types
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from bot import telegram_logger as telegram_logger_module
 from bot.telegram_logger import TelegramLogger, resolve_unsent_path
 
 class DummyBot:
@@ -242,4 +246,40 @@ def test_save_unsent_rejects_symlink(tmp_path, monkeypatch, caplog):
         "Refusing to write Telegram fallback message" in rec.message
         for rec in caplog.records
     )
+    asyncio.run(TelegramLogger.shutdown())
+
+
+def test_save_unsent_handles_symlink_race(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
+
+    def raise_elooop(*_args, **_kwargs):
+        raise OSError(errno.ELOOP, "symlink loop")
+
+    monkeypatch.setattr(telegram_logger_module.os, "open", raise_elooop)
+    caplog.set_level(logging.WARNING)
+
+    tl._save_unsent(1, "payload")
+
+    assert not resolved.exists()
+    assert any(
+        "Refusing to write Telegram fallback message" in rec.message
+        for rec in caplog.records
+    )
+    asyncio.run(TelegramLogger.shutdown())
+
+
+def test_save_unsent_sets_strict_file_permissions(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
+
+    tl._save_unsent(99, "secure")
+
+    assert stat.S_IMODE(resolved.stat().st_mode) == 0o600
     asyncio.run(TelegramLogger.shutdown())
