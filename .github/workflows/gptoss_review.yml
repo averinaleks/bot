@@ -80,15 +80,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "started=false" >> "${GITHUB_OUTPUT}"
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            started_output="false"
+            cleanup_output() {
+              printf 'started=%s\n' "$started_output" >> "$output_file"
+            }
+            trap cleanup_output EXIT
           fi
 
           if [ ! -f scripts/gptoss_mock_server.py ]; then
             echo "::notice::Скрипт scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "started=false" >> "$GITHUB_OUTPUT"
-            fi
             exit 0
           fi
 
@@ -114,9 +116,6 @@ jobs:
               sed 's/^/mock-server: /' mock_server.log >&2 || true
             fi
             rm -f mock_server.pid mock_server.port mock_server.log
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "started=false" >> "$GITHUB_OUTPUT"
-            fi
             exit 0
           fi
 
@@ -147,15 +146,10 @@ jobs:
               sed 's/^/mock-server: /' mock_server.log >&2 || true
             fi
             rm -f mock_server.port mock_server.log || true
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "started=false" >> "$GITHUB_OUTPUT"
-            fi
             exit 0
           fi
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "started=true" >> "$GITHUB_OUTPUT"
-          fi
+          started_output="true"
         env:
           MODEL_NAME: ${{ env.MODEL_NAME }}
 
@@ -165,8 +159,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            ready_output="false"
+            cleanup_output() {
+              printf 'ready=%s\n' "$ready_output" >> "$output_file"
+            }
+            trap cleanup_output EXIT
           fi
 
           ready=0
@@ -185,15 +184,10 @@ jobs:
               rm -f mock_server.pid
             fi
             rm -f mock_server.port mock_server.log || true
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "ready=false" >> "$GITHUB_OUTPUT"
-            fi
             exit 0
           fi
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
+          ready_output="true"
 
       - name: Generate diff
         if: >-
@@ -206,15 +200,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "has_diff=false" >> "${GITHUB_OUTPUT}"
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            has_diff_output="false"
+            cleanup_output() {
+              printf 'has_diff=%s\n' "$has_diff_output" >> "$output_file"
+            }
+            trap cleanup_output EXIT
           fi
 
           if [ ! -f scripts/prepare_gptoss_diff.py ]; then
             echo "::notice::Скрипт scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "has_diff=false" >> "${GITHUB_OUTPUT}"
-            fi
             exit 0
           fi
 
@@ -225,11 +221,12 @@ jobs:
             --output diff.patch \
             --path ':(glob)**/*.py'; then
             echo "::warning::Не удалось подготовить diff – пропускаю обзор"
+            has_diff_output="false"
             exit 0
           fi
 
-          if [ -s diff.patch ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "has_diff=true" >> "${GITHUB_OUTPUT}"
+          if [ -s diff.patch ]; then
+            has_diff_output="true"
           fi
 
       - name: LLM review
@@ -242,15 +239,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "has_content=false" >> "${GITHUB_OUTPUT}"
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            has_content_output="false"
+            cleanup_output() {
+              printf 'has_content=%s\n' "$has_content_output" >> "$output_file"
+            }
+            trap cleanup_output EXIT
           fi
 
           if [ ! -f scripts/run_gptoss_review.py ]; then
             echo "::notice::Скрипт scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              echo "has_content=false" >> "${GITHUB_OUTPUT}"
-            fi
             exit 0
           fi
 
@@ -260,11 +259,12 @@ jobs:
             --model "${MODEL_NAME}" \
             --api-url "http://127.0.0.1:${LLM_PORT}/v1/chat/completions"; then
             echo "::warning::Не удалось сгенерировать обзор"
+            has_content_output="false"
             exit 0
           fi
 
-          if [ -s review.md ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "has_content=true" >> "${GITHUB_OUTPUT}"
+          if [ -s review.md ]; then
+            has_content_output="true"
           fi
 
       - name: Upload review artifact
