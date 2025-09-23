@@ -213,6 +213,16 @@ def _read_manifest_text(path: Path) -> str | None:
             file=sys.stderr,
         )
         return None
+    except OSError as exc:
+        relative = path.as_posix()
+        print(
+            (
+                f"Skipping manifest '{relative}' due to filesystem error: {exc}. "
+                "Unable to read the file contents."
+            ),
+            file=sys.stderr,
+        )
+        return None
 
 
 def _parse_requirements(path: Path) -> Dict[str, ResolvedDependency]:

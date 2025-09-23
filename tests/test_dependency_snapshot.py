@@ -62,6 +62,32 @@ def test_parse_requirements_handles_decode_errors(
     assert "requirements.txt" in captured.err
 
 
+def test_parse_requirements_handles_filesystem_errors(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = tmp_path / "requirements.txt"
+    manifest.write_text("requests==2.32.3\n")
+
+    original_read_text = Path.read_text
+
+    def failing_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self == manifest:
+            raise OSError("Permission denied")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", failing_read_text)
+
+    resolved = snapshot._parse_requirements(manifest)
+
+    assert not resolved
+
+    captured = capsys.readouterr()
+    assert "filesystem error" in captured.err
+    assert "requirements.txt" in captured.err
+
+
 def test_submit_dependency_snapshot_skips_when_env_missing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
