@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
   security-events: write
-  actions: read  # required for github/codeql-action/upload-sarif
+  actions: write  # required for uploading artifacts such as SARIF reports
 
 jobs:
   scan:
