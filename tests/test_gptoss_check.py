@@ -76,6 +76,31 @@ def test_run_without_api(monkeypatch, caplog):
     assert "GPT_OSS_API" in caplog.text
 
 
+def test_run_handles_unexpected_query_error(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_API", "http://gptoss:8000")
+    monkeypatch.setenv("CHECK_CODE_PATH", "gptoss_check/main.py")
+    monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.setattr(check_code, "wait_for_api", lambda *args, **kwargs: None)
+
+    telegram_messages: list[str] = []
+    monkeypatch.setattr(check_code, "send_telegram", telegram_messages.append)
+
+    request = httpx.Request("POST", "http://gptoss:8000/v1/completions")
+    response = httpx.Response(500, request=request)
+
+    def boom(prompt: str) -> str:
+        raise httpx.HTTPStatusError("server error", request=request, response=response)
+
+    monkeypatch.setattr(check_code, "query", boom)
+
+    with caplog.at_level(logging.ERROR):
+        check_code.run()
+
+    assert "Непредвиденная ошибка GPT-OSS" in caplog.text
+    assert telegram_messages
+    assert "Непредвиденная ошибка GPT-OSS" in telegram_messages[0]
+
+
 def test_wait_for_api_http_error(monkeypatch):
     class DummyResponse:
         def __init__(self) -> None:
