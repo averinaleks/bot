@@ -24,10 +24,17 @@ jobs:
     steps:
       - name: Report skipped run
         run: |
-          printf '%s\n' \
-            "Dependabot automation runs only for Dependabot pull_request_target events." \
-            "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action." \
-            >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            {
+              printf '%s\n' \
+                "Dependabot automation runs only for Dependabot pull_request_target events." \
+                "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action."
+            } >>"$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' \
+              "Dependabot automation runs only for Dependabot pull_request_target events." \
+              "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action."
+          fi
 
   dependabot:
     if: ${{ github.event_name == 'pull_request_target' && contains(fromJSON(env.DEPENDABOT_ACTORS_JSON), github.actor) }}
@@ -140,7 +147,11 @@ jobs:
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "Auto-merge is disabled for this repository; skipping enablement." >> "$GITHUB_STEP_SUMMARY"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              echo "Auto-merge is disabled for this repository; skipping enablement." >>"$GITHUB_STEP_SUMMARY"
+            else
+              echo "Auto-merge is disabled for this repository; skipping enablement."
+            fi
           fi
 
       - name: Enable auto-merge for Dependabot PRs
@@ -170,23 +181,39 @@ jobs:
             --data "${payload}"); then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "status=transport-error" >> "$GITHUB_OUTPUT"
-            printf '%s\n' \
-              "Unable to contact the GitHub API to enable auto-merge." \
-              >> "$GITHUB_STEP_SUMMARY"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              {
+                printf '%s\n' "Unable to contact the GitHub API to enable auto-merge."
+              } >>"$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' "Unable to contact the GitHub API to enable auto-merge."
+            fi
             exit 0
           fi
 
           if [[ "${status}" =~ ^2 ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "Auto-merge enabled successfully (HTTP ${status})." >> "$GITHUB_STEP_SUMMARY"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "Auto-merge enabled successfully (HTTP ${status})." >>"$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' "Auto-merge enabled successfully (HTTP ${status})."
+            fi
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "status=${status}" >> "$GITHUB_OUTPUT"
-            printf '%s\n' \
-              "Unable to enable auto-merge automatically (HTTP ${status})." \
-              "Response from the GitHub API:" \
-              >> "$GITHUB_STEP_SUMMARY"
-            cat response.json >> "$GITHUB_STEP_SUMMARY"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              {
+                printf '%s\n' \
+                  "Unable to enable auto-merge automatically (HTTP ${status})." \
+                  "Response from the GitHub API:"
+                cat response.json
+              } >>"$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' \
+                "Unable to enable auto-merge automatically (HTTP ${status})." \
+                "Response from the GitHub API:"
+              cat response.json
+            fi
           fi
 
           rm -f response.json
@@ -194,6 +221,11 @@ jobs:
       - name: Report auto-merge failure
         if: ${{ steps.enable_automerge.outputs.enabled == 'false' }}
         run: |
-          printf '%s\n' \
-            "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
-            >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            printf '%s\n' \
+              "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules." \
+              >>"$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' \
+              "Auto-merge could not be enabled automatically. Check repository settings or branch protection rules."
+          fi
