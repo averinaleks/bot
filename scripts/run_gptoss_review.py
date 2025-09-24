@@ -20,6 +20,7 @@ import http.client
 import ipaddress
 import json
 import os
+import socket
 import ssl
 import sys
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
+_ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
 
 
 class EmptyDiffError(RuntimeError):
@@ -71,17 +73,81 @@ def _build_payload(diff_text: str, model: str | None) -> dict[str, Any]:
     return payload
 
 
+def _normalise_host(value: str | None) -> str:
+    """Return a lower-case host without brackets or whitespace."""
+
+    host = (value or "").strip().lower()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    return host
+
+
+def _load_allowed_hosts() -> set[str]:
+    """Load optional allow-list for HTTPS hosts from the environment."""
+
+    raw = os.getenv(_ALLOWED_HOSTS_ENV, "")
+    hosts: set[str] = set()
+    for part in raw.split(","):
+        normalised = _normalise_host(part)
+        if normalised:
+            hosts.add(normalised)
+    return hosts
+
+
+def _resolve_host_ips(hostname: str) -> set[str]:
+    """Return resolved IP addresses for *hostname* handling IPv4/IPv6."""
+
+    try:
+        infos = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC)
+    except socket.gaierror as exc:
+        raise RuntimeError(f"не удалось разрешить хост {hostname!r}: {exc}") from exc
+    ips: set[str] = set()
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        address = sockaddr[0]
+        if isinstance(address, bytes):
+            try:
+                address = address.decode()
+            except UnicodeDecodeError:
+                continue
+        ips.add(str(address))
+    return ips
+
+
+def _host_ips_are_private(ips: set[str]) -> bool:
+    """Return ``True`` when every IP in *ips* is loopback or private."""
+
+    if not ips:
+        return False
+    for ip_text in ips:
+        try:
+            address = ipaddress.ip_address(ip_text)
+        except ValueError:
+            return False
+        if not (address.is_loopback or address.is_private):
+            return False
+    return True
+
+
 def _perform_http_request(
     url: str, data: bytes, headers: dict[str, str], timeout: float
 ) -> tuple[int, str, bytes]:
     """Execute an HTTP(S) request and return status, reason and body."""
 
     parsed = urlparse(url)
-    host = parsed.hostname
-    if host is None:
-        raise RuntimeError("Недопустимый URL без hostname для GPT-OSS API")
 
     if parsed.scheme == "https":
+        if allowed_hosts and hostname not in allowed_hosts:
+            if not _host_ips_are_private(resolved_ips):
+                raise RuntimeError(
+                    "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
+                )
+        elif not _host_ips_are_private(resolved_ips):
+            raise RuntimeError(
+                "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
+            )
         connection: http.client.HTTPConnection = http.client.HTTPSConnection(
             host,
             parsed.port or 443,
@@ -89,6 +155,10 @@ def _perform_http_request(
             context=ssl.create_default_context(),
         )
     else:
+        if not _host_ips_are_private(resolved_ips):
+            raise RuntimeError(
+                "HTTP GPT-OSS URL разрешается в неприватный адрес"
+            )
         connection = http.client.HTTPConnection(
             host,
             parsed.port or 80,

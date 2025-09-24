@@ -37,6 +37,7 @@ _INVALID_PATH_CHARS = {"\x00", "\n", "\r"}
 _SAFE_PATH_CHARS_RE = re.compile(r"^[A-Za-z0-9_./*?\[\]-]+$")
 _ALLOWED_PATHSPEC_PREFIXES = ("", ":(glob)")
 _ALLOWED_GIT_OPTIONS = {"--no-tags"}
+_ALLOWED_GITHUB_API_HOSTS = {"api.github.com"}
 
 
 @dataclass
@@ -176,6 +177,11 @@ def _perform_https_request(
         raise RuntimeError("URL GitHub API не должен содержать учетные данные")
 
     sanitised = parsed._replace(path=parsed.path or "/", fragment="")
+    hostname = (sanitised.hostname or "").lower()
+    if hostname not in _ALLOWED_GITHUB_API_HOSTS:
+        raise RuntimeError(
+            "Разрешены только запросы к api.github.com"
+        )
     if sanitised.port and sanitised.port != 443:
         netloc = f"{hostname}:{sanitised.port}"
     else:
