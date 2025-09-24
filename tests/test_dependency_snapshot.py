@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -198,6 +199,46 @@ def test_submit_dependency_snapshot_reports_missing_requests(
     captured = capsys.readouterr()
     assert "Dependency snapshot submission skipped из-за сетевой ошибки." in captured.err
     assert "Dependency snapshot submission requires the 'requests' package." in captured.err
+
+
+def test_submit_dependency_snapshot_uses_string_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {},
+    }
+
+    monkeypatch.setattr(
+        snapshot,
+        "_build_manifests",
+        lambda _: {"requirements.txt": manifest},
+    )
+
+    captured_payload: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        captured_payload.update(json.loads(body))
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    metadata = captured_payload.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata == {
+        "run_attempt": "3",
+        "job": "submit",
+        "workflow": "dependency-graph",
+    }
 
 
 def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> None:
