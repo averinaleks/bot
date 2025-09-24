@@ -24,3 +24,23 @@ def test_dependency_snapshot_import_succeeds_without_requests(monkeypatch) -> No
 
     assert hasattr(module, "submit_dependency_snapshot")
     assert callable(module.submit_dependency_snapshot)
+
+
+def test_submit_dependency_snapshot_skips_when_requests_missing(monkeypatch, capsys):
+    """The script should report a friendly message when ``requests`` is unavailable."""
+
+    from scripts import submit_dependency_snapshot as snapshot
+
+    monkeypatch.setattr(snapshot, "requests", None, raising=False)
+    monkeypatch.setattr(
+        snapshot,
+        "_REQUESTS_IMPORT_ERROR",
+        ImportError("requests package is not installed"),
+        raising=False,
+    )
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "requests" in captured.err
+    assert "Skipping submission" in captured.err
