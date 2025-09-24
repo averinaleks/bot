@@ -30,6 +30,18 @@ except ImportError as exc:  # pragma: no cover - exercised via import hook in te
         Timeout = TimeoutError
         RequestException = Exception
 
+        def __getattr__(self, _name: str) -> type[Exception]:
+            """Return :class:`Exception` for any unrecognised attribute.
+
+            The real ``requests.exceptions`` module exposes a wide variety of
+            exception types.  When the dependency is missing we only emulate the
+            small subset actually used by the script, but returning
+            :class:`Exception` for any other attribute keeps the fallback
+            resilient if the implementation changes in the future.
+            """
+
+            return Exception
+
     requests_exceptions = _RequestsExceptionsModule()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
