@@ -1,5 +1,5 @@
 import os
-import subprocess
+import subprocess  # nosec B404
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -23,13 +23,14 @@ def test_build_and_push(tmp_path, docker_env, run_mock):
     dockerfile.write_text("FROM alpine:3.18\nRUN echo test > /test.txt\n")
     image = f"{os.environ['DOCKERHUB_USERNAME']}/bot-test-image:latest"
 
-    subprocess.run(["docker", "build", "-t", image, str(tmp_path)], check=True)
-    subprocess.run(
+    # Bandit: subprocess calls are patched to MagicMock during the test.
+    subprocess.run(["docker", "build", "-t", image, str(tmp_path)], check=True)  # nosec
+    subprocess.run(  # nosec
         ["docker", "login", "-u", os.environ["DOCKERHUB_USERNAME"], "--password-stdin"],
         input=os.environ["DOCKERHUB_TOKEN"].encode(),
         check=True,
     )
-    subprocess.run(["docker", "push", image], check=True)
+    subprocess.run(["docker", "push", image], check=True)  # nosec
 
     assert run_mock.call_args_list == [
         call(["docker", "build", "-t", image, str(tmp_path)], check=True),

@@ -1,4 +1,4 @@
-import subprocess
+import subprocess  # nosec B404
 import sys
 import threading
 import time
@@ -116,7 +116,8 @@ def test_main_writes_port_file_and_serves_requests(tmp_path: Path):
     port_file = tmp_path / "port.txt"
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "gptoss_mock_server.py"
 
-    process = subprocess.Popen(
+    # Bandit: the server process is spawned from a trusted local script in tests.
+    process = subprocess.Popen(  # nosec
         [
             sys.executable,
             str(script_path),

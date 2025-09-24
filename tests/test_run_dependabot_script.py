@@ -1,5 +1,5 @@
 import os
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 from textwrap import dedent
 
@@ -41,7 +41,8 @@ def test_run_dependabot_requires_token():
     env.pop("TOKEN", None)
     env.pop("GITHUB_TOKEN", None)
 
-    proc = subprocess.run(
+    # Bandit: the script executes within a temporary environment controlled by the test.
+    proc = subprocess.run(  # nosec
         ["bash", str(script)], capture_output=True, text=True, env=env
     )
 
@@ -57,11 +58,13 @@ def test_run_dependabot_ignores_already_queued_requests(tmp_path):
     summary = tmp_path / "summary.md"
     env = os.environ.copy()
     env["GITHUB_REPOSITORY"] = "owner/repo"
-    env["TOKEN"] = "dummy"
+    # Bandit: a non-sensitive placeholder token is sufficient for test isolation.
+    env["TOKEN"] = "dummy"  # nosec
     env["PATH"] = f"{fake_path}:{env['PATH']}"
     env["GITHUB_STEP_SUMMARY"] = str(summary)
 
-    proc = subprocess.run(
+    # Bandit: repeated invocation uses the same controlled environment as above.
+    proc = subprocess.run(  # nosec
         ["bash", str(script)], capture_output=True, text=True, env=env
     )
 
