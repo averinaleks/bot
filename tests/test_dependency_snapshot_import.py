@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def test_dependency_snapshot_import_succeeds_without_requests(monkeypatch) -> None:
     """Ensure the dependency snapshot script has no hard dependency on ``requests``."""
@@ -44,3 +46,25 @@ def test_submit_dependency_snapshot_skips_when_requests_missing(monkeypatch, cap
     captured = capsys.readouterr()
     assert "requests" in captured.err
     assert "Skipping submission" in captured.err
+
+
+def test_submit_with_headers_requires_requests(monkeypatch):
+    """Submitting without ``requests`` should raise a descriptive error."""
+
+    from scripts import submit_dependency_snapshot as snapshot
+
+    monkeypatch.setattr(snapshot, "requests", None, raising=False)
+    missing_error = ImportError("dependency missing")
+    monkeypatch.setattr(
+        snapshot,
+        "_REQUESTS_IMPORT_ERROR",
+        missing_error,
+        raising=False,
+    )
+
+    with pytest.raises(snapshot.DependencySubmissionError) as excinfo:
+        snapshot._submit_with_headers("https://example.com/api", b"{}", {})
+
+    message = str(excinfo.value)
+    assert "requests" in message
+    assert excinfo.value.__cause__ is missing_error
