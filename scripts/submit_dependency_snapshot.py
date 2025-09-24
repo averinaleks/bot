@@ -15,8 +15,12 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
+try:  # pragma: no cover - импорт опциональной зависимости
+    import requests
+    from requests import exceptions as requests_exceptions
+except Exception:  # pragma: no cover - requests может отсутствовать в окружении
+    requests = None  # type: ignore[assignment]
+    requests_exceptions = None  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -403,12 +407,10 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
     return value
 
 
-def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
-    if port == 443:
-        request_url = f"https://{host}{path}"
-    else:
-        request_url = f"https://{host}:{port}{path}"
+def _submit_with_requests(
+    request_url: str, body: bytes, headers: dict[str, str]
+) -> None:
+    assert requests is not None and requests_exceptions is not None
 
     last_error: Exception | None = None
     with requests.Session() as session:
@@ -421,7 +423,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     timeout=30,
                     allow_redirects=False,
                 )
-            except requests_exceptions.Timeout as exc:
+            except requests_exceptions.Timeout as exc:  # type: ignore[union-attr]
                 message = str(exc) or "timed out"
                 if attempt < 3:
                     wait_time = 2 ** (attempt - 1)
@@ -434,7 +436,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     continue
                 last_error = exc
                 break
-            except requests_exceptions.RequestException as exc:
+            except requests_exceptions.RequestException as exc:  # type: ignore[union-attr]
                 message = str(exc).strip() or exc.__class__.__name__
                 if attempt < 3:
                     wait_time = 2 ** (attempt - 1)
@@ -482,6 +484,88 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
         raise DependencySubmissionError(None, message, last_error)
+
+
+def _submit_without_requests(
+    request_url: str, body: bytes, headers: dict[str, str]
+) -> None:
+    from urllib import error as urllib_error, request as urllib_request
+    import socket
+
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        req = urllib_request.Request(
+            request_url,
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=30) as response:
+                status_code = int(response.getcode() or 0)
+                reason = getattr(response, "reason", "") or ""
+                payload = response.read()
+        except urllib_error.HTTPError as exc:
+            status_code = int(exc.code)
+            reason = getattr(exc, "reason", "") or ""
+            payload = exc.read()
+        except (urllib_error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+            message_obj = getattr(exc, "reason", exc)
+            message = str(message_obj).strip() or exc.__class__.__name__
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Network error '{message}'. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            last_error = exc
+            break
+
+        if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+            wait_time = 2 ** (attempt - 1)
+            print(
+                f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_time)
+            last_error = DependencySubmissionError(
+                status_code, f"Retryable HTTP {status_code}: {reason}"
+            )
+            continue
+
+        if status_code >= 400:
+            message = payload.decode(errors="replace") or reason
+            print(
+                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                file=sys.stderr,
+            )
+            raise DependencySubmissionError(
+                status_code,
+                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+            )
+
+        print(f"Dependency snapshot submitted: HTTP {status_code}")
+        return
+
+    if last_error is not None:
+        message = str(last_error).strip() or last_error.__class__.__name__
+        raise DependencySubmissionError(None, message, last_error)
+
+
+def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    host, port, path = _https_components(url)
+    if port == 443:
+        request_url = f"https://{host}{path}"
+    else:
+        request_url = f"https://{host}:{port}{path}"
+
+    if requests is None:
+        _submit_without_requests(request_url, body, headers)
+    else:
+        _submit_with_requests(request_url, body, headers)
 
 
 def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
