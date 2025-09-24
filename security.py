@@ -199,6 +199,36 @@ def safe_joblib_load(
             "joblib.numpy_pickle недоступен: установите зависимость для работы с артефактами"
         )
 
+    path_source: Path | None = None
+    if isinstance(source, (str, os.PathLike)):
+        path_source = Path(source)
+        try:
+            # Refuse to follow symlinks or load non-regular files to prevent
+            # filesystem tricks (e.g. symlink swaps) from bypassing
+            # signature checks enforced by callers.
+            if path_source.is_symlink():
+                raise RuntimeError(
+                    f"Отказ от загрузки артефакта модели через симлинк: {path_source}"
+                )
+            resolved = path_source.resolve(strict=True)
+        except FileNotFoundError:
+            # Mirror joblib's behaviour for missing files so callers receive a
+            # familiar exception type.
+            raise
+        except OSError as exc:
+            raise RuntimeError(
+                f"Не удалось получить путь артефакта модели {path_source}: {exc}"
+            ) from exc
+        if not resolved.is_file():
+            raise RuntimeError(
+                f"Артефакт модели {resolved} не является обычным файлом"
+            )
+        if not _is_within_directory(resolved, MODEL_DIR):
+            raise RuntimeError(
+                f"Артефакт модели {resolved} выходит за пределы MODEL_DIR"
+            )
+        source = str(resolved)
+
     loader = getattr(_joblib_numpy_pickle, "load", None)
     if loader is None:  # pragma: no cover - extremely unlikely for supported joblib
         raise RuntimeError("Текущая версия joblib не предоставляет numpy_pickle.load")
