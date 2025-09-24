@@ -38,6 +38,11 @@ apply_patch_or_skip() {
     return 0
   fi
 
+  if patch -p1 --reverse --dry-run <"${patch_file}"; then
+    echo "Патч ${patch_file} уже применён (обратное применение прошло успешно), пропускаем." >&2
+    return 0
+  fi
+
   if [[ ${#sentinels[@]} -eq 0 ]]; then
     echo "Не удалось применить патч ${patch_file}" >&2
     return 1
