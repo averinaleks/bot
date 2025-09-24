@@ -26,6 +26,7 @@ from bot.utils import ensure_writable_directory
 from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
+    create_joblib_stub,
     safe_joblib_load,
     set_model_dir,
     verify_model_state_signature,
@@ -78,17 +79,9 @@ except Exception as exc:  # pragma: no cover - joblib is optional in tests
     LOGGER.warning(
         "Не удалось импортировать joblib: %s. Сохранение моделей отключено.", exc
     )
-
-    import types
-
-    def _joblib_unavailable(*_args, **_kwargs):
-        raise RuntimeError(
-            "joblib недоступен: установите зависимость для работы с артефактами"
-        )
-
-    joblib = types.ModuleType("joblib")
-    joblib.dump = _joblib_unavailable  # type: ignore[attr-defined]
-    joblib.load = _joblib_unavailable  # type: ignore[attr-defined]
+    joblib = create_joblib_stub(
+        "joblib недоступен: установите зависимость для работы с артефактами"
+    )
     sys.modules.setdefault("joblib", joblib)
 
 try:
