@@ -17,9 +17,11 @@ permissions:
 jobs:
   skip-non-dependabot:
     runs-on: ubuntu-latest
+    env:
+      IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]' }}
     steps:
       - name: Report skipped run
-        if: ${{ github.event_name != 'pull_request_target' || (github.actor != 'dependabot[bot]' && github.actor != 'dependabot-preview[bot]') }}
+        if: ${{ github.event_name != 'pull_request_target' || env.IS_DEPENDABOT != 'true' }}
         run: |
           write_summary() {
             if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
