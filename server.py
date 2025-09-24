@@ -71,6 +71,32 @@ from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
+_MASKED_HEADER_VALUE = "***"
+_SENSITIVE_BOUNDARY_RE = re.compile(r"(^|[^a-z0-9])(auth|key|cookie)([^a-z0-9]|$)")
+_SENSITIVE_KEYWORDS = ("token", "secret", "session", "sessionid", "password", "apikey")
+
+
+def _mask_header_value(name: str, value: Any) -> str:
+    """Return ``value`` masked when ``name`` looks sensitive."""
+
+    lowered = str(name).lower()
+    if _SENSITIVE_BOUNDARY_RE.search(lowered) or any(keyword in lowered for keyword in _SENSITIVE_KEYWORDS):
+        return _MASKED_HEADER_VALUE
+    return sanitize_log_value(value)
+
+
+def _format_headers_for_log(headers: Mapping[str, Any] | None) -> str:
+    """Format request ``headers`` into a sanitized string for logging."""
+
+    if not headers:
+        return "{}"
+    pairs: list[str] = []
+    for raw_name, raw_value in headers.items():
+        safe_name = sanitize_log_value(raw_name)
+        masked_value = _mask_header_value(raw_name, raw_value)
+        pairs.append(f"{safe_name}: {masked_value}")
+    return "{" + ", ".join(pairs) + "}"
+
 if not DOTENV_AVAILABLE:
     logger.warning(
         "python-dotenv is not installed; continuing without loading .env files (%s)",
@@ -319,19 +345,22 @@ MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 async def check_api_key(request: Request, call_next):
     safe_method = sanitize_log_value(request.method)
     safe_url = sanitize_log_value(str(request.url))
+    safe_headers = _format_headers_for_log(getattr(request, "headers", None))
     if not API_KEYS:
         logging.warning(
-            "Rejecting request: authentication configuration is missing. method=%s url=%s",
+            "Rejecting request: authentication configuration is missing. method=%s url=%s headers=%s",
             safe_method,
             safe_url,
+            safe_headers,
         )
         return Response(status_code=401)
     auth = request.headers.get("Authorization")
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
-            "Unauthorized request: method=%s url=%s",
+            "Unauthorized request: method=%s url=%s headers=%s",
             safe_method,
             safe_url,
+            safe_headers,
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -340,9 +369,10 @@ async def check_api_key(request: Request, call_next):
             break
     else:
         logging.warning(
-            "Unauthorized request: method=%s url=%s",
+            "Unauthorized request: method=%s url=%s headers=%s",
             safe_method,
             safe_url,
+            safe_headers,
         )
         return Response(status_code=401)
     return await call_next(request)
