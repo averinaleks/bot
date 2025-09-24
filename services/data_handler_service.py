@@ -6,23 +6,47 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 import logging
+import os
 import threading
+from types import SimpleNamespace
+
+from bot.dotenv_utils import load_dotenv
+
+load_dotenv()
+
+_ALLOW_OFFLINE = (
+    os.getenv("OFFLINE_MODE") == "1"
+    or os.getenv("TEST_MODE") == "1"
+    or os.getenv("DATA_HANDLER_USE_STUB") == "1"
+)
 
 try:
-    import ccxt
-except ImportError as exc:  # pragma: no cover - critical dependency missing
-    logging.getLogger(__name__).critical(
-        "Библиотека `ccxt` не установлена. Установите `pip install ccxt` "
-        "или используйте заглушку биржи в тестовом окружении."
-    )
-    raise ImportError(
-        "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
-    ) from exc
+    import ccxt  # type: ignore
+except ImportError as exc:  # pragma: no cover - optional in offline mode
+    logger = logging.getLogger(__name__)
+    if _ALLOW_OFFLINE:
+        logger.warning(
+            "`ccxt` не найден: DataHandlerService использует OfflineBybit. "
+            "Для онлайн-запуска установите зависимость `pip install ccxt`."
+        )
+        from services.offline import OfflineBybit
+
+        ccxt = SimpleNamespace(  # type: ignore[assignment]
+            bybit=OfflineBybit,
+            BaseError=Exception,
+            NetworkError=Exception,
+        )
+    else:
+        logger.critical(
+            "Библиотека `ccxt` не установлена. Установите `pip install ccxt` "
+            "или активируйте офлайн-режим (OFFLINE_MODE=1)."
+        )
+        raise ImportError(
+            "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
+        ) from exc
 
 import hmac
-import os
 import tempfile
-from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
 from services.logging_utils import sanitize_log_value
 try:  # optional dependency
@@ -43,8 +67,6 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when werkzeug absent
     class HTTPException(Exception):  # type: ignore[no-redef]
         pass
-
-load_dotenv()
 
 app = Flask(__name__)
 # Минимальный shim Flask, используемый в тестах, может не иметь атрибута

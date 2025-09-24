@@ -12,32 +12,55 @@ from pathlib import Path
 import hmac
 import json
 import logging
+import math
 import os
 import stat
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
-
-try:
-    import ccxt
-except ImportError as exc:  # pragma: no cover - critical dependency missing
-    logging.getLogger(__name__).critical(
-        "Библиотека `ccxt` обязательна для TradeManager. Установите её через "
-        "`pip install ccxt` или подключите локальный mock-объект биржи."
-    )
-    raise ImportError(
-        "TradeManager не может работать без зависимости `ccxt`."
-    ) from exc
 
 from bot.dotenv_utils import load_dotenv
 from bot.utils import validate_host, safe_int
 from services.logging_utils import sanitize_log_value
 
 load_dotenv()
+
+_ALLOW_OFFLINE = (
+    os.getenv("OFFLINE_MODE") == "1"
+    or os.getenv("TEST_MODE") == "1"
+    or os.getenv("TRADE_MANAGER_USE_STUB") == "1"
+)
+
+try:
+    import ccxt  # type: ignore
+except ImportError as exc:  # pragma: no cover - optional in offline mode
+    logger = logging.getLogger(__name__)
+    if _ALLOW_OFFLINE:
+        logger.warning(
+            "`ccxt` не найден: TradeManagerService использует OfflineBybit. "
+            "Для работы с реальной биржей установите `pip install ccxt`."
+        )
+        from services.offline import OfflineBybit
+
+        ccxt = SimpleNamespace(  # type: ignore[assignment]
+            bybit=OfflineBybit,
+            BaseError=Exception,
+            NetworkError=Exception,
+            BadRequest=Exception,
+        )
+    else:
+        logger.critical(
+            "Библиотека `ccxt` обязательна для TradeManager. Установите её через "
+            "`pip install ccxt` или активируйте OFFLINE_MODE=1."
+        )
+        raise ImportError(
+            "TradeManager не может работать без зависимости `ccxt`."
+        ) from exc
 app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
@@ -45,6 +68,7 @@ if hasattr(app, "config"):
 logger = logging.getLogger(__name__)
 exchange = None
 _init_lock = threading.Lock()
+POSITIONS_LOCK = threading.RLock()
 
 
 def init_exchange() -> None:
@@ -81,32 +105,36 @@ else:
 @app.before_request
 def _require_api_token() -> ResponseReturnValue | None:
     """Simple token-based authentication middleware."""
-    if request.method == 'POST' or request.path == '/positions':
-        token = request.headers.get('Authorization', '')
-        if token.lower().startswith('bearer '):
-            token = token[7:]
-        else:
-            token = request.headers.get('X-API-KEY', token)
-        token = token.strip()
 
-        expected = API_TOKEN
-        reason: str | None = None
-        if not expected:
-            reason = 'server token not configured'
-        elif not token:
-            reason = 'missing token'
-        elif not hmac.compare_digest(token, expected):
-            reason = 'token mismatch'
+    if request.method != 'POST' and request.path != '/positions':
+        return None
 
-        if reason is not None:
-            remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
-            logger.warning(
-                'Rejected TradeManager request to %s from %s: %s',
-                sanitize_log_value(request.path),
-                sanitize_log_value(remote),
-                reason,
-            )
-            return jsonify({'error': 'unauthorized'}), 401
+    expected = API_TOKEN
+    if not expected:
+        return None
+
+    token = request.headers.get('Authorization', '')
+    if token.lower().startswith('bearer '):
+        token = token[7:]
+    else:
+        token = request.headers.get('X-API-KEY', token)
+    token = token.strip()
+
+    reason: str | None = None
+    if not token:
+        reason = 'missing token'
+    elif not hmac.compare_digest(token, expected):
+        reason = 'token mismatch'
+
+    if reason is not None:
+        remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
+        logger.warning(
+            'Rejected TradeManager request to %s from %s: %s',
+            sanitize_log_value(request.path),
+            sanitize_log_value(remote),
+            reason,
+        )
+        return jsonify({'error': 'unauthorized'}), 401
     return None
 
 # Gracefully handle missing ccxt error classes when running under test stubs
@@ -158,21 +186,28 @@ def _positions_file_is_safe(path: Path) -> bool:
 
 def _load_positions() -> None:
     """Load positions list from on-disk cache."""
-    global POSITIONS
     if not _positions_directory_is_safe(POSITIONS_FILE):
-        POSITIONS = []
+        with POSITIONS_LOCK:
+            POSITIONS.clear()
         return
     if not _positions_file_is_safe(POSITIONS_FILE):
-        POSITIONS = []
+        with POSITIONS_LOCK:
+            POSITIONS.clear()
         return
+    loaded: list[dict] = []
     try:
         with POSITIONS_FILE.open('r', encoding='utf-8') as fh:
-            POSITIONS = json.load(fh)
+            data = json.load(fh)
+        if isinstance(data, list):
+            loaded = data
     except (OSError, json.JSONDecodeError):
-        POSITIONS = []
+        loaded = []
+
+    with POSITIONS_LOCK:
+        POSITIONS[:] = loaded
 
 
-def _save_positions() -> None:
+def _write_positions_locked() -> None:
     """Persist positions list to on-disk cache."""
     directory = POSITIONS_FILE.parent
     if not _positions_directory_is_safe(POSITIONS_FILE):
@@ -204,9 +239,10 @@ def _save_positions() -> None:
         return
 
     tmp_path = Path(tmp_name)
+    snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-            json.dump(POSITIONS, fh)
+            json.dump(snapshot, fh)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp_path, POSITIONS_FILE)
@@ -216,6 +252,13 @@ def _save_positions() -> None:
             tmp_path.unlink()
         except OSError:
             pass
+
+
+def _save_positions() -> None:
+    """Public wrapper ensuring the positions lock is held while saving."""
+
+    with POSITIONS_LOCK:
+        _write_positions_locked()
 
 
 
@@ -296,45 +339,48 @@ def _sync_positions_with_exchange() -> None:
         if symbol and side and (amount is None or amount > 0):
             active_pairs.add((symbol.upper(), side))
 
-    before_count = len(POSITIONS)
-    filtered: list[dict] = []
-    for record in POSITIONS:
-        if record.get('action') != 'open':
-            filtered.append(record)
-            continue
+    with POSITIONS_LOCK:
+        before_count = len(POSITIONS)
+        filtered: list[dict] = []
+        for record in POSITIONS:
+            if record.get('action') != 'open':
+                filtered.append(record)
+                continue
 
-        record_id = record.get('id')
-        if record_id is not None and str(record_id) in active_ids:
-            filtered.append(record)
-            continue
+            record_id = record.get('id')
+            if record_id is not None and str(record_id) in active_ids:
+                filtered.append(record)
+                continue
 
-        record_symbol = record.get('symbol')
-        record_side = str(record.get('side', '')).lower()
-        if record_side == 'long':
-            record_side = 'buy'
-        elif record_side == 'short':
-            record_side = 'sell'
+            record_symbol = record.get('symbol')
+            record_side = str(record.get('side', '')).lower()
+            if record_side == 'long':
+                record_side = 'buy'
+            elif record_side == 'short':
+                record_side = 'sell'
 
-        if (
-            record_symbol
-            and record_side
-            and (str(record_symbol).upper(), record_side) in active_pairs
-        ):
-            filtered.append(record)
-            continue
+            if (
+                record_symbol
+                and record_side
+                and (str(record_symbol).upper(), record_side) in active_pairs
+            ):
+                filtered.append(record)
+                continue
 
-        # Position missing on the exchange – drop it locally.
-        logger.info(
-            'removing closed position %s %s (%s)',
-            sanitize_log_value(record_symbol),
-            record_side,
-            sanitize_log_value(record_id),
-        )
+            # Position missing on the exchange – drop it locally.
+            logger.info(
+                'removing closed position %s %s (%s)',
+                sanitize_log_value(record_symbol),
+                record_side,
+                sanitize_log_value(record_id),
+            )
 
-    removed = before_count - len(filtered)
-    POSITIONS[:] = filtered
-    if removed > 0:
-        _save_positions()
+        removed = before_count - len(filtered)
+        changed = filtered != POSITIONS
+        if changed:
+            POSITIONS[:] = filtered
+        if removed > 0 or changed:
+            _write_positions_locked()
 
 
 _load_positions()
@@ -351,20 +397,20 @@ def _record(
     sl: float | None = None,
     entry_price: float | None = None,
 ) -> None:
-    POSITIONS.append(
-        {
-            'id': order.get('id'),
-            'symbol': symbol,
-            'side': side,
-            'amount': amount,
-            'action': action,
-            'trailing_stop': trailing_stop,
-            'tp': tp,
-            'sl': sl,
-            'entry_price': entry_price,
-        }
-    )
-    _save_positions()
+    record = {
+        'id': order.get('id'),
+        'symbol': symbol,
+        'side': side,
+        'amount': amount,
+        'action': action,
+        'trailing_stop': trailing_stop,
+        'tp': tp,
+        'sl': sl,
+        'entry_price': entry_price,
+    }
+    with POSITIONS_LOCK:
+        POSITIONS.append(record)
+        _write_positions_locked()
 
 
 @app.route('/open_position', methods=['POST'])
@@ -375,21 +421,36 @@ def open_position() -> ResponseReturnValue:
         return jsonify({'error': 'invalid json'}), 400
     symbol = data.get('symbol')
     side = str(data.get('side', 'buy')).lower()
-    price = float(data.get('price', 0) or 0)
-    amount = float(data.get('amount', 0))
+    try:
+        price = float(data.get('price', 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid order'}), 400
+    try:
+        amount = float(data.get('amount', 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid order'}), 400
     tp = data.get('tp')
     sl = data.get('sl')
     trailing_stop = data.get('trailing_stop')
     tp = float(tp) if tp is not None else None
     sl = float(sl) if sl is not None else None
     trailing_stop = float(trailing_stop) if trailing_stop is not None else None
+    risk_usd = 0.0
     if amount <= 0:
-        risk_usd = float(os.getenv('TRADE_RISK_USD', '0') or 0)
-        if risk_usd > 0 and price > 0:
+        raw_risk = os.getenv('TRADE_RISK_USD', '0') or 0
+        try:
+            risk_usd = float(raw_risk)
+        except (TypeError, ValueError):
+            risk_usd = 0.0
+        if risk_usd > 0:
+            if not math.isfinite(price) or price <= 0:
+                return jsonify({'error': 'invalid order'}), 400
             amount = risk_usd / price
+    if not math.isfinite(amount) or amount <= 0:
+        return jsonify({'error': 'invalid order'}), 400
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
-    if not symbol or amount <= 0:
+    if not symbol:
         return jsonify({'error': 'invalid order'}), 400
     try:
         protective_failures: list[dict[str, str]] = []
@@ -496,7 +557,7 @@ def open_position() -> ResponseReturnValue:
             trailing_stop,
             tp,
             sl,
-            price if price > 0 else None,
+            price if math.isfinite(price) and price > 0 else None,
         )
         response: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
         if protective_failures:
@@ -575,27 +636,32 @@ def close_position() -> ResponseReturnValue:
     side = str(data.get('side', '')).lower()
     close_amount = data.get('close_amount')
     if close_amount is not None:
-        close_amount = float(close_amount)
+        try:
+            close_amount = float(close_amount)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'invalid order'}), 400
+        if not math.isfinite(close_amount) or close_amount <= 0:
+            return jsonify({'error': 'invalid order'}), 400
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     if not order_id or not side:
         return jsonify({'error': 'invalid order'}), 400
 
-    rec_index = next(
-        (
-            i
-            for i, rec in enumerate(POSITIONS)
-            if rec.get('id') == order_id and rec.get('action') == 'open'
-        ),
-        None,
-    )
-    if rec_index is None:
+    with POSITIONS_LOCK:
+        rec = next(
+            (
+                dict(rec)
+                for rec in POSITIONS
+                if rec.get('id') == order_id and rec.get('action') == 'open'
+            ),
+            None,
+        )
+    if rec is None:
         return jsonify({'error': 'order not found'}), 404
 
-    rec = POSITIONS[rec_index]
     symbol = rec.get('symbol')
-    amount = close_amount if close_amount is not None else rec.get('amount', 0)
-    if amount <= 0:
+    amount = close_amount if close_amount is not None else float(rec.get('amount', 0) or 0)
+    if not math.isfinite(amount) or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
 
     params = {'reduce_only': True}
@@ -604,12 +670,23 @@ def close_position() -> ResponseReturnValue:
         if not order or order.get('id') is None:
             app.logger.error('failed to create close order')
             return jsonify({'error': 'order creation failed'}), 500
-        remaining = rec.get('amount', 0) - amount
-        if remaining <= 0:
-            POSITIONS.pop(rec_index)
-        else:
-            rec['amount'] = remaining
-        _save_positions()
+        with POSITIONS_LOCK:
+            rec_index = next(
+                (
+                    i
+                    for i, current in enumerate(POSITIONS)
+                    if current.get('id') == order_id and current.get('action') == 'open'
+                ),
+                None,
+            )
+            if rec_index is not None:
+                current = POSITIONS[rec_index]
+                remaining = float(current.get('amount', 0) or 0) - amount
+                if remaining <= 0:
+                    POSITIONS.pop(rec_index)
+                else:
+                    current['amount'] = remaining
+                _write_positions_locked()
         return jsonify({'status': 'ok', 'order_id': order.get('id')})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error closing position: %s', exc)
@@ -625,7 +702,9 @@ def close_position() -> ResponseReturnValue:
 @app.route('/positions')
 def positions() -> ResponseReturnValue:
     _sync_positions_with_exchange()
-    return jsonify({'positions': POSITIONS})
+    with POSITIONS_LOCK:
+        snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
+    return jsonify({'positions': snapshot})
 
 
 @app.route('/ping')
