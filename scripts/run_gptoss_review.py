@@ -19,9 +19,8 @@ import ipaddress
 import json
 import os
 import sys
-import http.client
-import socket
-import ssl
+import requests
+from requests import exceptions as requests_exceptions
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -72,40 +71,31 @@ def _build_payload(diff_text: str, model: str | None) -> dict[str, Any]:
 
 
 def _perform_http_request(
-    parsed, data: bytes, headers: dict[str, str], timeout: float
+    url: str, data: bytes, headers: dict[str, str], timeout: float
 ) -> tuple[int, str, bytes]:
     """Execute an HTTP(S) request and return status, reason and body."""
 
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-
-    host = parsed.hostname or ""
-    port = parsed.port
-    if parsed.scheme == "https":
-        context = ssl.create_default_context()
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            host, port=port or 443, timeout=timeout, context=context
+    try:
+        response = requests.post(
+            url,
+            data=data,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
         )
-    else:
-        connection = http.client.HTTPConnection(host, port=port or 80, timeout=timeout)
+    except requests_exceptions.Timeout as exc:
+        raise TimeoutError(str(exc) or "timed out") from exc
+    except requests_exceptions.RequestException as exc:
+        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
 
     try:
-        connection.request("POST", path, body=data, headers=headers)
-        response = connection.getresponse()
-        body = response.read()
-        status = int(response.status)
+        status = int(response.status_code)
         reason = response.reason or ""
-        return status, reason, body
-    except socket.timeout as exc:
-        raise TimeoutError(str(exc) or "timed out") from exc
-    except (OSError, http.client.HTTPException) as exc:
-        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
+        payload = response.content
     finally:
-        try:
-            connection.close()
-        except OSError:
-            pass
+        response.close()
+
+    return status, reason, payload
 
 
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -124,8 +114,11 @@ def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
 
+    sanitised = parsed._replace(path=parsed.path or "/", fragment="")
+    url = sanitised.geturl()
+
     try:
-        status, reason, body = _perform_http_request(parsed, data, headers, timeout)
+        status, reason, body = _perform_http_request(url, data, headers, timeout)
     except TimeoutError as exc:
         raise RuntimeError(f"Не удалось подключиться к GPT-OSS ({api_url}): {exc}") from exc
     except ConnectionError as exc:
