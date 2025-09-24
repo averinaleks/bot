@@ -68,20 +68,20 @@ PY
 # previously implemented via a heredoc and chained to the snippet above, Docker
 # occasionally parsed the first statement ("nvidia_packages=...") as a top-level
 # instruction, breaking the docker-publish workflow with a "dockerfile parse
-# error". Using ``bash -c`` keeps the logic compact without relying on heredoc
-# parsing quirks. Historical failures:
+# error". Historical failures:
 # https://github.com/averinaleks/bot/actions/workflows/docker-publish.yml
 
-RUN bash -euo pipefail -c '
-    nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i "^nvidia-" || true)"
-    if [ -n "$nvidia_packages" ]; then
-        printf "%s\n" "$nvidia_packages" | cut -d= -f1 | xargs -r "$VIRTUAL_ENV"/bin/pip uninstall -y
-    else
-        echo "No NVIDIA packages detected in the virtual environment"
-    fi
-    find "$VIRTUAL_ENV" -type d -name "__pycache__" -exec rm -rf {} +
-    find "$VIRTUAL_ENV" -type f -name "*.pyc" -delete
-'
+RUN bash <<'BASH'
+set -euo pipefail
+nvidia_packages="$($VIRTUAL_ENV/bin/pip freeze | grep -i "^nvidia-" || true)"
+if [ -n "$nvidia_packages" ]; then
+    printf "%s\n" "$nvidia_packages" | cut -d= -f1 | xargs -r "$VIRTUAL_ENV"/bin/pip uninstall -y
+else
+    echo "No NVIDIA packages detected in the virtual environment"
+fi
+find "$VIRTUAL_ENV" -type d -name "__pycache__" -exec rm -rf {} +
+find "$VIRTUAL_ENV" -type f -name "*.pyc" -delete
+BASH
 
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
