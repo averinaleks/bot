@@ -18,6 +18,8 @@ from security import (
     ensure_minimum_ray_version,
     harden_mlflow,
     safe_joblib_load,
+    set_model_dir,
+    MODEL_DIR,
 )
 
 
@@ -27,6 +29,18 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for key in ("RAY_DISABLE_DASHBOARD", "RAY_JOB_ALLOWLIST", "MLFLOW_ENABLE_MODEL_LOADING"):
         monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_model_dir(tmp_path: Path) -> None:
+    """Обеспечить использование временного каталога для артефактов моделей."""
+
+    original_dir = MODEL_DIR
+    set_model_dir(tmp_path)
+    try:
+        yield
+    finally:
+        set_model_dir(original_dir)
 
 
 def _build_mlflow_stub() -> ModuleType:
@@ -172,3 +186,31 @@ def test_safe_joblib_load_enforces_module_allowlist(
     )
     assert isinstance(permitted, malicious_module.Payload)
     assert permitted.value == 99
+
+
+def test_safe_joblib_load_rejects_symlink(tmp_path: Path) -> None:
+    joblib = pytest.importorskip("joblib")
+
+    target = tmp_path / "model.joblib"
+    joblib.dump({"value": 1}, target)
+    link = tmp_path / "model-link.joblib"
+    link.symlink_to(target)
+
+    with pytest.raises(RuntimeError) as exc:
+        safe_joblib_load(link)
+
+    assert "симлинк" in str(exc.value)
+
+
+def test_safe_joblib_load_rejects_path_outside_model_dir(tmp_path: Path) -> None:
+    joblib = pytest.importorskip("joblib")
+
+    external_dir = tmp_path.parent / "external"
+    external_dir.mkdir(exist_ok=True)
+    outside = external_dir / "model.joblib"
+    joblib.dump({"value": 2}, outside)
+
+    with pytest.raises(RuntimeError) as exc:
+        safe_joblib_load(outside)
+
+    assert "MODEL_DIR" in str(exc.value)

@@ -974,6 +974,9 @@ class ModelBuilder:
         )
         self.cache_dir = Path(resolved_cache_dir).resolve()
         config["cache_dir"] = str(self.cache_dir)
+        # Ensure security-sensitive helpers restrict deserialisation to the
+        # active cache directory.
+        set_model_dir(self.cache_dir)
         self.state_file_path = (self.cache_dir / "model_builder_state.pkl").resolve(
             strict=False
         )
