@@ -38,6 +38,8 @@ MAX_RESPONSE_BYTES = 10000
 MAX_RETRIES = 3
 # Marker stored in allowed IP sets when DNS resolution failed in TEST_MODE.
 _TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
+# Default hosts that are considered safe targets for GPT OSS API requests.
+_DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _allow_insecure_url() -> bool:
@@ -113,7 +115,32 @@ def _is_local_hostname(hostname: str) -> bool:
     return ip_obj.is_loopback or ip_obj.is_private
 
 
-def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
+def _normalise_allowed_host(value: str) -> str | None:
+    """Normalise *value* from ``GPT_OSS_ALLOWED_HOSTS`` to bare host syntax."""
+
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    if trimmed.startswith("[") and trimmed.endswith("]"):
+        trimmed = trimmed[1:-1]
+    return trimmed.lower()
+
+
+def _load_allowed_hosts() -> set[str]:
+    """Return a set of hosts explicitly permitted for GPT OSS requests."""
+
+    raw = os.getenv("GPT_OSS_ALLOWED_HOSTS")
+    hosts = set(_DEFAULT_ALLOWED_HOSTS)
+    if not raw:
+        return hosts
+    for part in raw.split(","):
+        normalised = _normalise_allowed_host(part)
+        if normalised:
+            hosts.add(normalised)
+    return hosts
+
+
+def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[str]]:
     parsed = urlparse(api_url)
     if not parsed.scheme:
         raise GPTClientError(
@@ -126,6 +153,20 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
     if scheme not in {"http", "https"}:
         raise GPTClientError(
             f"GPT_OSS_API URL scheme {scheme!r} is not supported; use http or https"
+        )
+
+    hostname = parsed.hostname.lower()
+    if hostname.startswith("[") and hostname.endswith("]"):
+        hostname = hostname[1:-1]
+
+    try:
+        host_ip = ip_address(hostname)
+    except ValueError:
+        host_ip = None
+
+    if host_ip is None and hostname not in allowed_hosts:
+        raise GPTClientError(
+            "GPT_OSS_API host must be explicitly allowed via GPT_OSS_ALLOWED_HOSTS"
         )
 
     resolution_failed = False
@@ -169,7 +210,12 @@ def _validate_api_url(api_url: str) -> tuple[str, set[str]]:
         elif _insecure_allowed():
             logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
 
-    return parsed.hostname, resolved_ips
+    if host_ip is not None and not (host_ip.is_loopback or host_ip.is_private):
+        raise GPTClientError(
+            "GPT_OSS_API host IP must be loopback or private when not allowlisted"
+        )
+
+    return hostname, resolved_ips
 
 
 async def _fetch_response(
@@ -267,7 +313,8 @@ def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
         logger.error(message)
         raise GPTClientNetworkError(message)
 
-    hostname, allowed_ips = _validate_api_url(api_url)
+    allowed_hosts = _load_allowed_hosts()
+    hostname, allowed_ips = _validate_api_url(api_url, allowed_hosts)
 
     timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
     try:
