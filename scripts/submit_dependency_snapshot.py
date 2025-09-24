@@ -15,9 +15,6 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
-
 MANIFEST_PATTERNS = (
     "requirements*.txt",
     "requirements*.in",
@@ -404,6 +401,15 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    try:
+        import requests
+        from requests import exceptions as requests_exceptions
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised via import test
+        raise RuntimeError(
+            "The 'requests' package is required to submit dependency snapshots."
+            " Установите requests, чтобы включить отправку снапшотов."
+        ) from exc
+
     host, port, path = _https_components(url)
     if port == 443:
         request_url = f"https://{host}{path}"
