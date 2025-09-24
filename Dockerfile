@@ -92,7 +92,8 @@ RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81'
 from __future__ import annotations
 import os
 from pathlib import Path
-from urllib.request import urlretrieve
+import hashlib
+from urllib.request import urlopen
 
 try:
     import ray  # type: ignore
@@ -103,10 +104,32 @@ else:
     jars_dir.mkdir(parents=True, exist_ok=True)
     for jar in jars_dir.glob("commons-lang3-*.jar"):
         jar.unlink()
-    urlretrieve(
-        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar",
-        jars_dir / "commons-lang3-3.18.0.jar",
+
+    commons_lang3_url = (
+        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/"
+        "commons-lang3-3.18.0.jar"
     )
+    commons_lang3_sha256 = (
+        "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
+    )
+    destination = jars_dir / "commons-lang3-3.18.0.jar"
+
+    hasher = hashlib.sha256()
+    with urlopen(commons_lang3_url) as response, destination.open("wb") as fh:
+        while True:
+            chunk = response.read(8192)
+            if not chunk:
+                break
+            fh.write(chunk)
+            hasher.update(chunk)
+
+    digest = hasher.hexdigest()
+    if digest != commons_lang3_sha256:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError(
+            "SHA256 mismatch while downloading commons-lang3: expected "
+            f"{commons_lang3_sha256}, got {digest}"
+        )
 PY
     find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete && \
