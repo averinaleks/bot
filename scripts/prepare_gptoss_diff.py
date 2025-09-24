@@ -23,9 +23,8 @@ import os
 import re
 import subprocess  # nosec B404
 import sys
-import http.client
-import socket
-import ssl
+
+import requests
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -147,29 +146,31 @@ def _perform_https_request(
     if parsed.username or parsed.password:
         raise RuntimeError("URL GitHub API не должен содержать учетные данные")
 
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-
     host = parsed.hostname
-    port = parsed.port or 443
+    if ":" in host and not host.startswith("["):
+        formatted_host = f"[{host}]"
+    else:
+        formatted_host = host
 
-    context = ssl.create_default_context()
-    connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
+    port = parsed.port or 443
+    if port != 443:
+        formatted_host = f"{formatted_host}:{port}"
+
+    path = parsed.path or "/"
+    target_url = f"https://{formatted_host}{path}"
+    if parsed.query:
+        target_url = f"{target_url}?{parsed.query}"
+
     try:
-        connection.request("GET", path, headers=headers)
-        response = connection.getresponse()
-        body = response.read()
-        status = int(response.status)
-        reason = response.reason or ""
-        return status, reason, body
-    except (socket.timeout, OSError, http.client.HTTPException) as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    finally:
-        try:
-            connection.close()
-        except OSError:
-            pass
+        response = requests.get(target_url, headers=headers, timeout=timeout)
+    except requests.Timeout as exc:
+        message = str(exc).strip() or "timed out"
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
+    except requests.RequestException as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
+
+    return response.status_code, response.reason or "", response.content
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:

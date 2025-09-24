@@ -6,7 +6,6 @@ import fnmatch
 import json
 import os
 import re
-import socket
 import sys
 import time
 from collections import OrderedDict
@@ -14,9 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 from urllib.parse import quote, urlparse
+
+import requests
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -409,68 +408,45 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     netloc = host if port == 443 else f"{host}:{port}"
     target_url = f"https://{netloc}{path}"
     last_error: Exception | None = None
-    for attempt in range(1, 4):
-        request = urllib_request.Request(
-            target_url, data=body, headers=headers, method="POST"
-        )
-        try:
-            with urllib_request.urlopen(request, timeout=30) as response:
-                status_code = int(response.status)
+    with requests.Session() as session:
+        for attempt in range(1, 4):
+            try:
+                response = session.post(
+                    target_url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                )
+                status_code = int(response.status_code)
                 reason = response.reason or ""
-                payload = response.read()
-        except (TimeoutError, socket.timeout) as exc:
-            message = str(exc) or "timed out"
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
+                payload = response.content
+            except requests.Timeout as exc:
+                message = str(exc).strip() or "timed out"
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
                 last_error = exc
-                continue
-            last_error = exc
-            break
-        except urllib_error.HTTPError as exc:
-            status_code = int(exc.code)
-            reason = exc.reason or ""
-            payload = exc.read() if hasattr(exc, "read") else b""
-            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
-                last_error = DependencySubmissionError(
-                    status_code,
-                    f"Retryable HTTP {status_code}: {reason}",
-                )
-                continue
-            message = payload.decode(errors="replace") or reason
-            print(
-                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
-                file=sys.stderr,
-            )
-            raise DependencySubmissionError(
-                status_code,
-                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-            )
-        except urllib_error.URLError as exc:
-            reason = getattr(exc, "reason", exc)
-            message = str(reason).strip() or exc.__class__.__name__
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network error '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
+                break
+            except requests.RequestException as exc:
+                message = str(exc).strip() or exc.__class__.__name__
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network error '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
                 last_error = exc
-                continue
-            last_error = exc
-            break
-        else:
+                break
+
             if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(

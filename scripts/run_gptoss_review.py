@@ -19,9 +19,8 @@ import ipaddress
 import json
 import os
 import sys
-import http.client
-import socket
-import ssl
+
+import requests
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -76,36 +75,42 @@ def _perform_http_request(
 ) -> tuple[int, str, bytes]:
     """Execute an HTTP(S) request and return status, reason and body."""
 
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-
     host = parsed.hostname or ""
+    if parsed.username or parsed.password:
+        raise RuntimeError("URL не должен содержать учетные данные")
+
+    formatted_host = host
+    if ":" in host and not host.startswith("["):
+        formatted_host = f"[{host}]"
+
     port = parsed.port
-    if parsed.scheme == "https":
-        context = ssl.create_default_context()
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            host, port=port or 443, timeout=timeout, context=context
-        )
-    else:
-        connection = http.client.HTTPConnection(host, port=port or 80, timeout=timeout)
+    default_port = 443 if parsed.scheme == "https" else 80
+    if port and port != default_port:
+        formatted_host = f"{formatted_host}:{port}"
+
+    path = parsed.path or "/"
+    target_url = f"{parsed.scheme}://{formatted_host}{path}"
+    if parsed.query:
+        target_url = f"{target_url}?{parsed.query}"
+
+    verify = parsed.scheme == "https"
 
     try:
-        connection.request("POST", path, body=data, headers=headers)
-        response = connection.getresponse()
-        body = response.read()
-        status = int(response.status)
-        reason = response.reason or ""
-        return status, reason, body
-    except socket.timeout as exc:
-        raise TimeoutError(str(exc) or "timed out") from exc
-    except (OSError, http.client.HTTPException) as exc:
-        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
-    finally:
-        try:
-            connection.close()
-        except OSError:
-            pass
+        response = requests.post(
+            target_url,
+            data=data,
+            headers=headers,
+            timeout=timeout,
+            verify=verify,
+        )
+    except requests.Timeout as exc:
+        message = str(exc).strip() or "timed out"
+        raise TimeoutError(message) from exc
+    except requests.RequestException as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        raise ConnectionError(message) from exc
+
+    return response.status_code, response.reason or "", response.content
 
 
 def _send_request(api_url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
