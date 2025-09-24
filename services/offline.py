@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import secrets
+import time
 from collections.abc import Callable, Mapping
 
 from bot.config import OFFLINE_MODE
@@ -101,6 +103,64 @@ class OfflineBybit:
 
     def __init__(self, *args, **kwargs) -> None:
         self.orders: list[dict] = []
+        self._prices: dict[str, float] = {}
+
+    def set_price(self, symbol: str, price: float) -> None:
+        """Override cached price for ``symbol`` in tests or simulations."""
+
+        if price <= 0:
+            raise ValueError("offline price must be positive")
+        self._prices[symbol.upper()] = float(price)
+
+    def _resolve_price(self, symbol: str) -> float:
+        cached = self._prices.get(symbol.upper())
+        if cached and cached > 0:
+            return cached
+        # Deterministic pseudo price derived from the symbol name to keep tests
+        # stable without requiring randomness.
+        base = abs(hash(symbol.upper())) % 10_000
+        price = 10_000 + base
+        resolved = float(price)
+        self._prices[symbol.upper()] = resolved
+        return resolved
+
+    def fetch_ticker(self, symbol: str) -> dict:
+        """Return a deterministic pseudo ticker for ``symbol``."""
+
+        return {"last": self._resolve_price(symbol)}
+
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str = "1m",
+        limit: int = 200,
+    ) -> list[list[float]]:
+        """Generate a deterministic OHLCV series for ``symbol``."""
+
+        limit = max(1, int(limit or 0))
+        base_price = self._resolve_price(symbol)
+        candles: list[list[float]] = []
+        now_ms = int(time.time() * 1000)
+        step = 60_000
+        for index in range(limit):
+            ts = now_ms - (limit - index) * step
+            delta = math.sin(index / 3.0) * 0.01 * base_price
+            open_price = base_price + delta
+            close_price = base_price - delta
+            high_price = max(open_price, close_price) * 1.01
+            low_price = min(open_price, close_price) * 0.99
+            volume = 1_000 + index * 10
+            candles.append(
+                [
+                    float(ts),
+                    float(open_price),
+                    float(high_price),
+                    float(low_price),
+                    float(close_price),
+                    float(volume),
+                ]
+            )
+        return candles
 
     def create_order(
         self,
