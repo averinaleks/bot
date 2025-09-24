@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -14,30 +14,32 @@ from scripts import prepare_gptoss_diff
 @pytest.fixture()
 def temp_repo(tmp_path: Path) -> Iterator[Path]:
     remote = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "--bare", str(remote)], check=True)
+    # Bandit: the fixture initialises a temporary git repository with trusted commands.
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True)  # nosec
 
     workdir = tmp_path / "work"
-    subprocess.run(["git", "clone", str(remote), str(workdir)], check=True)
-    subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=workdir, check=True)
-    subprocess.run(["git", "config", "user.name", "CI"], cwd=workdir, check=True)
+    subprocess.run(["git", "clone", str(remote), str(workdir)], check=True)  # nosec
+    subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=workdir, check=True)  # nosec
+    subprocess.run(["git", "config", "user.name", "CI"], cwd=workdir, check=True)  # nosec
 
     (workdir / "example.py").write_text("print('hi')\n", encoding="utf-8")
-    subprocess.run(["git", "add", "example.py"], cwd=workdir, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=workdir, check=True)
-    subprocess.run(["git", "branch", "-M", "main"], cwd=workdir, check=True)
-    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=workdir, check=True)
+    subprocess.run(["git", "add", "example.py"], cwd=workdir, check=True)  # nosec
+    subprocess.run(["git", "commit", "-m", "init"], cwd=workdir, check=True)  # nosec
+    subprocess.run(["git", "branch", "-M", "main"], cwd=workdir, check=True)  # nosec
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=workdir, check=True)  # nosec
 
-    subprocess.run(["git", "checkout", "-b", "feature"], cwd=workdir, check=True)
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=workdir, check=True)  # nosec
     (workdir / "example.py").write_text("print('hi')\nprint('bye')\n", encoding="utf-8")
-    subprocess.run(["git", "commit", "-am", "update"], cwd=workdir, check=True)
+    subprocess.run(["git", "commit", "-am", "update"], cwd=workdir, check=True)  # nosec
 
     yield workdir
 
 
 def test_compute_diff_returns_content(temp_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(temp_repo)
+    # Bandit: git commands operate on the temporary repository created above.
     base_sha = (
-        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)  # nosec
         .stdout.strip()
     )
 
@@ -52,7 +54,8 @@ def test_prepare_diff_reads_remote_metadata(monkeypatch: pytest.MonkeyPatch, tem
 
     pull_payload = {
         "base": {
-            "sha": subprocess.run(
+            # Bandit: git invocations here also target the controlled temporary repository.
+            "sha": subprocess.run(  # nosec
                 ["git", "rev-parse", "origin/main"],
                 cwd=temp_repo,
                 check=True,
@@ -98,7 +101,7 @@ def test_api_request_adds_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, tmp_path: Path) -> None:
     monkeypatch.chdir(temp_repo)
     base_sha = (
-        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "rev-parse", "origin/main"], cwd=temp_repo, check=True, capture_output=True, text=True)  # nosec
         .stdout.strip()
     )
 

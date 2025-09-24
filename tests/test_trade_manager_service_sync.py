@@ -17,7 +17,8 @@ def _reload_service(monkeypatch, tmp_path, exchange):
     service.POSITIONS_FILE = tmp_path / 'positions.json'
     service.POSITIONS[:] = []
     service.exchange = exchange
-    service.API_TOKEN = 'token'
+    # Bandit: a placeholder token is used solely for fixture initialisation.
+    service.API_TOKEN = 'token'  # nosec
     return service
 
 
