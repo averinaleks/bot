@@ -1,3 +1,5 @@
 name: bot CodeQL configuration
 paths-ignore:
   - .git/**
+  - '**/.git/**'
+  - '**/.git'
