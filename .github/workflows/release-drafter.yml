@@ -15,16 +15,16 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-drafter-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   update_release_draft:
+    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Skip update for forked pull requests
-        if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
-        run: echo "Skipping release drafter for pull requests from forks."
-
       - name: Update release draft
-        if: github.event_name != 'pull_request_target' || (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository)
         uses: release-drafter/release-drafter@v6.1.0
         with:
           config-name: release-drafter.yml
