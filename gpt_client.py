@@ -39,7 +39,13 @@ MAX_RETRIES = 3
 # Marker stored in allowed IP sets when DNS resolution failed in TEST_MODE.
 _TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
 # Default hosts that are considered safe targets for GPT OSS API requests.
-_DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+#
+# ``gptoss`` is the service name used inside docker-compose setups for the
+# GPT-OSS container.  Allowing it here keeps local development and the
+# integration tests (which rely on that hostname) working without requiring
+# additional configuration.  Loopback addresses remain permitted out of the
+# box for single-host deployments.
+_DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "gptoss"})
 
 
 def _allow_insecure_url() -> bool:
