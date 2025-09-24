@@ -608,10 +608,13 @@ def submit_dependency_snapshot() -> None:
     job_metadata = _job_metadata(repository, run_id, correlator)
     job_metadata["correlator"] = f"{correlator}:attempt-{run_attempt}"
 
+    metadata_workflow = os.getenv("DEPENDENCY_SNAPSHOT_WORKFLOW") or "dependency-graph"
+    metadata_job = os.getenv("DEPENDENCY_SNAPSHOT_JOB") or "submit"
+
     metadata = {
         "run_attempt": str(run_attempt),
-        "job": job_name,
-        "workflow": workflow,
+        "job": str(metadata_job),
+        "workflow": str(metadata_workflow),
     }
 
     payload = {
