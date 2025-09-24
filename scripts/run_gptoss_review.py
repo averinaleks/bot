@@ -16,7 +16,6 @@ individual helper functions.
 from __future__ import annotations
 
 import argparse
-import http.client
 import ipaddress
 import json
 import os
@@ -26,7 +25,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import HTTPHandler, HTTPSHandler, Request, build_opener
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
@@ -142,58 +143,77 @@ def _perform_http_request(
         raise RuntimeError("URL GPT-OSS не содержит hostname")
 
     host = hostname
-    # ``http.client`` expects IPv6 addresses wrapped in square brackets.
+    if parsed.username or parsed.password:
+        raise RuntimeError("URL GPT-OSS не должен содержать учетные данные")
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
 
     resolved_ips = _resolve_host_ips(hostname)
     allowed_hosts = _load_allowed_hosts() if parsed.scheme == "https" else set()
 
-    connection: http.client.HTTPConnection | None = None
-    try:
-        if parsed.scheme == "https":
-            if allowed_hosts and hostname not in allowed_hosts:
-                if not _host_ips_are_private(resolved_ips):
-                    raise RuntimeError(
-                        "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
-                    )
-            elif not _host_ips_are_private(resolved_ips):
-                raise RuntimeError(
-                    "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
-                )
-            connection = http.client.HTTPSConnection(
-                host,
-                parsed.port or 443,
-                timeout=timeout,
-                context=ssl.create_default_context(),
-            )
-        else:
+    handlers: list[object] = []
+    if parsed.scheme == "https":
+        if allowed_hosts and hostname not in allowed_hosts:
             if not _host_ips_are_private(resolved_ips):
                 raise RuntimeError(
-                    "HTTP GPT-OSS URL разрешается в неприватный адрес"
+                    "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
                 )
-            connection = http.client.HTTPConnection(
-                host,
-                parsed.port or 80,
-                timeout=timeout,
+        elif not _host_ips_are_private(resolved_ips):
+            raise RuntimeError(
+                "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
             )
+        handlers.append(HTTPSHandler(context=ssl.create_default_context()))
+    else:
+        if not _host_ips_are_private(resolved_ips):
+            raise RuntimeError(
+                "HTTP GPT-OSS URL разрешается в неприватный адрес"
+            )
+        handlers.append(HTTPHandler())
 
-        path = parsed.path or "/"
-        if parsed.query:
-            path = f"{path}?{parsed.query}"
+    opener = build_opener(*handlers)
 
-        connection.request("POST", path, body=data, headers=headers)
-        response = connection.getresponse()
-        status = int(response.status)
-        reason = response.reason or ""
-        payload = response.read()
-    except TimeoutError as exc:
-        raise TimeoutError(str(exc) or "timed out") from exc
-    except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
-        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
-    finally:
-        if connection is not None:
-            connection.close()
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    netloc = host
+    if parsed.port:
+        netloc = f"{host}:{parsed.port}"
+
+    request_url = parsed._replace(
+        netloc=netloc,
+        path=path,
+        params="",
+        query="",
+        fragment="",
+    ).geturl()
+
+    request = Request(
+        request_url,
+        data=data,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            status = int(getattr(response, "status", response.getcode()))
+            reason = getattr(response, "reason", "") or ""
+            payload = response.read()
+    except HTTPError as exc:
+        status = int(getattr(exc, "code", 0) or 0)
+        reason = getattr(exc, "reason", "") or ""
+        payload = exc.read() if hasattr(exc, "read") else b""
+    except URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, TimeoutError) or isinstance(reason, socket.timeout):
+            raise TimeoutError(str(reason) or "timed out") from exc
+        message = getattr(reason, "strerror", None) or reason or exc
+        raise ConnectionError(str(message) or "URLError") from exc
+    except ssl.SSLError as exc:
+        raise ConnectionError(str(exc) or "SSL error") from exc
+    else:
+        return status, reason, payload
 
     return status, reason, payload
 

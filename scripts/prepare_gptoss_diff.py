@@ -29,7 +29,7 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, Request, build_opener
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -197,9 +197,9 @@ def _perform_https_request(
         method="GET",
     )
 
-    context = ssl.create_default_context()
+    opener = build_opener(HTTPSHandler(context=ssl.create_default_context()))
     try:
-        with urlopen(request, timeout=timeout, context=context) as response:
+        with opener.open(request, timeout=timeout) as response:
             status = int(getattr(response, "status", response.getcode()))
             reason = getattr(response, "reason", "") or ""
             payload = response.read()
