@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import os
 import runpy
 import sys
@@ -19,19 +20,25 @@ def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
 
     for module_name, requirement in packages:
         try:
-            importlib.import_module(module_name)
+            spec_found = importlib.util.find_spec(module_name) is not None
+        except (ImportError, ValueError):  # pragma: no cover - defensive guard
+            spec_found = False
+        if spec_found:
             continue
-        except ModuleNotFoundError:
-            pass
 
         _run_pip_install(requirement)
 
         try:
-            importlib.import_module(module_name)
-        except ModuleNotFoundError as exc:  # pragma: no cover - unexpected
+            spec = importlib.util.find_spec(module_name)
+        except (ImportError, ValueError) as exc:  # pragma: no cover - unexpected
             raise RuntimeError(
                 f"Dependency '{requirement}' was installed but importing '{module_name}' still failed"
             ) from exc
+
+        if spec is None:  # pragma: no cover - unexpected
+            raise RuntimeError(
+                f"Dependency '{requirement}' was installed but importing '{module_name}' still failed"
+            )
 
 
 @contextmanager
