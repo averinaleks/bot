@@ -176,3 +176,12 @@ def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> Non
     manifests = snapshot._build_manifests(tmp_path)
 
     assert set(manifests.keys()) == {"requirements.txt"}
+
+
+def test_build_manifests_skips_in_files_when_txt_present(tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").write_text("httpx==0.27.2\n")
+    (tmp_path / "requirements.in").write_text("httpx>=0.27.0\n")
+
+    manifests = snapshot._build_manifests(tmp_path)
+
+    assert set(manifests.keys()) == {"requirements.txt"}

@@ -53,7 +53,7 @@ def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
 
     path = Path(name)
-    if path.suffix == ".out":
+    if path.suffix in {".out", ".in"}:
         candidate = path.with_suffix(".txt").as_posix()
         if candidate in available:
             return True
