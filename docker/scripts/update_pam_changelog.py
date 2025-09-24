@@ -11,8 +11,10 @@ from pathlib import Path
 
 CHANGELOG_PATH = Path("debian/changelog")
 ENTRY_TEMPLATE = (
-    "pam (1.5.3-5ubuntu5.4+bot1) noble; urgency=medium\n\n"
-    "  * Apply upstream fix 940747f to address CVE-2024-10963 in pam_access.\n\n"
+    "pam (1.5.3-5ubuntu5.5+bot1) noble; urgency=medium\n\n"
+    "  * Pull in upstream commits b3020da7 and b7b96362 to harden pam_unix\n"
+    "    against CVE-2024-10041 and retain the pam_access nodns fix for\n"
+    "    CVE-2024-10963.\n\n"
     " -- Security Bot <security@example.com>  {timestamp}\n\n"
 )
 

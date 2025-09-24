@@ -19,10 +19,11 @@ RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recomme
     && dirmngr --version
 
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
+COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
 
-RUN /tmp/security/build_patched_pam.sh /tmp/security/linux-pam-CVE-2024-10963.patch \
+RUN /tmp/security/build_patched_pam.sh "/tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
     /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
 
 WORKDIR /app

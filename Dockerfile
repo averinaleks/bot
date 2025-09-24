@@ -10,8 +10,9 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 
 # Установка необходимых пакетов для сборки и обновление критических библиотек
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236.
-# Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 (HIGH).
+# Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 и CVE-2024-10041.
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
+COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
 
@@ -63,7 +64,7 @@ WORKDIR /tmp/build
 
 RUN rm -rf zlib.tar.gz zlib-src
 
-RUN /tmp/security/build_patched_pam.sh /tmp/security/linux-pam-CVE-2024-10963.patch \
+RUN /tmp/security/build_patched_pam.sh "/tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
     /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
 
 RUN set -eux; \
