@@ -43,6 +43,7 @@ try:  # joblib is optional in some environments
 except Exception:  # pragma: no cover - joblib not available
     joblib = None  # type: ignore[assignment]
     _joblib_numpy_pickle = None  # type: ignore[assignment]
+    _joblib_numpy_pickle_compat = None  # type: ignore[assignment]
 else:  # pragma: no cover - exercised in integration tests
     try:
         from joblib import numpy_pickle_compat as _joblib_numpy_pickle_compat  # type: ignore
@@ -89,6 +90,18 @@ _DEFAULT_SAFE_JOBLIB_MODULES: Tuple[str, ...] = (
 
 class ArtifactDeserializationError(RuntimeError):
     """Raised when a joblib artefact cannot be safely deserialised."""
+
+
+def create_joblib_stub(message: str) -> ModuleType:
+    """Return a ``joblib``-like module that refuses to serialise artefacts."""
+
+    def _unavailable(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError(message)
+
+    stub = ModuleType("joblib")
+    stub.dump = _unavailable  # type: ignore[attr-defined]
+    stub.load = _unavailable  # type: ignore[attr-defined]
+    return stub
 
 
 def _normalise_allowed_modules(allowed: Iterable[str] | None) -> Tuple[str, ...]:
