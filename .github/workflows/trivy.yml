@@ -139,5 +139,5 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
+      actions: write
     steps: *trivy_steps
