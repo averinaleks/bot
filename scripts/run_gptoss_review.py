@@ -16,6 +16,7 @@ individual helper functions.
 from __future__ import annotations
 
 import argparse
+import http.client
 import ipaddress
 import json
 import os
@@ -25,9 +26,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPHandler, HTTPSHandler, Request, build_opener
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
@@ -151,7 +150,7 @@ def _perform_http_request(
     resolved_ips = _resolve_host_ips(hostname)
     allowed_hosts = _load_allowed_hosts() if parsed.scheme == "https" else set()
 
-    handlers: list[object] = []
+    connection_kwargs: dict[str, object] = {"timeout": timeout}
     if parsed.scheme == "https":
         if allowed_hosts and hostname not in allowed_hosts:
             if not _host_ips_are_private(resolved_ips):
@@ -162,58 +161,47 @@ def _perform_http_request(
             raise RuntimeError(
                 "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
             )
-        handlers.append(HTTPSHandler(context=ssl.create_default_context()))
+        connection_cls = http.client.HTTPSConnection
+        connection_kwargs["context"] = ssl.create_default_context()
     else:
         if not _host_ips_are_private(resolved_ips):
             raise RuntimeError(
                 "HTTP GPT-OSS URL разрешается в неприватный адрес"
             )
-        handlers.append(HTTPHandler())
-
-    opener = build_opener(*handlers)
+        connection_cls = http.client.HTTPConnection
 
     path = parsed.path or "/"
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    netloc = host
-    if parsed.port:
-        netloc = f"{host}:{parsed.port}"
-
-    request_url = parsed._replace(
-        netloc=netloc,
-        path=path,
-        params="",
-        query="",
-        fragment="",
-    ).geturl()
-
-    request = Request(
-        request_url,
-        data=data,
-        headers=headers,
-        method="POST",
-    )
+    status = 0
+    reason = ""
+    payload = b""
+    connection: http.client.HTTPConnection | http.client.HTTPSConnection
+    port = parsed.port
+    connection = connection_cls(host, port, **connection_kwargs)  # type: ignore[arg-type]
 
     try:
-        with opener.open(request, timeout=timeout) as response:
-            status = int(getattr(response, "status", response.getcode()))
-            reason = getattr(response, "reason", "") or ""
-            payload = response.read()
-    except HTTPError as exc:
-        status = int(getattr(exc, "code", 0) or 0)
-        reason = getattr(exc, "reason", "") or ""
-        payload = exc.read() if hasattr(exc, "read") else b""
-    except URLError as exc:
-        reason = exc.reason
-        if isinstance(reason, TimeoutError) or isinstance(reason, socket.timeout):
-            raise TimeoutError(str(reason) or "timed out") from exc
-        message = getattr(reason, "strerror", None) or reason or exc
-        raise ConnectionError(str(message) or "URLError") from exc
+        connection.request("POST", path, body=data, headers=headers)
+        response = connection.getresponse()
+        status = int(getattr(response, "status", 0) or 0)
+        reason = getattr(response, "reason", "") or ""
+        payload = response.read()
+    except socket.timeout as exc:
+        raise TimeoutError(str(exc) or "timed out") from exc
+    except TimeoutError:
+        raise
     except ssl.SSLError as exc:
         raise ConnectionError(str(exc) or "SSL error") from exc
-    else:
-        return status, reason, payload
+    except http.client.HTTPException as exc:
+        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
+    except OSError as exc:
+        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
+    finally:
+        try:
+            connection.close()
+        except Exception:  # pragma: no cover - defensive cleanup
+            pass
 
     return status, reason, payload
 
