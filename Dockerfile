@@ -14,6 +14,7 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
+COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 WORKDIR /tmp/build
 
@@ -37,6 +38,7 @@ RUN set -eux; \
         tar \
         devscripts \
         equivs; \
+    /bin/bash /tmp/security/harden_gnutar.sh; \
     python3 -m pip install --no-compile --no-cache-dir --break-system-packages \
         'pip>=24.0' \
         'setuptools>=78.1.1,<81' \
@@ -140,6 +142,7 @@ WORKDIR /app
 # Копируем виртуальное окружение из этапа сборки
 COPY --from=builder /app/venv /app/venv
 COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
+COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 # Установка минимальных пакетов выполнения
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
@@ -152,6 +155,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && python3 -m ensurepip --upgrade \
     && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81' \
     && dpkg -i /tmp/pam-fixed/*.deb \
+    && /bin/bash /tmp/security/harden_gnutar.sh \
     && if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
         python3.11 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81'; \
