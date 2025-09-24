@@ -11,12 +11,27 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
+from typing import Dict, Iterable, TypedDict, TYPE_CHECKING
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
+try:
+    import requests  # type: ignore[import-not-found]
+    from requests import exceptions as requests_exceptions
+except ModuleNotFoundError:  # pragma: no cover - exercised in import test
+    requests = None  # type: ignore[assignment]
+
+    class _RequestsExceptions:
+        class RequestException(Exception):
+            """Fallback base class matching ``requests.exceptions.RequestException``."""
+
+        class Timeout(RequestException):
+            """Fallback timeout matching ``requests.exceptions.Timeout``."""
+
+    requests_exceptions = _RequestsExceptions()  # type: ignore[assignment]
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import requests as _requests  # noqa: F401
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -404,6 +419,11 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    if requests is None:
+        raise DependencySubmissionError(
+            None,
+            "Библиотека requests недоступна, отправка snapshot невозможна.",
+        )
     host, port, path = _https_components(url)
     if port == 443:
         request_url = f"https://{host}{path}"
@@ -546,6 +566,13 @@ def submit_dependency_snapshot() -> None:
         print(str(exc), file=sys.stderr)
         print(
             "Dependency snapshot submission skipped из-за отсутствия переменных окружения.",
+            file=sys.stderr,
+        )
+        return
+
+    if requests is None:
+        print(
+            "Dependency snapshot submission skipped из-за отсутствия библиотеки requests.",
             file=sys.stderr,
         )
         return
