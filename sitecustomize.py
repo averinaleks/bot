@@ -40,6 +40,16 @@ def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
 
         _run_pip_install(requirement)
 
+        # Installing a package mutates ``sys.path`` by writing .pth files and
+        # populates the import caches used by ``importlib``.  Without
+        # invalidating those caches the subsequent ``find_spec`` lookup would
+        # still return ``None`` even though the distribution is now
+        # available.  The CI environment exercises this scenario and, prior to
+        # the invalidation, caused the helper to raise a ``RuntimeError``
+        # despite the installation succeeding.  Refreshing the caches ensures
+        # the interpreter sees the newly installed modules immediately.
+        importlib.invalidate_caches()
+
         try:
             spec = importlib.util.find_spec(module_name)
         except (ImportError, ValueError) as exc:  # pragma: no cover - unexpected
@@ -98,6 +108,9 @@ _required_packages: list[tuple[str, str]] = [
     ("pandas", "pandas==2.3.2"),
     ("pydantic", "pydantic==2.11.9"),
     ("flask", "flask>=3.0.3,<4"),
+    ("requests", "requests>=2.32.3"),
+    ("aiohttp", "aiohttp>=3.10.10"),
+    ("bcrypt", "bcrypt>=4.1.3"),
     ("psutil", "psutil>=5.9.0"),
     ("polars", "polars>=1.6.0"),
     ("pyarrow", "pyarrow>=15.0.0"),
@@ -105,6 +118,6 @@ _required_packages: list[tuple[str, str]] = [
 ]
 
 if sys.version_info < (3, 12):
-    _required_packages.append(("scikit-learn", "scikit-learn==1.7.2"))
+    _required_packages.append(("sklearn", "scikit-learn==1.7.2"))
 
 _ensure_packages(_required_packages)
