@@ -587,6 +587,12 @@ def submit_dependency_snapshot() -> None:
     job_metadata = _job_metadata(repository, run_id, correlator)
     job_metadata["correlator"] = f"{correlator}:attempt-{run_attempt}"
 
+    metadata = {
+        "run_attempt": str(run_attempt),
+        "job": job_name,
+        "workflow": workflow,
+    }
+
     payload = {
         "version": 0,
         "sha": sha,
@@ -599,11 +605,7 @@ def submit_dependency_snapshot() -> None:
         },
         "scanned": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "manifests": manifests,
-        "metadata": {
-            "run_attempt": run_attempt,
-            "job": job_name,
-            "workflow": workflow,
-        },
+        "metadata": metadata,
     }
 
     try:

@@ -321,4 +321,4 @@ def test_submit_snapshot_uses_numeric_run_attempt(monkeypatch) -> None:
     module.submit_dependency_snapshot()
 
     assert captured_payload is not None
-    assert captured_payload["metadata"]["run_attempt"] == 3
+    assert captured_payload["metadata"]["run_attempt"] == "3"
