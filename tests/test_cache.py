@@ -135,3 +135,18 @@ def test_timeframe_path_traversal_rejected(tmp_path, monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     loaded = cache.load_cached_data("BTCUSDT", "../etc/passwd")
     assert loaded is None
+
+
+def test_symbol_path_traversal_rejected(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
+    df = pd.DataFrame({"close": [1, 2, 3]})
+
+    caplog.set_level(logging.ERROR)
+    cache.save_cached_data("../etc/passwd", "1m", df)
+
+    assert not any(tmp_path.glob("*.parquet"))
+
+    caplog.set_level(logging.WARNING)
+    loaded = cache.load_cached_data("../etc/passwd", "1m")
+    assert loaded is None
