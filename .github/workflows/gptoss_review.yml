@@ -22,8 +22,8 @@ permissions:
 concurrency:
   group: >-
     gptoss-review-${{ github.workflow }}-${{
-      (github.event.pull_request && github.event.pull_request.number)
-        || (github.event.issue && github.event.issue.number)
+      (github.event_name == 'pull_request_target' && github.event.pull_request.number)
+        || (github.event_name == 'issue_comment' && github.event.issue.number)
         || github.run_id
     }}
   cancel-in-progress: true
@@ -58,8 +58,8 @@ jobs:
         shell: bash
     env:
       PR_NUMBER: ${{
-        (github.event.pull_request && github.event.pull_request.number)
-          || (github.event.issue && github.event.issue.number)
+        (github.event_name == 'pull_request_target' && github.event.pull_request.number)
+          || (github.event_name == 'issue_comment' && github.event.issue.number)
           || ''
       }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
