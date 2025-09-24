@@ -502,6 +502,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
 def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
     status_code = error.status_code
+    message = str(error).strip()
     if status_code == 401:
         print(
             "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
@@ -537,15 +538,17 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
             "Dependency snapshot submission skipped из-за сетевой ошибки.",
             file=sys.stderr,
         )
+        if message:
+            print(message, file=sys.stderr)
         return
     print(
         "Dependency snapshot submission skipped из-за ошибки GitHub API.",
         file=sys.stderr,
     )
-    message = str(error).strip()
     if status_code:
+        detail = message or error.__class__.__name__
         print(
-            f"Получен код ответа HTTP {status_code}: {message}",
+            f"Получен код ответа HTTP {status_code}: {detail}",
             file=sys.stderr,
         )
     elif message:
