@@ -23,6 +23,7 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       PUBLISH_IMAGES: ${{ github.repository == 'averinaleks/bot' }}
+      PUBLISH_DOCKERHUB: ${{ github.repository == 'averinaleks/bot' && secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -111,7 +112,7 @@ jobs:
           df -h /mnt
 
       - name: Login to Docker Hub
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
@@ -157,7 +158,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
       - name: Cleanup before Trivy scan
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
         run: |
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
@@ -165,12 +166,12 @@ jobs:
           sudo mkdir -p /mnt/trivy-cache
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-cache
       - name: Prepare Trivy temp
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
         run: |
           sudo mkdir -p /mnt/trivy-tmp
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
         id: trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # 0.33.1
         continue-on-error: true
@@ -184,11 +185,11 @@ jobs:
           output: ${{ matrix.artifact }}.txt
           scanners: vuln
       - name: Show Trivy scan results
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.trivy.outcome == 'success' }}
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.PUBLISH_IMAGES == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.trivy.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
