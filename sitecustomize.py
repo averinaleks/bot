@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import importlib
 import os
-import subprocess
+import runpy
 import sys
-from typing import Iterable
+from contextlib import contextmanager
+from typing import Iterable, Iterator, Sequence
+
+try:
+    from pip._internal.cli.main import main as _pip_main
+except Exception:  # pragma: no cover - pip should always be importable, but guard just in case
+    _pip_main = None
 
 
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
@@ -28,15 +34,44 @@ def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
             ) from exc
 
 
+@contextmanager
+def _temporarily_overridden_env(name: str, value: str) -> Iterator[None]:
+    original = os.environ.get(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = original
+
+
+def _run_pip(args: Sequence[str]) -> int:
+    if _pip_main is not None:
+        return _pip_main(list(args))
+
+    original_argv = sys.argv[:]
+    try:
+        sys.argv = ["pip", *args]
+        runpy.run_module("pip", run_name="__main__", alter_sys=True)
+    except SystemExit as exc:  # pragma: no cover - depends on pip internals
+        code = exc.code if isinstance(exc.code, int) else 1
+        return code
+    finally:
+        sys.argv = original_argv
+
+    return 0
+
+
 def _run_pip_install(requirement: str) -> None:
-    env = os.environ.copy()
-    env["BOT_AUTO_INSTALL_DISABLED"] = "1"
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", requirement],
-        env=env,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
+    with _temporarily_overridden_env("BOT_AUTO_INSTALL_DISABLED", "1"):
+        exit_code = _run_pip(["install", requirement])
+
+    if exit_code != 0:
+        raise RuntimeError(
+            f"pip failed to install required dependency '{requirement}' (exit code {exit_code})"
+        )
 
 
 _required_packages: list[tuple[str, str]] = [
