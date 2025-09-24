@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 import logging
 import sys
@@ -310,3 +311,28 @@ def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
     cfg = tmp_path / "gptoss_check.config"
     cfg.write_text("skip_gptoss_check=true # comment\n", encoding="utf-8")
     assert _load_skip_flag(cfg) is True
+
+
+def test_fallback_simple_response_json(monkeypatch):
+    module_path = Path("gptoss_check/check_code.py")
+    spec = importlib.util.spec_from_file_location(
+        "gptoss_check.check_code_fallback",
+        module_path,
+    )
+    assert spec is not None and spec.loader is not None
+
+    monkeypatch.setitem(sys.modules, "http_client", None)
+    monkeypatch.setitem(sys.modules, "httpx", None)
+
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+
+    spec.loader.exec_module(module)
+
+    response = module._SimpleResponse(
+        200,
+        {"Content-Type": "application/json"},
+        b"{\"ok\": true}",
+    )
+
+    assert response.json() == {"ok": True}
