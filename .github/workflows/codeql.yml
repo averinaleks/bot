@@ -26,6 +26,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
+      - name: Disable git reference logs
+        run: git config --global core.logallrefupdates false
+
       - name: Remove git metadata that can confuse CodeQL
         run: |
           rm -rf .git/logs
