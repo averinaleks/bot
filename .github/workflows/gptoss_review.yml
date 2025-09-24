@@ -57,7 +57,11 @@ jobs:
       run:
         shell: bash
     env:
-      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || '' }}
+      PR_NUMBER: ${{
+        (github.event.pull_request && github.event.pull_request.number)
+          || (github.event.issue && github.event.issue.number)
+          || ''
+      }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
 
     steps:
