@@ -26,8 +26,17 @@ def _load_pip_main() -> _PipMain | None:
 _pip_main = _load_pip_main()
 
 
+def _running_under_codeql() -> bool:
+    """Return ``True`` when the current interpreter is launched by CodeQL."""
+
+    if os.environ.get("CODEQL_DIST"):
+        return True
+
+    return any(name.startswith("CODEQL_EXTRACTOR_PYTHON") for name in os.environ)
+
+
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
-    if os.environ.get("BOT_AUTO_INSTALL_DISABLED") == "1":
+    if os.environ.get("BOT_AUTO_INSTALL_DISABLED") == "1" or _running_under_codeql():
         return
 
     for module_name, requirement in packages:
