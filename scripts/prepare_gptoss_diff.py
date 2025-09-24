@@ -23,9 +23,8 @@ import os
 import re
 import subprocess  # nosec B404
 import sys
-import http.client
-import socket
-import ssl
+import requests
+from requests import exceptions as requests_exceptions
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -147,29 +146,36 @@ def _perform_https_request(
     if parsed.username or parsed.password:
         raise RuntimeError("URL GitHub API не должен содержать учетные данные")
 
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
+    sanitised = parsed._replace(path=parsed.path or "/", fragment="")
+    if sanitised.query:
+        path = f"{sanitised.path}?{sanitised.query}"
+    else:
+        path = sanitised.path
+    if sanitised.port and sanitised.port != 443:
+        target = f"https://{sanitised.hostname}:{sanitised.port}{path}"
+    else:
+        target = f"https://{sanitised.hostname}{path}"
 
-    host = parsed.hostname
-    port = parsed.port or 443
-
-    context = ssl.create_default_context()
-    connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
     try:
-        connection.request("GET", path, headers=headers)
-        response = connection.getresponse()
-        body = response.read()
-        status = int(response.status)
-        reason = response.reason or ""
-        return status, reason, body
-    except (socket.timeout, OSError, http.client.HTTPException) as exc:
+        response = requests.get(
+            target,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+        )
+    except requests_exceptions.Timeout as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    except requests_exceptions.RequestException as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+
+    try:
+        status = int(response.status_code)
+        reason = response.reason or ""
+        payload = response.content
     finally:
-        try:
-            connection.close()
-        except OSError:
-            pass
+        response.close()
+
+    return status, reason, payload
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:

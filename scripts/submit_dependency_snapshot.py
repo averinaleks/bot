@@ -6,17 +6,17 @@ import fnmatch
 import json
 import os
 import re
-import socket
-import ssl
 import sys
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
-from http import client as http_client
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
+
+import requests
+from requests import exceptions as requests_exceptions
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -47,9 +47,6 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
-
-_SSL_CONTEXT = ssl.create_default_context()
-
 
 def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
@@ -408,74 +405,79 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     host, port, path = _https_components(url)
+    if port == 443:
+        request_url = f"https://{host}{path}"
+    else:
+        request_url = f"https://{host}:{port}{path}"
+
     last_error: Exception | None = None
-    for attempt in range(1, 4):
-        connection = http_client.HTTPSConnection(
-            host, port, timeout=30, context=_SSL_CONTEXT
-        )
-        try:
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
+    with requests.Session() as session:
+        for attempt in range(1, 4):
             try:
-                status_code = int(response.status)
-                reason = response.reason or ""
-                payload = response.read()
-            finally:
-                response.close()
-        except (TimeoutError, socket.timeout) as exc:
-            message = str(exc) or "timed out"
-            if attempt < 3:
+                response = session.post(
+                    request_url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
+            except requests_exceptions.Timeout as exc:
+                message = str(exc) or "timed out"
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
+                last_error = exc
+                break
+            except requests_exceptions.RequestException as exc:
+                message = str(exc).strip() or exc.__class__.__name__
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network error '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
+                last_error = exc
+                break
+
+            status_code = int(response.status_code)
+            reason = response.reason or ""
+            payload = response.content
+            response.close()
+
+            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
-                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
                     file=sys.stderr,
                 )
                 time.sleep(wait_time)
-                last_error = exc
+                last_error = DependencySubmissionError(
+                    status_code, f"Retryable HTTP {status_code}: {reason}"
+                )
                 continue
-            last_error = exc
-            break
-        except (http_client.HTTPException, OSError) as exc:
-            message = str(exc).strip() or exc.__class__.__name__
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
+
+            if status_code >= 400:
+                message = payload.decode(errors="replace") or reason
                 print(
-                    f"Network error '{message}'. Retrying in {wait_time} s...",
+                    f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
                     file=sys.stderr,
                 )
-                time.sleep(wait_time)
-                last_error = exc
-                continue
-            last_error = exc
-            break
-        finally:
-            connection.close()
+                raise DependencySubmissionError(
+                    status_code,
+                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+                )
 
-        if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
-            wait_time = 2 ** (attempt - 1)
-            print(
-                f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
-                file=sys.stderr,
-            )
-            time.sleep(wait_time)
-            last_error = DependencySubmissionError(
-                status_code, f"Retryable HTTP {status_code}: {reason}"
-            )
-            continue
-
-        if status_code >= 400:
-            message = payload.decode(errors="replace") or reason
-            print(
-                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
-                file=sys.stderr,
-            )
-            raise DependencySubmissionError(
-                status_code,
-                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-            )
-
-        print(f"Dependency snapshot submitted: HTTP {status_code}")
-        return
+            print(f"Dependency snapshot submitted: HTTP {status_code}")
+            return
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
