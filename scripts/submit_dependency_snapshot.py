@@ -15,8 +15,19 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
+try:
+    import requests
+    from requests import exceptions as requests_exceptions
+except ModuleNotFoundError:
+    requests = None  # type: ignore[assignment]
+
+    class _RequestsExceptions:
+        """Minimal stand-ins for ``requests.exceptions`` when requests is absent."""
+
+        Timeout = TimeoutError
+        RequestException = Exception
+
+    requests_exceptions = _RequestsExceptions()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -404,6 +415,11 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    if requests is None:
+        raise DependencySubmissionError(
+            None,
+            "Пакет 'requests' требуется для отправки snapshot зависимостей.",
+        )
     host, port, path = _https_components(url)
     if port == 443:
         request_url = f"https://{host}{path}"
