@@ -149,38 +149,39 @@ def _perform_http_request(
     resolved_ips = _resolve_host_ips(hostname)
     allowed_hosts = _load_allowed_hosts() if parsed.scheme == "https" else set()
 
-    if parsed.scheme == "https":
-        if allowed_hosts and hostname not in allowed_hosts:
+    connection: http.client.HTTPConnection | None = None
+    try:
+        if parsed.scheme == "https":
+            if allowed_hosts and hostname not in allowed_hosts:
+                if not _host_ips_are_private(resolved_ips):
+                    raise RuntimeError(
+                        "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
+                    )
+            elif not _host_ips_are_private(resolved_ips):
+                raise RuntimeError(
+                    "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
+                )
+            connection = http.client.HTTPSConnection(
+                host,
+                parsed.port or 443,
+                timeout=timeout,
+                context=ssl.create_default_context(),
+            )
+        else:
             if not _host_ips_are_private(resolved_ips):
                 raise RuntimeError(
-                    "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
+                    "HTTP GPT-OSS URL разрешается в неприватный адрес"
                 )
-        elif not _host_ips_are_private(resolved_ips):
-            raise RuntimeError(
-                "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
+            connection = http.client.HTTPConnection(
+                host,
+                parsed.port or 80,
+                timeout=timeout,
             )
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            host,
-            parsed.port or 443,
-            timeout=timeout,
-            context=ssl.create_default_context(),
-        )
-    else:
-        if not _host_ips_are_private(resolved_ips):
-            raise RuntimeError(
-                "HTTP GPT-OSS URL разрешается в неприватный адрес"
-            )
-        connection = http.client.HTTPConnection(
-            host,
-            parsed.port or 80,
-            timeout=timeout,
-        )
 
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
 
-    try:
         connection.request("POST", path, body=data, headers=headers)
         response = connection.getresponse()
         status = int(response.status)
@@ -191,7 +192,8 @@ def _perform_http_request(
     except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
         raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
     finally:
-        connection.close()
+        if connection is not None:
+            connection.close()
 
     return status, reason, payload
 

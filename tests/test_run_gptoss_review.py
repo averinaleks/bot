@@ -115,6 +115,98 @@ def test_main_handles_missing_diff(tmp_path: Path, monkeypatch) -> None:
     assert "has_content=false" in github_output.read_text(encoding="utf-8")
 
 
+
+def test_perform_http_request_handles_ipv6_host(monkeypatch):
+    recorded: dict[str, object] = {}
+
+    class _DummyResponse:
+        status = 200
+        reason = "OK"
+
+        @staticmethod
+        def read() -> bytes:
+            return b"{}"
+
+    class _DummyConnection:
+        def __init__(self, host: str, port: int, timeout: float, **_kwargs: object) -> None:
+            recorded["init"] = (host, port, timeout)
+
+        def request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> None:
+            recorded["request"] = (method, path, body, headers)
+
+        @staticmethod
+        def getresponse() -> _DummyResponse:
+            return _DummyResponse()
+
+        def close(self) -> None:
+            recorded["closed"] = True
+
+    monkeypatch.setattr(run_gptoss_review, "_resolve_host_ips", lambda hostname: {hostname})
+    monkeypatch.setattr(run_gptoss_review, "_load_allowed_hosts", lambda: set())
+    monkeypatch.setattr(
+        run_gptoss_review.http.client,
+        "HTTPConnection",
+        _DummyConnection,
+    )
+
+    status, reason, payload = run_gptoss_review._perform_http_request(
+        "http://[::1]:8080/v1/chat?foo=bar",
+        b"payload",
+        {"Content-Type": "application/json"},
+        timeout=5.0,
+    )
+
+    assert status == 200
+    assert reason == "OK"
+    assert payload == b"{}"
+    assert recorded["init"] == ("[::1]", 8080, 5.0)
+    method, path, body, headers = recorded["request"]
+    assert method == "POST"
+    assert path == "/v1/chat?foo=bar"
+    assert body == b"payload"
+    assert headers["Content-Type"] == "application/json"
+    assert recorded["closed"] is True
+
+
+def test_perform_http_request_rejects_public_http(monkeypatch):
+    monkeypatch.setattr(run_gptoss_review, "_resolve_host_ips", lambda _: {"8.8.8.8"})
+    monkeypatch.setattr(run_gptoss_review, "_load_allowed_hosts", lambda: set())
+    monkeypatch.setattr(
+        run_gptoss_review.http.client,
+        "HTTPConnection",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not connect")),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        run_gptoss_review._perform_http_request(
+            "http://example.invalid/api",
+            b"{}",
+            {},
+            timeout=1.0,
+        )
+
+    assert "HTTP GPT-OSS URL" in str(exc.value)
+
+
+def test_perform_http_request_respects_https_allowlist(monkeypatch):
+    monkeypatch.setattr(run_gptoss_review, "_resolve_host_ips", lambda _: {"8.8.4.4"})
+    monkeypatch.setattr(run_gptoss_review, "_load_allowed_hosts", lambda: {"allowed.local"})
+    monkeypatch.setattr(
+        run_gptoss_review.http.client,
+        "HTTPSConnection",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not connect")),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        run_gptoss_review._perform_http_request(
+            "https://other.local/v1/chat",
+            b"{}",
+            {},
+            timeout=1.0,
+        )
+
+    assert "GPT_OSS_ALLOWED_HOSTS" in str(exc.value)
+
 def test_main_handles_timeout(monkeypatch, tmp_path):
     diff_path = tmp_path / "diff.patch"
     diff_path.write_text("dummy", encoding="utf-8")
