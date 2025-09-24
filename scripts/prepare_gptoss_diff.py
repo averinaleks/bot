@@ -169,16 +169,17 @@ def _perform_https_request(
     """Return status, reason and payload for a validated HTTPS request."""
 
     parsed = urlparse(url)
-    if parsed.scheme != "https" or not parsed.hostname:
+    hostname = parsed.hostname
+    if parsed.scheme != "https" or hostname is None:
         raise RuntimeError("Разрешены только HTTPS-запросы к GitHub API")
     if parsed.username or parsed.password:
         raise RuntimeError("URL GitHub API не должен содержать учетные данные")
 
     sanitised = parsed._replace(path=parsed.path or "/", fragment="")
     if sanitised.port and sanitised.port != 443:
-        netloc = f"{sanitised.hostname}:{sanitised.port}"
+        netloc = f"{hostname}:{sanitised.port}"
     else:
-        netloc = sanitised.hostname
+        netloc = hostname
     sanitised = sanitised._replace(netloc=netloc)
     target_url = urlunparse(sanitised)
 
@@ -226,7 +227,7 @@ def _fetch_pull_request(
     base = payload.get("base") or {}
     base_sha = base.get("sha")
     base_ref = base.get("ref")
-    if not base_sha or not base_ref:
+    if not isinstance(base_sha, str) or not isinstance(base_ref, str):
         raise RuntimeError("GitHub API не вернул base.sha/base.ref")
 
     return PullRequestInfo(base_sha=base_sha, base_ref=base_ref)
@@ -302,12 +303,15 @@ def _execute_git(argv: Sequence[str], *, capture_output: bool) -> GitCompletedPr
             stdout_text = None
             stderr_text = None
 
-        if process.returncode != 0:
-            raise GitCommandError(process.returncode, argv, stdout_text, stderr_text)
+        returncode = process.returncode
+        if returncode is None:  # pragma: no cover - process should always set returncode
+            raise RuntimeError("git процесс завершился без кода возврата")
+        if returncode != 0:
+            raise GitCommandError(returncode, argv, stdout_text, stderr_text)
 
         return GitCompletedProcess(
             args=tuple(argv),
-            returncode=process.returncode,
+            returncode=returncode,
             stdout=stdout_text,
             stderr=stderr_text,
         )

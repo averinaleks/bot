@@ -77,16 +77,20 @@ def _perform_http_request(
     """Execute an HTTP(S) request and return status, reason and body."""
 
     parsed = urlparse(url)
+    host = parsed.hostname
+    if host is None:
+        raise RuntimeError("Недопустимый URL без hostname для GPT-OSS API")
+
     if parsed.scheme == "https":
         connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            parsed.hostname,
+            host,
             parsed.port or 443,
             timeout=timeout,
             context=ssl.create_default_context(),
         )
     else:
         connection = http.client.HTTPConnection(
-            parsed.hostname,
+            host,
             parsed.port or 80,
             timeout=timeout,
         )
