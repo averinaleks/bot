@@ -53,7 +53,6 @@ def test_load_multiindex_timestamps_localized(tmp_path, monkeypatch):
 def test_load_rejects_pickle_cache(tmp_path, monkeypatch, suffix):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
     cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)
-    df = pd.DataFrame({"close": [1, 2, 3]})
     old_file = tmp_path / f"BTCUSDT_1m{suffix}"
     legacy_payload = b"legacy pickle data"
     if suffix.endswith(".gz"):
