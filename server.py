@@ -73,7 +73,15 @@ logger = logging.getLogger(__name__)
 
 _MASKED_HEADER_VALUE = "***"
 _SENSITIVE_BOUNDARY_RE = re.compile(r"(^|[^a-z0-9])(auth|key|cookie)([^a-z0-9]|$)")
-_SENSITIVE_KEYWORDS = ("token", "secret", "session", "sessionid", "password", "apikey")
+_SENSITIVE_KEYWORDS = (
+    "token",
+    "secret",
+    "session",
+    "sessionid",
+    "password",
+    "apikey",
+    "authorization",
+)
 
 
 def _mask_header_value(name: str, value: Any) -> str:
