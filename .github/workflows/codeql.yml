@@ -40,6 +40,9 @@ jobs:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
+      - name: Remove git logs after CodeQL init
+        run: rm -rf .git/logs
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
