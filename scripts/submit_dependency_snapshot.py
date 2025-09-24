@@ -11,12 +11,23 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
+from typing import Any, Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
+try:
+    import requests
+    from requests import exceptions as requests_exceptions
+except ModuleNotFoundError:
+    requests = None  # type: ignore[assignment]
+
+    class _RequestsExceptionsShim:
+        """Fallback exceptions used when ``requests`` is unavailable."""
+
+        Timeout = RuntimeError
+        RequestException = RuntimeError
+
+    requests_exceptions = _RequestsExceptionsShim()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -404,6 +415,12 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
+    if requests is None:
+        raise DependencySubmissionError(
+            None,
+            "The 'requests' package is required to submit dependency snapshots.",
+        )
+
     host, port, path = _https_components(url)
     if port == 443:
         request_url = f"https://{host}{path}"
