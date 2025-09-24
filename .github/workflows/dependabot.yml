@@ -14,12 +14,9 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  DEPENDABOT_ACTORS_JSON: '["dependabot[bot]","dependabot-preview[bot]"]'
-
 jobs:
   skip-non-dependabot:
-    if: ${{ !(github.event_name == 'pull_request_target' && contains(fromJson(env.DEPENDABOT_ACTORS_JSON), github.actor)) }}
+    if: ${{ !(github.event_name == 'pull_request_target' && (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Report skipped run
@@ -37,7 +34,7 @@ jobs:
           write_summary "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action."
 
   dependabot:
-    if: ${{ github.event_name == 'pull_request_target' && contains(fromJson(env.DEPENDABOT_ACTORS_JSON), github.actor) }}
+    if: ${{ github.event_name == 'pull_request_target' && (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
