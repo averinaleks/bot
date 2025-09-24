@@ -18,10 +18,10 @@ job when the diff cannot be produced.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
-import subprocess  # nosec B404
 import sys
 import http.client
 import ssl
@@ -47,12 +47,40 @@ class PullRequestInfo:
     base_ref: str
 
 
-@dataclass
+@dataclass(slots=True)
 class DiffComputation:
     """Result of running ``git diff`` for the requested changes."""
 
     content: str
     has_diff: bool
+
+
+@dataclass(slots=True)
+class GitCompletedProcess:
+    """Lightweight replacement for :class:`subprocess.CompletedProcess`."""
+
+    args: tuple[str, ...]
+    returncode: int
+    stdout: str | None = None
+    stderr: str | None = None
+
+
+class GitCommandError(RuntimeError):
+    """Raised when a git invocation returns a non-zero exit status."""
+
+    def __init__(
+        self,
+        returncode: int,
+        cmd: Sequence[str],
+        stdout: str | None,
+        stderr: str | None,
+    ) -> None:
+        message = f"Command {tuple(cmd)!r} exited with status {returncode}"
+        super().__init__(message)
+        self.returncode = returncode
+        self.cmd = tuple(cmd)
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def _validate_git_sha(sha: str) -> str:
@@ -219,7 +247,7 @@ def _fetch_pull_request(
     return PullRequestInfo(base_sha=base_sha, base_ref=base_ref)
 
 
-def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess.CompletedProcess:
+def _run_git(args: Sequence[str], *, capture_output: bool = False) -> GitCompletedProcess:
     """Execute a validated git command and return the completed process."""
 
     argv = list(args)
@@ -265,13 +293,50 @@ def _run_git(args: Sequence[str], *, capture_output: bool = False) -> subprocess
     else:
         raise RuntimeError(f"Недопустимая команда git: {subcommand}")
 
-    # Аргументы команды валидируются перед выполнением, поэтому запуск безопасен.
-    return subprocess.run(  # nosec B603
-        argv,
-        check=True,
-        text=True,
-        capture_output=capture_output,
-    )
+    return _execute_git(argv, capture_output=capture_output)
+
+
+def _execute_git(argv: Sequence[str], *, capture_output: bool) -> GitCompletedProcess:
+    """Spawn git via :mod:`asyncio` and return a completed process."""
+
+    async def _run() -> GitCompletedProcess:
+        stdout_pipe = asyncio.subprocess.PIPE if capture_output else None
+        stderr_pipe = asyncio.subprocess.PIPE if capture_output else None
+
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=stdout_pipe,
+            stderr=stderr_pipe,
+        )
+
+        stdout_bytes, stderr_bytes = await process.communicate()
+        if capture_output:
+            stdout_text = (stdout_bytes or b"").decode("utf-8", "replace")
+            stderr_text = (stderr_bytes or b"").decode("utf-8", "replace")
+        else:
+            stdout_text = None
+            stderr_text = None
+
+        if process.returncode != 0:
+            raise GitCommandError(process.returncode, argv, stdout_text, stderr_text)
+
+        return GitCompletedProcess(
+            args=tuple(argv),
+            returncode=process.returncode,
+            stdout=stdout_text,
+            stderr=stderr_text,
+        )
+
+    try:
+        return asyncio.run(_run())
+    except RuntimeError as exc:
+        if "asyncio.run() cannot be called" not in str(exc):
+            raise
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_run())
+        finally:
+            loop.close()
 
 
 def _commit_exists(sha: str) -> bool:
@@ -282,7 +347,7 @@ def _commit_exists(sha: str) -> bool:
             ["git", "cat-file", "-e", f"{_validate_git_sha(sha)}^{{commit}}"],
             capture_output=False,
         )
-    except subprocess.CalledProcessError:
+    except GitCommandError:
         return False
     return True
 
@@ -297,7 +362,7 @@ def _ensure_base_available(base_ref: str, base_sha: str) -> None:
 
     try:
         _run_git(["git", "fetch", "--no-tags", "origin", safe_ref])
-    except subprocess.CalledProcessError as exc:
+    except GitCommandError as exc:
         if _commit_exists(base_sha):
             return
         raise RuntimeError(f"git fetch origin {base_ref} завершился с ошибкой") from exc
@@ -331,10 +396,10 @@ def _compute_diff(
             _build_diff_args(base_sha, paths),
             capture_output=True,
         )
-    except subprocess.CalledProcessError as exc:
+    except GitCommandError as exc:
         raise RuntimeError("git diff завершился с ошибкой") from exc
 
-    content = result.stdout
+    content = result.stdout or ""
     if truncate and len(content) > truncate:
         content = content[: truncate - 3] + "..."
 
