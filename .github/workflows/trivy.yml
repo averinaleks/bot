@@ -49,6 +49,8 @@ jobs:
         env:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         with:
+          # Pin the Trivy CLI version to avoid unexpected regressions during scheduled runs.
+          version: v0.66.0
           scan-type: fs
           scanners: vuln
           format: sarif
