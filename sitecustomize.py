@@ -6,12 +6,24 @@ import os
 import runpy
 import sys
 from contextlib import contextmanager
-from typing import Iterable, Iterator, Sequence
+from typing import Callable, Iterable, Iterator, Sequence, cast
 
-try:
-    from pip._internal.cli.main import main as _pip_main
-except Exception:  # pragma: no cover - pip should always be importable, but guard just in case
-    _pip_main = None
+_PipMain = Callable[[list[str] | None], int]
+
+
+def _load_pip_main() -> _PipMain | None:
+    try:
+        module = importlib.import_module("pip._internal.cli.main")
+    except Exception:  # pragma: no cover - pip should always be importable, but guard just in case
+        return None
+
+    main_callable = getattr(module, "main", None)
+    if not callable(main_callable):  # pragma: no cover - defensive
+        return None
+    return cast(_PipMain, main_callable)
+
+
+_pip_main = _load_pip_main()
 
 
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
