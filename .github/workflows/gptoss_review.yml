@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   skip:
-    if: github.event_name != 'pull_request_target' && github.event_name != 'issue_comment'
+    if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'issue_comment' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip unsupported event
@@ -38,19 +38,17 @@ jobs:
           echo "Workflow triggered for ${{ github.event_name }} – no review required."
 
   review:
-    if: >
-      (
-        github.event_name == 'pull_request_target' &&
-        github.event.pull_request != null &&
-        github.event.pull_request.draft == false &&
-        github.event.pull_request.head.repo.full_name == github.repository
-      )
-      || (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request != null &&
-        github.event.comment.user.login != 'github-actions[bot]' &&
-        contains(github.event.comment.body || '', '/llm-review')
-      )
+    if: ${{
+      (github.event_name == 'pull_request_target'
+        && github.event.pull_request != null
+        && github.event.pull_request.draft == false
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      ||
+      (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request != null
+        && github.event.comment.user.login != 'github-actions[bot]'
+        && contains(github.event.comment.body || '', '/llm-review'))
+    }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -78,7 +76,7 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Проверка статуса PR
-        if: steps.validate_event.outputs.skip != 'true'
+        if: ${{ steps.validate_event.outputs.skip != 'true' }}
         id: ensure_pr_ready
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -153,13 +151,13 @@ if output_path:
 PY
 
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-        if: steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true'
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' }}
         with:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
 
       - name: Start mock GPT-OSS server
-        if: steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true'
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' }}
         id: start_llm
         run: |
           set -euo pipefail
@@ -238,10 +236,11 @@ PY
           MODEL_NAME: ${{ env.MODEL_NAME }}
 
       - name: Wait for GPT-OSS server
-        if: >-
-          steps.validate_event.outputs.skip != 'true' &&
-          steps.ensure_pr_ready.outputs.skip != 'true' &&
-          steps.start_llm.outputs.started == 'true'
+        if: ${{
+          steps.validate_event.outputs.skip != 'true'
+          && steps.ensure_pr_ready.outputs.skip != 'true'
+          && steps.start_llm.outputs.started == 'true'
+        }}
         id: wait_llm
         run: |
           set -euo pipefail
@@ -282,11 +281,12 @@ PY
           ready_output="true"
 
       - name: Generate diff
-        if: >-
-          steps.validate_event.outputs.skip != 'true' &&
-          steps.ensure_pr_ready.outputs.skip != 'true' &&
-          steps.start_llm.outputs.started == 'true' &&
-          steps.wait_llm.outputs.ready == 'true'
+        if: ${{
+          steps.validate_event.outputs.skip != 'true'
+          && steps.ensure_pr_ready.outputs.skip != 'true'
+          && steps.start_llm.outputs.started == 'true'
+          && steps.wait_llm.outputs.ready == 'true'
+        }}
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -323,12 +323,13 @@ PY
           fi
 
       - name: LLM review
-        if: >-
-          steps.validate_event.outputs.skip != 'true' &&
-          steps.ensure_pr_ready.outputs.skip != 'true' &&
-          steps.start_llm.outputs.started == 'true' &&
-          steps.wait_llm.outputs.ready == 'true' &&
-          steps.generate_diff.outputs.has_diff == 'true'
+        if: ${{
+          steps.validate_event.outputs.skip != 'true'
+          && steps.ensure_pr_ready.outputs.skip != 'true'
+          && steps.start_llm.outputs.started == 'true'
+          && steps.wait_llm.outputs.ready == 'true'
+          && steps.generate_diff.outputs.has_diff == 'true'
+        }}
         id: llm_review
         run: |
           set -euo pipefail
@@ -367,22 +368,24 @@ PY
           fi
 
       - name: Upload review artifact
-        if: >-
-          steps.validate_event.outputs.skip != 'true' &&
-          steps.ensure_pr_ready.outputs.skip != 'true' &&
-          steps.wait_llm.outputs.ready == 'true' &&
-          steps.llm_review.outputs.has_content == 'true'
+        if: ${{
+          steps.validate_event.outputs.skip != 'true'
+          && steps.ensure_pr_ready.outputs.skip != 'true'
+          && steps.wait_llm.outputs.ready == 'true'
+          && steps.llm_review.outputs.has_content == 'true'
+        }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: gptoss-review-${{ env.PR_NUMBER }}
           path: review.md
 
       - name: Comment PR
-        if: >-
-          steps.validate_event.outputs.skip != 'true' &&
-          steps.ensure_pr_ready.outputs.skip != 'true' &&
-          steps.wait_llm.outputs.ready == 'true' &&
-          steps.llm_review.outputs.has_content == 'true'
+        if: ${{
+          steps.validate_event.outputs.skip != 'true'
+          && steps.ensure_pr_ready.outputs.skip != 'true'
+          && steps.wait_llm.outputs.ready == 'true'
+          && steps.llm_review.outputs.has_content == 'true'
+        }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
         with:
           script: |
@@ -397,7 +400,7 @@ PY
             });
 
       - name: Cleanup
-        if: always()
+        if: ${{ always() }}
         run: |
           if [ -f mock_server.pid ]; then
             kill "$(cat mock_server.pid)" || true
