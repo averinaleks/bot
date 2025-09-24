@@ -31,7 +31,16 @@ def _sanitize_symbol(symbol: str) -> str:
 
     utils = _utils_module()
     sanitize_symbol = getattr(utils, "sanitize_symbol")
-    return sanitize_symbol(symbol)
+    cleaned = sanitize_symbol(symbol)
+    # Reject symbols that would produce ambiguous or hidden filenames.  After
+    # sanitisation we expect at least one visible character that is neither a
+    # leading dot nor part of a ".." sequence which might hint at path
+    # traversal attempts.
+    if not cleaned:
+        raise ValueError("Symbol contains no valid characters")
+    if cleaned.startswith(".") or ".." in cleaned:
+        raise ValueError("Symbol sanitization resulted in unsafe value")
+    return cleaned
 
 
 def _sanitize_timeframe(timeframe: str) -> str:
@@ -224,7 +233,15 @@ class HistoricalDataCache:
             raise ImportError(
                 "Для кэширования данных требуется пакет 'pandas'"
             ) from exc
-        safe_symbol = _sanitize_symbol(symbol)
+        try:
+            safe_symbol = _sanitize_symbol(symbol)
+        except ValueError:
+            logger.error(
+                "Невозможно кэшировать %s_%s: недопустимое значение символа",
+                symbol,
+                timeframe,
+            )
+            return
         try:
             safe_timeframe = _sanitize_timeframe(timeframe)
         except ValueError:
@@ -314,7 +331,15 @@ class HistoricalDataCache:
                 "Для загрузки кэша требуется пакет 'pandas'"
             ) from exc
         try:
-            safe_symbol = _sanitize_symbol(symbol)
+            try:
+                safe_symbol = _sanitize_symbol(symbol)
+            except ValueError:
+                logger.warning(
+                    "Запрошен недопустимый символ %s для таймфрейма %s",
+                    symbol,
+                    timeframe,
+                )
+                return None
             try:
                 safe_timeframe = _sanitize_timeframe(timeframe)
             except ValueError:
