@@ -14,7 +14,6 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
-COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 WORKDIR /tmp/build
 
@@ -64,24 +63,10 @@ WORKDIR /tmp/build
 
 RUN rm -rf zlib.tar.gz zlib-src
 
-WORKDIR /tmp/build/pam-src
+RUN /tmp/security/build_patched_pam.sh /tmp/security/linux-pam-CVE-2024-10963.patch \
+    /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
 
 RUN set -eux; \
-    patch -p1 < /tmp/security/linux-pam-CVE-2024-10963.patch; \
-    python3 /tmp/security/update_pam_changelog.py; \
-    export DEB_BUILD_OPTIONS=nocheck; \
-    dpkg-buildpackage -b -uc -us
-
-WORKDIR /tmp/build
-
-RUN set -eux; \
-    mkdir -p /tmp/pam-fixed; \
-    cp libpam-modules_* libpam-modules-bin_* libpam-runtime_* libpam0g_* /tmp/pam-fixed/; \
-    dpkg -i /tmp/pam-fixed/*.deb; \
-    rm -rf pam-src /etc/apt/sources.list.d/noble-src.list; \
-    apt-get purge -y --auto-remove devscripts equivs; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*; \
     ldconfig; \
     python3 --version; \
     openssl version; \
