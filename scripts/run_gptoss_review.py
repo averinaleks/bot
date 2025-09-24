@@ -77,25 +77,30 @@ def _perform_http_request(
     """Execute an HTTP(S) request and return status, reason and body."""
 
     parsed = urlparse(url)
+    connection_factory: type[http.client.HTTPConnection]
+    connection_kwargs: dict[str, Any] = {
+        "host": parsed.hostname,
+        "timeout": timeout,
+    }
+
     if parsed.scheme == "https":
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            parsed.hostname,
-            parsed.port or 443,
-            timeout=timeout,
-            context=ssl.create_default_context(),
-        )
+        tls_context = ssl.create_default_context()
+        tls_context.check_hostname = True
+        tls_context.verify_mode = ssl.CERT_REQUIRED
+        connection_factory = getattr(http.client, "HTTPSConnection")
+        connection_kwargs["port"] = parsed.port or 443
+        connection_kwargs["context"] = tls_context
     else:
-        connection = http.client.HTTPConnection(
-            parsed.hostname,
-            parsed.port or 80,
-            timeout=timeout,
-        )
+        connection_factory = http.client.HTTPConnection
+        connection_kwargs["port"] = parsed.port or 80
 
     path = parsed.path or "/"
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
+    connection: http.client.HTTPConnection | None = None
     try:
+        connection = connection_factory(**connection_kwargs)
         connection.request("POST", path, body=data, headers=headers)
         response = connection.getresponse()
         status = int(response.status)
@@ -106,7 +111,8 @@ def _perform_http_request(
     except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
         raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
     finally:
-        connection.close()
+        if connection is not None:
+            connection.close()
 
     return status, reason, payload
 
