@@ -11,12 +11,10 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
+from typing import Any, Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -47,6 +45,27 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
+
+_REQUESTS_MODULE: Any | None = None
+_REQUESTS_EXCEPTIONS: Any | None = None
+
+
+def _load_requests() -> bool:
+    """Import ``requests`` and cache the module references when available."""
+
+    global _REQUESTS_MODULE, _REQUESTS_EXCEPTIONS
+
+    try:
+        import requests as requests_module
+        from requests import exceptions as requests_exceptions
+    except ModuleNotFoundError:
+        _REQUESTS_MODULE = None
+        _REQUESTS_EXCEPTIONS = None
+        return False
+
+    _REQUESTS_MODULE = requests_module
+    _REQUESTS_EXCEPTIONS = requests_exceptions
+    return True
 
 def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
@@ -411,7 +430,13 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         request_url = f"https://{host}:{port}{path}"
 
     last_error: Exception | None = None
-    with requests.Session() as session:
+    if _REQUESTS_MODULE is None or _REQUESTS_EXCEPTIONS is None:
+        raise DependencySubmissionError(
+            None,
+            "Библиотека 'requests' недоступна для отправки snapshot зависимостей.",
+        )
+
+    with _REQUESTS_MODULE.Session() as session:
         for attempt in range(1, 4):
             try:
                 response = session.post(
@@ -421,7 +446,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     timeout=30,
                     allow_redirects=False,
                 )
-            except requests_exceptions.Timeout as exc:
+            except _REQUESTS_EXCEPTIONS.Timeout as exc:
                 message = str(exc) or "timed out"
                 if attempt < 3:
                     wait_time = 2 ** (attempt - 1)
@@ -434,7 +459,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     continue
                 last_error = exc
                 break
-            except requests_exceptions.RequestException as exc:
+            except _REQUESTS_EXCEPTIONS.RequestException as exc:
                 message = str(exc).strip() or exc.__class__.__name__
                 if attempt < 3:
                     wait_time = 2 ** (attempt - 1)
@@ -597,6 +622,13 @@ def submit_dependency_snapshot() -> None:
             "X-GitHub-Api-Version": os.getenv("GITHUB_API_VERSION", _DEFAULT_API_VERSION),
             "User-Agent": "dependency-snapshot-script",
         }
+
+        if not _load_requests():
+            print(
+                "Dependency snapshot submission skipped из-за отсутствия библиотеки 'requests'.",
+                file=sys.stderr,
+            )
+            return
 
         schemes = _auth_schemes(token)
         last_error: DependencySubmissionError | None = None
