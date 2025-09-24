@@ -318,6 +318,8 @@ def _compute_diff(
 
     if not base_sha:
         raise RuntimeError("Не указан base_sha для diff")
+    if truncate < 0:
+        raise RuntimeError("Параметр truncate должен быть неотрицательным")
 
     try:
         result = _run_git(
@@ -358,7 +360,10 @@ def prepare_diff(
     safe_sha = _validate_git_sha(base_sha)
     _ensure_base_available(base_ref, safe_sha)
     monitored_paths: Sequence[str] = paths or [":(glob)**/*.py"]
-    return _compute_diff(safe_sha, monitored_paths, truncate=truncate)
+    diff = _compute_diff(safe_sha, monitored_paths, truncate=truncate)
+    if not isinstance(diff, DiffComputation):
+        raise RuntimeError("git diff вернул неожиданный результат")
+    return diff
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

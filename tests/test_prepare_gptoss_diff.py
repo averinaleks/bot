@@ -260,3 +260,33 @@ def test_ensure_base_available_raises_if_fetch_fails(monkeypatch: pytest.MonkeyP
     with pytest.raises(RuntimeError):
         prepare_gptoss_diff._ensure_base_available("main", "a" * 40)
 
+
+def test_compute_diff_rejects_negative_truncate(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run_git(_args, *, capture_output: bool = False):
+        _ = capture_output
+        return subprocess.CompletedProcess(_args, 0, stdout="diff")
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff._compute_diff("a" * 40, [":(glob)**/*.py"], truncate=-1)
+
+
+def test_prepare_diff_validates_compute_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        prepare_gptoss_diff,
+        "_ensure_base_available",
+        lambda ref, sha: None,
+    )
+    monkeypatch.setattr(prepare_gptoss_diff, "_validate_git_sha", lambda sha: "a" * 40)
+    monkeypatch.setattr(prepare_gptoss_diff, "_compute_diff", lambda *args, **kwargs: None)
+
+    with pytest.raises(RuntimeError):
+        prepare_gptoss_diff.prepare_diff(
+            "example/repo",
+            "123",
+            token=None,
+            base_sha="a" * 40,
+            base_ref="main",
+        )
+
