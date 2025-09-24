@@ -23,12 +23,12 @@ import os
 import re
 import subprocess  # nosec B404
 import sys
-import http.client
-import ssl
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
+
+import requests
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -147,34 +147,19 @@ def _perform_https_request(
         raise RuntimeError("URL GitHub API не должен содержать учетные данные")
 
     sanitised = parsed._replace(path=parsed.path or "/", fragment="")
-    if sanitised.query:
-        path = f"{sanitised.path}?{sanitised.query}"
-    else:
-        path = sanitised.path
-
     if sanitised.port and sanitised.port != 443:
-        host = f"{sanitised.hostname}:{sanitised.port}"
+        netloc = f"{sanitised.hostname}:{sanitised.port}"
     else:
-        host = sanitised.hostname
-
-    connection = http.client.HTTPSConnection(
-        host,
-        timeout=timeout,
-        context=ssl.create_default_context(),
-    )
+        netloc = sanitised.hostname
+    sanitised = sanitised._replace(netloc=netloc)
+    target_url = urlunparse(sanitised)
 
     try:
-        connection.request("GET", path or "/", headers=headers)
-        response = connection.getresponse()
-        status = int(response.status)
-        reason = response.reason or ""
-        payload = response.read()
-    except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+        response = requests.get(target_url, headers=headers, timeout=timeout)
+    except requests.RequestException as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    finally:
-        connection.close()
 
-    return status, reason, payload
+    return int(response.status_code), response.reason or "", response.content
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
