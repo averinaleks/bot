@@ -137,6 +137,17 @@ def _perform_http_request(
     """Execute an HTTP(S) request and return status, reason and body."""
 
     parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise RuntimeError("URL GPT-OSS не содержит hostname")
+
+    host = hostname
+    # ``http.client`` expects IPv6 addresses wrapped in square brackets.
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+
+    resolved_ips = _resolve_host_ips(hostname)
+    allowed_hosts = _load_allowed_hosts() if parsed.scheme == "https" else set()
 
     if parsed.scheme == "https":
         if allowed_hosts and hostname not in allowed_hosts:
