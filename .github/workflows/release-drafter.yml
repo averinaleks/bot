@@ -16,17 +16,33 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request_target' && format('release-drafter-pr-{0}', github.event.number) || format('release-drafter-ref-{0}', github.ref) }}
+  group: ${{ github.event_name == 'pull_request_target' && github.event.pull_request != null && github.event.number && format('release-drafter-pr-{0}', github.event.number) || format('release-drafter-ref-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
   update_release_draft:
-    if: github.event_name != 'pull_request_target' || (github.event.pull_request != null && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - name: Update release draft
         uses: release-drafter/release-drafter@v6.1.0
         with:
           config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  autolabel_pull_request:
+    if: |
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request != null
+      && github.event.pull_request.head.repo != null
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update pull request metadata
+        uses: release-drafter/release-drafter@v6.1.0
+        with:
+          config-name: release-drafter.yml
+          disable-releases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
