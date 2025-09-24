@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Remove git logs to avoid CodeQL parsing artifacts
         run: rm -rf .git/logs
