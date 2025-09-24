@@ -5,6 +5,7 @@ import socket
 import time
 from contextlib import contextmanager
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
+from ipaddress import ip_address
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -77,6 +78,21 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
             def __init__(self, timeout: float = 10.0) -> None:
                 self.timeout = timeout
 
+            @staticmethod
+            def _is_local_hostname(hostname: str | None) -> bool:
+                """Return ``True`` when *hostname* clearly refers to localhost."""
+
+                if not hostname:
+                    return False
+                lowered = hostname.lower()
+                if lowered == "localhost":
+                    return True
+                try:
+                    parsed_ip = ip_address(lowered)
+                except ValueError:
+                    return False
+                return parsed_ip.is_loopback or parsed_ip.is_private
+
             def _request(
                 self,
                 method: str,
@@ -88,6 +104,11 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
                 parsed = urlparse(url)
                 if parsed.scheme not in {"http", "https"}:
                     raise HTTPError(f"Unsupported URL scheme: {parsed.scheme}")
+
+                if parsed.scheme == "http" and not self._is_local_hostname(parsed.hostname):
+                    raise HTTPError(
+                        "Insecure HTTP connections are only allowed for localhost"
+                    )
 
                 connection_cls = HTTPConnection if parsed.scheme == "http" else HTTPSConnection
                 host = parsed.hostname or ""
