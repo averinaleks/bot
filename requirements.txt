@@ -228,7 +228,7 @@ nvidia-nvjitlink-cu12==12.8.93
     #   torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-openai==1.108.2
+openai==1.109.0
     # via -r requirements-core.in
 packaging==25.0
     # via
