@@ -7,20 +7,21 @@ the entire job to exit with a non-zero status.  This module replaces the shell
 logic with a small Python implementation that gracefully handles errors and
 reports the result back to GitHub Actions via ``GITHUB_OUTPUT``.
 
-The module keeps dependencies minimal by delegating HTTP access to
-``requests``.  It can also be imported from unit tests to validate individual
-helper functions.
+Only the Python standard library is required which keeps the workflow resilient
+on fresh GitHub runners where third-party packages like ``requests`` may be
+missing.  The module can also be imported from unit tests to validate
+individual helper functions.
 """
 
 from __future__ import annotations
 
 import argparse
+import http.client
 import ipaddress
 import json
 import os
+import ssl
 import sys
-import requests
-from requests import exceptions as requests_exceptions
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,25 +76,37 @@ def _perform_http_request(
 ) -> tuple[int, str, bytes]:
     """Execute an HTTP(S) request and return status, reason and body."""
 
-    try:
-        response = requests.post(
-            url,
-            data=data,
-            headers=headers,
+    parsed = urlparse(url)
+    if parsed.scheme == "https":
+        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
+            parsed.hostname,
+            parsed.port or 443,
             timeout=timeout,
-            allow_redirects=False,
+            context=ssl.create_default_context(),
         )
-    except requests_exceptions.Timeout as exc:
-        raise TimeoutError(str(exc) or "timed out") from exc
-    except requests_exceptions.RequestException as exc:
-        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
+    else:
+        connection = http.client.HTTPConnection(
+            parsed.hostname,
+            parsed.port or 80,
+            timeout=timeout,
+        )
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
 
     try:
-        status = int(response.status_code)
+        connection.request("POST", path, body=data, headers=headers)
+        response = connection.getresponse()
+        status = int(response.status)
         reason = response.reason or ""
-        payload = response.content
+        payload = response.read()
+    except TimeoutError as exc:
+        raise TimeoutError(str(exc) or "timed out") from exc
+    except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+        raise ConnectionError(str(exc) or exc.__class__.__name__) from exc
     finally:
-        response.close()
+        connection.close()
 
     return status, reason, payload
 
