@@ -15,8 +15,19 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
-import requests
-from requests import exceptions as requests_exceptions
+try:
+    import requests
+    from requests import exceptions as requests_exceptions
+except ModuleNotFoundError:  # pragma: no cover - exercised via import hook in tests
+    requests = None  # type: ignore[assignment]
+
+    class _RequestsExceptionsModule:
+        """Compatibility shim when the ``requests`` package is unavailable."""
+
+        Timeout = TimeoutError
+        RequestException = Exception
+
+    requests_exceptions = _RequestsExceptionsModule()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -411,6 +422,11 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         request_url = f"https://{host}:{port}{path}"
 
     last_error: Exception | None = None
+    if requests is None:
+        raise DependencySubmissionError(
+            None,
+            "Dependency snapshot submission requires the 'requests' package.",
+        )
     with requests.Session() as session:
         for attempt in range(1, 4):
             try:
