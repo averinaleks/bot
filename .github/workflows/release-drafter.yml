@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   update_release_draft:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request_target' || (github.event.pull_request != null && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Update release draft
