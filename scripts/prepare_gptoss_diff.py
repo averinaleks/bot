@@ -19,16 +19,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import http.client
 import json
 import os
 import re
+import ssl
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
-from urllib.parse import urlparse, urlunparse
-
-import requests
+from urllib.parse import urlparse
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -182,19 +182,36 @@ def _perform_https_request(
         raise RuntimeError(
             "Разрешены только запросы к api.github.com"
         )
-    if sanitised.port and sanitised.port != 443:
-        netloc = f"{hostname}:{sanitised.port}"
+
+    port = sanitised.port or 443
+    if port != 443:
+        netloc = f"{hostname}:{port}"
     else:
         netloc = hostname
     sanitised = sanitised._replace(netloc=netloc)
-    target_url = urlunparse(sanitised)
+
+    path = sanitised.path or "/"
+    if sanitised.query:
+        path = f"{path}?{sanitised.query}"
+
+    connection = http.client.HTTPSConnection(
+        netloc,
+        timeout=timeout,
+        context=ssl.create_default_context(),
+    )
 
     try:
-        response = requests.get(target_url, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
+        connection.request("GET", path, headers=headers)
+        response = connection.getresponse()
+        status = int(response.status)
+        reason = response.reason or ""
+        payload = response.read()
+    except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
+    finally:
+        connection.close()
 
-    return int(response.status_code), response.reason or "", response.content
+    return status, reason, payload
 
 
 def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
