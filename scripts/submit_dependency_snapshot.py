@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import importlib
 import json
 import os
 import re
@@ -11,15 +12,14 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
+from typing import Any, Dict, Iterable, TypedDict, cast
 
 from urllib.parse import quote, urlparse
 
 try:
-    import requests
-    from requests import exceptions as requests_exceptions
+    _requests_module = importlib.import_module("requests")
 except ModuleNotFoundError:  # pragma: no cover - exercised via import hook in tests
-    requests = None  # type: ignore[assignment]
+    requests = None
 
     class _RequestsExceptionsModule:
         """Compatibility shim when the ``requests`` package is unavailable."""
@@ -27,7 +27,10 @@ except ModuleNotFoundError:  # pragma: no cover - exercised via import hook in t
         Timeout = TimeoutError
         RequestException = Exception
 
-    requests_exceptions = _RequestsExceptionsModule()  # type: ignore[assignment]
+    requests_exceptions: Any = _RequestsExceptionsModule()
+else:
+    requests = cast(Any, _requests_module)
+    requests_exceptions = cast(Any, _requests_module.exceptions)
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",

@@ -12,4 +12,5 @@ flake8
 bandit
 ruff
 mypy
+types-requests
 pip-audit

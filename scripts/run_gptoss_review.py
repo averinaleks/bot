@@ -15,16 +15,19 @@ helper functions.
 from __future__ import annotations
 
 import argparse
+import importlib
 import ipaddress
 import json
 import os
 import sys
-import requests
-from requests import exceptions as requests_exceptions
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
+
+requests_module = importlib.import_module("requests")
+requests = cast(Any, requests_module)
+requests_exceptions = cast(Any, requests_module.exceptions)
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 

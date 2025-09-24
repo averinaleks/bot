@@ -5,13 +5,18 @@ import importlib.util
 import os
 import runpy
 import sys
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Iterable, Iterator, Sequence
+from typing import cast
+
+PipMainCallable = Callable[[Sequence[str]], int]
 
 try:
-    from pip._internal.cli.main import main as _pip_main
+    from pip._internal.cli.main import main as _pip_main_callable
 except Exception:  # pragma: no cover - pip should always be importable, but guard just in case
-    _pip_main = None
+    _pip_main_impl: PipMainCallable | None = None
+else:
+    _pip_main_impl = cast(PipMainCallable, _pip_main_callable)
 
 
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
@@ -55,8 +60,8 @@ def _temporarily_overridden_env(name: str, value: str) -> Iterator[None]:
 
 
 def _run_pip(args: Sequence[str]) -> int:
-    if _pip_main is not None:
-        return _pip_main(list(args))
+    if _pip_main_impl is not None:
+        return _pip_main_impl(list(args))
 
     original_argv = sys.argv[:]
     try:
