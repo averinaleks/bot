@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+from importlib import metadata
 import json
 from pathlib import Path
 
 import pytest
 
 from scripts import submit_dependency_snapshot as snapshot
+
+
+httpx = pytest.importorskip("httpx")
+
+try:
+    HTTPX_VERSION = httpx.__version__
+except AttributeError:  # pragma: no cover - fallback for older releases
+    HTTPX_VERSION = metadata.version("httpx")
+
+HTTPX_REQUIREMENT = f"httpx=={HTTPX_VERSION}"
+HTTPX_PURL = f"pkg:pypi/httpx@{snapshot._encode_version_for_purl(HTTPX_VERSION)}"
 
 
 @pytest.mark.parametrize(
@@ -30,13 +42,13 @@ def test_build_manifests_includes_supported_patterns(tmp_path: Path, filename: s
 
 def test_parse_requirements_skips_blocklisted_packages(tmp_path: Path) -> None:
     requirement_file = tmp_path / "requirements.txt"
-    requirement_file.write_text("ccxtpro==1.0.1\nhttpx==0.27.2\n")
+    requirement_file.write_text(f"ccxtpro==1.0.1\n{HTTPX_REQUIREMENT}\n")
 
     resolved = snapshot._parse_requirements(requirement_file)
 
     assert "ccxtpro" not in resolved
     assert "httpx" in resolved
-    assert resolved["httpx"]["package_url"] == "pkg:pypi/httpx@0.27.2"
+    assert resolved["httpx"]["package_url"] == HTTPX_PURL
 
 
 def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
@@ -148,8 +160,8 @@ def test_submit_dependency_snapshot_reports_submission_error(
         "name": "requirements.txt",
         "file": {"source_location": "requirements.txt"},
         "resolved": {
-            "pkg:pypi/httpx@0.27.2": {
-                "package_url": "pkg:pypi/httpx@0.27.2",
+            HTTPX_PURL: {
+                "package_url": HTTPX_PURL,
                 "relationship": "direct",
                 "scope": "runtime",
                 "dependencies": [],
@@ -242,8 +254,8 @@ def test_submit_dependency_snapshot_uses_string_metadata(
 
 
 def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> None:
-    (tmp_path / "requirements.txt").write_text("httpx==0.27.2\n")
-    (tmp_path / "requirements.out").write_text("httpx==0.27.2\n")
+    (tmp_path / "requirements.txt").write_text(f"{HTTPX_REQUIREMENT}\n")
+    (tmp_path / "requirements.out").write_text(f"{HTTPX_REQUIREMENT}\n")
 
     manifests = snapshot._build_manifests(tmp_path)
 
@@ -251,8 +263,8 @@ def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> Non
 
 
 def test_build_manifests_skips_in_files_when_txt_present(tmp_path: Path) -> None:
-    (tmp_path / "requirements.txt").write_text("httpx==0.27.2\n")
-    (tmp_path / "requirements.in").write_text("httpx>=0.27.0\n")
+    (tmp_path / "requirements.txt").write_text(f"{HTTPX_REQUIREMENT}\n")
+    (tmp_path / "requirements.in").write_text(f"httpx>={HTTPX_VERSION}\n")
 
     manifests = snapshot._build_manifests(tmp_path)
 
