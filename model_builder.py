@@ -39,6 +39,7 @@ from bot.utils import (
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
     ArtifactDeserializationError,
+    create_joblib_stub,
     harden_mlflow,
     safe_joblib_load,
     set_model_dir,
@@ -261,17 +262,9 @@ except Exception as exc:  # pragma: no cover - stub for tests
         "Не удалось импортировать joblib: %s. Сериализация моделей будет отключена.",
         exc,
     )
-
-    import types
-
-    def _joblib_unavailable(*_args, **_kwargs):  # type: ignore[override]
-        raise RuntimeError(
-            "joblib недоступен: установите зависимость для сохранения/загрузки моделей"
-        )
-
-    joblib = types.ModuleType("joblib")
-    joblib.dump = _joblib_unavailable  # type: ignore[attr-defined]
-    joblib.load = _joblib_unavailable  # type: ignore[attr-defined]
+    joblib = create_joblib_stub(
+        "joblib недоступен: установите зависимость для сохранения/загрузки моделей"
+    )
     sys.modules.setdefault("joblib", joblib)
 
 try:

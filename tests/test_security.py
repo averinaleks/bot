@@ -15,6 +15,7 @@ from security import (
     _MLFLOW_DISABLED_ATTRS,
     ArtifactDeserializationError,
     apply_ray_security_defaults,
+    create_joblib_stub,
     ensure_minimum_ray_version,
     harden_mlflow,
     safe_joblib_load,
@@ -200,6 +201,16 @@ def test_safe_joblib_load_rejects_symlink(tmp_path: Path) -> None:
         safe_joblib_load(link)
 
     assert "симлинк" in str(exc.value)
+
+
+def test_create_joblib_stub_denies_usage() -> None:
+    stub = create_joblib_stub("joblib unavailable")
+
+    with pytest.raises(RuntimeError, match="joblib unavailable"):
+        stub.dump({}, "ignored")
+
+    with pytest.raises(RuntimeError, match="joblib unavailable"):
+        stub.load("ignored")
 
 
 def test_safe_joblib_load_rejects_path_outside_model_dir(tmp_path: Path) -> None:
