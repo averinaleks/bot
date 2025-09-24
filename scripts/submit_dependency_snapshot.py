@@ -15,10 +15,13 @@ from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
 
+_REQUESTS_IMPORT_ERROR: ImportError | None = None
+
 try:
     import requests
     from requests import exceptions as requests_exceptions
-except ModuleNotFoundError:  # pragma: no cover - exercised via import hook in tests
+except ImportError as exc:  # pragma: no cover - exercised via import hook in tests
+    _REQUESTS_IMPORT_ERROR = exc
     requests = None  # type: ignore[assignment]
 
     class _RequestsExceptionsModule:
@@ -58,6 +61,19 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
+_REQUESTS_REQUIRED_MESSAGE = (
+    "Dependency snapshot submission requires the 'requests' package."
+)
+
+
+def _report_missing_requests() -> None:
+    """Inform the caller that submitting a snapshot is not possible."""
+
+    print(f"{_REQUESTS_REQUIRED_MESSAGE} Skipping submission.", file=sys.stderr)
+    if _REQUESTS_IMPORT_ERROR is not None:
+        detail = str(_REQUESTS_IMPORT_ERROR).strip()
+        if detail:
+            print(detail, file=sys.stderr)
 
 def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
@@ -425,7 +441,8 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     if requests is None:
         raise DependencySubmissionError(
             None,
-            "Dependency snapshot submission requires the 'requests' package.",
+            _REQUESTS_REQUIRED_MESSAGE,
+            cause=_REQUESTS_IMPORT_ERROR,
         )
     with requests.Session() as session:
         for attempt in range(1, 4):
@@ -556,6 +573,10 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 
 def submit_dependency_snapshot() -> None:
+    if requests is None:
+        _report_missing_requests()
+        return
+
     try:
         repository = _env("GITHUB_REPOSITORY")
         token = _env("GITHUB_TOKEN")
