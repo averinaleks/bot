@@ -152,10 +152,14 @@ def _perform_https_request(
     else:
         path = sanitised.path
 
+    hostname = sanitised.hostname
+    if hostname is None:  # pragma: no cover - guarded by earlier validation
+        raise RuntimeError("Не удалось определить хост GitHub API")
+
     if sanitised.port and sanitised.port != 443:
-        host = f"{sanitised.hostname}:{sanitised.port}"
+        host = f"{hostname}:{sanitised.port}"
     else:
-        host = sanitised.hostname
+        host = hostname
 
     connection = http.client.HTTPSConnection(
         host,

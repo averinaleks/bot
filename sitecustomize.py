@@ -6,12 +6,16 @@ import os
 import runpy
 import sys
 from contextlib import contextmanager
-from typing import Iterable, Iterator, Sequence
+from typing import Callable, Iterable, Iterator, Sequence, cast
+
+_PipMain = Callable[[Sequence[str] | None], int]
 
 try:
-    from pip._internal.cli.main import main as _pip_main
+    from pip._internal.cli.main import main as _pip_main_impl
 except Exception:  # pragma: no cover - pip should always be importable, but guard just in case
-    _pip_main = None
+    _pip_main: _PipMain | None = None
+else:
+    _pip_main = cast(_PipMain, _pip_main_impl)
 
 
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
