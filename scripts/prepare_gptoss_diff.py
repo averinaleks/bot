@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import http.client
 import json
 import os
 import re
@@ -28,7 +27,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -190,26 +191,28 @@ def _perform_https_request(
         netloc = hostname
     sanitised = sanitised._replace(netloc=netloc)
 
-    path = sanitised.path or "/"
-    if sanitised.query:
-        path = f"{path}?{sanitised.query}"
-
-    connection = http.client.HTTPSConnection(
-        netloc,
-        timeout=timeout,
-        context=ssl.create_default_context(),
+    request = Request(
+        sanitised.geturl(),
+        headers=headers,
+        method="GET",
     )
 
+    context = ssl.create_default_context()
     try:
-        connection.request("GET", path, headers=headers)
-        response = connection.getresponse()
-        status = int(response.status)
-        reason = response.reason or ""
-        payload = response.read()
-    except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    finally:
-        connection.close()
+        with urlopen(request, timeout=timeout, context=context) as response:
+            status = int(getattr(response, "status", response.getcode()))
+            reason = getattr(response, "reason", "") or ""
+            payload = response.read()
+    except HTTPError as exc:
+        status = int(getattr(exc, "code", 0) or 0)
+        reason = getattr(exc, "reason", "") or ""
+        payload = exc.read() if hasattr(exc, "read") else b""
+        return status, reason, payload
+    except URLError as exc:
+        message = getattr(exc.reason, "strerror", None) or exc.reason or exc
+        raise RuntimeError(
+            f"HTTP запрос {sanitised.geturl()} завершился ошибкой: {message}"
+        ) from exc
 
     return status, reason, payload
 
