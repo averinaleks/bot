@@ -11,13 +11,19 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recommends -y \
     python3 python3-venv build-essential linux-libc-dev libgcrypt20 git \
     && apt-get install -y --no-install-recommends gnupg dirmngr \
-    && apt-get install -y --only-upgrade libpam0g libpam-modules \
     && python3 -m venv /venv \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ldconfig \
     && gpg --version \
     && dirmngr --version
+
+COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
+COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
+COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
+
+RUN /tmp/security/build_patched_pam.sh /tmp/security/linux-pam-CVE-2024-10963.patch \
+    /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
 
 WORKDIR /app
 
@@ -34,11 +40,15 @@ FROM ubuntu:24.04@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
+
 # Устанавливаем только необходимые пакеты выполнения и сразу обновляем базовую систему
 RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recommends -y \
     libssl3t64 \
     python3.12-minimal \
-    && apt-get install -y --only-upgrade openssl libssl3t64 libpam0g libpam-modules \
+    openssl \
+    && dpkg -i /tmp/pam-fixed/*.deb \
+    && rm -rf /tmp/pam-fixed \
     && apt-get purge -y git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
