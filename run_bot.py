@@ -171,7 +171,7 @@ def _log_mode(command: str, offline: bool) -> None:
 
 
 def _patch_offline_services():
-    from bot.services.offline import OfflineBybit, OfflineTelegram, OfflineGPT
+    from services.offline import OfflineBybit, OfflineTelegram, OfflineGPT
 
     import bot.utils as utils_module
     import bot.telegram_logger as telegram_logger_module
