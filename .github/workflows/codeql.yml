@@ -26,6 +26,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Remove git logs to avoid CodeQL parsing artifacts
+        run: rm -rf .git/logs
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
