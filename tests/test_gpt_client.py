@@ -14,6 +14,7 @@ from bot.gpt_client import (
     MAX_PROMPT_BYTES,
     MAX_RESPONSE_BYTES,
     _get_api_url_timeout,
+    _load_allowed_hosts,
     _validate_api_url,
     _parse_gpt_response,
     query_gpt,
@@ -53,6 +54,15 @@ QUERIES = [
     (query_gpt, httpx.AsyncClient),
     (query_gpt_async, httpx.AsyncClient),
 ]
+
+
+@pytest.fixture(autouse=True)
+def allow_test_hosts(monkeypatch):
+    monkeypatch.setenv(
+        "GPT_OSS_ALLOWED_HOSTS",
+        "example.com,foo.local,localhost,127.0.0.1,::1",
+    )
+    yield
 
 
 async def run_query(func, prompt):
@@ -435,7 +445,7 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     with pytest.raises(GPTClientError):
-        _validate_api_url("http://foo.local")
+        _validate_api_url("http://foo.local", _load_allowed_hosts())
 
 
 def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
@@ -447,7 +457,7 @@ def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
     monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
     monkeypatch.setattr("bot.gpt_client.ALLOW_INSECURE_GPT_URL", True)
     with caplog.at_level(logging.WARNING):
-        host, ips = _validate_api_url("http://foo.local")
+        host, ips = _validate_api_url("http://foo.local", _load_allowed_hosts())
 
     assert host == "foo.local"
     assert ips == {"8.8.8.8"}
