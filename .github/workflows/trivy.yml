@@ -9,15 +9,15 @@ on:
   schedule:
     - cron: "21 10 * * 2"
 
-permissions:
-  contents: read
-  security-events: write
-  actions: write  # required for uploading artifacts such as SARIF reports
-
 jobs:
   scan:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
-    steps:
+    permissions:
+      contents: read
+      security-events: write
+      actions: write  # required for uploading artifacts such as SARIF reports
+    steps: &trivy_steps
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         # v4
@@ -109,7 +109,7 @@ jobs:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
@@ -133,3 +133,11 @@ jobs:
         run: |
           echo "::error::Trivy detected ${{ steps.parse_trivy.outputs.vulnerability_count }} high or critical vulnerabilities."
           exit 1
+
+  scan-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps: *trivy_steps
