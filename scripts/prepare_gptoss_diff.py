@@ -23,8 +23,8 @@ import os
 import re
 import subprocess  # nosec B404
 import sys
-import requests
-from requests import exceptions as requests_exceptions
+import http.client
+import ssl
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -151,29 +151,28 @@ def _perform_https_request(
         path = f"{sanitised.path}?{sanitised.query}"
     else:
         path = sanitised.path
+
     if sanitised.port and sanitised.port != 443:
-        target = f"https://{sanitised.hostname}:{sanitised.port}{path}"
+        host = f"{sanitised.hostname}:{sanitised.port}"
     else:
-        target = f"https://{sanitised.hostname}{path}"
+        host = sanitised.hostname
+
+    connection = http.client.HTTPSConnection(
+        host,
+        timeout=timeout,
+        context=ssl.create_default_context(),
+    )
 
     try:
-        response = requests.get(
-            target,
-            headers=headers,
-            timeout=timeout,
-            allow_redirects=False,
-        )
-    except requests_exceptions.Timeout as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-    except requests_exceptions.RequestException as exc:
-        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
-
-    try:
-        status = int(response.status_code)
+        connection.request("GET", path or "/", headers=headers)
+        response = connection.getresponse()
+        status = int(response.status)
         reason = response.reason or ""
-        payload = response.content
+        payload = response.read()
+    except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {exc}") from exc
     finally:
-        response.close()
+        connection.close()
 
     return status, reason, payload
 
