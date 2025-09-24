@@ -68,14 +68,89 @@ jobs:
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+      - name: Проверка статуса PR
         if: steps.validate_event.outputs.skip != 'true'
+        id: ensure_pr_ready
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          pr_number="${PR_NUMBER:-}"
+          if [ -z "$pr_number" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          api_url="https://api.github.com/repos/${REPOSITORY}/pulls/${pr_number}"
+          if ! response=$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "$api_url"); then
+            echo "::warning::Не удалось получить данные PR ${pr_number} – пропускаю обзор" >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf '%s\n' "$response" | python3 - <<'PY'
+import json
+import os
+import sys
+
+output_path = os.getenv("GITHUB_OUTPUT")
+repository = os.getenv("REPOSITORY", "")
+
+skip = False
+notices: list[str] = []
+
+try:
+    data = json.load(sys.stdin)
+except json.JSONDecodeError:
+    skip = True
+    notices.append("Ответ GitHub API не является корректным JSON")
+else:
+    state = data.get("state")
+    head = data.get("head") or {}
+    head_repo = (head.get("repo") or {}).get("full_name")
+
+    if state != "open":
+        skip = True
+        notices.append(f"PR находится в состоянии {state!r}")
+
+    if head_repo is None:
+        skip = True
+        notices.append("head-репозиторий недоступен (ветка могла быть удалена)")
+    elif head_repo and repository and head_repo != repository:
+        skip = True
+        notices.append(
+            f"PR создан из репозитория {head_repo}, ожидается {repository}"
+        )
+
+if skip:
+    if notices:
+        print("::notice::" + "; ".join(notices) + ". Пропускаю запуск обзора.")
+    else:
+        print("::notice::PR не подходит для обзора. Пропускаю запуск обзора.")
+else:
+    print("::debug::PR прошёл проверку статуса и источника.")
+
+if output_path:
+    try:
+        with open(output_path, "a", encoding="utf-8") as fh:
+            fh.write(f"skip={'true' if skip else 'false'}\n")
+    except OSError as exc:
+        print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
+PY
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        if: steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true'
         with:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
 
       - name: Start mock GPT-OSS server
-        if: steps.validate_event.outputs.skip != 'true'
+        if: steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true'
         id: start_llm
         run: |
           set -euo pipefail
@@ -154,7 +229,10 @@ jobs:
           MODEL_NAME: ${{ env.MODEL_NAME }}
 
       - name: Wait for GPT-OSS server
-        if: steps.validate_event.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true'
+        if: >-
+          steps.validate_event.outputs.skip != 'true' &&
+          steps.ensure_pr_ready.outputs.skip != 'true' &&
+          steps.start_llm.outputs.started == 'true'
         id: wait_llm
         run: |
           set -euo pipefail
@@ -197,6 +275,7 @@ jobs:
       - name: Generate diff
         if: >-
           steps.validate_event.outputs.skip != 'true' &&
+          steps.ensure_pr_ready.outputs.skip != 'true' &&
           steps.start_llm.outputs.started == 'true' &&
           steps.wait_llm.outputs.ready == 'true'
         id: generate_diff
@@ -237,6 +316,7 @@ jobs:
       - name: LLM review
         if: >-
           steps.validate_event.outputs.skip != 'true' &&
+          steps.ensure_pr_ready.outputs.skip != 'true' &&
           steps.start_llm.outputs.started == 'true' &&
           steps.wait_llm.outputs.ready == 'true' &&
           steps.generate_diff.outputs.has_diff == 'true'
@@ -280,6 +360,7 @@ jobs:
       - name: Upload review artifact
         if: >-
           steps.validate_event.outputs.skip != 'true' &&
+          steps.ensure_pr_ready.outputs.skip != 'true' &&
           steps.wait_llm.outputs.ready == 'true' &&
           steps.llm_review.outputs.has_content == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -290,6 +371,7 @@ jobs:
       - name: Comment PR
         if: >-
           steps.validate_event.outputs.skip != 'true' &&
+          steps.ensure_pr_ready.outputs.skip != 'true' &&
           steps.wait_llm.outputs.ready == 'true' &&
           steps.llm_review.outputs.has_content == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
