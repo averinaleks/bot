@@ -64,14 +64,23 @@ exec(textwrap.dedent("""
 """))
 PY
 
-# NOTE: keep the cleanup below in a dedicated RUN step. The exec form avoids the
-# Dockerfile parser occasionally treating the first line of the script as a
-# separate instruction ("nvidia_packages=...") when heredocs or loose quoting
-# are used, which previously broke the docker-publish workflow with a
-# "dockerfile parse error". Historical failures:
+# NOTE: keep the cleanup below in a dedicated RUN step. Using an explicit Bash
+# invocation with ``set -euo pipefail`` prevents the Docker parser from
+# splitting the first command token (``nvidia_packages=...``) into a separate
+# instruction, a behaviour that historically produced "dockerfile parse error"
+# failures in the docker-publish workflow. Historical context:
 # https://github.com/averinaleks/bot/actions/workflows/docker-publish.yml
 
-RUN ["/bin/bash", "-euo", "pipefail", "-c", "nvidia_packages=\"$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)\"; if [ -n \"$nvidia_packages\" ]; then printf '%s\\n' \"$nvidia_packages\" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; else echo 'No NVIDIA packages detected in the virtual environment'; fi; find \"$VIRTUAL_ENV\" -type d -name '__pycache__' -exec rm -rf {} +; find \"$VIRTUAL_ENV\" -type f -name '*.pyc' -delete"]
+RUN /bin/bash -euo pipefail -c "\
+  nvidia_packages=\"\$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)\"; \
+  if [ -n \"\$nvidia_packages\" ]; then \
+    printf '%s\\n' \"\$nvidia_packages\" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; \
+  else \
+    echo 'No NVIDIA packages detected in the virtual environment'; \
+  fi; \
+  find \"$VIRTUAL_ENV\" -type d -name '__pycache__' -exec rm -rf {} +; \
+  find \"$VIRTUAL_ENV\" -type f -name '*.pyc' -delete\
+"
 
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive

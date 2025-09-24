@@ -137,12 +137,6 @@ def _perform_http_request(
     """Execute an HTTP(S) request and return status, reason and body."""
 
     parsed = urlparse(url)
-    hostname = _normalise_host(parsed.hostname)
-    if not hostname:
-        raise RuntimeError("URL GPT-OSS должен содержать хост")
-
-    resolved_ips = _resolve_host_ips(parsed.hostname or "")
-    allowed_hosts = _load_allowed_hosts()
 
     if parsed.scheme == "https":
         if allowed_hosts and hostname not in allowed_hosts:
@@ -155,7 +149,7 @@ def _perform_http_request(
                 "HTTPS GPT-OSS хост должен разрешаться в приватные или loopback IP"
             )
         connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-            parsed.hostname,
+            host,
             parsed.port or 443,
             timeout=timeout,
             context=ssl.create_default_context(),
@@ -166,7 +160,7 @@ def _perform_http_request(
                 "HTTP GPT-OSS URL разрешается в неприватный адрес"
             )
         connection = http.client.HTTPConnection(
-            parsed.hostname,
+            host,
             parsed.port or 80,
             timeout=timeout,
         )
