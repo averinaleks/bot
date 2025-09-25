@@ -82,7 +82,7 @@ jobs:
           # files and emit parse warnings. Removing all nested .git directories
           # immediately before analysis ensures the extractor never sees these
           # files.
-          find "$PWD" -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
+          find "$PWD" -mindepth 2 -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
             chmod -R u+w "$dir" || true
             rm -rf "$dir" || true
           done
