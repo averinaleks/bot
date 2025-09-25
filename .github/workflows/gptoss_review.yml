@@ -20,7 +20,14 @@ permissions:
   issues: write
 
 concurrency:
-  group: ${{ format('gptoss-review-{0}-{1}', github.workflow, github.event_name == 'pull_request_target' && github.event.pull_request.number || github.event_name == 'issue_comment' && github.event.issue.number || github.run_id) }}
+  group: >-
+    ${{ format(
+      'gptoss-review-{0}-{1}',
+      github.workflow,
+      (github.event_name == 'pull_request_target' && github.event.pull_request.number)
+        || (github.event_name == 'issue_comment' && github.event.issue.number)
+        || github.run_id
+    ) }}
   cancel-in-progress: true
 
 jobs:
@@ -253,13 +260,22 @@ jobs:
           PY
 
       - name: Checkout PR head
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && env.PR_NUMBER != '' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && github.event_name == 'pull_request_target'
+              && github.event.pull_request.head.repo.full_name == github.repository
+              && env.PR_NUMBER != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
 
       - name: Checkout repository
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name != 'pull_request_target' && env.PR_NUMBER != '' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && github.event_name != 'pull_request_target'
+              && env.PR_NUMBER != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
@@ -341,7 +357,10 @@ jobs:
         env:
           MODEL_NAME: "${{ env.MODEL_NAME }}"
       - name: Wait for GPT-OSS server
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.start_llm.outputs.started == 'true' }}
         id: wait_llm
         run: |
           set -euo pipefail
@@ -382,7 +401,11 @@ jobs:
           ready_output="true"
 
       - name: Generate diff
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.wait_llm.outputs.ready == 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.start_llm.outputs.started == 'true'
+              && steps.wait_llm.outputs.ready == 'true' }}
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -419,7 +442,12 @@ jobs:
           fi
 
       - name: LLM review
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && steps.start_llm.outputs.started == 'true' && steps.wait_llm.outputs.ready == 'true' && steps.generate_diff.outputs.has_diff == 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.start_llm.outputs.started == 'true'
+              && steps.wait_llm.outputs.ready == 'true'
+              && steps.generate_diff.outputs.has_diff == 'true' }}
         id: llm_review
         run: |
           set -euo pipefail
@@ -458,14 +486,22 @@ jobs:
           fi
 
       - name: Upload review artifact
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && steps.wait_llm.outputs.ready == 'true' && steps.llm_review.outputs.has_content == 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.wait_llm.outputs.ready == 'true'
+              && steps.llm_review.outputs.has_content == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: gptoss-review-${{ env.PR_NUMBER }}
           path: review.md
 
       - name: Comment PR
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && steps.wait_llm.outputs.ready == 'true' && steps.llm_review.outputs.has_content == 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.wait_llm.outputs.ready == 'true'
+              && steps.llm_review.outputs.has_content == 'true' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
         with:
           script: |
