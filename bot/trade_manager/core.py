@@ -119,6 +119,11 @@ except Exception:  # pragma: no cover - minimal stubs
     Flask = _StubApp  # type: ignore[assignment,misc]
 import multiprocessing as mp  # noqa: E402
 
+
+class TradeManagerTaskError(RuntimeError):
+    """Raised when one of the TradeManager background tasks fails."""
+
+
 def setup_multiprocessing() -> None:
     """Ensure multiprocessing uses the 'spawn' start method."""
     if mp.get_start_method(allow_none=True) != "spawn":
@@ -314,6 +319,8 @@ class TradeManager:
         self.returns_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task] = []
         self.loop: asyncio.AbstractEventLoop | None = None
+        self._failure_notified = False
+        self._critical_error = False
         self.exchange = data_handler.exchange
         self.max_positions = config.get("max_positions", 5)
         self.top_signals = config.get("top_signals", self.max_positions)
@@ -1818,6 +1825,8 @@ class TradeManager:
     async def run(self):
         try:
             self.loop = asyncio.get_running_loop()
+            self._failure_notified = False
+            self._critical_error = False
             self.tasks = [
                 asyncio.create_task(
                     self.monitor_performance(), name="monitor_performance"
@@ -1825,22 +1834,50 @@ class TradeManager:
                 asyncio.create_task(self.manage_positions(), name="manage_positions"),
                 asyncio.create_task(self.ranked_signal_loop(), name="ranked_signal_loop"),
             ]
-            results = await asyncio.gather(*self.tasks, return_exceptions=True)
-            for task, result in zip(self.tasks, results):
-                if isinstance(result, Exception):
-                    logger.error("Задача %s завершилась с ошибкой: %s", task.get_name(), result)
-                    await self.telegram_logger.send_telegram_message(
-                        f"❌ Task {task.get_name()} failed: {result}"
+
+            pending: set[asyncio.Task] = set(self.tasks)
+            try:
+                while pending:
+                    done, pending = await asyncio.wait(
+                        pending, return_when=asyncio.FIRST_EXCEPTION
                     )
+                    for finished in done:
+                        try:
+                            finished.result()
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception as exc:
+                            self._failure_notified = True
+                            logger.error(
+                                "Задача %s завершилась с ошибкой: %s",
+                                finished.get_name(),
+                                exc,
+                            )
+                            await self.telegram_logger.send_telegram_message(
+                                f"❌ Task {finished.get_name()} failed: {exc}"
+                            )
+                            for task in pending:
+                                task.cancel()
+                            if pending:
+                                await asyncio.gather(
+                                    *pending, return_exceptions=True
+                                )
+                            raise TradeManagerTaskError(str(exc)) from exc
+            finally:
+                await asyncio.gather(*self.tasks, return_exceptions=True)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
             logger.exception(
                 "Critical error in TradeManager (%s): %s",
                 type(e).__name__,
                 e,
             )
-            await self.telegram_logger.send_telegram_message(
-                f"❌ Critical TradeManager error: {e}"
-            )
+            if not self._failure_notified:
+                await self.telegram_logger.send_telegram_message(
+                    f"❌ Critical TradeManager error: {e}"
+                )
+            self._critical_error = True
+            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+                self.loop.stop()
             raise
         finally:
             self.tasks.clear()

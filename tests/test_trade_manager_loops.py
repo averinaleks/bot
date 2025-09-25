@@ -217,6 +217,45 @@ async def test_process_symbol_recovery(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    failure_started = asyncio.Event()
+    cancel_events = [asyncio.Event(), asyncio.Event()]
+
+    async def failing_task():
+        failure_started.set()
+        await asyncio.sleep(0)
+        raise RuntimeError('boom')
+
+    def make_long_task(idx: int):
+        async def _runner():
+            try:
+                while True:
+                    await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                cancel_events[idx].set()
+                raise
+
+        return _runner
+
+    monkeypatch.setattr(tm, 'monitor_performance', failing_task)
+    monkeypatch.setattr(tm, 'manage_positions', make_long_task(0))
+    monkeypatch.setattr(tm, 'ranked_signal_loop', make_long_task(1))
+
+    run_task = asyncio.create_task(tm.run())
+
+    await asyncio.wait_for(failure_started.wait(), timeout=1)
+
+    with pytest.raises(trade_manager.TradeManagerTaskError):
+        await run_task
+
+    for event in cancel_events:
+        await asyncio.wait_for(event.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_process_symbol_data_fresh_error(monkeypatch):
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
