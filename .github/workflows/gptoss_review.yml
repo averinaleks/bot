@@ -41,6 +41,7 @@ jobs:
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login || '' }}
+          COMMENT_AUTHOR_ASSOC: ${{ github.event.comment.author_association || '' }}
           COMMENT_BODY: ${{ github.event.comment.body || '' }}
         run: |
           set -euo pipefail
@@ -67,11 +68,14 @@ jobs:
             issue_comment)
               pr_number="${ISSUE_NUMBER:-}"
               comment_author="${COMMENT_AUTHOR:-}"
+              author_assoc="${COMMENT_AUTHOR_ASSOC:-}"
               comment_body="${COMMENT_BODY:-}"
               if [ -z "$pr_number" ]; then
                 skip_reason="Комментарий не относится к pull request"
               elif [ "$comment_author" = "github-actions[bot]" ]; then
                 skip_reason="Комментарий создан GitHub Actions – обзор не требуется"
+              elif [[ ! "$author_assoc" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then
+                skip_reason="Комментарий создан пользователем с ролью ${author_assoc:-unknown}"
               elif [[ "$comment_body" != *"/llm-review"* ]]; then
                 skip_reason="Комментарий не содержит /llm-review"
               else
@@ -114,7 +118,14 @@ jobs:
 
   review:
     needs: evaluate
-    if: ${{ needs.evaluate.outputs.run_review == 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: >-
+      ${{ needs.evaluate.outputs.run_review == 'true'
+          && (github.event_name != 'pull_request_target'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+          && (github.event_name != 'issue_comment'
+              || github.event.comment.author_association == 'OWNER'
+              || github.event.comment.author_association == 'MEMBER'
+              || github.event.comment.author_association == 'COLLABORATOR') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -184,6 +195,7 @@ jobs:
 
             skip = False
             notices: list[str] = []
+            head_sha = ""
 
             try:
                 with open(response_path, "r", encoding="utf-8") as fh:
@@ -195,6 +207,7 @@ jobs:
                 state = data.get("state")
                 head = data.get("head") or {}
                 head_repo = (head.get("repo") or {}).get("full_name")
+                head_sha = (head.get("sha") or "").strip()
 
                 if state != "open":
                     skip = True
@@ -208,6 +221,9 @@ jobs:
                     notices.append(
                         f"PR создан из репозитория {head_repo}, ожидается {repository}"
                     )
+                if not head_sha:
+                    skip = True
+                    notices.append("Не удалось получить SHA head-коммита PR")
 
             if skip:
                 if notices:
@@ -221,6 +237,7 @@ jobs:
                 try:
                     with open(output_path, "a", encoding="utf-8") as fh:
                         fh.write(f"skip={'true' if skip else 'false'}\n")
+                        fh.write(f"head_sha={head_sha}\n")
                 except OSError as exc:
                     print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
           PY
@@ -230,7 +247,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
-          ref: refs/pull/${{ env.PR_NUMBER }}/head
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Checkout repository
         if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name != 'pull_request_target' }}
@@ -240,7 +257,13 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Start mock GPT-OSS server
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && (github.event_name != 'issue_comment'
+                  || github.event.comment.author_association == 'OWNER'
+                  || github.event.comment.author_association == 'MEMBER'
+                  || github.event.comment.author_association == 'COLLABORATOR') }}
         id: start_llm
         run: |
           set -euo pipefail
