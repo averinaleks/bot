@@ -18,8 +18,8 @@ from urllib.parse import quote, urlparse
 _REQUESTS_IMPORT_ERROR: ImportError | None = None
 
 try:
-    import requests
-    from requests import exceptions as requests_exceptions
+    import requests  # type: ignore[import-untyped]
+    from requests import exceptions as requests_exceptions  # type: ignore[import-untyped]
 except ImportError as exc:  # pragma: no cover - exercised via import hook in tests
     _REQUESTS_IMPORT_ERROR = exc
     requests = None  # type: ignore[assignment]
