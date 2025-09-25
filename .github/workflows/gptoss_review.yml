@@ -163,101 +163,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          pr_number="${PR_NUMBER:-}"
-          output_file="${GITHUB_OUTPUT:-}"
-
-          if [ -z "$pr_number" ]; then
-            if [ -n "$output_file" ]; then
-              echo "skip=true" >> "$output_file"
-            else
-              echo "::warning::Переменная GITHUB_OUTPUT не задана – не удалось записать skip=true" >&2
-            fi
-            exit 0
+          if ! python3 scripts/check_pr_status.py \
+            --repo "${REPOSITORY}" \
+            --pr-number "${PR_NUMBER:-}" \
+            --token "${GITHUB_TOKEN}"; then
+            echo "::warning::Проверка статуса PR завершилась с ошибкой – пропускаю обзор"
           fi
-
-          api_url="https://api.github.com/repos/${REPOSITORY}/pulls/${pr_number}"
-          if ! response=$(curl -fsSL \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            "$api_url"); then
-            echo "::warning::Не удалось получить данные PR ${pr_number} – пропускаю обзор" >&2
-            if [ -n "$output_file" ]; then
-              echo "skip=true" >> "$output_file"
-            else
-              echo "::warning::Переменная GITHUB_OUTPUT не задана – не удалось записать skip=true" >&2
-            fi
-            exit 0
-          fi
-
-          response_file=$(mktemp)
-          cleanup() {
-            rm -f "$response_file"
-          }
-          trap cleanup EXIT
-
-          printf '%s\n' "$response" >"$response_file"
-
-          python3 - "$response_file" <<'PY'
-            import json
-            import os
-            import sys
-
-            output_path = os.getenv("GITHUB_OUTPUT")
-            repository = os.getenv("REPOSITORY", "")
-
-            if len(sys.argv) != 2:
-                raise SystemExit("Ожидается путь к файлу с ответом GitHub API")
-
-            response_path = sys.argv[1]
-
-            skip = False
-            notices: list[str] = []
-            head_sha = ""
-
-            try:
-                with open(response_path, "r", encoding="utf-8") as fh:
-                    data = json.load(fh)
-            except json.JSONDecodeError:
-                skip = True
-                notices.append("Ответ GitHub API не является корректным JSON")
-            else:
-                state = data.get("state")
-                head = data.get("head") or {}
-                head_repo = (head.get("repo") or {}).get("full_name")
-                head_sha = (head.get("sha") or "").strip()
-
-                if state != "open":
-                    skip = True
-                    notices.append(f"PR находится в состоянии {state!r}")
-
-                if head_repo is None:
-                    skip = True
-                    notices.append("head-репозиторий недоступен (ветка могла быть удалена)")
-                elif head_repo and repository and head_repo != repository:
-                    skip = True
-                    notices.append(
-                        f"PR создан из репозитория {head_repo}, ожидается {repository}"
-                    )
-                if not head_sha:
-                    skip = True
-                    notices.append("Не удалось получить SHA head-коммита PR")
-
-            if skip:
-                if notices:
-                    print("::notice::" + "; ".join(notices) + ". Пропускаю запуск обзора.")
-                else:
-                    print("::notice::PR не подходит для обзора. Пропускаю запуск обзора.")
-            else:
-                print("::debug::PR прошёл проверку статуса и источника.")
-
-            if output_path:
-                try:
-                    with open(output_path, "a", encoding="utf-8") as fh:
-                        fh.write(f"skip={'true' if skip else 'false'}\n")
-                        fh.write(f"head_sha={head_sha}\n")
-                except OSError as exc:
-                    print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
-          PY
 
       - name: Checkout PR head
         if: >-
