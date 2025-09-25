@@ -77,6 +77,33 @@ def test_trade_manager_save_recovery(tmp_path, monkeypatch, caplog):
     assert tm.returns_by_symbol["BTCUSDT"][0][1] == 0.3
 
 
+def test_trade_manager_corrupted_state_files(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
+    from bot.trade_manager.core import TradeManager
+
+    state_path = tmp_path / "trade_manager_state.parquet"
+    returns_path = tmp_path / "trade_manager_returns.json"
+    state_path.write_text("not a valid state", encoding="utf-8")
+    returns_path.write_text("{broken json", encoding="utf-8")
+
+    cfg = BotConfig(cache_dir=str(tmp_path))
+    dh = types.SimpleNamespace(exchange=types.SimpleNamespace(), usdt_pairs=["BTCUSDT"])
+
+    with caplog.at_level(logging.WARNING):
+        tm = TradeManager(cfg, dh, object(), None, None)
+
+    assert tm.positions.empty
+    assert "last_trailing_ts" in tm.positions.columns
+    assert tm.returns_by_symbol == {"BTCUSDT": []}
+
+    assert not state_path.exists()
+    assert not returns_path.exists()
+    renamed = {p.name for p in tmp_path.iterdir()}
+    assert any(name.startswith("trade_manager_state.parquet.corrupt") for name in renamed)
+    assert any(name.startswith("trade_manager_returns.json.corrupt") for name in renamed)
+    assert any("Поврежден файл состояния" in record.message for record in caplog.records)
+
+
 def test_model_builder_save_recovery(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("TEST_MODE", "1")
     from bot.model_builder import ModelBuilder

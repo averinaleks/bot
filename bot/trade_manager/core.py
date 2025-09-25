@@ -286,30 +286,10 @@ class TradeManager:
                     pass
 
                 self.telegram_logger.send_telegram_message = _noop  # type: ignore[attr-defined]
-        self.positions = pd.DataFrame(
-            columns=[
-                "symbol",
-                "side",
-                "position",
-                "size",
-                "entry_price",
-                "tp_multiplier",
-                "sl_multiplier",
-                "stop_loss_price",
-                "highest_price",
-                "lowest_price",
-                "breakeven_triggered",
-                "last_checked_ts",
-                "last_trailing_ts",
-            ],
-            index=pd.MultiIndex.from_arrays(
-                [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
-                names=["symbol", "timestamp"],
-            ),
+        self.positions = self._init_positions_frame()
+        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = (
+            self._init_returns_state()
         )
-        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = {
-            symbol: [] for symbol in data_handler.usdt_pairs
-        }
         self.position_lock = asyncio.Lock()
         self.returns_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task] = []
@@ -335,6 +315,33 @@ class TradeManager:
         self._min_retrain_size: dict[str, int] = {}
         self.load_state()
         self.http_client = None
+
+    def _init_positions_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "symbol",
+                "side",
+                "position",
+                "size",
+                "entry_price",
+                "tp_multiplier",
+                "sl_multiplier",
+                "stop_loss_price",
+                "highest_price",
+                "lowest_price",
+                "breakeven_triggered",
+                "last_checked_ts",
+                "last_trailing_ts",
+            ],
+            index=pd.MultiIndex.from_arrays(
+                [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
+                names=["symbol", "timestamp"],
+            ),
+        )
+
+    def _init_returns_state(self) -> dict[str, list[tuple[float, float]]]:
+        pairs = getattr(self.data_handler, "usdt_pairs", [])
+        return {symbol: [] for symbol in pairs}
 
     def _has_position(self, symbol: str) -> bool:
         """Check if a position for ``symbol`` exists using the MultiIndex."""
@@ -482,6 +489,9 @@ class TradeManager:
             raise
 
     def load_state(self):
+        corrupted: list[str] = []
+        state_loaded = False
+        returns_loaded = False
         try:
             if os.path.exists(self.state_file):
                 try:
@@ -508,18 +518,114 @@ class TradeManager:
                 self._sort_positions()
                 if "last_trailing_ts" not in self.positions.columns:
                     self.positions["last_trailing_ts"] = pd.NaT
+                state_loaded = True
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            corrupted.append(
+                self._handle_corrupted_state_file(self.state_file, exc)
+            )
+            self.positions = self._init_positions_frame()
+
+        try:
             if os.path.exists(self.returns_file):
                 with open(self.returns_file, "r", encoding="utf-8") as f:
                     self.returns_by_symbol = json.load(f)
-                logger.info("Состояние TradeManager загружено")
-        except (OSError, ValueError, json.JSONDecodeError) as e:
-            logger.exception("Не удалось загрузить состояние (%s): %s", type(e).__name__, e)
-            raise
+                returns_loaded = True
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            corrupted.append(
+                self._handle_corrupted_state_file(self.returns_file, exc)
+            )
+            self.returns_by_symbol = self._init_returns_state()
+
+        self.returns_by_symbol = {
+            **self._init_returns_state(),
+            **self.returns_by_symbol,
+        }
+
+        if returns_loaded or state_loaded:
+            logger.info("Состояние TradeManager загружено")
+
+        if corrupted:
+            self._dispatch_state_reset_notice([c for c in corrupted if c])
 
     def _sort_positions(self) -> None:
         """Ensure positions are sorted by symbol then timestamp."""
         if not self.positions.empty:
             self.positions.sort_index(level=["symbol", "timestamp"], inplace=True)
+
+    def _handle_corrupted_state_file(self, path: str, exc: Exception) -> str:
+        sanitized_path = sanitize_log_value(path)
+        logger.warning(
+            "Поврежден файл состояния %s (%s). Состояние будет очищено.",
+            sanitized_path,
+            exc,
+        )
+        if os.path.exists(path):
+            quarantine_name = f"{path}.corrupt.{int(time.time())}"
+            try:
+                shutil.move(path, quarantine_name)
+            except OSError as move_err:
+                logger.debug(
+                    "Не удалось переместить поврежденный файл %s: %s",
+                    sanitized_path,
+                    move_err,
+                )
+                try:
+                    os.remove(path)
+                except OSError as remove_err:
+                    logger.warning(
+                        "Не удалось удалить поврежденный файл %s: %s",
+                        sanitized_path,
+                        remove_err,
+                    )
+                else:
+                    logger.warning("Поврежденный файл %s удален", sanitized_path)
+            else:
+                logger.warning(
+                    "Поврежденный файл %s перемещен в %s",
+                    sanitized_path,
+                    sanitize_log_value(quarantine_name),
+                )
+        return sanitized_path
+
+    def _dispatch_state_reset_notice(self, files: list[str]) -> None:
+        if not files:
+            return
+        unique_files = sorted(set(files))
+        message = (
+            "Очистка состояния TradeManager: поврежденные файлы "
+            + ", ".join(unique_files)
+        )
+        sender = getattr(self.telegram_logger, "send_telegram_message", None)
+        if not callable(sender):
+            return
+        try:
+            result = sender(message, urgent=True)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "Не удалось инициировать уведомление Telegram об очистке состояния: %s",
+                exc,
+            )
+            return
+        if inspect.isawaitable(result):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                try:
+                    asyncio.run(result)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.debug(
+                        "Не удалось отправить уведомление Telegram об очистке состояния: %s",
+                        exc,
+                    )
+            else:
+                try:
+                    loop.create_task(result)
+                except RuntimeError as exc:  # pragma: no cover - defensive
+                    logger.debug(
+                        "Не удалось запланировать уведомление Telegram об очистке состояния: %s",
+                        exc,
+                    )
+
 
     @retry(3, lambda attempt: min(2 ** attempt, 5))
     async def place_order(
