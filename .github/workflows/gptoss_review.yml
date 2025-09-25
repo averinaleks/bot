@@ -61,24 +61,28 @@ jobs:
 
           case "$EVENT_NAME" in
             pull_request_target)
-              pr_number="$PR_NUMBER"
+              pr_number="${PR_NUMBER:-}"
+              pr_draft="${PR_DRAFT:-false}"
+              pr_head_repo="${PR_HEAD_REPO:-}"
               if [ -z "$pr_number" ]; then
                 skip_reason="PR не найден"
-              elif [ "$PR_DRAFT" = "true" ]; then
+              elif [ "$pr_draft" = "true" ]; then
                 skip_reason="PR находится в состоянии draft"
-              elif [ -n "$PR_HEAD_REPO" ] && [ "$PR_HEAD_REPO" != "$REPOSITORY" ]; then
+              elif [ -n "$pr_head_repo" ] && [ "$pr_head_repo" != "$REPOSITORY" ]; then
                 skip_reason="PR создан из внешнего репозитория"
               else
                 run_review=true
               fi
               ;;
             issue_comment)
-              pr_number="$ISSUE_NUMBER"
+              pr_number="${ISSUE_NUMBER:-}"
+              comment_author="${COMMENT_AUTHOR:-}"
+              comment_body="${COMMENT_BODY:-}"
               if [ -z "$pr_number" ]; then
                 skip_reason="Комментарий не относится к pull request"
-              elif [ "$COMMENT_AUTHOR" = "github-actions[bot]" ]; then
+              elif [ "$comment_author" = "github-actions[bot]" ]; then
                 skip_reason="Комментарий создан GitHub Actions – обзор не требуется"
-              elif [[ "$COMMENT_BODY" != *"/llm-review"* ]]; then
+              elif [[ "$comment_body" != *"/llm-review"* ]]; then
                 skip_reason="Комментарий не содержит /llm-review"
               else
                 run_review=true
