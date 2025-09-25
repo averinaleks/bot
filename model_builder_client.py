@@ -183,12 +183,13 @@ async def _fetch_training_data_from_endpoint(
     if not await _hostname_still_allowed(endpoint):
         return features, labels
 
+    timeout = 5.0
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             resp = await client.get(
                 f"{endpoint.base_url}/ohlcv/{symbol}",
                 params={"limit": limit},
-                timeout=5.0,
+                timeout=timeout,
             )
         if resp.status_code != 200:
             logger.error("Failed to fetch OHLCV: HTTP %s", resp.status_code)
@@ -227,10 +228,11 @@ async def _train_with_endpoint(
         return False
 
     payload = {"features": features, "labels": labels}
+    timeout = 5.0
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             response = await client.post(
-                f"{endpoint.base_url}/train", json=payload, timeout=5.0
+                f"{endpoint.base_url}/train", json=payload, timeout=timeout
             )
         if response.status_code == 200:
             return True
