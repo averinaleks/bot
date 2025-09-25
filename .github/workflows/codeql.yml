@@ -110,6 +110,16 @@ jobs:
             chmod -R u+w "$dir" || true
             rm -rf "$dir" || true
           done
+          # Remove the repository's root .git directory as a final safeguard so
+          # that no Git metadata remains for CodeQL to misinterpret as Python
+          # source files (for example reflogs for remote refs ending with
+          # ".py"). Once dependencies are installed the workflow no longer
+          # requires Git metadata, so deleting it here prevents future parse
+          # warnings.
+          if [ -d .git ]; then
+            chmod -R u+w .git || true
+            rm -rf .git || true
+          fi
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
