@@ -86,8 +86,31 @@ def _require_api_key() -> "ResponseReturnValue | None":
     """Ensure protected endpoints require a shared token when configured."""
 
     token = os.getenv("DATA_HANDLER_API_KEY", "").strip()
+    allow_anonymous_raw = os.getenv("DATA_HANDLER_ALLOW_ANONYMOUS", "")
+    allow_anonymous = allow_anonymous_raw.strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    logger = logging.getLogger(__name__)
+
     if not token:
-        return None
+        if allow_anonymous:
+            logger.warning(
+                "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что "
+                "DATA_HANDLER_ALLOW_ANONYMOUS=%s. Используйте только для локальной отладки.",
+                sanitize_log_value(allow_anonymous_raw or "1"),
+            )
+            return None
+
+        logger.warning(
+            "DATA_HANDLER_API_KEY не настроен. Запрос к %s отклонён. Настройте "
+            "переменную окружения или, только для локальной отладки, установите "
+            "DATA_HANDLER_ALLOW_ANONYMOUS=1.",
+            sanitize_log_value(request.path),
+        )
+        return jsonify({'error': 'unauthorized'}), 401
 
     provided = (request.headers.get("X-API-KEY") or "").strip()
     reason: str | None = None
