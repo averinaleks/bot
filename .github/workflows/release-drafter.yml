@@ -16,7 +16,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request_target' && github.event.pull_request != null && github.event.pull_request.number != null && format('release-drafter-pr-{0}', github.event.pull_request.number) || format('release-drafter-ref-{0}', github.ref) }}
+  group: ${{ github.event_name == 'pull_request_target' && github.event.pull_request != null && github.event.pull_request.number != null
+    ? format('release-drafter-pr-{0}', github.event.pull_request.number)
+    : format('release-drafter-ref-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
@@ -32,11 +34,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   autolabel_pull_request:
-    if: |
-      github.event_name == 'pull_request_target'
-      && github.event.pull_request != null
-      && github.event.pull_request.head.repo != null
-      && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request != null &&
+      github.event.pull_request.head.repo != null &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Update pull request metadata
