@@ -20,14 +20,14 @@ jobs:
       matrix:
         language: [ 'python' ]
     steps:
+      - name: Disable git reference logs
+        run: git config --global core.logallrefupdates false
+
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           persist-credentials: false
           fetch-depth: 2
-
-      - name: Disable git reference logs
-        run: git config --global core.logallrefupdates false
 
       - name: Remove git metadata that can confuse CodeQL
         run: |
@@ -52,6 +52,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
+
+      - name: Remove git metadata before analysis
+        run: rm -rf .git
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
