@@ -114,7 +114,7 @@ jobs:
 
   review:
     needs: evaluate
-    if: ${{ needs.evaluate.outputs.run_review == 'true' }}
+    if: ${{ needs.evaluate.outputs.run_review == 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -225,11 +225,19 @@ jobs:
                     print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
           PY
 
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' }}
+      - name: Checkout PR head
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
           ref: refs/pull/${{ env.PR_NUMBER }}/head
+
+      - name: Checkout repository
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name != 'pull_request_target' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
 
       - name: Start mock GPT-OSS server
         if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' }}
