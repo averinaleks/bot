@@ -20,100 +20,30 @@ jobs:
       matrix:
         language: [ 'python' ]
     steps:
-      - name: Disable git reference logs
-        run: git config --global core.logallrefupdates false
-
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           persist-credentials: false
-          fetch-depth: 2
-
-      - name: Remove git metadata created during checkout
-        run: |
-          if [ -d .git ]; then
-            git config core.logallrefupdates false || true
-            git for-each-ref --format='%(refname)' refs/remotes | while IFS= read -r ref; do
-              case "$ref" in
-                *.py)
-                  git update-ref -d "$ref" || true
-                  ;;
-              esac
-            done
-            git reflog expire --expire=now --all || true
-            if [ -d .git/refs ]; then
-              find .git/refs -type f -name '*.py' -print0 | xargs -0r rm -f || true
-              find .git/refs -type d -name '*.py' -print0 | xargs -0r rm -rf || true
-            fi
-            find .git -type f -name '*.py' -print0 | xargs -0r rm -f || true
-            if [ -d .git/logs ]; then
-              chmod -R u+w .git/logs || true
-              find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
-              rm -rf .git/logs || true
-            fi
-            chmod -R u+w .git || true
-          fi
-          # Guard against any git metadata that might exist within subdirectories.
-          find "$PWD" -mindepth 2 -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
-            if [ -z "$dir" ]; then
-              continue
-            fi
-            chmod -R u+w "$dir" || true
-            rm -rf "$dir" || true
-          done
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-ci.txt
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
         with:
           languages: ${{ matrix.language }}
-          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
 
-      - name: Remove git metadata before analysis
-        run: |
-          # Guard against any git metadata recreated by tooling between steps.
-          # Some package installers and third-party actions may vendor
-          # repositories that include their own .git directories. They can
-          # contain files with misleading extensions (for example ref logs that
-          # end in ".py"), which causes CodeQL to treat them as Python source
-          # files and emit parse warnings. Removing all nested .git directories
-          # immediately before analysis ensures the extractor never sees these
-          # files.
-          find "$PWD" -mindepth 2 -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
-            if [ -z "$dir" ]; then
-              continue
-            fi
-            chmod -R u+w "$dir" || true
-            rm -rf "$dir" || true
-          done
-          if [ -d .git ]; then
-            if [ -d .git/refs ]; then
-              find .git/refs -type f -name '*.py' -print0 | xargs -0r rm -f || true
-              find .git/refs -type d -name '*.py' -print0 | xargs -0r rm -rf || true
-            fi
-            find .git -type f -name '*.py' -print0 | xargs -0r rm -f || true
-          fi
-          if [ -d .git/logs ]; then
-            chmod -R u+w .git/logs || true
-            find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
-            rm -rf .git/logs || true
-          fi
-          # The repository's root .git directory must remain intact; CodeQL uses
-          # it during analysis (for example to resolve commit metadata). Removing
-          # nested .git directories and any stray reference logs is sufficient to
-          # suppress false positives from vendored dependencies while keeping the
-          # root repository healthy.
-
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
         with:
           category: "/language:${{ matrix.language }}"
