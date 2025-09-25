@@ -157,8 +157,8 @@ def _perform_http_request(
     connection_kwargs: dict[str, object] = {"timeout": timeout}
     connection_cls: type[http.client.HTTPConnection] | type[http.client.HTTPSConnection]
     if parsed.scheme == "https":
-        if allowed_hosts and hostname not in allowed_hosts:
-            if not _host_ips_are_private(resolved_ips):
+        if allowed_hosts:
+            if hostname not in allowed_hosts and not _host_ips_are_private(resolved_ips):
                 raise RuntimeError(
                     "Хост GPT-OSS должен быть в списке GPT_OSS_ALLOWED_HOSTS или разрешаться в приватные IP"
                 )

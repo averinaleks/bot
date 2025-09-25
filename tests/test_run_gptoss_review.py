@@ -207,6 +207,51 @@ def test_perform_http_request_respects_https_allowlist(monkeypatch):
 
     assert "GPT_OSS_ALLOWED_HOSTS" in str(exc.value)
 
+
+def test_perform_http_request_allows_https_allowlisted_host(monkeypatch):
+    recorded: dict[str, object] = {}
+
+    class _DummyResponse:
+        status = 200
+        reason = "OK"
+
+        @staticmethod
+        def read() -> bytes:
+            return b"{}"
+
+    class _DummyConnection:
+        def __init__(self, host: str, port: int, timeout: float, **_kwargs: object) -> None:
+            recorded["init"] = (host, port, timeout)
+
+        def request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> None:
+            recorded["request"] = (method, path, body, headers)
+
+        @staticmethod
+        def getresponse() -> _DummyResponse:
+            return _DummyResponse()
+
+        def close(self) -> None:
+            recorded["closed"] = True
+
+    monkeypatch.setattr(run_gptoss_review, "_resolve_host_ips", lambda _: {"8.8.8.8"})
+    monkeypatch.setattr(run_gptoss_review, "_load_allowed_hosts", lambda: {"allowed.local"})
+    monkeypatch.setattr(run_gptoss_review.http.client, "HTTPSConnection", _DummyConnection)
+
+    status, reason, payload = run_gptoss_review._perform_http_request(
+        "https://allowed.local/v1/chat", b"payload", {"Content-Type": "application/json"}, timeout=2.5
+    )
+
+    assert status == 200
+    assert reason == "OK"
+    assert payload == b"{}"
+    assert recorded["init"] == ("allowed.local", None, 2.5)
+    method, path, body, headers = recorded["request"]
+    assert method == "POST"
+    assert path == "/v1/chat"
+    assert body == b"payload"
+    assert headers["Content-Type"] == "application/json"
+    assert recorded["closed"] is True
+
 def test_main_handles_timeout(monkeypatch, tmp_path):
     diff_path = tmp_path / "diff.patch"
     diff_path.write_text("dummy", encoding="utf-8")
