@@ -29,11 +29,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
-      - name: Remove git metadata that can confuse CodeQL
+      - name: Purge git reference logs that can look like Python files
         run: |
           if [ -d .git ]; then
-            chmod -R u+w .git || true
-            rm -rf .git || true
+            git reflog expire --expire=now --all || true
+            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
+              chmod -R u+w "$dir" || true
+              rm -rf "$dir" || true
+            done
           fi
 
       - name: Set up Python
@@ -50,8 +53,11 @@ jobs:
       - name: Remove git metadata after CodeQL init
         run: |
           if [ -d .git ]; then
-            chmod -R u+w .git || true
-            rm -rf .git || true
+            git reflog expire --expire=now --all || true
+            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
+              chmod -R u+w "$dir" || true
+              rm -rf "$dir" || true
+            done
           fi
 
       - name: Install dependencies
@@ -62,8 +68,11 @@ jobs:
       - name: Remove git metadata before analysis
         run: |
           if [ -d .git ]; then
-            chmod -R u+w .git || true
-            rm -rf .git || true
+            git reflog expire --expire=now --all || true
+            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
+              chmod -R u+w "$dir" || true
+              rm -rf "$dir" || true
+            done
           fi
           # Guard against any git metadata recreated by tooling between steps.
           # Some package installers and third-party actions may vendor
@@ -77,9 +86,6 @@ jobs:
             chmod -R u+w "$dir" || true
             rm -rf "$dir" || true
           done
-          # As a final safeguard, proactively delete any reflog files that may
-          # have been recreated with misleading Python extensions.
-          find "$PWD" -path '*/.git/logs/*' -type f -name '*.py' -delete || true
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
