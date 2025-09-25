@@ -26,6 +26,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Remove Git reference logs that mimic Python files
+        run: rm -rf .git/logs
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
