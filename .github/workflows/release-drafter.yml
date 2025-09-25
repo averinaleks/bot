@@ -29,7 +29,7 @@ concurrency:
       && github.event.pull_request != null
       && github.event.pull_request.number != null
       ? format('release-drafter-pr-{0}', github.event.pull_request.number)
-      : format('release-drafter-ref-{0}', github.ref)
+      : format('release-drafter-ref-{0}', replace(github.ref, '/', '-'))
     }}
   cancel-in-progress: false
 
