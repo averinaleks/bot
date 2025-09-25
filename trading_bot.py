@@ -136,6 +136,12 @@ def safe_float(env_var: str, default: float) -> float:
     return safe_number(env_var, default, float)
 
 
+def _http_client_timeout() -> float:
+    """Return the default timeout for outbound HTTP requests."""
+
+    return safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
+
+
 GPT_ADVICE_MAX_ATTEMPTS = safe_int("GPT_ADVICE_MAX_ATTEMPTS", 3)
 _GPT_ADVICE_ERROR_COUNT = 0
 _GPT_SAFE_MODE = False
@@ -322,7 +328,7 @@ async def get_http_client() -> httpx.AsyncClient:
     global HTTP_CLIENT
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
-            timeout = safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
+            timeout = _http_client_timeout()
             kwargs = {"trust_env": False, "timeout": timeout}
             if OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
                 logger.debug("Offline HTTP client instantiated")
@@ -417,11 +423,12 @@ async def check_services() -> None:
     }
     if env.get("gptoss_api"):
         services["gptoss"] = (env["gptoss_api"], "health")
-    async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
+    timeout = _http_client_timeout()
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         async def _probe(name: str, url: str, endpoint: str) -> str | None:
             for attempt in range(retries):
                 try:
-                    resp = await client.get(f"{url}/{endpoint}", timeout=5)
+                    resp = await client.get(f"{url}/{endpoint}", timeout=timeout)
                     if resp.status_code == 200:
                         return None
                     if resp.status_code != 200:
@@ -464,10 +471,11 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
     if OFFLINE_MODE:
         logger.debug("Offline mode: price fetch skipped for %s", symbol)
         return None
+    timeout = _http_client_timeout()
     try:
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             resp = await client.get(
-                f"{env['data_handler_url']}/price/{symbol}", timeout=5
+                f"{env['data_handler_url']}/price/{symbol}", timeout=timeout
             )
         try:
             data = resp.json()
@@ -496,10 +504,11 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
     if OFFLINE_MODE:
         logger.debug("Offline mode: initial history fetch skipped for %s", symbol)
         return
-    async with httpx.AsyncClient(trust_env=False) as client:
+    timeout = _http_client_timeout()
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             resp = await client.get(
-                f"{env['data_handler_url']}/history/{symbol}", timeout=5
+                f"{env['data_handler_url']}/history/{symbol}", timeout=timeout
             )
             data = resp.json() if resp.status_code == 200 else {}
             candles = data.get("history", [])
@@ -572,25 +581,26 @@ async def get_prediction(symbol: str, features: list[float], env: dict) -> dict 
     if OFFLINE_MODE:
         logger.debug("Offline mode: prediction request skipped for %s", symbol)
         return None
+    timeout = _http_client_timeout()
     try:
         payload = json.dumps({"symbol": symbol, "features": features}).encode()
         headers = {
             "Content-Type": "application/json",
             "Content-Length": str(len(payload)),
         }
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             try:
                 resp = await client.post(
                     f"{env['model_builder_url']}/predict",
                     content=payload,
                     headers=headers,
-                    timeout=5,
+                    timeout=timeout,
                 )
             except TypeError:  # pragma: no cover - fallback for stub clients
                 resp = await client.post(
                     f"{env['model_builder_url']}/predict",
                     json={"symbol": symbol, "features": features},
-                    timeout=5,
+                    timeout=timeout,
                 )
         if resp.status_code != 200:
             logger.error("Model prediction failed: HTTP %s", resp.status_code)
@@ -778,12 +788,13 @@ async def close_position_async(
         return True, None
 
     url = f"{env['trade_manager_url']}/close_position"
+    timeout = _http_client_timeout()
     for attempt in range(1, max_attempts + 1):
         try:
             response = await client.post(
                 url,
                 json={"order_id": order_id, "side": side},
-                timeout=5,
+                timeout=timeout,
             )
             if response.status_code == 200:
                 return True, None
@@ -814,11 +825,12 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
         logger.info("Offline mode: position monitoring disabled")
         return
     trail_state: dict[str, float] = {}
-    async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
+    timeout = _http_client_timeout()
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         while True:
             try:
                 resp = await client.get(
-                    f"{env['trade_manager_url']}/positions", timeout=5
+                    f"{env['trade_manager_url']}/positions", timeout=timeout
                 )
                 if resp.status_code != 200:
                     logger.error(
@@ -904,8 +916,11 @@ async def _total_position_notional(env: dict) -> float:
         logger.debug("Offline mode: assuming zero position notional")
         return 0.0
     client = await get_http_client()
+    timeout = _http_client_timeout()
     try:
-        resp = await client.get(f"{env['trade_manager_url']}/positions", timeout=5)
+        resp = await client.get(
+            f"{env['trade_manager_url']}/positions", timeout=timeout
+        )
         if resp.status_code != 200:
             logger.error(
                 "Failed to fetch positions: status code %s", resp.status_code
@@ -1192,10 +1207,11 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
         logger.info("Offline mode: reactive trade skipped for %s", symbol)
         return
     env = env or _load_env()
-    async with httpx.AsyncClient(trust_env=False) as client:
+    timeout = _http_client_timeout()
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             resp = await client.get(
-                f"{env['data_handler_url']}/price/{symbol}", timeout=5.0
+                f"{env['data_handler_url']}/price/{symbol}", timeout=timeout
             )
             if resp.status_code != 200:
                 logger.error("Failed to fetch price: HTTP %s", resp.status_code)
@@ -1212,7 +1228,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
             pred = await client.post(
                 f"{env['model_builder_url']}/predict",
                 json={"symbol": symbol, "features": features},
-                timeout=5.0,
+                timeout=timeout,
             )
             if pred.status_code != 200:
                 logger.error("Model prediction failed: HTTP %s", pred.status_code)
