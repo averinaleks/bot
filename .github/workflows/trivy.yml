@@ -42,24 +42,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-trivy-db-
 
+      - name: Install Trivy CLI
+        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        # v0.2.4
+        with:
+          trivy-version: v0.66.0
+
       - id: trivy
         name: Run Trivy scan
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        # 0.33.1
-        continue-on-error: true
         env:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
-        with:
-          # Pin the Trivy CLI version to avoid unexpected regressions during scheduled runs.
-          version: v0.66.0
-          scan-type: fs
-          scanners: vuln
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          # Fail workflow when vulnerabilities of specified severity are found
-          exit-code: 1
+        run: |
+          set -euo pipefail
+          trivy fs \
+            --scanners vuln \
+            --format sarif \
+            --output trivy-results.sarif \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 0 \
+            .
 
       - name: Ensure jq is available
         if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
