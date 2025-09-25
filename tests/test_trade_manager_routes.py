@@ -5,6 +5,8 @@ import inspect
 import asyncio
 import concurrent.futures
 import logging
+from typing import Any
+
 import pytest
 
 
@@ -52,6 +54,8 @@ def _setup_module(monkeypatch):
     async def _safe_api_call(exchange, method: str, *args, **kwargs):
         return await getattr(exchange, method)(*args, **kwargs)
     utils_stub.safe_api_call = _safe_api_call
+    utils_stub.retry = lambda *a, **k: (lambda f: f)
+    utils_stub.suppress_tf_logs = lambda: None
     sys.modules["utils"] = utils_stub
 
     joblib_mod = types.ModuleType("joblib")
@@ -69,7 +73,7 @@ def _setup_module(monkeypatch):
         run=dummy_coroutine,
         get_stats=lambda: {"win_rate": 1.0},
     )
-    tm.trade_manager = stub
+    tm._sync_trade_manager(stub)
     tm._ready_event.set()
     monkeypatch.delenv("TEST_MODE", raising=False)
     return tm, loop, stub
@@ -164,3 +168,30 @@ def test_resolve_host_rejects_public_addresses(monkeypatch, value):
     monkeypatch.setenv("HOST", value)
     with pytest.raises(tm.InvalidHostError):
         tm._resolve_host()
+
+
+def test_service_authorization_uses_shared_helper(monkeypatch):
+    tm, _, _ = _setup_module(monkeypatch)
+    called: dict[str, Any] = {}
+
+    def fake_require(headers, *, token=None, test_mode=None):  # noqa: ANN001
+        called["headers"] = dict(headers)
+        from bot.trade_manager.server_common import AuthorizationError
+
+        return AuthorizationError("token mismatch")
+
+    monkeypatch.setattr(tm.server_common, "require_token", fake_require)
+    client = tm.api_app.test_client()
+    resp = client.get("/positions")
+    assert resp.status_code == 401
+    assert called["headers"]
+
+
+def test_package_exports_common_create_trade_manager(monkeypatch):
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    import importlib
+
+    pkg = importlib.reload(importlib.import_module("bot.trade_manager"))
+    from bot.trade_manager import server_common
+
+    assert pkg.create_trade_manager is server_common.create_trade_manager

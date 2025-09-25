@@ -10,7 +10,8 @@ alias the asynchronous helpers.
 """
 
 from .core import TradeManager
-from .service import api_app, asgi_app, create_trade_manager
+from .service import api_app, asgi_app
+from .server_common import create_trade_manager
 from bot.http_client import get_async_http_client, close_async_http_client
 
 # Provide the expected public names for HTTP helpers

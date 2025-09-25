@@ -1,36 +1,23 @@
-# pylint: disable=unused-import
 """Flask routes for the TradeManager service."""
 
 from __future__ import annotations
 
 import asyncio
-import inspect
 import ipaddress
-import json
 import os
 import sys
 import threading
 from typing import Any
 
-import httpx
-from bot.ray_compat import ray
-from bot.dotenv_utils import load_dotenv
-from flask import Flask, jsonify, request, Response
+from flask import Flask, Response, jsonify, request
 
+from . import server_common
 from .core import (
-    IS_TEST_MODE as CORE_TEST_MODE,
-    TradeManager,
     _HOSTNAME_RE,
-    _register_cleanup_handlers,
     InvalidHostError,
-    configure_logging,
     logger,
     setup_multiprocessing,
 )
-from bot.config import load_config
-
-
-
 
 __all__ = [
     "api_app",
@@ -68,204 +55,64 @@ except AttributeError:  # pragma: no cover - older Flask versions
 _ready_event = threading.Event()
 
 # For simple logging/testing of received orders
-POSITIONS = []
+POSITIONS: list[dict[str, Any]] = []
 
-trade_manager: TradeManager | None = None
+# Local mirror of the shared TradeManager instance for backward compatibility
+trade_manager: Any | None = None
 
-# Determine test mode at import time, considering both environment and core flag
-IS_TEST_MODE = os.getenv("TEST_MODE") == "1" or CORE_TEST_MODE
-
-TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+# Determine test mode via shared module
+IS_TEST_MODE = server_common.IS_TEST_MODE
 
 
-def _load_env() -> None:
-    """Load `.env` and validate required environment variables."""
-    global TRADE_MANAGER_TOKEN
-    load_dotenv()
-    TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
-    if not TRADE_MANAGER_TOKEN:
-        logger.warning(
-            "TRADE_MANAGER_TOKEN пуст, все торговые запросы будут отвергнуты"
-        )
+def _sync_trade_manager(value: Any | None) -> None:
+    """Synchronize local and shared trade manager references."""
+
+    global trade_manager
+    trade_manager = value
+    server_common.set_trade_manager(value)
+
+
+def _load_env() -> Any:
+    """Load environment variables via shared helper."""
+
+    return server_common.load_environment()
 
 
 def _require_token() -> tuple[Any, int] | None:
     """Validate Authorization header unless running in test mode."""
-    if IS_TEST_MODE:
+
+    error = server_common.require_token(request.headers)
+    if error is None:
         return None
-    if not TRADE_MANAGER_TOKEN:
-        return jsonify({"error": "unauthorized"}), 401
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header != f"Bearer {TRADE_MANAGER_TOKEN}":
-        return jsonify({"error": "unauthorized"}), 401
-    return None
+    return jsonify({"error": "unauthorized"}), error.status_code
 
 
-async def create_trade_manager() -> TradeManager | None:
-    """Instantiate the TradeManager using config.json."""
-    global trade_manager
-    if trade_manager is None:
-        logger.info("Загрузка конфигурации из config.json")
-        try:
-            cfg = load_config("config.json")
-            logger.info("Конфигурация успешно загружена")
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.exception(
-                "Failed to load configuration (%s): %s", type(exc).__name__, exc
-            )
-            raise
-        if not ray.is_initialized():
-            from security import apply_ray_security_defaults
+async def create_trade_manager(config_path: str = "config.json") -> Any:
+    """Instantiate the TradeManager using the shared implementation."""
 
-            logger.info(
-                "Инициализация Ray: num_cpus=%s, num_gpus=1", cfg["ray_num_cpus"]
-            )
-            try:
-                ray.init(
-                    **apply_ray_security_defaults(
-                        {
-                            "num_cpus": cfg["ray_num_cpus"],
-                            "num_gpus": 1,
-                            "ignore_reinit_error": True,
-                        }
-                    )
-                )
-                logger.info("Ray успешно инициализирован")
-            except RuntimeError as exc:
-                logger.exception(
-                    "Ray initialization failed (%s): %s", type(exc).__name__, exc
-                )
-                raise
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-        telegram_bot = None
-        if token:
-            try:
-                from telegram import Bot
-                telegram_bot = Bot(token)
-                try:
-                    await telegram_bot.delete_webhook(drop_pending_updates=True)
-                    logger.info("Удалён существующий Telegram webhook")
-                except httpx.HTTPError as exc:  # pragma: no cover - delete_webhook errors
-                    logger.exception(
-                        "Failed to delete Telegram webhook (%s): %s",
-                        type(exc).__name__,
-                        exc,
-                    )
-            except (RuntimeError, httpx.HTTPError) as exc:  # pragma: no cover - import/runtime errors
-                logger.exception(
-                    "Не удалось создать Telegram Bot (%s): %s",
-                    type(exc).__name__,
-                    exc,
-                )
-                raise
-        from bot.data_handler import DataHandler
-        from bot.model_builder import ModelBuilder
+    tm = await server_common.create_trade_manager(config_path)
+    if tm is not None:
+        _sync_trade_manager(tm)
+    return tm
 
-        logger.info("Создание DataHandler")
-        try:
-            dh = DataHandler(cfg, telegram_bot, chat_id)
-            logger.info("DataHandler успешно создан")
-        except RuntimeError as exc:
-            logger.exception(
-                "Не удалось создать DataHandler (%s): %s",
-                type(exc).__name__,
-                exc,
-            )
-            raise
 
-        logger.info("Создание ModelBuilder")
-        try:
-            mb = ModelBuilder(cfg, dh, None)
-            dh.feature_callback = mb.precompute_features
-            logger.info("ModelBuilder успешно создан")
-            asyncio.create_task(mb.train())
-            asyncio.create_task(mb.backtest_loop())
-            await dh.load_initial()
-            asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
-        except RuntimeError as exc:
-            logger.error("Не удалось загрузить исходные данные: %s", exc)
-            await dh.stop()
-            return None
-        except (ValueError, ImportError) as exc:
-            logger.exception(
-                "Не удалось создать ModelBuilder (%s): %s",
-                type(exc).__name__,
-                exc,
-            )
-            raise
+async def _initialize_from_loop(loop: asyncio.AbstractEventLoop) -> None:
+    tm = await create_trade_manager()
+    if tm is not None:
+        loop.create_task(tm.run())
+    _ready_event.set()
 
-        trade_manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
-        logger.info("Экземпляр TradeManager создан")
-        if telegram_bot:
-            from bot.utils import TelegramUpdateListener
-
-            listener = TelegramUpdateListener(telegram_bot)
-
-            async def handle_command(update):
-                msg = getattr(update, "message", None)
-                if not msg or not msg.text:
-                    return
-                text = msg.text.strip().lower()
-                import trading_bot as tb
-
-                if text.startswith("/start"):
-                    await tb.set_trading_enabled(True)
-                    try:
-                        await telegram_bot.send_message(
-                            chat_id=msg.chat_id, text="Trading enabled"
-                        )
-                    except Exception as exc:
-                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
-                elif text.startswith("/stop"):
-                    await tb.set_trading_enabled(False)
-                    try:
-                        await telegram_bot.send_message(
-                            chat_id=msg.chat_id, text="Trading disabled"
-                        )
-                    except Exception as exc:
-                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
-                elif text.startswith("/status"):
-                    status = "enabled" if await tb.get_trading_enabled() else "disabled"
-                    positions = []
-                    if trade_manager is not None:
-                        try:
-                            res = trade_manager.get_open_positions()
-                            positions = (
-                                await res if inspect.isawaitable(res) else res
-                            ) or []
-                        except Exception as exc:  # pragma: no cover - log and ignore
-                            logger.error("Не удалось получить открытые позиции: %s", exc)
-                    message = f"Trading {status}"
-                    if positions:
-                        message += "\n" + "\n".join(str(p) for p in positions)
-                    try:
-                        await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
-                    except Exception as exc:
-                        logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
-
-            threading.Thread(
-                target=lambda: asyncio.run(listener.listen(handle_command)),
-                daemon=True,
-            ).start()
-            setattr(trade_manager, "_listener", listener)
-        if not IS_TEST_MODE:
-            _register_cleanup_handlers(trade_manager)
-    return trade_manager
 
 def _initialize_trade_manager() -> None:
     """Background initialization for the TradeManager."""
-    global trade_manager
+
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        trade_manager = loop.run_until_complete(create_trade_manager())
-        if trade_manager is not None:
-            loop.create_task(trade_manager.run())
-            _ready_event.set()
+        loop.run_until_complete(_initialize_from_loop(loop))
+        tm = server_common.get_trade_manager()
+        if tm is not None:
             loop.run_forever()
-        else:
-            _ready_event.set()
     except (RuntimeError, ValueError) as exc:
         logger.exception(
             "TradeManager initialization failed (%s): %s",
@@ -287,6 +134,7 @@ _startup_launched = False
 @api_app.before_request
 def _start_trade_manager() -> None:
     """Launch trade manager initialization in a background thread."""
+
     global _startup_launched
     if _startup_launched or IS_TEST_MODE:
         return
@@ -294,26 +142,27 @@ def _start_trade_manager() -> None:
     threading.Thread(target=_initialize_trade_manager, daemon=True).start()
 
 
-
-
-
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
     """Open a new trade position."""
+
     err = _require_token()
     if err:
         return err
-    if not _ready_event.is_set() or trade_manager is None:
+    if not _ready_event.is_set():
+        return jsonify({"error": "not ready"}), 503
+    tm = server_common.get_trade_manager()
+    if tm is None:
         return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
     POSITIONS.append(info)
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
-    if getattr(trade_manager, "loop", None):
-        trade_manager.loop.call_soon_threadsafe(
+    if getattr(tm, "loop", None):
+        tm.loop.call_soon_threadsafe(
             asyncio.create_task,
-            trade_manager.open_position(symbol, side, price, info),
+            tm.open_position(symbol, side, price, info),
         )
     else:
         return jsonify({"error": "loop not running"}), 503
@@ -325,16 +174,19 @@ def close_position_route():
     err = _require_token()
     if err:
         return err
-    if not _ready_event.is_set() or trade_manager is None:
+    if not _ready_event.is_set():
+        return jsonify({"error": "not ready"}), 503
+    tm = server_common.get_trade_manager()
+    if tm is None:
         return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
     symbol = info.get("symbol")
     price = float(info.get("price", 0))
     reason = info.get("reason", "")
-    if getattr(trade_manager, "loop", None):
-        trade_manager.loop.call_soon_threadsafe(
+    if getattr(tm, "loop", None):
+        tm.loop.call_soon_threadsafe(
             asyncio.create_task,
-            trade_manager.close_position(symbol, price, reason),
+            tm.close_position(symbol, price, reason),
         )
     else:
         return jsonify({"error": "loop not running"}), 503
@@ -351,20 +203,22 @@ def positions_route():
 
 @api_app.route("/stats")
 def stats_route():
-    if not _ready_event.is_set() or trade_manager is None:
+    tm = server_common.get_trade_manager()
+    if not _ready_event.is_set() or tm is None:
         return jsonify({"error": "not ready"}), 503
-    stats = trade_manager.get_stats()
+    stats = tm.get_stats()
     return jsonify({"stats": stats})
 
 
 @api_app.route("/start")
 def start_route():
-    if not _ready_event.is_set() or trade_manager is None:
+    tm = server_common.get_trade_manager()
+    if not _ready_event.is_set() or tm is None:
         return jsonify({"error": "not ready"}), 503
-    if getattr(trade_manager, "loop", None):
-        trade_manager.loop.call_soon_threadsafe(
+    if getattr(tm, "loop", None):
+        tm.loop.call_soon_threadsafe(
             asyncio.create_task,
-            trade_manager.run(),
+            tm.run(),
         )
         return jsonify({"status": "started"})
     return jsonify({"error": "loop not running"}), 503
@@ -378,20 +232,15 @@ def ping():
 @api_app.route("/ready")
 def ready() -> Response | tuple[Response, int]:
     """Return 200 once the TradeManager is initialized."""
-    if _ready_event.is_set() and trade_manager is not None:
+
+    tm = server_common.get_trade_manager()
+    if _ready_event.is_set() and tm is not None:
         return jsonify({"status": "ok"})
     return jsonify({"status": "initializing"}), 503
 
 
-
-
 def _resolve_host() -> str:
-    """Получить безопасный адрес привязки сервиса.
-
-    Если переменная окружения ``HOST`` не задана, используется ``127.0.0.1`` и
-    выводится предупреждение. Запуск на всех интерфейсах (``0.0.0.0`` или ``::``)
-    запрещён без явной конфигурации.
-    """
+    """Получить безопасный адрес привязки сервиса."""
 
     host_env = os.getenv("HOST")
     if not host_env:
@@ -417,9 +266,11 @@ def _resolve_host() -> str:
         )
     return "127.0.0.1"
 
+
 def main() -> None:
     """Entry point for running the service as a script."""
-    configure_logging()
+
+    server_common.configure_service_environment()
     setup_multiprocessing()
     _load_env()
     try:
@@ -430,6 +281,19 @@ def main() -> None:
     port = int(os.getenv("PORT", "8002"))
     logger.info("Запуск сервиса TradeManager на %s:%s", host, port)
     api_app.run(host=host, port=port)
+
+
+def __getattr__(name: str) -> Any:
+    if name == "trade_manager":
+        return server_common.get_trade_manager()
+    raise AttributeError(name)
+
+
+def __setattr__(name: str, value: Any) -> None:
+    if name == "trade_manager":
+        server_common.set_trade_manager(value)
+    else:
+        globals()[name] = value
 
 
 if __name__ == "__main__":

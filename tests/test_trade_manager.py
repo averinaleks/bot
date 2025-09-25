@@ -53,6 +53,7 @@ def _retry(max_attempts, delay_fn):
         return func
     return decorator
 utils_stub.retry = _retry
+utils_stub.suppress_tf_logs = lambda: None
 sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
@@ -117,6 +118,7 @@ def _retry2(max_attempts, delay_fn):
         return func
     return decorator
 utils.retry = _retry2
+utils.suppress_tf_logs = lambda: None
 sys.modules['utils'] = utils
 sys.modules['bot.utils'] = utils
 
