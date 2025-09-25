@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   skip:
-    if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'issue_comment' }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip unsupported event
