@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
-      - name: Purge git reference logs that can look like Python files
+      - name: Remove git metadata created during checkout
         run: |
           if [ -d .git ]; then
             git config core.logallrefupdates false || true
@@ -48,7 +48,17 @@ jobs:
               chmod -R u+w "$dir" || true
               rm -rf "$dir" || true
             done
+            chmod -R u+w .git || true
+            rm -rf .git || true
           fi
+          # Guard against any git metadata that might exist within subdirectories.
+          find "$PWD" -mindepth 2 -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
+            if [ -z "$dir" ]; then
+              continue
+            fi
+            chmod -R u+w "$dir" || true
+            rm -rf "$dir" || true
+          done
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -61,27 +71,6 @@ jobs:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
-      - name: Remove git metadata after CodeQL init
-        run: |
-          if [ -d .git ]; then
-            git config core.logallrefupdates false || true
-            git for-each-ref --format='%(refname)' refs/remotes | while IFS= read -r ref; do
-              case "$ref" in
-                *.py)
-                  git update-ref -d "$ref" || true
-                  ;;
-              esac
-            done
-            git reflog expire --expire=now --all || true
-            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
-              if [ -z "$dir" ]; then
-                continue
-              fi
-              chmod -R u+w "$dir" || true
-              rm -rf "$dir" || true
-            done
-          fi
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -89,24 +78,6 @@ jobs:
 
       - name: Remove git metadata before analysis
         run: |
-          if [ -d .git ]; then
-            git config core.logallrefupdates false || true
-            git for-each-ref --format='%(refname)' refs/remotes | while IFS= read -r ref; do
-              case "$ref" in
-                *.py)
-                  git update-ref -d "$ref" || true
-                  ;;
-              esac
-            done
-            git reflog expire --expire=now --all || true
-            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
-              if [ -z "$dir" ]; then
-                continue
-              fi
-              chmod -R u+w "$dir" || true
-              rm -rf "$dir" || true
-            done
-          fi
           # Guard against any git metadata recreated by tooling between steps.
           # Some package installers and third-party actions may vendor
           # repositories that include their own .git directories. They can
