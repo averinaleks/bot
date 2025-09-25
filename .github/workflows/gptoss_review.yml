@@ -243,18 +243,17 @@ jobs:
           PY
 
       - name: Checkout PR head
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && env.PR_NUMBER != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Checkout repository
-        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name != 'pull_request_target' }}
+        if: ${{ steps.validate_event.outputs.skip != 'true' && steps.ensure_pr_ready.outputs.skip != 'true' && github.event_name != 'pull_request_target' && env.PR_NUMBER != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ format('refs/pull/{0}/head', env.PR_NUMBER) }}
 
       - name: Start mock GPT-OSS server
         if: >-
