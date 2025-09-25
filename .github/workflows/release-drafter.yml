@@ -23,14 +23,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: >-
-    ${{
-      github.event_name == 'pull_request_target'
-      && github.event.pull_request != null
-      && github.event.pull_request.number != null
-      ? format('release-drafter-pr-{0}', github.event.pull_request.number)
-      : format('release-drafter-ref-{0}', replace(github.ref, '/', '-'))
-    }}
+  group: ${{ github.event_name == 'pull_request_target' && github.event.pull_request != null && github.event.pull_request.number != null && format('release-drafter-pr-{0}', github.event.pull_request.number) || format('release-drafter-ref-{0}', github.ref_name) }}
   cancel-in-progress: false
 
 jobs:
