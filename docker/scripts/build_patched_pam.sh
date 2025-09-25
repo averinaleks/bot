@@ -89,6 +89,11 @@ apply_patch_or_skip() {
   local patch_file="$1"
   local -a sentinels
 
+  if patch_already_present "${patch_file}"; then
+    echo "Патч ${patch_file} уже присутствует (обнаружено до применения), пропускаем." >&2
+    return 0
+  fi
+
   mapfile -t sentinels < <(determine_sentinels "${patch_file}" || true)
 
   if patch -p1 --forward <"${patch_file}"; then
