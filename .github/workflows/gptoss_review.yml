@@ -157,7 +157,15 @@ jobs:
             exit 0
           fi
 
-          printf '%s\n' "$response" | python3 - <<'PY'
+          response_file=$(mktemp)
+          cleanup() {
+            rm -f "$response_file"
+          }
+          trap cleanup EXIT
+
+          printf '%s\n' "$response" >"$response_file"
+
+          python3 - "$response_file" <<'PY'
             import json
             import os
             import sys
@@ -165,11 +173,17 @@ jobs:
             output_path = os.getenv("GITHUB_OUTPUT")
             repository = os.getenv("REPOSITORY", "")
 
+            if len(sys.argv) != 2:
+                raise SystemExit("Ожидается путь к файлу с ответом GitHub API")
+
+            response_path = sys.argv[1]
+
             skip = False
             notices: list[str] = []
 
             try:
-                data = json.load(sys.stdin)
+                with open(response_path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
             except json.JSONDecodeError:
                 skip = True
                 notices.append("Ответ GitHub API не является корректным JSON")
