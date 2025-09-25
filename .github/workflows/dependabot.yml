@@ -36,7 +36,7 @@ jobs:
           write_summary "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action."
 
   dependabot:
-    if: ${{ github.event_name == 'pull_request_target' && (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]') }}
+    if: ${{ github.event_name == 'pull_request_target' && (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]') && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
-          repository: ${{ (github.event.pull_request && github.event.pull_request.head.repo.full_name) || github.repository }}
+          repository: ${{ github.repository }}
           ref: ${{ (github.event.pull_request && github.event.pull_request.head.sha) || github.sha }}
 
       # Set up a lightweight Python environment and install only the
@@ -72,7 +72,7 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       - name: Install dependencies
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' && github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
@@ -85,7 +85,7 @@ jobs:
       # resolving the entire environment from scratch, keeping the job fast
       # while still validating the new packages.
       - name: Install Dependabot updates
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           DEPENDENCIES_JSON: ${{ steps.metadata.outputs['updated-dependencies-json'] }}
         run: |
@@ -134,7 +134,7 @@ jobs:
       # the main CI.  If any test fails this step will surface the
       # error and prevent automatic merging of the pull request.
       - name: Run unit tests
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' && github.event.pull_request.head.repo.full_name == github.repository }}
         run: pytest -m "not integration" -q
 
       - name: Check auto-merge availability
