@@ -28,6 +28,63 @@ determine_sentinels() {
   esac
 }
 
+patch_already_present() {
+  local patch_file="$1"
+  local patch_name
+  patch_name=$(basename "${patch_file}")
+
+  case "${patch_name}" in
+    linux-pam-CVE-2024-10963.patch)
+      python3 - "$patch_file" <<'PY'
+import pathlib
+import sys
+
+c_path = pathlib.Path("modules/pam_access/pam_access.c")
+xml_path = pathlib.Path("modules/pam_access/pam_access.8.xml")
+
+try:
+    c_text = c_path.read_text(encoding="utf-8")
+    xml_text = xml_path.read_text(encoding="utf-8")
+except FileNotFoundError:
+    sys.exit(1)
+
+if "nodns" in c_text and "nodns" in xml_text:
+    sys.exit(0)
+
+sys.exit(1)
+PY
+      return
+      ;;
+    linux-pam-CVE-2024-10041.patch)
+      python3 - "$patch_file" <<'PY'
+import pathlib
+import re
+import sys
+
+acct_path = pathlib.Path("modules/pam_unix/pam_unix_acct.c")
+passverify_path = pathlib.Path("modules/pam_unix/passverify.c")
+
+try:
+    acct_text = acct_path.read_text(encoding="utf-8")
+    pass_text = passverify_path.read_text(encoding="utf-8")
+except FileNotFoundError:
+    sys.exit(1)
+
+helper_comment = "The helper has to be invoked"
+acct_pattern = re.compile(r"pam_syslog\(pamh,\s*(?:\(?geteuid\(\)\s*==\s*0\)?|euid\s*==\s*0)\s*\?\s*LOG_ERR\s*:\s*LOG_DEBUG")
+
+if helper_comment in pass_text and acct_pattern.search(acct_text):
+    sys.exit(0)
+
+sys.exit(1)
+PY
+      return
+      ;;
+  esac
+
+  return 1
+}
+
 apply_patch_or_skip() {
   local patch_file="$1"
   local -a sentinels
@@ -60,6 +117,11 @@ apply_patch_or_skip() {
 
   if [[ ${all_present} -eq 1 ]]; then
     echo "Патч ${patch_file} уже присутствует, пропускаем." >&2
+    return 0
+  fi
+
+  if patch_already_present "${patch_file}"; then
+    echo "Патч ${patch_file} уже присутствует (обнаружено эвристикой), пропускаем." >&2
     return 0
   fi
 
