@@ -32,6 +32,7 @@ jobs:
       - name: Remove git metadata that can confuse CodeQL
         run: |
           rm -rf .git/logs
+          find .git -type f -name '*.py' -delete || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,6 +48,7 @@ jobs:
       - name: Remove git metadata after CodeQL init
         run: |
           rm -rf .git/logs
+          find .git -type f -name '*.py' -delete || true
 
       - name: Install dependencies
         run: |
