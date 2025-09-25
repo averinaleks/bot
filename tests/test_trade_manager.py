@@ -10,6 +10,7 @@ import contextlib
 import tempfile
 import httpx
 import aiohttp
+from pathlib import Path
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -53,13 +54,34 @@ def _retry(max_attempts, delay_fn):
         return func
     return decorator
 utils_stub.retry = _retry
+utils_stub.suppress_tf_logs = lambda: None
 sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
 sys.modules.pop('bot.trade_manager.core', None)
+import pickle
+
+
 joblib_mod = types.ModuleType('joblib')
-joblib_mod.dump = lambda *a, **k: None
-joblib_mod.load = lambda *a, **k: {}
+
+
+def _joblib_dump(obj, file, *args, **kwargs):
+    if hasattr(file, 'write'):
+        pickle.dump(obj, file)
+        return
+    path = Path(file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('wb') as fh:
+        pickle.dump(obj, fh)
+
+
+def _joblib_load(file, *args, **kwargs):
+    with Path(file).open('rb') as fh:
+        return pickle.load(fh)
+
+
+joblib_mod.dump = _joblib_dump
+joblib_mod.load = _joblib_load
 sys.modules.setdefault('joblib', joblib_mod)
 
 import asyncio  # noqa: E402
@@ -77,7 +99,7 @@ def _set_test_mode():
 def _import_trade_manager(_set_test_mode):
     global trade_manager, TradeManager
     import bot.trade_manager.core as tm
-    from bot.trade_manager.core import TradeManager as TM
+    from bot.trade_manager import TradeManager as TM
     trade_manager = tm
     TradeManager = TM
     yield
@@ -117,6 +139,7 @@ def _retry2(max_attempts, delay_fn):
         return func
     return decorator
 utils.retry = _retry2
+utils.suppress_tf_logs = lambda: None
 sys.modules['utils'] = utils
 sys.modules['bot.utils'] = utils
 

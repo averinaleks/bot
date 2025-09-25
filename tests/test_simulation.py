@@ -56,7 +56,7 @@ def trade_manager_classes(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     sys.modules.pop('trade_manager', None)
     sys.modules.pop('simulation', None)
-    from bot.trade_manager.core import TradeManager
+    from bot.trade_manager import TradeManager
     from bot.simulation import HistoricalSimulator
     yield TradeManager, HistoricalSimulator
     monkeypatch.delenv("TEST_MODE", raising=False)
