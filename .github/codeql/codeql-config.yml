@@ -6,7 +6,10 @@ paths-ignore:
   # excluded explicitly. We therefore ignore .git directories (and everything
   # beneath them) no matter where they appear in the workspace tree to avoid
   # future false parse errors when CodeQL walks the workspace.
+  - /.git
+  - /.git/**
   - .git
   - .git/**
   - '**/.git'
   - '**/.git/**'
+  - '**/.git/logs/**'
