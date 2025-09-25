@@ -18,6 +18,7 @@ import stat
 import tempfile
 import threading
 import time
+from contextvars import ContextVar
 from types import SimpleNamespace
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
@@ -27,6 +28,7 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 from bot.dotenv_utils import load_dotenv
 from bot.utils import validate_host, safe_int
 from services.logging_utils import sanitize_log_value
+from services.exchange_provider import ExchangeProvider
 
 load_dotenv()
 
@@ -66,25 +68,51 @@ if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 logger = logging.getLogger(__name__)
-exchange = None
-_init_lock = threading.Lock()
 POSITIONS_LOCK = threading.RLock()
+
+_exchange_ctx: ContextVar[Any | None] = ContextVar("trade_manager_exchange", default=None)
+
+
+def _close_exchange_instance(instance: Any) -> None:
+    close_method = getattr(instance, "close", None)
+    if callable(close_method):
+        close_method()
+
+
+def _create_exchange() -> Any:
+    exchange = ccxt.bybit(
+        {
+            'apiKey': os.getenv('BYBIT_API_KEY', ''),
+            'secret': os.getenv('BYBIT_API_SECRET', ''),
+        }
+    )
+    _sync_positions_with_exchange(exchange)
+    return exchange
+
+
+exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
+
+
+def _current_exchange() -> Any | None:
+    exchange = _exchange_ctx.get()
+    if exchange is not None:
+        return exchange
+    cached = exchange_provider.peek()
+    if cached is not None:
+        _exchange_ctx.set(cached)
+    return cached
 
 
 def init_exchange() -> None:
-    """Initialize the global ccxt Bybit exchange instance."""
-    global exchange
+    """Ensure the exchange is initialized before serving requests."""
+
     try:
-        exchange = ccxt.bybit(
-            {
-                'apiKey': os.getenv('BYBIT_API_KEY', ''),
-                'secret': os.getenv('BYBIT_API_SECRET', ''),
-            }
-        )
+        exchange = exchange_provider.get()
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
-    _sync_positions_with_exchange()
+    else:
+        _exchange_ctx.set(exchange)
 
 
 # Expected API token for simple authentication
@@ -93,13 +121,12 @@ API_TOKEN = (os.getenv('TRADE_MANAGER_TOKEN') or '').strip()
 
 if hasattr(app, "before_first_request"):
     app.before_first_request(init_exchange)
-else:
-    @app.before_request
-    def _ensure_exchange() -> None:
-        if exchange is None:
-            with _init_lock:
-                if exchange is None:
-                    init_exchange()
+
+
+@app.before_request
+def _bind_exchange() -> None:
+    exchange = exchange_provider.get()
+    _exchange_ctx.set(exchange)
 
 
 @app.before_request
@@ -262,8 +289,9 @@ def _save_positions() -> None:
 
 
 
-def _sync_positions_with_exchange() -> None:
+def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
     """Fetch open positions from the exchange and drop closed ones locally."""
+    exchange = exchange or _current_exchange()
     if exchange is None or not hasattr(exchange, 'fetch_positions'):
         return
 
@@ -448,6 +476,7 @@ def open_position() -> ResponseReturnValue:
             amount = risk_usd / price
     if not math.isfinite(amount) or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
+    exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     if not symbol:
@@ -642,6 +671,7 @@ def close_position() -> ResponseReturnValue:
             return jsonify({'error': 'invalid order'}), 400
         if not math.isfinite(close_amount) or close_amount <= 0:
             return jsonify({'error': 'invalid order'}), 400
+    exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     if not order_id or not side:

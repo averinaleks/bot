@@ -69,7 +69,8 @@ def _setup_module(monkeypatch):
         run=dummy_coroutine,
         get_stats=lambda: {"win_rate": 1.0},
     )
-    tm.trade_manager = stub
+    tm.trade_manager_factory.reset()
+    tm.trade_manager_factory.set(stub, loop=loop)
     tm._ready_event.set()
     monkeypatch.delenv("TEST_MODE", raising=False)
     return tm, loop, stub

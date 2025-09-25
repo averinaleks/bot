@@ -4,7 +4,7 @@ import hmac
 import logging
 import os
 import tempfile
-import threading
+from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request
 from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
 from services.logging_utils import sanitize_log_value
+from services.exchange_provider import ExchangeProvider
 
 load_dotenv()
 
@@ -79,7 +80,8 @@ app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
-exchange = None
+_exchange_ctx: ContextVar[Any | None] = ContextVar("data_handler_exchange", default=None)
+exchange_provider: ExchangeProvider[Any] | None = None
 
 
 def _require_api_key() -> "ResponseReturnValue | None":
@@ -163,12 +165,11 @@ def _create_history_cache() -> "HistoricalDataCache | None":
 history_cache = _create_history_cache()
 if os.getenv("TEST_MODE") == "1":
     history_cache = None
-_init_lock = threading.Lock()
 
 
-def _load_initial_history() -> None:
+def _load_initial_history(exchange: Any) -> None:
     """Fetch and cache initial OHLCV history for configured symbols."""
-    if exchange is None or history_cache is None or pd is None:
+    if history_cache is None or pd is None:
         return
     symbols = [
         s.strip()
@@ -198,40 +199,61 @@ def _load_initial_history() -> None:
             logging.exception("Failed to prefetch history for %s: %s", sym, exc)
 
 
+def _close_exchange_instance(instance: Any) -> None:
+    close_method = getattr(instance, "close", None)
+    if callable(close_method):
+        close_method()
+
+
+def _create_exchange() -> Any:
+    exchange = ccxt.bybit(
+        {
+            'apiKey': os.getenv('BYBIT_API_KEY', ''),
+            'secret': os.getenv('BYBIT_API_SECRET', ''),
+        }
+    )
+    _load_initial_history(exchange)
+    return exchange
+
+
+exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
+
+
+def _current_exchange() -> Any | None:
+    exchange = _exchange_ctx.get()
+    if exchange is not None:
+        return exchange
+    cached = exchange_provider.peek()
+    if cached is not None:
+        _exchange_ctx.set(cached)
+    return cached
+
+
 def init_exchange() -> None:
-    """Initialize the global ccxt Bybit exchange instance."""
-    global exchange
+    """Ensure the exchange is initialized before serving requests."""
+
     try:
-        exchange = ccxt.bybit(
-            {
-                'apiKey': os.getenv('BYBIT_API_KEY', ''),
-                'secret': os.getenv('BYBIT_API_SECRET', ''),
-            }
-        )
-        _load_initial_history()
+        exchange = exchange_provider.get()
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
+    else:
+        _exchange_ctx.set(exchange)
 
 
 if hasattr(app, "before_first_request"):
     app.before_first_request(init_exchange)
-else:
-    @app.before_request
-    def _ensure_exchange() -> None:
-        if exchange is None:
-            with _init_lock:
-                if exchange is None:
-                    init_exchange()
+
+
+@app.before_request
+def _bind_exchange() -> None:
+    exchange = exchange_provider.get()
+    _exchange_ctx.set(exchange)
+
 
 def close_exchange(_: BaseException | None = None) -> None:
     """Закрыть соединение с биржей при завершении контекста приложения."""
-    global exchange
-    if exchange is not None:
-        close_method = getattr(exchange, "close", None)
-        if callable(close_method):
-            close_method()
-        exchange = None
+    exchange_provider.close()
 
 if hasattr(app, "teardown_appcontext"):
     app.teardown_appcontext(close_exchange)
@@ -245,6 +267,7 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     try:
@@ -279,6 +302,7 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     timeframe = request.args.get('timeframe', '1m')

@@ -11,7 +11,9 @@ def _reset_positions(tmp_path, monkeypatch):
     monkeypatch.setattr(tms, 'POSITIONS_FILE', cache_file)
     monkeypatch.setattr(tms, 'POSITIONS', [])
     monkeypatch.setattr(tms, 'API_TOKEN', 'test-token')
+    tms.exchange_provider.override(None)
     yield
+    tms.exchange_provider.close()
 
 
 def _post_open_position(client, payload):
@@ -47,7 +49,7 @@ def test_open_position_records_even_when_stop_loss_fails(monkeypatch):
             return {'id': order_id}
 
     exchange = ExchangeWithCancel()
-    monkeypatch.setattr(tms, 'exchange', exchange)
+    tms.exchange_provider.override(exchange)
 
     with tms.app.test_client() as client:
         response = _post_open_position(
@@ -89,7 +91,7 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
             return {'id': 'other'}
 
     exchange = ExchangeWithoutCancel()
-    monkeypatch.setattr(tms, 'exchange', exchange)
+    tms.exchange_provider.override(exchange)
 
     with tms.app.test_client() as client:
         response = _post_open_position(

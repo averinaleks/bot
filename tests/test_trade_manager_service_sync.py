@@ -16,7 +16,7 @@ def _reload_service(monkeypatch, tmp_path, exchange):
     service = importlib.reload(importlib.import_module('services.trade_manager_service'))
     service.POSITIONS_FILE = tmp_path / 'positions.json'
     service.POSITIONS[:] = []
-    service.exchange = exchange
+    service.exchange_provider.override(exchange)
     # Bandit: a placeholder token is used solely for fixture initialisation.
     service.API_TOKEN = 'token'  # nosec
     return service
@@ -41,7 +41,7 @@ def test_sync_removes_closed_positions(monkeypatch, tmp_path):
     ]
     service._save_positions()
 
-    service._sync_positions_with_exchange()
+    service._sync_positions_with_exchange(exchange)
 
     assert [pos['id'] for pos in service.POSITIONS] == ['2']
     with service.POSITIONS_FILE.open('r', encoding='utf-8') as fh:
