@@ -1,20 +1,16 @@
-"""Compatibility wrapper for the TradeManager service."""
+"""Обёртка совместимости для устаревшего импорта ``import trade_manager``.
 
-# Import configuration explicitly from the local package to avoid accidentally
-# pulling in unrelated modules named ``config``.
-from bot.config import OFFLINE_MODE
+Новый код должен использовать ``from bot.trade_manager import TradeManager``.
+"""
 
-if OFFLINE_MODE:
-    from services.offline import OfflineBybit as TradeManager, OfflineTelegram as TelegramLogger
-else:  # pragma: no cover - real implementation
-    from bot.utils import TelegramLogger  # noqa: F401  # re-export for test injection
-    from bot.trade_manager.service import *  # noqa: F401,F403
-    from bot.trade_manager.core import TradeManager  # noqa: F401
+from __future__ import annotations
 
-if __name__ == "__main__":  # pragma: no cover - manual execution
-    if OFFLINE_MODE:
-        print("Offline mode: trade manager not started")
-    else:
-        from bot.trade_manager.service import main
+import warnings
 
-        main()
+warnings.warn(
+    "`import trade_manager` устарел, используйте `from bot.trade_manager import TradeManager`",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from bot.trade_manager import *  # noqa: F401,F403

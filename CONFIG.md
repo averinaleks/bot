@@ -15,15 +15,6 @@ If both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` environment variables are
 defined, a Telegram logger is automatically attached and forwards `ERROR`
 messages to the specified chat.
 
-## DataHandlerService environment variables
-
-- `DATA_HANDLER_API_KEY` — shared token required by the `/price` and `/history`
-  endpoints. Requests must include `X-API-KEY`. Without the variable the
-  service now responds with `401` and logs a warning about missing
-  configuration.
-- `DATA_HANDLER_ALLOW_ANONYMOUS` — set to `1` (or `true`/`yes`/`on`) to allow
-  anonymous access during local debugging. The service emits a warning on every
-  unauthenticated request, and the flag should never be enabled in production.
 
 For production deployments you **must** provide a strong random value in the `CSRF_SECRET` environment variable. Without it the
 FastAPI server refuses to start because CSRF protection cannot be configured safely.
