@@ -25,6 +25,7 @@ RUN set -eux; \
         tzdata \
         linux-libc-dev \
         build-essential \
+        patch \
         ca-certificates \
         wget \
         curl \
