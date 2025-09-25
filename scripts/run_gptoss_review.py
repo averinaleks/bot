@@ -16,6 +16,7 @@ individual helper functions.
 from __future__ import annotations
 
 import argparse
+import logging
 import http.client
 import ipaddress
 import json
@@ -30,6 +31,9 @@ from urllib.parse import urlparse
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
+
+
+logger = logging.getLogger(__name__)
 
 
 class EmptyDiffError(RuntimeError):
@@ -201,8 +205,8 @@ def _perform_http_request(
     finally:
         try:
             connection.close()
-        except Exception:  # pragma: no cover - defensive cleanup
-            pass
+        except Exception as exc:  # pragma: no cover - defensive cleanup
+            logger.warning("Failed to close HTTP connection cleanly: %s", exc)
 
     return status, reason, payload
 
