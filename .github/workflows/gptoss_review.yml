@@ -157,8 +157,14 @@ jobs:
           set -euo pipefail
 
           pr_number="${PR_NUMBER:-}"
+          output_file="${GITHUB_OUTPUT:-}"
+
           if [ -z "$pr_number" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$output_file" ]; then
+              echo "skip=true" >> "$output_file"
+            else
+              echo "::warning::Переменная GITHUB_OUTPUT не задана – не удалось записать skip=true" >&2
+            fi
             exit 0
           fi
 
@@ -168,7 +174,11 @@ jobs:
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             "$api_url"); then
             echo "::warning::Не удалось получить данные PR ${pr_number} – пропускаю обзор" >&2
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$output_file" ]; then
+              echo "skip=true" >> "$output_file"
+            else
+              echo "::warning::Переменная GITHUB_OUTPUT не задана – не удалось записать skip=true" >&2
+            fi
             exit 0
           fi
 
