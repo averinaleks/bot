@@ -102,7 +102,7 @@ jobs:
           fi
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3
         # v3.30.3
         with:
@@ -140,4 +140,5 @@ jobs:
     permissions:
       contents: read
       actions: write
+      security-events: write
     steps: *trivy_steps
