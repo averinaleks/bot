@@ -41,15 +41,12 @@ jobs:
               esac
             done
             git reflog expire --expire=now --all || true
-            find "$PWD" -path '*/.git/logs' -type d -prune -print0 | while IFS= read -r -d '' dir; do
-              if [ -z "$dir" ]; then
-                continue
-              fi
-              chmod -R u+w "$dir" || true
-              rm -rf "$dir" || true
-            done
+            if [ -d .git/logs ]; then
+              chmod -R u+w .git/logs || true
+              find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
+              rm -rf .git/logs || true
+            fi
             chmod -R u+w .git || true
-            rm -rf .git || true
           fi
           # Guard against any git metadata that might exist within subdirectories.
           find "$PWD" -mindepth 2 -name '.git' -type d -print0 | while IFS= read -r -d '' dir; do
@@ -93,10 +90,16 @@ jobs:
             chmod -R u+w "$dir" || true
             rm -rf "$dir" || true
           done
+          if [ -d .git/logs ]; then
+            chmod -R u+w .git/logs || true
+            find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
+            rm -rf .git/logs || true
+          fi
           # The repository's root .git directory must remain intact; CodeQL uses
           # it during analysis (for example to resolve commit metadata). Removing
-          # nested .git directories is sufficient to suppress false positives
-          # from vendored dependencies while keeping the root repository healthy.
+          # nested .git directories and any stray reference logs is sufficient to
+          # suppress false positives from vendored dependencies while keeping the
+          # root repository healthy.
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
