@@ -36,7 +36,13 @@ jobs:
           write_summary "Actor '${{ github.actor }}' on event '${{ github.event_name }}' does not require action."
 
   dependabot:
-    if: ${{ github.event_name == 'pull_request_target' && (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]') && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target' &&
+        (github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]') &&
+        github.event.pull_request != null &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependabot metadata
