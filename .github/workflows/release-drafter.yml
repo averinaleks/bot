@@ -1,3 +1,5 @@
+---
+# yamllint disable rule:truthy
 name: Release Drafter
 
 on:
@@ -7,19 +9,28 @@ on:
   pull_request_target:
     branches:
       - main
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
   workflow_dispatch:
 
 permissions:
-  actions: read # allow downloading pinned Release Drafter action revisions
+  actions: read  # allow downloading pinned Release Drafter action revisions
   contents: write
   pull-requests: write
 
 concurrency:
-    group: >-
-      ${{ github.event_name == 'pull_request_target' && github.event.pull_request && github.event.pull_request.number
-        ? format('release-drafter-pr-{0}', github.event.pull_request.number)
-        : format('release-drafter-ref-{0}', github.ref) }}
+  group: >-
+    ${{
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request != null
+      && github.event.pull_request.number != null
+      ? format('release-drafter-pr-{0}', github.event.pull_request.number)
+      : format('release-drafter-ref-{0}', github.ref)
+    }}
   cancel-in-progress: false
 
 jobs:
