@@ -54,7 +54,17 @@ jobs:
           python -m pip install -r requirements-ci.txt
 
       - name: Remove git metadata before analysis
-        run: rm -rf .git
+        run: |
+          rm -rf .git
+          # Guard against any git metadata recreated by tooling between steps.
+          # Some package installers and third-party actions may vendor
+          # repositories that include their own .git directories. They can
+          # contain files with misleading extensions (for example ref logs that
+          # end in ".py"), which causes CodeQL to treat them as Python source
+          # files and emit parse warnings. Removing all nested .git directories
+          # immediately before analysis ensures the extractor never sees these
+          # files.
+          find "$PWD" -name '.git' -type d -prune -exec rm -rf '{}' +
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
