@@ -3,15 +3,10 @@ paths-ignore:
   # Ensure Git metadata created during checkout (including reference logs) is never
   # analysed by CodeQL. CodeQL interprets any *.py file it discovers as Python
   # source, so logs for remote refs with names that end in ".py" must be
-  # excluded explicitly. We therefore ignore every possible .git directory or
-  # file pattern, regardless of depth or naming, to avoid future false parse
-  # errors when CodeQL walks the workspace.
+  # excluded explicitly. We therefore ignore .git directories (and everything
+  # beneath them) no matter where they appear in the workspace tree to avoid
+  # future false parse errors when CodeQL walks the workspace.
+  - .git
   - .git/**
-  - '.git'
-  - '.git*'
   - '**/.git'
   - '**/.git/**'
-  - '**/.git*'
-  - '**/.git*/**'
-  - '**/.git/refs/**'
-  - '**/.git/logs/**'
