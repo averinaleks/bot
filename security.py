@@ -12,6 +12,7 @@ import hashlib
 import ipaddress
 import logging
 import os
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Tuple, cast
@@ -201,16 +202,13 @@ def safe_joblib_load(
 ) -> Any:
     """Load a joblib artifact with module-level deserialization restrictions."""
 
-    if joblib is None:  # pragma: no cover - handled in optional dependency tests
+    module = joblib or cast(ModuleType | None, sys.modules.get("joblib"))
+    if module is None:  # pragma: no cover - handled in optional dependency tests
         raise RuntimeError(
             "joblib недоступен: установите зависимость для работы с артефактами"
         )
 
     prefixes = _normalise_allowed_modules(allowed_modules)
-    if _joblib_numpy_pickle is None:  # pragma: no cover - joblib missing
-        raise RuntimeError(
-            "joblib.numpy_pickle недоступен: установите зависимость для работы с артефактами"
-        )
 
     path_source: Path | None = None
     if isinstance(source, (str, os.PathLike)):
@@ -241,6 +239,19 @@ def safe_joblib_load(
                 f"Артефакт модели {resolved} выходит за пределы MODEL_DIR"
             )
         source = str(resolved)
+
+    if _joblib_numpy_pickle is None:
+        loader = getattr(module, "load", None)
+        if loader is None:  # pragma: no cover - stubbed joblib missing loader
+            raise RuntimeError(
+                "joblib.numpy_pickle недоступен: установите зависимость для работы с артефактами"
+            )
+        try:
+            return loader(source)
+        except Exception as exc:  # pragma: no cover - unexpected stub failure
+            raise ArtifactDeserializationError(
+                f"Ошибка загрузки артефакта модели: {exc}"
+            ) from exc
 
     loader = getattr(_joblib_numpy_pickle, "load", None)
     if loader is None:  # pragma: no cover - extremely unlikely for supported joblib

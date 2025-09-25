@@ -15,6 +15,11 @@ If both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` environment variables are
 defined, a Telegram logger is automatically attached and forwards `ERROR`
 messages to the specified chat.
 
+When embedding the bot in your own tooling import it via
+`from bot.trade_manager import TradeManager` (and `TelegramLogger` if you need
+notifications). The legacy top-level module `trade_manager` is kept for
+backwards compatibility only.
+
 For production deployments you **must** provide a strong random value in the `CSRF_SECRET` environment variable. Without it the
 FastAPI server refuses to start because CSRF protection cannot be configured safely.
 

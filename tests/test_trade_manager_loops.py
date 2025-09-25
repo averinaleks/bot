@@ -69,7 +69,7 @@ def _set_test_mode():
 def _import_trade_manager(_set_test_mode):
     global trade_manager, TradeManager
     import bot.trade_manager.core as tm
-    from bot.trade_manager.core import TradeManager as TM
+    from bot.trade_manager import TradeManager as TM
     trade_manager = tm
     TradeManager = TM
     yield
