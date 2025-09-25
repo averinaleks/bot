@@ -34,37 +34,96 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    outputs:
+      run_review: ${{ steps.decision.outputs.run_review }}
+      pr_number: ${{ steps.decision.outputs.pr_number }}
+      skip_reason: ${{ steps.decision.outputs.skip_reason }}
+    steps:
+      - name: Determine execution mode
+        id: decision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PR_DRAFT: ${{ github.event.pull_request.draft || 'false' }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login || '' }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+        run: |
+          set -euo pipefail
+
+          run_review=false
+          pr_number=""
+          skip_reason=""
+
+          case "$EVENT_NAME" in
+            pull_request_target)
+              pr_number="$PR_NUMBER"
+              if [ -z "$pr_number" ]; then
+                skip_reason="PR не найден"
+              elif [ "$PR_DRAFT" = "true" ]; then
+                skip_reason="PR находится в состоянии draft"
+              elif [ -n "$PR_HEAD_REPO" ] && [ "$PR_HEAD_REPO" != "$REPOSITORY" ]; then
+                skip_reason="PR создан из внешнего репозитория"
+              else
+                run_review=true
+              fi
+              ;;
+            issue_comment)
+              pr_number="$ISSUE_NUMBER"
+              if [ -z "$pr_number" ]; then
+                skip_reason="Комментарий не относится к pull request"
+              elif [ "$COMMENT_AUTHOR" = "github-actions[bot]" ]; then
+                skip_reason="Комментарий создан GitHub Actions – обзор не требуется"
+              elif [[ "$COMMENT_BODY" != *"/llm-review"* ]]; then
+                skip_reason="Комментарий не содержит /llm-review"
+              else
+                run_review=true
+              fi
+              ;;
+            *)
+              skip_reason="Workflow triggered for $EVENT_NAME – no review required."
+              ;;
+          esac
+
+          if [ "$run_review" = true ]; then
+            skip_reason=""
+          elif [ -z "$skip_reason" ]; then
+            skip_reason="Workflow triggered for $EVENT_NAME – no review required."
+          fi
+
+          {
+            echo "run_review=$run_review"
+            echo "pr_number=$pr_number"
+            echo "skip_reason=$skip_reason"
+          } >>"$GITHUB_OUTPUT"
+
   skip:
-    if: ${{ github.event_name == 'push' }}
+    needs: evaluate
+    if: ${{ needs.evaluate.outputs.run_review != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip unsupported event
         run: |
-          echo "Workflow triggered for ${{ github.event_name }} – no review required."
+          message="${{ needs.evaluate.outputs.skip_reason }}"
+          if [ -z "$message" ]; then
+            message="Workflow triggered for ${{ github.event_name }} – no review required."
+          fi
+          echo "$message"
 
   review:
-    if: ${{
-      (github.event_name == 'pull_request_target'
-        && github.event.pull_request != null
-        && github.event.pull_request.draft == false
-        && github.event.pull_request.head.repo.full_name == github.repository)
-      ||
-      (github.event_name == 'issue_comment'
-        && github.event.issue.pull_request != null
-        && github.event.comment.user.login != 'github-actions[bot]'
-        && contains(github.event.comment.body || '', '/llm-review'))
-    }}
+    needs: evaluate
+    if: ${{ needs.evaluate.outputs.run_review == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
         shell: bash
     env:
-      PR_NUMBER: ${{
-        (github.event_name == 'pull_request_target' && github.event.pull_request.number)
-          || (github.event_name == 'issue_comment' && github.event.issue.number)
-          || ''
-      }}
+      PR_NUMBER: ${{ needs.evaluate.outputs.pr_number }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
 
     steps:
