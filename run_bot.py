@@ -191,7 +191,7 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
 
     from bot.data_handler import DataHandler
     from bot.model_builder import ModelBuilder
-    from bot.bot.trade_manager.core import TradeManager
+    from bot.trade_manager import TradeManager
 
     exchange = exchange_cls() if exchange_cls else None
 
