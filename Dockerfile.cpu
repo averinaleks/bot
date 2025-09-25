@@ -23,13 +23,6 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
-COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
-COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
-COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
-
-RUN /tmp/security/build_patched_pam.sh "/tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
-    /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
 WORKDIR /app
 
 COPY requirements-core.txt .
@@ -113,8 +106,6 @@ RUN /bin/bash -euo pipefail -c "\
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
-COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
-
 # Обновляем систему перед установкой зависимостей выполнения
 RUN set -eux; \
     apt-get update; \
@@ -129,8 +120,6 @@ RUN set -eux; \
         python3 \
         # Исключаем tar, чтобы избежать CVE-2025-45582
         coreutils libgcrypt20 login passwd; \
-    dpkg -i /tmp/pam-fixed/*.deb; \
-    rm -rf /tmp/pam-fixed; \
     # ``ensurepip`` отключён в системном Python Ubuntu, а рантайм использует
     # виртуальное окружение из стадии сборки, поэтому дополнительные операции с pip
     # не требуются.
