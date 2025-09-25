@@ -55,7 +55,7 @@ cachetools==5.5.2
     #   -r requirements.txt
     #   google-auth
     # via -r requirements.txt
-ccxt==4.5.3
+ccxt==4.5.5
     # via -r requirements.txt
 # ccxtpro==1.0.1  # install manually if you have a commercial license
     # via -r requirements.txt
@@ -66,7 +66,7 @@ certifi==2025.8.3
     #   httpcore
     #   httpx
     #   requests
-cffi==1.17.1
+cffi==2.0.0
     # via
     #   -r requirements.txt
     #   cryptography
@@ -92,7 +92,7 @@ contourpy==1.3.2
     # via
     #   -r requirements.txt
     #   matplotlib
-cryptography==45.0.6
+cryptography==46.0.1
     # via
     #   -r requirements.txt
     #   ccxt
@@ -254,7 +254,7 @@ lightning-utilities==0.15.2
     #   -r requirements.txt
     #   pytorch-lightning
     #   torchmetrics
-llvmlite==0.44.0
+llvmlite==0.45.0
     # via
     #   -r requirements.txt
     #   numba
@@ -294,7 +294,7 @@ networkx==3.4.2
     # via
     #   -r requirements.txt
     #   torch
-numba==0.61.2
+numba==0.62.0
     # via
     #   -r requirements.txt
     #   shap
@@ -320,7 +320,7 @@ numpy==2.2.2
     # via
     #   -r requirements.txt
     #   torch
-openai==1.101.0
+openai==1.109.0
     # via -r requirements.txt
 opentelemetry-api==1.36.0
     # via
@@ -446,7 +446,7 @@ python-dotenv==1.1.1
     # via
     #   -r requirements.txt
     #   pydantic-settings
-python-telegram-bot==22.3
+python-telegram-bot==22.4
     # via -r requirements.txt
 pytorch-lightning==2.5.5
     # via -r requirements.txt
@@ -492,12 +492,12 @@ safetensors==0.6.2
     # via
     #   -r requirements.txt
     #   transformers
-scikit-learn==1.7.1
+scikit-learn==1.7.2
     # via
     #   -r requirements.txt
     #   imbalanced-learn
     #   shap
-scipy==1.15.3
+scipy==1.16.1
     # via
     #   -r requirements.txt
     #   imbalanced-learn
@@ -532,7 +532,7 @@ sqlparse==0.5.3
     #   -r requirements.txt
 stable-baselines3==1.7.0
     # via -r requirements.txt
-starlette==0.47.2
+starlette==0.47.3
     # via
     #   -r requirements.txt
     #   fastapi
