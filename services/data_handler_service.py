@@ -1,18 +1,25 @@
 """Simple reference data handler service fetching real prices from Bybit."""
-from flask import Flask, jsonify, request
+
+import hmac
+import logging
+import os
+import tempfile
+import threading
+from types import SimpleNamespace
 from typing import Any
+
+from flask import Flask, jsonify, request
+
+from bot.dotenv_utils import load_dotenv
+from bot.host_utils import validate_host
+from services.logging_utils import sanitize_log_value
+
+load_dotenv()
+
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
-import logging
-import os
-import threading
-from types import SimpleNamespace
-
-from bot.dotenv_utils import load_dotenv
-
-load_dotenv()
 
 _ALLOW_OFFLINE = (
     os.getenv("OFFLINE_MODE") == "1"
@@ -45,10 +52,6 @@ except ImportError as exc:  # pragma: no cover - optional in offline mode
             "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
         ) from exc
 
-import hmac
-import tempfile
-from bot.host_utils import validate_host
-from services.logging_utils import sanitize_log_value
 try:  # optional dependency
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - pandas not installed
