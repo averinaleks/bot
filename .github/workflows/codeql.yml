@@ -41,6 +41,7 @@ jobs:
               esac
             done
             git reflog expire --expire=now --all || true
+            find .git -type f -name '*.py' -print0 | xargs -0r rm -f || true
             if [ -d .git/logs ]; then
               chmod -R u+w .git/logs || true
               find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
@@ -90,6 +91,9 @@ jobs:
             chmod -R u+w "$dir" || true
             rm -rf "$dir" || true
           done
+          if [ -d .git ]; then
+            find .git -type f -name '*.py' -print0 | xargs -0r rm -f || true
+          fi
           if [ -d .git/logs ]; then
             chmod -R u+w .git/logs || true
             find .git/logs -type f -name '*.py' -print0 | xargs -0r rm -f || true
