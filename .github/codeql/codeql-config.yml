@@ -4,3 +4,4 @@ paths-ignore:
   - '**/.git/**'
   - '**/.git'
   - '**/.git/refs/**'
+  - '**/.git/logs/**'
