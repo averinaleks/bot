@@ -151,6 +151,7 @@ def _perform_http_request(
     allowed_hosts = _load_allowed_hosts() if parsed.scheme == "https" else set()
 
     connection_kwargs: dict[str, object] = {"timeout": timeout}
+    connection_cls: type[http.client.HTTPConnection] | type[http.client.HTTPSConnection]
     if parsed.scheme == "https":
         if allowed_hosts and hostname not in allowed_hosts:
             if not _host_ips_are_private(resolved_ips):
