@@ -288,7 +288,7 @@ pyparsing==3.2.3
     # via matplotlib
 pytest==8.4.2
     # via pytest-asyncio
-pytest-asyncio==1.1.0
+pytest-asyncio==1.2.0
     # via -r requirements-core.in
 python-dateutil==2.9.0.post0
     # via
@@ -400,6 +400,7 @@ typing-extensions==4.14.1
     #   openai
     #   pydantic
     #   pydantic-core
+    #   pytest-asyncio
     #   pytorch-lightning
     #   referencing
     #   shap
