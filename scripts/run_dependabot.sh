@@ -14,7 +14,7 @@ if [[ -z "${token}" ]]; then
 fi
 
 for ecosystem in pip github-actions; do
-  tmp_response=$(mktemp)
+  tmp_response=$(mktemp -t run_dependabot.XXXXXX)
   http_status=$(curl -S -s -o "${tmp_response}" -w "%{http_code}" -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
