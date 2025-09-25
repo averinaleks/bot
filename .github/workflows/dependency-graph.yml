@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  # Required by the dependency submission API; avoid granting broader dependency-graph scope.
   security-events: write
 
 jobs:
