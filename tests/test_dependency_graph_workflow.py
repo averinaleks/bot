@@ -40,12 +40,11 @@ def test_dependency_graph_permissions_are_valid() -> None:
 
     assert permissions, "permissions block must be present"
 
-    allowed_keys = {"contents", "security-events", "dependency-graph"}
+    allowed_keys = {"contents", "security-events"}
     assert set(permissions) <= allowed_keys
 
     assert permissions.get("contents") == "read"
     assert permissions.get("security-events") == "write"
-    assert permissions.get("dependency-graph") == "write"
 
 
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
