@@ -35,7 +35,7 @@ backports-asyncio-runner==1.2.0 ; python_version < "3.11"
     # via
     #   -r requirements-core.in
     #   pytest-asyncio
-bcrypt==4.3.0
+bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
     # via flask
@@ -332,7 +332,7 @@ scikit-learn==1.7.2
     #   -r requirements-core.in
     #   imbalanced-learn
     #   shap
-scipy==1.16.1
+scipy==1.15.3
     # via
     #   -r requirements-core.in
     #   imbalanced-learn
