@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import importlib
+import os
+import sys
 import warnings
 
 warnings.warn(
@@ -13,4 +16,8 @@ warnings.warn(
     stacklevel=2,
 )
 
+if os.getenv("TEST_MODE") == "1":
+    sys.modules.pop("bot.trade_manager", None)
+
+importlib.import_module("bot.trade_manager")
 from bot.trade_manager import *  # noqa: F401,F403

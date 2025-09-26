@@ -175,12 +175,15 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
     def _handler(*_args):
         logger.info("Остановка TradeManager")
         tm.shutdown()
-        try:
-
-            asyncio.run(TelegramLogger.shutdown())
-        except RuntimeError:
-            # event loop may already be closed
-            pass
+        shutdown = getattr(TelegramLogger, "shutdown", None)
+        if shutdown is not None:
+            try:
+                result = shutdown()
+                if inspect.isawaitable(result):
+                    asyncio.run(result)
+            except RuntimeError:
+                # event loop may already be closed
+                pass
         listener = getattr(tm, "_listener", None)
         if listener is not None:
             listener.stop()
@@ -1982,7 +1985,13 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+            test_mode_env = os.getenv("TEST_MODE") == "1"
+            if (
+                self.loop
+                and self.loop.is_running()
+                and not IS_TEST_MODE
+                and not test_mode_env
+            ):
                 self.loop.stop()
             raise
         finally:
@@ -1999,7 +2008,11 @@ class TradeManager:
                 pass
         self.tasks.clear()
 
-        await TelegramLogger.shutdown()
+        shutdown = getattr(TelegramLogger, "shutdown", None)
+        if shutdown is not None:
+            result = shutdown()
+            if inspect.isawaitable(result):
+                await result
         await close_http_client()
 
     def shutdown(self) -> None:

@@ -36,13 +36,19 @@ logger = logging.getLogger(__name__)
 POSITIONS_LOCK = threading.RLock()
 
 _exchange_runtime: server_common.ExchangeRuntime | None = None
+exchange: Any | None = None
+ccxt = None
 
 
 def _current_exchange() -> Any | None:
+    global exchange
     runtime = _exchange_runtime
     if runtime is None:
-        return None
-    return runtime.current()
+        return exchange
+    current = runtime.current()
+    if current is not None:
+        exchange = current
+    return current or exchange
 
 
 def init_exchange() -> None:
@@ -51,7 +57,8 @@ def init_exchange() -> None:
     runtime = _exchange_runtime
     if runtime is None:
         raise RuntimeError("Exchange runtime is not configured")
-    runtime.init()
+    global exchange
+    exchange = runtime.init()
 
 
 # Expected API token for simple authentication
@@ -64,9 +71,10 @@ if hasattr(app, "before_first_request"):
 
 @app.before_request
 def _bind_exchange() -> None:
+    global exchange
     runtime = _exchange_runtime
     if runtime is not None:
-        runtime.bind()
+        exchange = runtime.bind()
 
 
 @app.before_request
@@ -343,7 +351,9 @@ _exchange_runtime = server_common.ExchangeRuntime(
     context_name="trade_manager_exchange",
     after_create=_sync_positions_with_exchange,
 )
+ccxt = _exchange_runtime.ccxt
 exchange_provider = _exchange_runtime.provider
+exchange = exchange_provider.peek()
 CCXT_BASE_ERROR = _exchange_runtime.ccxt_base_error
 CCXT_NETWORK_ERROR = _exchange_runtime.ccxt_network_error
 CCXT_BAD_REQUEST = _exchange_runtime.ccxt_bad_request
