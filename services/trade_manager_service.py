@@ -9,7 +9,6 @@ from flask import Flask, request, jsonify
 from werkzeug.exceptions import BadRequest
 from typing import Any
 from pathlib import Path
-import hmac
 import json
 import logging
 import math
@@ -18,51 +17,17 @@ import stat
 import tempfile
 import threading
 import time
-from contextvars import ContextVar
-from types import SimpleNamespace
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
-from bot.dotenv_utils import load_dotenv
+from bot.trade_manager import server_common
 from bot.utils import validate_host, safe_int
 from services.logging_utils import sanitize_log_value
-from services.exchange_provider import ExchangeProvider
 
-load_dotenv()
+server_common.load_environment()
 
-_ALLOW_OFFLINE = (
-    os.getenv("OFFLINE_MODE") == "1"
-    or os.getenv("TEST_MODE") == "1"
-    or os.getenv("TRADE_MANAGER_USE_STUB") == "1"
-)
-
-try:
-    import ccxt  # type: ignore
-except ImportError as exc:  # pragma: no cover - optional in offline mode
-    logger = logging.getLogger(__name__)
-    if _ALLOW_OFFLINE:
-        logger.warning(
-            "`ccxt` не найден: TradeManagerService использует OfflineBybit. "
-            "Для работы с реальной биржей установите `pip install ccxt`."
-        )
-        from services.offline import OfflineBybit
-
-        ccxt = SimpleNamespace(  # type: ignore[assignment]
-            bybit=OfflineBybit,
-            BaseError=Exception,
-            NetworkError=Exception,
-            BadRequest=Exception,
-        )
-    else:
-        logger.critical(
-            "Библиотека `ccxt` обязательна для TradeManager. Установите её через "
-            "`pip install ccxt` или активируйте OFFLINE_MODE=1."
-        )
-        raise ImportError(
-            "TradeManager не может работать без зависимости `ccxt`."
-        ) from exc
 app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
@@ -70,53 +35,27 @@ if hasattr(app, "config"):
 logger = logging.getLogger(__name__)
 POSITIONS_LOCK = threading.RLock()
 
-_exchange_ctx: ContextVar[Any | None] = ContextVar("trade_manager_exchange", default=None)
-
-
-def _close_exchange_instance(instance: Any) -> None:
-    close_method = getattr(instance, "close", None)
-    if callable(close_method):
-        close_method()
-
-
-def _create_exchange() -> Any:
-    exchange = ccxt.bybit(
-        {
-            'apiKey': os.getenv('BYBIT_API_KEY', ''),
-            'secret': os.getenv('BYBIT_API_SECRET', ''),
-        }
-    )
-    _sync_positions_with_exchange(exchange)
-    return exchange
-
-
-exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
+_exchange_runtime: server_common.ExchangeRuntime | None = None
 
 
 def _current_exchange() -> Any | None:
-    exchange = _exchange_ctx.get()
-    if exchange is not None:
-        return exchange
-    cached = exchange_provider.peek()
-    if cached is not None:
-        _exchange_ctx.set(cached)
-    return cached
+    runtime = _exchange_runtime
+    if runtime is None:
+        return None
+    return runtime.current()
 
 
 def init_exchange() -> None:
     """Ensure the exchange is initialized before serving requests."""
 
-    try:
-        exchange = exchange_provider.get()
-    except Exception as exc:  # pragma: no cover - config errors
-        logging.exception("Failed to initialize Bybit client: %s", exc)
-        raise RuntimeError("Invalid Bybit configuration") from exc
-    else:
-        _exchange_ctx.set(exchange)
+    runtime = _exchange_runtime
+    if runtime is None:
+        raise RuntimeError("Exchange runtime is not configured")
+    runtime.init()
 
 
 # Expected API token for simple authentication
-API_TOKEN = (os.getenv('TRADE_MANAGER_TOKEN') or '').strip()
+API_TOKEN = (server_common.get_api_token() or '').strip()
 
 
 if hasattr(app, "before_first_request"):
@@ -125,8 +64,9 @@ if hasattr(app, "before_first_request"):
 
 @app.before_request
 def _bind_exchange() -> None:
-    exchange = exchange_provider.get()
-    _exchange_ctx.set(exchange)
+    runtime = _exchange_runtime
+    if runtime is not None:
+        runtime.bind()
 
 
 @app.before_request
@@ -140,18 +80,7 @@ def _require_api_token() -> ResponseReturnValue | None:
     if not expected:
         return None
 
-    token = request.headers.get('Authorization', '')
-    if token.lower().startswith('bearer '):
-        token = token[7:]
-    else:
-        token = request.headers.get('X-API-KEY', token)
-    token = token.strip()
-
-    reason: str | None = None
-    if not token:
-        reason = 'missing token'
-    elif not hmac.compare_digest(token, expected):
-        reason = 'token mismatch'
+    reason = server_common.validate_token(request.headers, expected)
 
     if reason is not None:
         remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
@@ -163,11 +92,6 @@ def _require_api_token() -> ResponseReturnValue | None:
         )
         return jsonify({'error': 'unauthorized'}), 401
     return None
-
-# Gracefully handle missing ccxt error classes when running under test stubs
-CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
-CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
-CCXT_BAD_REQUEST = getattr(ccxt, 'BadRequest', CCXT_BASE_ERROR)
 
 POSITIONS: list[dict] = []
 POSITIONS_FILE = Path('cache/positions.json')
@@ -412,6 +336,17 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
 
 
 _load_positions()
+
+
+_exchange_runtime = server_common.ExchangeRuntime(
+    service_name="TradeManagerService",
+    context_name="trade_manager_exchange",
+    after_create=_sync_positions_with_exchange,
+)
+exchange_provider = _exchange_runtime.provider
+CCXT_BASE_ERROR = _exchange_runtime.ccxt_base_error
+CCXT_NETWORK_ERROR = _exchange_runtime.ccxt_network_error
+CCXT_BAD_REQUEST = _exchange_runtime.ccxt_bad_request
 
 
 def _record(

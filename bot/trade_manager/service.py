@@ -14,7 +14,6 @@ from typing import Any
 
 import httpx
 from bot.ray_compat import ray
-from bot.dotenv_utils import load_dotenv
 from flask import Flask, jsonify, request, Response
 
 from .core import (
@@ -27,7 +26,7 @@ from .core import (
     logger,
     setup_multiprocessing,
 )
-from bot.config import load_config
+from . import server_common
 
 
 
@@ -36,6 +35,7 @@ __all__ = [
     "api_app",
     "asgi_app",
     "create_trade_manager",
+    "trade_manager",
     "_ready_event",
     "get_trade_manager",
     "_resolve_host",
@@ -106,6 +106,12 @@ def get_trade_manager() -> TradeManager | None:
     return trade_manager_factory.get()
 
 
+def trade_manager() -> TradeManager | None:
+    """Backwards compatible alias returning the active manager."""
+
+    return trade_manager_factory.get()
+
+
 def _manager_with_loop() -> tuple[TradeManager | None, asyncio.AbstractEventLoop | None]:
     manager = trade_manager_factory.get()
     loop = trade_manager_factory.get_loop()
@@ -116,14 +122,14 @@ def _manager_with_loop() -> tuple[TradeManager | None, asyncio.AbstractEventLoop
 # Determine test mode at import time, considering both environment and core flag
 IS_TEST_MODE = os.getenv("TEST_MODE") == "1" or CORE_TEST_MODE
 
-TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+TRADE_MANAGER_TOKEN: str | None = server_common.get_api_token()
 
 
 def _load_env() -> None:
     """Load `.env` and validate required environment variables."""
     global TRADE_MANAGER_TOKEN
-    load_dotenv()
-    TRADE_MANAGER_TOKEN = os.getenv("TRADE_MANAGER_TOKEN")
+    server_common.load_environment()
+    TRADE_MANAGER_TOKEN = server_common.get_api_token()
     if not TRADE_MANAGER_TOKEN:
         logger.warning(
             "TRADE_MANAGER_TOKEN пуст, все торговые запросы будут отвергнуты"
@@ -136,10 +142,10 @@ def _require_token() -> tuple[Any, int] | None:
         return None
     if not TRADE_MANAGER_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header != f"Bearer {TRADE_MANAGER_TOKEN}":
-        return jsonify({"error": "unauthorized"}), 401
-    return None
+    reason = server_common.validate_token(request.headers, TRADE_MANAGER_TOKEN)
+    if reason is None:
+        return None
+    return jsonify({"error": "unauthorized"}), 401
 
 
 async def create_trade_manager() -> TradeManager | None:
@@ -149,7 +155,7 @@ async def create_trade_manager() -> TradeManager | None:
         return existing
     logger.info("Загрузка конфигурации из config.json")
     try:
-        cfg = load_config("config.json")
+        cfg = server_common.load_trade_manager_config("config.json")
         logger.info("Конфигурация успешно загружена")
     except (OSError, json.JSONDecodeError) as exc:
         logger.exception(
