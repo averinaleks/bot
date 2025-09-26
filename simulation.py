@@ -6,7 +6,7 @@ import asyncio
 import pandas as pd
 from typing import Dict
 
-from bot.utils import logger
+from utils import logger
 
 
 class HistoricalSimulator:

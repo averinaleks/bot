@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from bot.utils import retry
+from utils import retry
 
 
 def test_retry_success_sync():

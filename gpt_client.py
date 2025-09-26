@@ -21,7 +21,7 @@ import httpx
 
 from bot.pydantic_compat import BaseModel, Field, ValidationError
 
-from bot.utils import retry
+from utils import retry
 # Absolute import ensures the project's own configuration module is used
 # instead of any unrelated ``config`` module on the import path.
 from bot.config import OFFLINE_MODE

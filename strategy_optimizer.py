@@ -20,7 +20,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     optuna = None  # type: ignore
 
-from bot.utils import logger
+from utils import logger
 from bot.config import BotConfig
 from bot.portfolio_backtest import portfolio_backtest
 

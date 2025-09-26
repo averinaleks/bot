@@ -173,7 +173,7 @@ def _log_mode(command: str, offline: bool) -> None:
 def _patch_offline_services():
     from services.offline import OfflineBybit, OfflineTelegram, OfflineGPT
 
-    import bot.utils as utils_module
+    import utils as utils_module
     import bot.telegram_logger as telegram_logger_module
     import bot.gpt_client as gpt_client
 
@@ -252,7 +252,7 @@ async def main() -> None:
 
     config_module.OFFLINE_MODE = offline_mode
     from bot.config import load_config
-    from bot.utils import configure_logging
+    from utils import configure_logging
 
     cfg = load_config(args.config)
     ensure_directories(cfg)

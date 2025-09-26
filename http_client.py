@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 
-from bot.utils import retry
+from utils import retry
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, is_offline_env
 

@@ -247,7 +247,7 @@ async def create_trade_manager() -> TradeManager | None:
     manager = TradeManager(cfg, dh, mb, telegram_bot, chat_id)
     logger.info("Экземпляр TradeManager создан")
     if telegram_bot:
-        from bot.utils import TelegramUpdateListener
+        from utils import TelegramUpdateListener
 
         listener = TelegramUpdateListener(telegram_bot)
 

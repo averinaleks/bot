@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 
-from bot.utils import configure_logging as _base_configure_logging
+from utils import configure_logging as _base_configure_logging
 from bot.telegram_logger import TelegramLogger
 
 

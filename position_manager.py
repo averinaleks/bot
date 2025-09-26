@@ -7,7 +7,7 @@ import contextlib
 import inspect
 from typing import Optional
 
-from bot.utils import check_dataframe_empty_async as _check_df_async, logger
+from utils import check_dataframe_empty_async as _check_df_async, logger
 
 
 class PositionManager:

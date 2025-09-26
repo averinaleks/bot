@@ -23,7 +23,34 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
 from bot.trade_manager import server_common
-from bot.utils import validate_host, safe_int
+from bot.host_utils import validate_host
+try:
+    from utils import safe_int
+except ImportError:  # pragma: no cover - fallback when utils stub missing
+    def safe_int(value, default=0, *, env_var=None):
+        if value is None:
+            return default
+        try:
+            result = int(value)
+        except (TypeError, ValueError):
+            if env_var:
+                logging.getLogger(__name__).warning(
+                    "Invalid %s value '%s', using default %s",
+                    sanitize_log_value(env_var),
+                    sanitize_log_value(value),
+                    default,
+                )
+            return default
+        if result <= 0:
+            if env_var:
+                logging.getLogger(__name__).warning(
+                    "Non-positive %s value '%s', using default %s",
+                    sanitize_log_value(env_var),
+                    sanitize_log_value(value),
+                    default,
+                )
+            return default
+        return result
 from services.logging_utils import sanitize_log_value
 
 server_common.load_environment()
@@ -36,13 +63,18 @@ logger = logging.getLogger(__name__)
 POSITIONS_LOCK = threading.RLock()
 
 _exchange_runtime: server_common.ExchangeRuntime | None = None
+exchange: Any | None = None
 
 
 def _current_exchange() -> Any | None:
     runtime = _exchange_runtime
     if runtime is None:
         return None
-    return runtime.current()
+    instance = runtime.current()
+    if instance is not None:
+        global exchange
+        exchange = instance
+    return instance
 
 
 def init_exchange() -> None:
@@ -51,7 +83,9 @@ def init_exchange() -> None:
     runtime = _exchange_runtime
     if runtime is None:
         raise RuntimeError("Exchange runtime is not configured")
-    runtime.init()
+    instance = runtime.init()
+    global exchange
+    exchange = instance
 
 
 # Expected API token for simple authentication
@@ -347,6 +381,7 @@ exchange_provider = _exchange_runtime.provider
 CCXT_BASE_ERROR = _exchange_runtime.ccxt_base_error
 CCXT_NETWORK_ERROR = _exchange_runtime.ccxt_network_error
 CCXT_BAD_REQUEST = _exchange_runtime.ccxt_bad_request
+ccxt = _exchange_runtime.ccxt
 
 
 def _record(

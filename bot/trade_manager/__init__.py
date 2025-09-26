@@ -15,7 +15,14 @@ if OFFLINE_MODE:
     __all__ = ["TradeManager", "TelegramLogger"]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
-    from bot.utils import TelegramLogger
+    from utils import TelegramLogger
+
+    if not hasattr(TelegramLogger, "shutdown"):
+        @classmethod
+        async def _noop_shutdown(cls) -> None:  # pragma: no cover - stub environments
+            return None
+
+        setattr(TelegramLogger, "shutdown", _noop_shutdown)  # type: ignore[arg-type]
 
     from .core import TradeManager
     from .service import (

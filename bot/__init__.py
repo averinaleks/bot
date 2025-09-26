@@ -16,3 +16,8 @@ __path__ = [
     str(Path(__file__).resolve().parent),
     str(Path(__file__).resolve().parent.parent),
 ]
+
+import importlib
+
+_utils_module = importlib.import_module("utils")
+sys.modules.setdefault("bot.utils", _utils_module)

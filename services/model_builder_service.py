@@ -22,7 +22,35 @@ from flask import Flask, jsonify, request
 from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
-from bot.utils import ensure_writable_directory
+from utils import ensure_writable_directory
+try:
+    from utils import safe_int
+except ImportError:  # pragma: no cover - fallback when utils stub missing
+    def safe_int(value, default=0, *, env_var=None):
+        if value is None:
+            return default
+        try:
+            result = int(value)
+        except (TypeError, ValueError):
+            if env_var:
+                logging.getLogger(__name__).warning(
+                    "Invalid %s value '%s', using default %s",
+                    sanitize_log_value(env_var),
+                    sanitize_log_value(value),
+                    default,
+                )
+            return default
+        if result <= 0:
+            if env_var:
+                logging.getLogger(__name__).warning(
+                    "Non-positive %s value '%s', using default %s",
+                    sanitize_log_value(env_var),
+                    sanitize_log_value(value),
+                    default,
+                )
+            return default
+        return result
+from bot.host_utils import validate_host
 from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
@@ -32,7 +60,6 @@ from security import (
     verify_model_state_signature,
     write_model_state_signature,
 )
-from utils import safe_int, validate_host
 
 _FILENAME_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
 _FILENAME_HYPHEN_RE = re.compile(r"[-\s]+")
@@ -686,7 +713,7 @@ else:  # pragma: no cover - simplified Flask used in tests
 
 
 if __name__ == "__main__":  # pragma: no cover - manual launch
-    from bot.utils import configure_logging
+    from utils import configure_logging
 
     configure_logging()
     host = validate_host()

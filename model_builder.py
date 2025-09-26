@@ -29,13 +29,13 @@ from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
 from bot.dotenv_utils import load_dotenv
 from bot.ray_compat import IS_RAY_STUB, ray
-from bot.utils import (
+from utils import (
     check_dataframe_empty,
     ensure_writable_directory,
     is_cuda_available,
     logger,
-    validate_host,
 )
+from bot.host_utils import validate_host
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
     ArtifactDeserializationError,
@@ -213,7 +213,7 @@ if IS_RAY_STUB:
     sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
-    from bot.utils import configure_logging
+    from utils import configure_logging
 except ImportError:  # pragma: no cover - stub for test environment
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""

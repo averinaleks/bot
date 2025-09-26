@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - fallback if numba unavailable
             return func
         return decorator
 
-from bot.utils import logger
+from utils import logger
 
 
 @njit(cache=True)

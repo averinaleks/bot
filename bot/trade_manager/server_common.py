@@ -99,6 +99,7 @@ class ExchangeRuntime:
         self._context: ContextVar[Any | None] = ContextVar(context_name, default=None)
         self._after_create = after_create
         self._ccxt = self._ensure_ccxt(service_name)
+        self.ccxt = self._ccxt
         self.ccxt_base_error = getattr(self._ccxt, "BaseError", Exception)
         self.ccxt_network_error = getattr(
             self._ccxt, "NetworkError", self.ccxt_base_error

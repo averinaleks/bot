@@ -38,10 +38,10 @@ test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
-from bot.utils import retry  # noqa: E402
+from utils import retry  # noqa: E402
 import inspect  # noqa: E402
 # Базовые утилиты импортируются всегда
-from bot.utils import (  # noqa: E402
+from utils import (  # noqa: E402
     logger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
@@ -51,7 +51,7 @@ from bot.utils import (  # noqa: E402
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
 try:  # pragma: no cover - fallback для тестов
-    from bot.utils import configure_logging  # noqa: E402
+    from utils import configure_logging  # noqa: E402
 except ImportError:  # pragma: no cover - заглушка
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
@@ -1982,7 +1982,13 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+            should_stop_loop = (
+                self.loop
+                and self.loop.is_running()
+                and not IS_TEST_MODE
+                and not isinstance(e, TradeManagerTaskError)
+            )
+            if should_stop_loop:
                 self.loop.stop()
             raise
         finally:

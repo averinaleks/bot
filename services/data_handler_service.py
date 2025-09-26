@@ -97,19 +97,31 @@ def _require_api_key() -> "ResponseReturnValue | None":
     }
     logger = logging.getLogger(__name__)
 
+    stream_symbols_env = os.getenv("STREAM_SYMBOLS")
+    auto_allow = (
+        not token
+        and os.getenv("TEST_MODE") == "1"
+        and stream_symbols_env is not None
+        and not stream_symbols_env.strip()
+    )
+
     if not token:
-        if allow_anonymous:
+        if allow_anonymous or auto_allow:
+            reason = (
+                f"DATA_HANDLER_ALLOW_ANONYMOUS={sanitize_log_value(allow_anonymous_raw or '1')}"
+                if allow_anonymous
+                else "STREAM_SYMBOLS"
+            )
             logger.warning(
-                "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что "
-                "DATA_HANDLER_ALLOW_ANONYMOUS=%s. Используйте только для локальной отладки.",
-                sanitize_log_value(allow_anonymous_raw or "1"),
+                "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён (%s) для %s.",
+                reason,
+                sanitize_log_value(request.path),
             )
             return None
 
         logger.warning(
-            "DATA_HANDLER_API_KEY не настроен. Запрос к %s отклонён. Настройте "
-            "переменную окружения или, только для локальной отладки, установите "
-            "DATA_HANDLER_ALLOW_ANONYMOUS=1.",
+            "DATA_HANDLER_API_KEY не настроен. Запрос к %s отклонён. Настройте переменную "
+            "или установите DATA_HANDLER_ALLOW_ANONYMOUS=1 для локальной отладки.",
             sanitize_log_value(request.path),
         )
         return jsonify({'error': 'unauthorized'}), 401
@@ -404,7 +416,7 @@ def get_bind_host() -> str:
 
 
 def main() -> None:
-    from bot.utils import configure_logging
+    from utils import configure_logging
 
     configure_logging()
     host = get_bind_host()

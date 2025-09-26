@@ -13,4 +13,8 @@ warnings.warn(
     stacklevel=2,
 )
 
+import sys
+
+sys.modules.pop("bot.trade_manager", None)
+
 from bot.trade_manager import *  # noqa: F401,F403

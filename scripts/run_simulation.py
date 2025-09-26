@@ -17,7 +17,7 @@ from bot.data_handler import DataHandler
 from bot.model_builder import ModelBuilder
 from bot.trade_manager import TradeManager
 from bot.simulation import HistoricalSimulator
-from bot.utils import logger
+from utils import logger
 
 
 async def main() -> None:
@@ -43,7 +43,7 @@ async def main() -> None:
     await sim.run(start_ts, end_ts, args.speed)
 
 if __name__ == "__main__":
-    from bot.utils import configure_logging
+    from utils import configure_logging
 
     configure_logging()
     asyncio.run(main())

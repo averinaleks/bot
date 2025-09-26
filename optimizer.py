@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 
 from bot.config import BotConfig
-from bot.utils import (
+from utils import (
     check_dataframe_empty_async as _check_df_async,
     is_cuda_available,
     logger,
