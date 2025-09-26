@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Awaitable, Dict, Optional, Tuple, TYPE_CHECKING, cast
 import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
@@ -56,6 +56,11 @@ is_cuda_available = _utils.is_cuda_available
 _check_df_async = _utils.check_dataframe_empty_async
 safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
+
+if TYPE_CHECKING:
+    from telegram_logger import TelegramLogger as TelegramLoggerType
+else:  # pragma: no cover - type-checking aid
+    TelegramLoggerType = Any
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
 try:  # pragma: no cover - fallback для тестов
@@ -221,7 +226,7 @@ class TradeManager:
         Reinforcement learning agent used for decisions.
     """
 
-    telegram_logger: TelegramLogger | types.SimpleNamespace
+    telegram_logger: TelegramLoggerType | types.SimpleNamespace
 
     def __init__(
         self,
@@ -298,7 +303,7 @@ class TradeManager:
                 async def _noop(*a, **k):
                     pass
 
-                self.telegram_logger.send_telegram_message = _noop  # type: ignore[attr-defined]
+                setattr(self.telegram_logger, "send_telegram_message", _noop)
         self.positions = self._init_positions_frame()
         self.returns_by_symbol: dict[str, list[tuple[float, float]]] = (
             self._init_returns_state()
@@ -622,11 +627,16 @@ class TradeManager:
             )
             return
         if inspect.isawaitable(result):
+            awaitable = cast(Awaitable[Any], result)
+
+            async def _consume(value: Awaitable[Any]) -> Any:
+                return await value
+
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 try:
-                    asyncio.run(result)
+                    asyncio.run(_consume(awaitable))
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.debug(
                         "Не удалось отправить уведомление Telegram об очистке состояния: %s",
@@ -634,7 +644,10 @@ class TradeManager:
                     )
             else:
                 try:
-                    loop.create_task(result)
+                    coroutine = (
+                        awaitable if inspect.iscoroutine(awaitable) else _consume(awaitable)
+                    )
+                    loop.create_task(coroutine)
                 except RuntimeError as exc:  # pragma: no cover - defensive
                     logger.debug(
                         "Не удалось запланировать уведомление Telegram об очистке состояния: %s",

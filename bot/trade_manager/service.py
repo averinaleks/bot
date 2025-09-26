@@ -10,7 +10,7 @@ import json
 import os
 import sys
 import threading
-from typing import Any
+from typing import Any, Mapping, cast
 
 import httpx
 from bot.ray_compat import ray
@@ -142,7 +142,10 @@ def _require_token() -> tuple[Any, int] | None:
         return None
     if not TRADE_MANAGER_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
-    reason = server_common.validate_token(request.headers, TRADE_MANAGER_TOKEN)
+    header_mapping: Mapping[str, str] = cast(
+        Mapping[str, str], {key: value for key, value in request.headers.items()}
+    )
+    reason = server_common.validate_token(header_mapping, TRADE_MANAGER_TOKEN)
     if reason is None:
         return None
     return jsonify({"error": "unauthorized"}), 401
