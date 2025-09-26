@@ -164,6 +164,43 @@ def _calibrate_output(calibrator, value: float) -> float:
     return calibrator.predict_proba([[value]])[0, 1]
 
 
+async def _shutdown_telegram_logger_async() -> None:
+    """Await TelegramLogger.shutdown() if the attribute is available."""
+
+    shutdown = getattr(TelegramLogger, "shutdown", None)
+    if shutdown is None:
+        logger.debug("TelegramLogger.shutdown missing; skipping cleanup")
+        return
+
+    result = shutdown()
+    if inspect.isawaitable(result):
+        await result
+
+
+def _shutdown_telegram_logger_sync() -> None:
+    """Synchronously drain Telegram logger shutdown if possible."""
+
+    async def _runner() -> None:
+        await _shutdown_telegram_logger_async()
+
+    try:
+        asyncio.run(_runner())
+    except RuntimeError:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.debug(
+                "Event loop unavailable while shutting down TelegramLogger",
+            )
+        else:
+            try:
+                loop.create_task(_runner())
+            except RuntimeError:
+                logger.debug(
+                    "Unable to schedule TelegramLogger shutdown on running loop",
+                )
+
+
 def _register_cleanup_handlers(tm: "TradeManager") -> None:
     """Register atexit and signal handlers for graceful shutdown."""
 
@@ -175,12 +212,7 @@ def _register_cleanup_handlers(tm: "TradeManager") -> None:
     def _handler(*_args):
         logger.info("Остановка TradeManager")
         tm.shutdown()
-        try:
-
-            asyncio.run(TelegramLogger.shutdown())
-        except RuntimeError:
-            # event loop may already be closed
-            pass
+        _shutdown_telegram_logger_sync()
         listener = getattr(tm, "_listener", None)
         if listener is not None:
             listener.stop()
@@ -1982,7 +2014,12 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+            if (
+                self.loop
+                and self.loop.is_running()
+                and os.getenv("TEST_MODE") != "1"
+                and not IS_TEST_MODE
+            ):
                 self.loop.stop()
             raise
         finally:
@@ -1999,7 +2036,7 @@ class TradeManager:
                 pass
         self.tasks.clear()
 
-        await TelegramLogger.shutdown()
+        await _shutdown_telegram_logger_async()
         await close_http_client()
 
     def shutdown(self) -> None:

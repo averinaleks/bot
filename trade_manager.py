@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 import warnings
 
 warnings.warn(
@@ -13,4 +15,9 @@ warnings.warn(
     stacklevel=2,
 )
 
-from bot.trade_manager import *  # noqa: F401,F403
+if "bot.trade_manager" in sys.modules:
+    importlib.reload(sys.modules["bot.trade_manager"])
+else:
+    importlib.import_module("bot.trade_manager")
+
+from bot.trade_manager import *  # type: ignore[F401,F403]

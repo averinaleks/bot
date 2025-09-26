@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import errno
+import inspect
 import logging
 import os
 import stat
@@ -364,11 +365,22 @@ if OFFLINE_MODE:
 
 
 def _shutdown_all() -> None:
-    coro = TelegramLogger.shutdown()
+    shutdown = getattr(TelegramLogger, "shutdown", None)
+    if shutdown is None:
+        logger.debug("TelegramLogger.shutdown missing; skipping global cleanup")
+        return
+
+    coro = shutdown()
+    if not inspect.isawaitable(coro):
+        return
+
     try:
         asyncio.run(coro)
     except RuntimeError as exc:
-        coro.close()
+        try:
+            coro.close()  # type: ignore[call-arg]
+        except Exception:
+            pass
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -378,7 +390,7 @@ def _shutdown_all() -> None:
             )
         else:
             try:
-                loop.create_task(TelegramLogger.shutdown())
+                loop.create_task(shutdown())
             except RuntimeError as task_exc:
                 logger.debug(
                     "Не удалось запланировать завершение TelegramLogger в активном цикле: %s",

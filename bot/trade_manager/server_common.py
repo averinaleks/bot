@@ -136,6 +136,12 @@ class ExchangeRuntime:
             ) from exc
         return ccxt
 
+    @property
+    def ccxt_module(self):
+        """Return the currently resolved ``ccxt`` module or stub."""
+
+        return self._ccxt
+
     def _create_exchange(self) -> Any:
         exchange = self._ccxt.bybit(
             {

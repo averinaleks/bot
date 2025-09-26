@@ -23,7 +23,10 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
 from bot.trade_manager import server_common
-from bot.utils import validate_host, safe_int
+from bot.utils_compat import get as _utils_get
+
+validate_host = _utils_get("validate_host")
+safe_int = _utils_get("safe_int")
 from services.logging_utils import sanitize_log_value
 
 server_common.load_environment()
@@ -35,14 +38,24 @@ if hasattr(app, "config"):
 logger = logging.getLogger(__name__)
 POSITIONS_LOCK = threading.RLock()
 
+exchange: Any | None = None
 _exchange_runtime: server_common.ExchangeRuntime | None = None
+
+
+def _set_exchange(instance: Any | None) -> Any | None:
+    global exchange
+    exchange = instance
+    return instance
 
 
 def _current_exchange() -> Any | None:
     runtime = _exchange_runtime
     if runtime is None:
-        return None
-    return runtime.current()
+        return exchange
+    current = runtime.current()
+    if current is not None:
+        return _set_exchange(current)
+    return exchange
 
 
 def init_exchange() -> None:
@@ -51,7 +64,8 @@ def init_exchange() -> None:
     runtime = _exchange_runtime
     if runtime is None:
         raise RuntimeError("Exchange runtime is not configured")
-    runtime.init()
+    instance = runtime.init()
+    _set_exchange(instance)
 
 
 # Expected API token for simple authentication
@@ -66,7 +80,8 @@ if hasattr(app, "before_first_request"):
 def _bind_exchange() -> None:
     runtime = _exchange_runtime
     if runtime is not None:
-        runtime.bind()
+        instance = runtime.bind()
+        _set_exchange(instance)
 
 
 @app.before_request
@@ -344,6 +359,7 @@ _exchange_runtime = server_common.ExchangeRuntime(
     after_create=_sync_positions_with_exchange,
 )
 exchange_provider = _exchange_runtime.provider
+ccxt = _exchange_runtime.ccxt_module
 CCXT_BASE_ERROR = _exchange_runtime.ccxt_base_error
 CCXT_NETWORK_ERROR = _exchange_runtime.ccxt_network_error
 CCXT_BAD_REQUEST = _exchange_runtime.ccxt_bad_request

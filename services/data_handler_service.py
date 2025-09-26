@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request
 
 from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
+from bot.utils_compat import get as _utils_get
 from services.logging_utils import sanitize_log_value
 from services.exchange_provider import ExchangeProvider
 
@@ -103,6 +104,13 @@ def _require_api_key() -> "ResponseReturnValue | None":
                 "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что "
                 "DATA_HANDLER_ALLOW_ANONYMOUS=%s. Используйте только для локальной отладки.",
                 sanitize_log_value(allow_anonymous_raw or "1"),
+            )
+            return None
+
+        stream_symbols = os.getenv("STREAM_SYMBOLS")
+        if stream_symbols is not None and stream_symbols.strip() == "":
+            logger.warning(
+                "DATA_HANDLER_API_KEY не задан. STREAM_SYMBOLS пуст, анонимный доступ включён для тестовых сервисов."
             )
             return None
 
@@ -404,7 +412,7 @@ def get_bind_host() -> str:
 
 
 def main() -> None:
-    from bot.utils import configure_logging
+    configure_logging = _utils_get("configure_logging")
 
     configure_logging()
     host = get_bind_host()
