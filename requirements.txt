@@ -332,7 +332,7 @@ scikit-learn==1.7.2
     #   -r requirements-core.in
     #   imbalanced-learn
     #   shap
-scipy==1.16.1
+scipy==1.15.3
     # via
     #   -r requirements-core.in
     #   imbalanced-learn
