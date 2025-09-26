@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 import warnings
 
 warnings.warn(
@@ -12,5 +14,8 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
+
+if "bot.trade_manager" in sys.modules:
+    importlib.reload(sys.modules["bot.trade_manager"])
 
 from bot.trade_manager import *  # noqa: F401,F403

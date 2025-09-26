@@ -15,7 +15,10 @@ if OFFLINE_MODE:
     __all__ = ["TradeManager", "TelegramLogger"]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
-    from bot.utils import TelegramLogger
+    from bot.utils_loader import require_utils
+
+    _utils = require_utils("TelegramLogger")
+    TelegramLogger = _utils.TelegramLogger
 
     from .core import TradeManager
     from .service import (

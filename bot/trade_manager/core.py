@@ -38,16 +38,24 @@ test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
-from bot.utils import retry  # noqa: E402
 import inspect  # noqa: E402
-# Базовые утилиты импортируются всегда
-from bot.utils import (  # noqa: E402
-    logger,
-    is_cuda_available,
-    check_dataframe_empty_async as _check_df_async,
-    safe_api_call,
-    TelegramLogger,
+from bot.utils_loader import require_utils  # noqa: E402
+
+_utils = require_utils(
+    "retry",
+    "logger",
+    "is_cuda_available",
+    "check_dataframe_empty_async",
+    "safe_api_call",
+    "TelegramLogger",
 )
+
+retry = _utils.retry
+logger = _utils.logger
+is_cuda_available = _utils.is_cuda_available
+_check_df_async = _utils.check_dataframe_empty_async
+safe_api_call = _utils.safe_api_call
+TelegramLogger = _utils.TelegramLogger
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
 try:  # pragma: no cover - fallback для тестов
@@ -1982,7 +1990,11 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+            if (
+                self.loop
+                and self.loop.is_running()
+                and not (IS_TEST_MODE or os.getenv("TEST_MODE") == "1")
+            ):
                 self.loop.stop()
             raise
         finally:
