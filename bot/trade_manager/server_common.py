@@ -99,6 +99,12 @@ class ExchangeRuntime:
         self._context: ContextVar[Any | None] = ContextVar(context_name, default=None)
         self._after_create = after_create
         self._ccxt = self._ensure_ccxt(service_name)
+        # Expose the resolved ``ccxt`` module so callers can monkeypatch it for
+        # offline tests.  Several integration tests expect ``services`` modules
+        # to provide a ``ccxt`` attribute that mirrors the runtime instance.
+        # The refactor that introduced :class:`ExchangeRuntime` kept the module
+        # private which broke those tests.
+        self.ccxt = self._ccxt
         self.ccxt_base_error = getattr(self._ccxt, "BaseError", Exception)
         self.ccxt_network_error = getattr(
             self._ccxt, "NetworkError", self.ccxt_base_error

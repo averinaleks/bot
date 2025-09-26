@@ -22,7 +22,7 @@ from flask import Flask, jsonify, request
 from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
-from bot.utils import ensure_writable_directory
+from bot.shared_utils import ensure_writable_directory
 from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
@@ -686,7 +686,7 @@ else:  # pragma: no cover - simplified Flask used in tests
 
 
 if __name__ == "__main__":  # pragma: no cover - manual launch
-    from bot.utils import configure_logging
+    from bot.shared_utils import configure_logging
 
     configure_logging()
     host = validate_host()

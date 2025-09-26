@@ -95,14 +95,22 @@ def _require_api_key() -> "ResponseReturnValue | None":
         "yes",
         "on",
     }
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes"}
     logger = logging.getLogger(__name__)
 
+    integration_mode = test_mode and os.getenv("STREAM_SYMBOLS") == ""
+
     if not token:
-        if allow_anonymous:
+        if allow_anonymous or integration_mode:
             logger.warning(
                 "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что "
-                "DATA_HANDLER_ALLOW_ANONYMOUS=%s. Используйте только для локальной отладки.",
-                sanitize_log_value(allow_anonymous_raw or "1"),
+                "DATA_HANDLER_ALLOW_ANONYMOUS=%s или сервис запущен без STREAM_SYMBOLS в"
+                " тестовом режиме. Используйте только для локальной отладки.",
+                sanitize_log_value(
+                    allow_anonymous_raw
+                    if allow_anonymous_raw
+                    else ("<unset>" if not integration_mode else "")
+                ),
             )
             return None
 
@@ -404,7 +412,7 @@ def get_bind_host() -> str:
 
 
 def main() -> None:
-    from bot.utils import configure_logging
+    from bot.shared_utils import configure_logging
 
     configure_logging()
     host = get_bind_host()

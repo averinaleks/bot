@@ -38,10 +38,10 @@ test_stubs.apply()
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
-from bot.utils import retry  # noqa: E402
+from utils import retry  # noqa: E402
 import inspect  # noqa: E402
 # Базовые утилиты импортируются всегда
-from bot.utils import (  # noqa: E402
+from utils import (  # noqa: E402
     logger,
     is_cuda_available,
     check_dataframe_empty_async as _check_df_async,
@@ -51,7 +51,7 @@ from bot.utils import (  # noqa: E402
 
 # ``configure_logging`` может отсутствовать в тестовых заглушках
 try:  # pragma: no cover - fallback для тестов
-    from bot.utils import configure_logging  # noqa: E402
+    from utils import configure_logging  # noqa: E402
 except ImportError:  # pragma: no cover - заглушка
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
@@ -76,8 +76,10 @@ try:  # pragma: no cover - optional dependency
 except ImportError as exc:  # optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
     torch = types.ModuleType("torch")  # type: ignore[assignment]
+
     def _tensor(*args: Any, **kwargs: Any) -> Any:
         return args[0]
+
     torch.tensor = _tensor  # type: ignore[attr-defined,assignment]
     torch.float32 = float  # type: ignore[attr-defined,assignment]
     torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined,assignment,misc]
@@ -85,6 +87,12 @@ except ImportError as exc:  # optional dependency may not be installed
     torch.amp = types.SimpleNamespace(
         autocast=lambda *a, **k: contextlib.nullcontext()
     )  # type: ignore[attr-defined,assignment,misc]
+
+
+def _is_test_mode() -> bool:
+    """Return whether the current process runs under TEST_MODE."""
+
+    return os.getenv("TEST_MODE") == "1" or IS_TEST_MODE
 try:  # pragma: no cover - optional dependency
     from flask import Flask, request, jsonify  # type: ignore  # noqa: E402
 except Exception:  # pragma: no cover - minimal stubs
@@ -1982,7 +1990,7 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if self.loop and self.loop.is_running() and not IS_TEST_MODE:
+            if self.loop and self.loop.is_running() and not _is_test_mode():
                 self.loop.stop()
             raise
         finally:
@@ -2017,7 +2025,7 @@ class TradeManager:
                 # event loop already closed
                 pass
         try:
-            if IS_TEST_MODE or getattr(ray, "is_initialized", lambda: False)():
+            if _is_test_mode() or getattr(ray, "is_initialized", lambda: False)():
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)

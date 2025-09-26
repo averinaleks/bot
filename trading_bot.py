@@ -19,7 +19,7 @@ from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_as
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
 from telegram_logger import TelegramLogger, resolve_unsent_path
-from bot.utils import retry, suppress_tf_logs
+from bot.shared_utils import retry, suppress_tf_logs
 
 _OFFLINE_ENV = is_offline_env()
 
@@ -1413,7 +1413,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    from bot.utils import configure_logging
+    from bot.shared_utils import configure_logging
 
     configure_logging()
     main()

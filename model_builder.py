@@ -29,7 +29,7 @@ from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
 from bot.dotenv_utils import load_dotenv
 from bot.ray_compat import IS_RAY_STUB, ray
-from bot.utils import (
+from bot.shared_utils import (
     check_dataframe_empty,
     ensure_writable_directory,
     is_cuda_available,
@@ -213,7 +213,7 @@ if IS_RAY_STUB:
     sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
-    from bot.utils import configure_logging
+    from bot.shared_utils import configure_logging
 except ImportError:  # pragma: no cover - stub for test environment
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
