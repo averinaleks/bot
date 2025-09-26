@@ -23,7 +23,11 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
 from bot.trade_manager import server_common
-from bot.utils import validate_host, safe_int
+from bot.utils_loader import require_utils
+
+_utils = require_utils("validate_host", "safe_int")
+validate_host = _utils.validate_host
+safe_int = _utils.safe_int
 from services.logging_utils import sanitize_log_value
 
 server_common.load_environment()

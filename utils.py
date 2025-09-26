@@ -11,7 +11,7 @@ import time
 import warnings
 from functools import wraps
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 try:  # pragma: no cover - optional dependency for HTTP error handling
     import httpx
@@ -238,10 +238,24 @@ except ImportError:
     np = None
 
 try:  # pragma: no cover - prefer package import to avoid shadowing
-    from bot.telegram_logger import TelegramLogger  # noqa: F401
-except ImportError as exc:  # pragma: no cover - fallback when package import fails
+    from bot.telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
+except Exception as exc:  # pragma: no cover - fallback when package import fails
     logger.warning("Failed to import TelegramLogger via package: %s", exc)
-    from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
+    try:
+        from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
+    except Exception:
+        class TelegramLogger:  # type: ignore[override]
+            """Lightweight fallback used when Telegram logger is unavailable."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - simple stub
+                logger.warning("TelegramLogger is unavailable; notifications disabled")
+
+            async def send_telegram_message(self, *args: Any, **kwargs: Any) -> None:
+                logger.debug("TelegramLogger stub dropping message")
+
+            @classmethod
+            async def shutdown(cls) -> None:
+                logger.debug("TelegramLogger stub shutdown invoked")
 
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden

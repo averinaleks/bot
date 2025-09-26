@@ -22,7 +22,7 @@ from flask import Flask, jsonify, request
 from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
-from bot.utils import ensure_writable_directory
+from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
@@ -32,7 +32,10 @@ from security import (
     verify_model_state_signature,
     write_model_state_signature,
 )
-from utils import safe_int, validate_host
+_utils = require_utils("ensure_writable_directory", "safe_int", "validate_host")
+ensure_writable_directory = _utils.ensure_writable_directory
+safe_int = _utils.safe_int
+validate_host = _utils.validate_host
 
 _FILENAME_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
 _FILENAME_HYPHEN_RE = re.compile(r"[-\s]+")
