@@ -6,11 +6,22 @@
 ``sys.path`` или ``noqa``.
 """
 
+from typing import TYPE_CHECKING, Any, cast
+
 from bot.config import OFFLINE_MODE
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .core import TradeManager as TradeManagerType
+    from telegram_logger import TelegramLogger as TelegramLoggerType
+else:
+    TradeManagerType = Any
+    TelegramLoggerType = Any
+
 if OFFLINE_MODE:
-    from services.offline import OfflineBybit as TradeManager
-    from services.offline import OfflineTelegram as TelegramLogger
+    from services.offline import OfflineBybit, OfflineTelegram
+
+    TradeManager = cast(type[TradeManagerType], OfflineBybit)
+    TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
 
     __all__ = ["TradeManager", "TelegramLogger"]
 else:  # pragma: no cover - реальная инициализация
@@ -18,9 +29,9 @@ else:  # pragma: no cover - реальная инициализация
     from bot.utils_loader import require_utils
 
     _utils = require_utils("TelegramLogger")
-    TelegramLogger = _utils.TelegramLogger
+    TelegramLogger = cast(type[TelegramLoggerType], _utils.TelegramLogger)
 
-    from .core import TradeManager
+    from .core import TradeManager as _TradeManager
     from .service import (
         InvalidHostError,
         api_app,
@@ -31,6 +42,8 @@ else:  # pragma: no cover - реальная инициализация
         _resolve_host,
         _ready_event,
     )
+
+    TradeManager = cast(type[TradeManagerType], _TradeManager)
 
     # Псевдонимы синхронных помощников оставлены для обратной совместимости
     get_http_client = get_async_http_client
