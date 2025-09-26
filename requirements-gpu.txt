@@ -16,6 +16,7 @@ attrs==25.3.0
     #   jsonschema
     #   referencing
 certifi==2025.8.3
+    # via requests
 charset-normalizer==3.4.3
     # via requests
 cupy-cuda12x==13.6.0
@@ -40,12 +41,18 @@ h5py==3.14.0
     # via
     #   keras
     #   tensorflow
+idna==3.10
+    # via requests
+jinja2==3.1.6
+    # via torch
 jsonschema==4.25.1
     # via -r requirements-gpu.in
 jsonschema-specifications==2025.4.1
     # via jsonschema
 keras==3.11.3
-    # via tensorflow
+    # via
+    #   -r requirements-gpu.in
+    #   tensorflow
 libclang==18.1.1
     # via tensorflow
 markdown==3.8.2
@@ -66,9 +73,9 @@ mpmath==1.3.0
     # via sympy
 namex==0.1.0
     # via keras
-networkx==3.5
+networkx==3.4.2
     # via torch
-numpy==2.2.2
+numpy==2.2.6
     # via
     #   cupy-cuda12x
     #   h5py
@@ -76,6 +83,43 @@ numpy==2.2.2
     #   ml-dtypes
     #   tensorboard
     #   tensorflow
+nvidia-cublas-cu12==12.8.4.1
+    # via
+    #   nvidia-cudnn-cu12
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cuda-cupti-cu12==12.8.90
+    # via torch
+nvidia-cuda-nvrtc-cu12==12.8.93
+    # via torch
+nvidia-cuda-runtime-cu12==12.8.90
+    # via torch
+nvidia-cudnn-cu12==9.10.2.21
+    # via torch
+nvidia-cufft-cu12==11.3.3.83
+    # via torch
+nvidia-cufile-cu12==1.13.1.3
+    # via torch
+nvidia-curand-cu12==10.3.9.90
+    # via torch
+nvidia-cusolver-cu12==11.7.3.90
+    # via torch
+nvidia-cusparse-cu12==12.5.8.93
+    # via
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cusparselt-cu12==0.7.1
+    # via torch
+nvidia-nccl-cu12==2.27.3
+    # via torch
+nvidia-nvjitlink-cu12==12.8.93
+    # via
+    #   nvidia-cufft-cu12
+    #   nvidia-cusolver-cu12
+    #   nvidia-cusparse-cu12
+    #   torch
+nvidia-nvtx-cu12==12.8.90
+    # via torch
 opt-einsum==3.4.0
     # via tensorflow
 optree==0.17.0
@@ -126,6 +170,10 @@ triton==3.4.0
     # via torch
 typing-extensions==4.14.1
     # via
+    #   optree
+    #   referencing
+    #   tensorflow
+    #   torch
 urllib3==2.5.0
     # via requests
 werkzeug==3.1.3
@@ -136,5 +184,4 @@ wrapt==1.17.3
     # via tensorflow
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools>=78.1.1,<81
-    # via -r requirements-gpu.in
+# setuptools
