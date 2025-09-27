@@ -78,11 +78,34 @@ def _build_payload(diff_text: str, model: str | None) -> dict[str, Any]:
 
 
 def _normalise_host(value: str | None) -> str:
-    """Return a lower-case host without brackets or whitespace."""
+    """Return a lower-case host component stripped from brackets and ports."""
 
-    host = (value or "").strip().lower()
-    if host.startswith("[") and host.endswith("]"):
-        host = host[1:-1]
+    raw = (value or "").strip().lower()
+    if not raw:
+        return ""
+
+    host = raw
+    port_sep = ""
+
+    if raw.startswith("["):
+        # IPv6 literals may be formatted as ``[addr]`` or ``[addr]:port``.
+        end_bracket = raw.find("]")
+        if end_bracket == -1:
+            return raw  # malformed but keep original for validation elsewhere
+        host = raw[1:end_bracket]
+        port_sep = raw[end_bracket + 1 :]
+    else:
+        # Split ``hostname:port`` while keeping IPv6 literals without brackets.
+        if raw.count(":") == 1:
+            head, tail = raw.split(":", 1)
+            if tail.isdigit():
+                host = head
+                port_sep = ":" + tail
+
+    if port_sep and not host:
+        # Handle edge cases like ``:443`` gracefully.
+        return ""
+
     return host
 
 

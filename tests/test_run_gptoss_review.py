@@ -208,6 +208,20 @@ def test_perform_http_request_respects_https_allowlist(monkeypatch):
     assert "GPT_OSS_ALLOWED_HOSTS" in str(exc.value)
 
 
+def test_load_allowed_hosts_strips_port(monkeypatch):
+    monkeypatch.setenv(
+        "GPT_OSS_ALLOWED_HOSTS",
+        "Example.com:8443, [2001:db8::1]:443,just-host, :443",
+    )
+
+    hosts = run_gptoss_review._load_allowed_hosts()
+
+    assert "example.com" in hosts
+    assert "2001:db8::1" in hosts
+    assert "just-host" in hosts
+    assert "" not in hosts
+
+
 def test_perform_http_request_allows_https_allowlisted_host(monkeypatch):
     recorded: dict[str, object] = {}
 
