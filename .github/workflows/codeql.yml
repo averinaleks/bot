@@ -34,9 +34,12 @@ jobs:
           # branches can therefore surface as false positives. A simple rm -rf
           # is more reliable than a complex find expression and avoids
           # corner-case syntax issues that previously left the directories in
-          # place.
+          # place. As an extra safeguard we also prune any stray *.py files
+          # that may remain in Git reference logs should a runner cache or
+          # filesystem quirk prevent the directories from being removed.
           rm -rf .git
           find "$PWD" -type d -name ".git" -prune -exec rm -rf {} +
+          find "$PWD" -path '*/.git/logs/*' -name '*.py' -delete
 
       - name: Set up Python
         uses: actions/setup-python@v5
