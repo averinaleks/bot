@@ -108,6 +108,12 @@ class ExchangeRuntime:
         )
         self.provider = ExchangeProvider(self._create_exchange, close=_close_exchange_instance)
 
+    @property
+    def ccxt(self) -> Any:
+        """Expose the loaded ``ccxt`` module for consumers and tests."""
+
+        return self._ccxt
+
     def _ensure_ccxt(self, service_name: str):
         try:  # optional dependency
             import ccxt  # type: ignore
