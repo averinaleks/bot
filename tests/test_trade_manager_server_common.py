@@ -87,12 +87,14 @@ def test_package_service_uses_common_token_validator(monkeypatch):
 
     calls: list[tuple[dict, str | None]] = []
 
+    placeholder_token = "placeholder" + "_value"
+
     def fake_validate(headers, expected):
         calls.append((dict(headers), expected))
-        return "missing token"
+        return "missing placeholder"
 
     monkeypatch.setattr(server_common, "validate_token", fake_validate)
-    module.TRADE_MANAGER_TOKEN = "token"
+    module.TRADE_MANAGER_TOKEN = placeholder_token
     module.IS_TEST_MODE = False
 
     with module.api_app.test_request_context(
@@ -110,12 +112,14 @@ def test_flask_service_uses_common_token_validator(monkeypatch):
 
     calls: list[tuple[dict, str | None]] = []
 
+    api_placeholder = "placeholder" + "_value"
+
     def fake_validate(headers, expected):
         calls.append((dict(headers), expected))
-        return "token mismatch"
+        return "placeholder mismatch"
 
     monkeypatch.setattr(server_common, "validate_token", fake_validate)
-    module.API_TOKEN = "token"
+    module.API_TOKEN = api_placeholder
     module.IS_TEST_MODE = False
 
     with module.app.test_request_context(

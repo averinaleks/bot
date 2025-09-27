@@ -10,6 +10,7 @@ import contextlib
 import tempfile
 import httpx
 import aiohttp
+import cloudpickle
 from pathlib import Path
 from bot.config import BotConfig
 
@@ -59,7 +60,6 @@ sys.modules['utils'] = utils_stub
 sys.modules['bot.utils'] = utils_stub
 sys.modules.pop('trade_manager', None)
 sys.modules.pop('bot.trade_manager.core', None)
-import pickle
 
 
 joblib_mod = types.ModuleType('joblib')
@@ -67,17 +67,17 @@ joblib_mod = types.ModuleType('joblib')
 
 def _joblib_dump(obj, file, *args, **kwargs):
     if hasattr(file, 'write'):
-        pickle.dump(obj, file)
+        cloudpickle.dump(obj, file)
         return
     path = Path(file)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('wb') as fh:
-        pickle.dump(obj, fh)
+        cloudpickle.dump(obj, fh)
 
 
 def _joblib_load(file, *args, **kwargs):
     with Path(file).open('rb') as fh:
-        return pickle.load(fh)
+        return cloudpickle.load(fh)
 
 
 joblib_mod.dump = _joblib_dump
