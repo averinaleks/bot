@@ -11,13 +11,12 @@ on:
 
 jobs:
   scan:
-    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
       actions: write  # required for uploading artifacts such as SARIF reports
-    steps: &trivy_steps
+    steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         # v4
@@ -104,7 +103,7 @@ jobs:
           fi
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo != null && github.event.pull_request.head.repo.full_name == github.repository)) }}
         uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3
         # v3.30.3
         with:
@@ -135,12 +134,3 @@ jobs:
         run: |
           echo "::error::Trivy detected ${{ steps.parse_trivy.outputs.vulnerability_count }} high or critical vulnerabilities."
           exit 1
-
-  scan-pr:
-    if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
-      security-events: write
-    steps: *trivy_steps
