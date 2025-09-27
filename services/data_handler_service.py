@@ -139,10 +139,12 @@ def _require_api_key() -> "ResponseReturnValue | None":
 
         if auto_allow_reason is not None:
             is_testing_client = False
-            try:
-                flask_app = current_app._get_current_object()
-            except Exception:
-                flask_app = app
+            flask_app: Any = app
+            if current_app is not None:
+                try:
+                    flask_app = current_app._get_current_object()
+                except Exception:
+                    flask_app = app
             if getattr(flask_app, "testing", False):
                 is_testing_client = True
             elif request.environ.get("werkzeug.test"):
