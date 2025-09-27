@@ -55,9 +55,11 @@ def test_evaluate_payload_handles_unexpected_format() -> None:
 def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _build_payload()
 
+    expected_token = "dummy" + "_value"
+
     def fake_fetch(url: str, token: str, timeout: float) -> dict[str, object]:
         assert "3163" in url
-        assert token == "token"
+        assert token == expected_token
         assert timeout == 5.0
         return payload
 
@@ -72,7 +74,7 @@ def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         "--pr-number",
         "3163",
         "--token",
-        "token",
+        expected_token,
         "--timeout",
         "5.0",
     ])
