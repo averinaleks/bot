@@ -8,9 +8,11 @@ import time
 from pathlib import Path
 from typing import Iterable, Set
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 from ipaddress import ip_address
 from urllib.parse import urlparse, urlunparse
