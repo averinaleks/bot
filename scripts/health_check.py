@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Iterable, Set
 
@@ -98,7 +99,13 @@ def _normalise_base_url(base_url: str, allowed_hosts: Set[str]) -> str:
     return normalised.rstrip("/") or normalised
 
 
-def check_endpoints(base_url: str, endpoints: Iterable[str]) -> int:
+def check_endpoints(
+    base_url: str,
+    endpoints: Iterable[str],
+    *,
+    max_attempts: int = 5,
+    delay_seconds: float = 2.0,
+) -> int:
     allowed_hosts = _load_allowed_hosts()
     try:
         normalised = _normalise_base_url(base_url, allowed_hosts)
@@ -110,21 +117,36 @@ def check_endpoints(base_url: str, endpoints: Iterable[str]) -> int:
     for endpoint in endpoints:
         suffix = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         url = f"{base}{suffix}"
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+        attempts_left = max(1, max_attempts)
+        while attempts_left:
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+            except requests.RequestException as exc:
+                attempts_left -= 1
+                if attempts_left <= 0:
+                    logger.error(
+                        "Health check failed for %s: %s",
+                        sanitize_log_value(url),
+                        sanitize_log_value(str(exc)),
+                    )
+                    return 1
+                logger.warning(
+                    "Attempt %s for %s failed: %s – retrying in %.1fs",
+                    max_attempts - attempts_left,
+                    sanitize_log_value(url),
+                    sanitize_log_value(str(exc)),
+                    delay_seconds,
+                )
+                time.sleep(max(0.0, delay_seconds))
+                continue
+
             logger.info(
                 "%s -> %s",
                 sanitize_log_value(url),
                 response.status_code,
             )
-        except requests.RequestException as exc:
-            logger.error(
-                "Health check failed for %s: %s",
-                sanitize_log_value(url),
-                sanitize_log_value(str(exc)),
-            )
-            return 1
+            break
     return 0
 
 
