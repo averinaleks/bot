@@ -274,7 +274,10 @@ def _current_exchange() -> Any | None:
     exchange = _exchange_ctx.get()
     if exchange is not None:
         return exchange
-    cached = exchange_provider.peek()
+    provider = exchange_provider
+    if provider is None:
+        return None
+    cached = provider.peek()
     if cached is not None:
         _exchange_ctx.set(cached)
     return cached
@@ -283,8 +286,11 @@ def _current_exchange() -> Any | None:
 def init_exchange() -> None:
     """Ensure the exchange is initialized before serving requests."""
 
+    provider = exchange_provider
+    if provider is None:
+        raise RuntimeError("Exchange provider is not configured")
     try:
-        exchange = exchange_provider.get()
+        exchange = provider.get()
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
@@ -298,13 +304,19 @@ if hasattr(app, "before_first_request"):
 
 @app.before_request
 def _bind_exchange() -> None:
-    exchange = exchange_provider.get()
+    provider = exchange_provider
+    if provider is None:
+        raise RuntimeError("Exchange provider is not configured")
+    exchange = provider.get()
     _exchange_ctx.set(exchange)
 
 
 def close_exchange(_: BaseException | None = None) -> None:
     """Закрыть соединение с биржей при завершении контекста приложения."""
-    exchange_provider.close()
+    provider = exchange_provider
+    if provider is None:
+        return
+    provider.close()
 
 if hasattr(app, "teardown_appcontext"):
     app.teardown_appcontext(close_exchange)
