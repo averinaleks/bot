@@ -1,3 +1,4 @@
+import importlib
 import importlib.util
 from pathlib import Path
 import logging
@@ -336,3 +337,40 @@ def test_fallback_simple_response_json(monkeypatch):
     )
 
     assert response.json() == {"ok": True}
+
+
+def test_fallback_client_accepts_private_hostname(monkeypatch):
+    module_path = Path("gptoss_check/check_code.py")
+    spec = importlib.util.spec_from_file_location(
+        "gptoss_check.check_code_private_host",
+        module_path,
+    )
+    assert spec is not None and spec.loader is not None
+
+    monkeypatch.setitem(sys.modules, "http_client", None)
+    monkeypatch.setitem(sys.modules, "httpx", None)
+
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+
+    spec.loader.exec_module(module)
+
+    calls: dict[str, tuple[str | None, object | None]] = {}
+
+    def fake_getaddrinfo(host: str, port: object, *args, **kwargs):  # type: ignore[override]
+        calls["args"] = (host, port)
+        return [
+            (
+                module.socket.AF_INET,
+                module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("172.18.0.5", 0),
+            )
+        ]
+
+    monkeypatch.setattr(module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    client = module._SimpleClient()
+    assert client._is_local_hostname("gptoss") is True
+    assert calls["args"][0] == "gptoss"

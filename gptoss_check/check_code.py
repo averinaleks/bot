@@ -80,18 +80,36 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
 
             @staticmethod
             def _is_local_hostname(hostname: str | None) -> bool:
-                """Return ``True`` when *hostname* clearly refers to localhost."""
+                """Return ``True`` when *hostname* refers to a local address."""
 
                 if not hostname:
                     return False
+
                 lowered = hostname.lower()
                 if lowered == "localhost":
                     return True
+
                 try:
                     parsed_ip = ip_address(lowered)
                 except ValueError:
+                    pass
+                else:
+                    return parsed_ip.is_loopback or parsed_ip.is_private
+
+                try:
+                    addrinfo = socket.getaddrinfo(hostname, None)
+                except socket.gaierror:
                     return False
-                return parsed_ip.is_loopback or parsed_ip.is_private
+
+                for _family, _socktype, _proto, _canonname, sockaddr in addrinfo:
+                    address = sockaddr[0]
+                    try:
+                        parsed = ip_address(address)
+                    except ValueError:
+                        continue
+                    if parsed.is_loopback or parsed.is_private:
+                        return True
+                return False
 
             def _request(
                 self,
