@@ -27,7 +27,16 @@ jobs:
           fetch-depth: 0
 
       - name: Remove Git metadata directories that mimic Python files
-        run: find "$PWD" -type d -name ".git" -prune -exec rm -rf '{}' +
+        run: |
+          # Remove the primary repository metadata directory as well as any
+          # nested ones that may exist after checkout. CodeQL treats any file
+          # ending in .py as Python source, and Git reference logs for remote
+          # branches can therefore surface as false positives. A simple rm -rf
+          # is more reliable than a complex find expression and avoids
+          # corner-case syntax issues that previously left the directories in
+          # place.
+          rm -rf .git
+          find "$PWD" -type d -name ".git" -prune -exec rm -rf {} +
 
       - name: Set up Python
         uses: actions/setup-python@v5
