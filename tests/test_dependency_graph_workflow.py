@@ -67,5 +67,6 @@ def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
     assert "Prepare requirements" in workflow
-    assert 'if stripped.startswith("ccxtpro")' in workflow
-    assert 'if stripped.startswith("#") and "ccxtpro" in stripped' in workflow
+    assert 'stripped_lower = stripped.lower()' in workflow
+    assert 'if stripped_lower.startswith("ccxtpro")' in workflow
+    assert 'if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower' in workflow
