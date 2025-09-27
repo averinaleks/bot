@@ -171,9 +171,10 @@ jobs:
                   filtered: list[str] = []
                   for line in lines:
                       stripped = line.lstrip()
-                      if stripped.startswith("ccxtpro"):
+                      stripped_lower = stripped.lower()
+                      if stripped_lower.startswith("ccxtpro"):
                           continue
-                      if stripped.startswith("#") and "ccxtpro" in stripped:
+                      if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower:
                           continue
                       filtered.append(line)
                   if filtered != lines:
