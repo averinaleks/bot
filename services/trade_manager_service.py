@@ -7,7 +7,7 @@ environment variables.
 
 from flask import Flask, request, jsonify
 from werkzeug.exceptions import BadRequest
-from typing import Any
+from typing import Any, Mapping, cast
 from pathlib import Path
 import json
 import logging
@@ -84,7 +84,8 @@ def _require_api_token() -> ResponseReturnValue | None:
     if not expected:
         return None
 
-    reason = server_common.validate_token(request.headers, expected)
+    headers: Mapping[str, str] = cast(Mapping[str, str], request.headers)
+    reason = server_common.validate_token(headers, expected)
 
     if reason is not None:
         remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
