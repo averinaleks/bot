@@ -120,12 +120,14 @@ _required_packages: list[tuple[str, str]] = [
     ("pydantic", "pydantic==2.11.9"),
     ("flask", "flask>=3.0.3,<4"),
     ("requests", "requests>=2.32.3"),
+    ("httpx", "httpx>=0.27.0"),
     ("aiohttp", "aiohttp>=3.10.10"),
     ("bcrypt", "bcrypt>=4.1.3"),
     ("psutil", "psutil>=5.9.0"),
     ("polars", "polars>=1.6.0"),
     ("pyarrow", "pyarrow>=15.0.0"),
     ("joblib", "joblib>=1.3"),
+    ("cloudpickle", "cloudpickle>=3.1"),
 ]
 
 if sys.version_info < (3, 12):
