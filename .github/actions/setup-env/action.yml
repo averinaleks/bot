@@ -60,7 +60,9 @@ runs:
     - name: Get pip cache dir
       id: pip-cache
       shell: bash
-      run: echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+      run: |
+        dir=$(python -m pip cache dir)
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
     - name: Cache pip wheels
       uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
       with:
