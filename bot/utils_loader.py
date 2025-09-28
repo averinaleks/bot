@@ -22,12 +22,14 @@ def _load_from_source() -> ModuleType:
     project_root = Path(__file__).resolve().parent.parent
     utils_path = project_root / "utils.py"
     spec = importlib.util.spec_from_file_location("_bot_real_utils", utils_path)
-    if spec is None or spec.loader is None:
+    if spec is None:
+        raise ImportError(f"Unable to load utils module from {utils_path!s}")
+
+    loader = spec.loader
+    if loader is None:
         raise ImportError(f"Unable to load utils module from {utils_path!s}")
 
     module = importlib.util.module_from_spec(spec)
-    loader = spec.loader
-    assert loader is not None
     loader.exec_module(module)  # type: ignore[arg-type]
     sys.modules.setdefault("_bot_real_utils", module)
     _UTILS_CACHE = module

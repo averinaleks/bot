@@ -1,3 +1,4 @@
-[bandit]
-exclude_dirs = tests,scripts,gptoss_check
-skips = B101
+exclude_dirs:
+  - tests
+  - scripts
+  - gptoss_check
