@@ -80,6 +80,19 @@ def test_chat_completions_returns_message(mock_gptoss_server):
     assert message.count("В файле test.py") == 2
 
 
+def test_parse_diff_header_validates_paths():
+    parse = gptoss_mock_server._parse_diff_header
+
+    assert parse("+++ b/src/app.py") == "src/app.py"
+    assert parse("+++ b/./nested/module.py") == "nested/module.py"
+    assert parse('+++ b/"path with spaces.py"') == "path with spaces.py"
+
+    assert parse("+++ b/../secrets.txt") is None
+    assert parse("+++ b/..\\windows.txt") is None
+    assert parse("+++ b//absolute.txt") is None
+    assert parse("+++ a/src/app.py") is None
+
+
 def test_signal_handlers_ignore_sighup_and_shutdown(monkeypatch):
     class DummyServer:
         def __init__(self) -> None:
