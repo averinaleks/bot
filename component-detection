@@ -63,7 +63,7 @@ def _build_components(root: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "dependencyScope": None,
                 "topLevelReferrers": [],
                 "containerDetailIds": [],
-                "containerLayerIds": {},
+                "containerLayerIds": [],
             }
             components.append(component)
 
