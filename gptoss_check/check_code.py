@@ -15,10 +15,26 @@ from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
+_http_client_error: Exception | None = None
 try:  # pragma: no cover - exercised via docker compose integration
-    from http_client import get_httpx_client as _get_httpx_client
+    import http_client as _http_client
 except Exception as import_error:  # pragma: no cover - fallback for CI container
     _http_client_error = import_error
+else:
+    _httpx_candidate = getattr(_http_client, "httpx", None)
+    _uses_stub = bool(getattr(_httpx_candidate, "__offline_stub__", False))
+    if _httpx_candidate is None or _uses_stub:
+        reason = "HTTPX stub" if _uses_stub else "missing httpx client"
+        _http_client_error = RuntimeError(
+            f"Unavailable HTTP client for GPT-OSS check: {reason}"
+        )
+    else:  # pragma: no cover - executed when a real httpx client is available
+        get_httpx_client = _http_client.get_httpx_client
+        HTTPError = _httpx_candidate.HTTPError  # type: ignore[attr-defined]
+        httpx = _httpx_candidate  # type: ignore[assignment]
+        _fallback_reason = None
+
+if _http_client_error is not None:
     try:
         import httpx as _httpx  # type: ignore[import-not-found]
     except Exception as httpx_error:  # pragma: no cover - fallback when httpx missing
@@ -198,15 +214,10 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
                 client.close()
 
         httpx = SimpleNamespace(HTTPError=HTTPError)
-        _fallback_reason = _httpx_error or _http_client_error
+        _fallback_reason = _http_client_error
 
-    logger.debug("Using fallback HTTP client for GPT-OSS check: %s", _fallback_reason)
 else:  # pragma: no cover - import succeeds in fully configured environments
-    import httpx as _httpx
-
-    get_httpx_client = _get_httpx_client
-    HTTPError = _httpx.HTTPError
-    httpx = _httpx
+    _fallback_reason = None
 
 try:  # pragma: no cover - exercised via docker compose integration
     from gpt_client import GPTClientError as _GPTClientError, query_gpt as _query_gpt
