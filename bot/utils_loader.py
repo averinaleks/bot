@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -10,6 +9,7 @@ from types import ModuleType
 from typing import Iterable
 
 _UTILS_CACHE: ModuleType | None = None
+_ALLOWED_MODULE_NAMES = ("utils", "bot.utils")
 
 
 def _load_from_source() -> ModuleType:
@@ -37,13 +37,28 @@ def _load_from_source() -> ModuleType:
 
 
 def _get_candidate(name: str) -> ModuleType | None:
+    """Return the utils module referenced by ``name`` if it is allowed."""
+
     module = sys.modules.get(name)
     if module is not None:
         return module
+
     try:
-        return importlib.import_module(name)
+        if name == "utils":
+            import utils as utils_module  # type: ignore[import-not-found]
+
+            module = utils_module
+        elif name == "bot.utils":
+            from bot import utils as bot_utils  # type: ignore[import-not-found]
+
+            module = bot_utils
+        else:  # pragma: no cover - defensive guard
+            raise ValueError(f"Refusing to import unexpected utils module {name!r}")
     except Exception:
         return None
+
+    sys.modules.setdefault(name, module)
+    return module
 
 
 def require_utils(*required_names: str) -> ModuleType:
@@ -51,7 +66,7 @@ def require_utils(*required_names: str) -> ModuleType:
 
     names: Iterable[str] = required_names or ()
 
-    for candidate_name in ("utils", "bot.utils"):
+    for candidate_name in _ALLOWED_MODULE_NAMES:
         candidate = _get_candidate(candidate_name)
         if candidate is None:
             continue
