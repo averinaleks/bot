@@ -58,3 +58,23 @@ def test_save_artifacts_rejects_symlink_escape(monkeypatch, tmp_path, request):
     with pytest.raises(ValueError):
         storage.save_artifacts({"weights": []}, "escape", {})
 
+
+def test_save_artifacts_rejects_model_symlink(monkeypatch, tmp_path, request):
+    storage = _load_storage(monkeypatch, tmp_path, request)
+    if not storage.JOBLIB_AVAILABLE:
+        pytest.skip("joblib is required to persist model artifacts")
+
+    fixed_timestamp = 1_750_000_000
+    monkeypatch.setattr(storage.time, "time", lambda: fixed_timestamp)
+
+    symbol = "BTCUSDT"
+    target_dir = storage._symbol_directory(symbol) / str(fixed_timestamp)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    outside = tmp_path / "outside.pkl"
+    outside.write_bytes(b"sentinel")
+    (target_dir / "model.pkl").symlink_to(outside)
+
+    with pytest.raises(RuntimeError, match="символь"):
+        storage.save_artifacts({"weights": []}, symbol, {})
+

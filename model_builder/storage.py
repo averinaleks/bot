@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib.metadata
 import json
 import os
@@ -135,7 +136,8 @@ def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
         raise ValueError("artifact directory escapes MODEL_DIR")
     model_file = target_dir / "model.pkl"
     if JOBLIB_AVAILABLE:
-        joblib.dump(model, model_file)
+        with _open_secure_artifact(model_file, "wb") as handle:
+            joblib.dump(model, handle)
     else:
         logger.warning(
             "joblib недоступен, модель %s не будет сохранена на диск", symbol
@@ -170,8 +172,14 @@ def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
         "platform": platform.platform(),
     }
     meta_all = {**meta_env, **(meta or {})}
-    with open(target_dir / "meta.json", "w", encoding="utf-8") as f:
-        json.dump(meta_all, f, ensure_ascii=False, indent=2)
+    meta_path = target_dir / "meta.json"
+    with _open_secure_artifact(meta_path, "w", encoding="utf-8") as handle:
+        json.dump(meta_all, handle, ensure_ascii=False, indent=2)
+        handle.flush()
+        try:
+            os.fsync(handle.fileno())
+        except (AttributeError, OSError):  # pragma: no cover - fsync may be unsupported
+            pass
 
     return target_dir
 
@@ -186,3 +194,39 @@ __all__ = [
     "_safe_model_file_path",
     "save_artifacts",
 ]
+
+
+def _open_secure_artifact(
+    path: Path, mode: str, *, encoding: str | None = None
+):
+    """Return a file object that refuses to follow symlinks when writing artifacts."""
+
+    if "w" not in mode or any(flag in mode for flag in "ax+"):
+        raise ValueError("_open_secure_artifact supports only overwrite write modes")
+    if "b" in mode and encoding is not None:
+        raise ValueError("binary mode cannot be combined with text encoding")
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow and path.exists() and path.is_symlink():
+        raise RuntimeError(
+            f"Отказ сохранения артефакта модели через символьную ссылку: {path}"
+        )
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if nofollow:
+        flags |= nofollow
+
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:  # pragma: no cover - platform specific errno
+        if exc.errno in (errno.ELOOP, errno.EPERM):
+            raise RuntimeError(
+                f"Отказ сохранения артефакта модели через символьную ссылку: {path}"
+            ) from exc
+        raise
+
+    try:
+        return os.fdopen(fd, mode, encoding=encoding)
+    except Exception:
+        os.close(fd)
+        raise
