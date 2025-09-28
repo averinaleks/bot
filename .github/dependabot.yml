@@ -1,11 +1,20 @@
 ---
 version: 2
+
+registries:
+  pytorch-cpu:
+    type: python-index
+    url: https://download.pytorch.org/whl/cpu
+    replaces-base: false
+
 updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "daily"
     insecure-external-code-execution: allow
+    registries:
+      - pytorch-cpu
     ignore:
       # Heavy ML packages routinely fail to resolve in Dependabot's
       # constrained execution environment.  Skip them so the scheduled
