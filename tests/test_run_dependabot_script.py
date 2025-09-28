@@ -4,7 +4,9 @@ from pathlib import Path
 from textwrap import dedent
 
 
-def _fake_curl(tmp_path: Path, status: str = "422", body: str = "{}") -> Path:
+def _fake_curl(
+    tmp_path: Path, status: str = "422", body: str = "{}", exit_code: int = 0
+) -> Path:
     """Create a fake curl executable that records the output path."""
 
     script = tmp_path / "curl"
@@ -27,6 +29,7 @@ def _fake_curl(tmp_path: Path, status: str = "422", body: str = "{}") -> Path:
             {body}
             EOF
             printf '%s' '{status}'
+            exit {exit_code}
             """
         ).lstrip()
     )
@@ -53,7 +56,10 @@ def test_run_dependabot_requires_token():
 def test_run_dependabot_ignores_already_queued_requests(tmp_path):
     script = Path(__file__).resolve().parents[1] / "scripts" / "run_dependabot.sh"
     fake_path = _fake_curl(
-        tmp_path, status="422", body='{"message":"Update already queued"}'
+        tmp_path,
+        status="422",
+        body='{"message":"Update already queued"}',
+        exit_code=22,
     )
     summary = tmp_path / "summary.md"
     env = os.environ.copy()
@@ -71,3 +77,35 @@ def test_run_dependabot_ignores_already_queued_requests(tmp_path):
     assert proc.returncode == 0
     assert "status 422" in proc.stderr
     assert "Update already queued" in summary.read_text()
+
+
+def test_run_dependabot_handles_missing_endpoint(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_dependabot.sh"
+    fake_path = _fake_curl(tmp_path, status="404", body='{"message":"Not Found"}', exit_code=22)
+    env = os.environ.copy()
+    env["GITHUB_REPOSITORY"] = "owner/repo"
+    env["TOKEN"] = "dummy"  # nosec - non-sensitive test token
+    env["PATH"] = f"{fake_path}:{env['PATH']}"
+
+    proc = subprocess.run(  # nosec - executes controlled test script
+        ["bash", str(script)], capture_output=True, text=True, env=env
+    )
+
+    assert proc.returncode == 0
+    assert "Dependabot endpoint returned 404" in proc.stderr
+
+
+def test_run_dependabot_propagates_unexpected_curl_failure(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_dependabot.sh"
+    fake_path = _fake_curl(tmp_path, status="000", body="{}", exit_code=7)
+    env = os.environ.copy()
+    env["GITHUB_REPOSITORY"] = "owner/repo"
+    env["TOKEN"] = "dummy"  # nosec - non-sensitive test token
+    env["PATH"] = f"{fake_path}:{env['PATH']}"
+
+    proc = subprocess.run(  # nosec - executes controlled test script
+        ["bash", str(script)], capture_output=True, text=True, env=env
+    )
+
+    assert proc.returncode == 7
+    assert "curl failed with exit code 7" in proc.stderr
