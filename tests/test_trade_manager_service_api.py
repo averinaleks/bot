@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from tests import test_trade_manager_routes as tm_routes
+
 
 @pytest.fixture(autouse=True)
 def _reset_positions(tmp_path, monkeypatch):
@@ -112,3 +114,56 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
     from services import trade_manager_service as tms_reload
 
     assert len(tms_reload.POSITIONS) == 1
+
+
+def _setup_trade_manager(monkeypatch):
+    tm, loop, stub = tm_routes._setup_module(monkeypatch)
+    return tm, loop, stub
+
+
+def test_open_position_route_rejects_missing_symbol(monkeypatch):
+    tm, loop, _ = _setup_trade_manager(monkeypatch)
+    client = tm.api_app.test_client()
+    resp = client.post(
+        "/open_position",
+        json={"side": "buy", "price": 100.0},
+    )
+    assert resp.status_code == 400
+    assert "symbol" in resp.json["error"]
+    assert not loop.calls
+
+
+def test_open_position_route_rejects_invalid_side(monkeypatch):
+    tm, loop, _ = _setup_trade_manager(monkeypatch)
+    client = tm.api_app.test_client()
+    resp = client.post(
+        "/open_position",
+        json={"symbol": "BTCUSDT", "side": "hold", "price": 100.0},
+    )
+    assert resp.status_code == 400
+    assert "side" in resp.json["error"]
+    assert not loop.calls
+
+
+def test_open_position_route_rejects_invalid_price(monkeypatch):
+    tm, loop, _ = _setup_trade_manager(monkeypatch)
+    client = tm.api_app.test_client()
+    resp = client.post(
+        "/open_position",
+        json={"symbol": "BTCUSDT", "side": "buy", "price": -1},
+    )
+    assert resp.status_code == 400
+    assert "price" in resp.json["error"]
+    assert not loop.calls
+
+
+def test_close_position_route_rejects_invalid_price(monkeypatch):
+    tm, loop, _ = _setup_trade_manager(monkeypatch)
+    client = tm.api_app.test_client()
+    resp = client.post(
+        "/close_position",
+        json={"symbol": "BTCUSDT", "price": "nan"},
+    )
+    assert resp.status_code == 400
+    assert "price" in resp.json["error"]
+    assert not loop.calls

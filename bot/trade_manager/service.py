@@ -7,6 +7,7 @@ import asyncio
 import inspect
 import ipaddress
 import json
+import math
 import os
 import sys
 import threading
@@ -14,7 +15,7 @@ from typing import Any, Mapping, cast
 
 import httpx
 from bot.ray_compat import ray
-from flask import Flask, jsonify, request, Response
+from flask import Flask, Response, jsonify, request
 
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
@@ -353,6 +354,62 @@ def _start_trade_manager() -> None:
 
 
 
+class ValidationError(ValueError):
+    """Raised when request payload validation fails."""
+
+
+def _validate_payload_is_object(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValidationError("payload must be a JSON object")
+    return data
+
+
+def _validate_symbol(info: Mapping[str, Any]) -> str:
+    symbol = info.get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise ValidationError("symbol is required")
+    return symbol.strip()
+
+
+def _validate_side(info: Mapping[str, Any]) -> str:
+    side = info.get("side")
+    if not isinstance(side, str) or side.lower() not in {"buy", "sell"}:
+        raise ValidationError("side must be either 'buy' or 'sell'")
+    return side.lower()
+
+
+def _validate_price(info: Mapping[str, Any]) -> float:
+    raw_price = info.get("price")
+    if raw_price is None:
+        raise ValidationError("price is required")
+    try:
+        price = float(raw_price)
+    except (TypeError, ValueError):
+        raise ValidationError("price must be a number") from None
+    if not math.isfinite(price) or price <= 0:
+        raise ValidationError("price must be a positive finite number")
+    return price
+
+
+def _validate_open_position(info: Any) -> tuple[str, str, float, dict[str, Any]]:
+    data = _validate_payload_is_object(info)
+    symbol = _validate_symbol(data)
+    side = _validate_side(data)
+    price = _validate_price(data)
+    return symbol, side, price, data
+
+
+def _validate_close_position(info: Any) -> tuple[str, float, dict[str, Any]]:
+    data = _validate_payload_is_object(info)
+    symbol = _validate_symbol(data)
+    price = _validate_price(data)
+    return symbol, price, data
+
+
+def _validation_error_response(exc: ValidationError) -> tuple[Response, int]:
+    return jsonify({"error": str(exc)}), 400
+
+
 @api_app.route("/open_position", methods=["POST"])
 def open_position_route():
     """Open a new trade position."""
@@ -362,11 +419,13 @@ def open_position_route():
     manager, loop = _manager_with_loop()
     if not _ready_event.is_set() or manager is None or loop is None:
         return jsonify({"error": "not ready"}), 503
-    info = request.get_json(force=True)
+    try:
+        symbol, side, price, info = _validate_open_position(
+            request.get_json(force=True, silent=True)
+        )
+    except ValidationError as exc:
+        return _validation_error_response(exc)
     POSITIONS.append(info)
-    symbol = info.get("symbol")
-    side = info.get("side")
-    price = float(info.get("price", 0))
     loop.call_soon_threadsafe(
         asyncio.create_task,
         manager.open_position(symbol, side, price, info),
@@ -382,9 +441,12 @@ def close_position_route():
     manager, loop = _manager_with_loop()
     if not _ready_event.is_set() or manager is None or loop is None:
         return jsonify({"error": "not ready"}), 503
-    info = request.get_json(force=True)
-    symbol = info.get("symbol")
-    price = float(info.get("price", 0))
+    try:
+        symbol, price, info = _validate_close_position(
+            request.get_json(force=True, silent=True)
+        )
+    except ValidationError as exc:
+        return _validation_error_response(exc)
     reason = info.get("reason", "")
     loop.call_soon_threadsafe(
         asyncio.create_task,
