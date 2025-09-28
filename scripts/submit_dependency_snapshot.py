@@ -6,6 +6,7 @@ import fnmatch
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from collections import OrderedDict
@@ -92,6 +93,58 @@ def _extract_payload_token(payload: Mapping[str, object] | None) -> str:
     if not isinstance(payload, Mapping):
         return ""
     return _extract_payload_value(payload, *_TOKEN_PAYLOAD_KEYS)
+
+
+def _run_git_command(*args: str) -> str | None:
+    """Return the trimmed stdout from ``git`` or ``None`` on failure."""
+
+    try:
+        completed = subprocess.run(
+            ("git",) + args,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    output = completed.stdout.strip()
+    return output or None
+
+
+def _discover_git_sha() -> str | None:
+    """Return the current commit hash from the local repository."""
+
+    return _run_git_command("rev-parse", "HEAD")
+
+
+def _discover_git_ref() -> str | None:
+    """Return a ref name for the current ``HEAD`` commit."""
+
+    ref = _run_git_command("symbolic-ref", "--quiet", "HEAD")
+    if ref:
+        return ref
+
+    remote_refs = _run_git_command(
+        "for-each-ref",
+        "--format=%(refname)",
+        "--contains",
+        "HEAD",
+        "refs/remotes/origin",
+    )
+    if not remote_refs:
+        return None
+
+    for line in remote_refs.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("refs/remotes/origin/"):
+            continue
+        branch_name = candidate.removeprefix("refs/remotes/origin/")
+        if branch_name:
+            return f"refs/heads/{branch_name}"
+
+    return None
 
 
 def _load_event_payload() -> dict[str, Any] | None:
@@ -717,6 +770,11 @@ def submit_dependency_snapshot() -> None:
             if ref_candidate:
                 ref = ref_candidate
                 payload_used = True
+
+    if not sha:
+        sha = _discover_git_sha() or ""
+    if not ref:
+        ref = _discover_git_ref() or ""
 
     try:
         if not sha:

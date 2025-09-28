@@ -430,6 +430,41 @@ def test_submit_dependency_snapshot_uses_string_metadata(
     }
 
 
+def test_submit_dependency_snapshot_falls_back_to_git_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {},
+    }
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "321")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    captured: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        captured.update(json.loads(body))
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+    monkeypatch.setattr(snapshot, "_discover_git_sha", lambda: "cafebabe")
+    monkeypatch.setattr(snapshot, "_discover_git_ref", lambda: "refs/heads/git-main")
+
+    snapshot.submit_dependency_snapshot()
+
+    assert captured["sha"] == "cafebabe"
+    assert captured["ref"] == "refs/heads/git-main"
+
+
 def test_build_manifests_skips_out_files_when_txt_present(tmp_path: Path) -> None:
     (tmp_path / "requirements.txt").write_text(f"{HTTPX_REQUIREMENT}\n")
     (tmp_path / "requirements.out").write_text(f"{HTTPX_REQUIREMENT}\n")
