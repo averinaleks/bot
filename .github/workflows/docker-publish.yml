@@ -222,6 +222,7 @@ jobs:
         id: start_service
         env:
           TEST_MODE: "1"
+          DATA_HANDLER_ALLOW_ANONYMOUS: "1"
         run: |
           scripts/run_data_handler_service.sh --bind 0.0.0.0:8000 &
           echo $! > "$GITHUB_WORKSPACE/service.pid"
@@ -237,6 +238,8 @@ jobs:
           TEST_MODE: "1"
           HEALTH_CHECK_MAX_ATTEMPTS: "10"
           HEALTH_CHECK_DELAY_SECONDS: "3"
+          HEALTH_CHECK_BASE_URL: "http://127.0.0.1:8000"
+          HEALTH_CHECK_ALLOWED_HOSTS: "localhost,127.0.0.1,::1"
         run: python scripts/health_check.py
       - name: Cleanup
         if: ${{ always() && steps.start_service.outputs.service_running == 'true' }}

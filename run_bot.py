@@ -331,14 +331,14 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         logger.warning("TradeManager has no run() coroutine; nothing to execute")
         return
 
-    domain_errors: tuple[type[BaseException], ...] = ()
+    domain_error_map: dict[type[BaseException], str] = {}
     module_name = getattr(type(trade_manager), "__module__", "")
     module_candidates = [module_name]
     if module_name and "." in module_name:
         module_candidates.append(module_name.rsplit(".", 1)[0])
 
     seen: set[type[BaseException]] = set()
-    collected: list[type[BaseException]] = []
+    collected: list[tuple[type[BaseException], str]] = []
     for candidate in module_candidates:
         module = sys.modules.get(candidate)
         if module is None:
@@ -351,10 +351,10 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
                 and error_cls not in seen
             ):
                 seen.add(error_cls)
-                collected.append(error_cls)
+                collected.append((error_cls, attr))
 
     if collected:
-        domain_errors = tuple(collected)
+        domain_error_map = {cls: attr for cls, attr in collected}
 
     try:
         if runtime is not None:
@@ -366,20 +366,17 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        if domain_errors and isinstance(exc, domain_errors):
+        matched_attr: str | None = None
+        matched_cls: type[BaseException] | None = None
+        for cls, attr in domain_error_map.items():
+            if isinstance(exc, cls):
+                matched_attr = attr
+                matched_cls = cls
+                break
+
+        if matched_attr is not None:
             message = "Trading loop aborted after TradeManager error"
             logger.error("%s: %s", message, exc, exc_info=True)
-            if type(exc).__name__.endswith("TaskError"):
-                original_message = str(exc)
-                args = getattr(exc, "args", ()) or ()
-                if args:
-                    new_args = (f"{message}: {original_message}", *args[1:])
-                else:
-                    new_args = (f"{message}: {original_message}",)
-                replacement = exc.__class__(*new_args)
-                if hasattr(exc, "__dict__"):
-                    replacement.__dict__.update(exc.__dict__)
-                raise replacement from exc
             raise
         logger.exception("Unexpected error during trading loop")
         raise
