@@ -57,11 +57,22 @@ except ValueError:
 @contextmanager
 def get_requests_session(
     timeout: float = DEFAULT_TIMEOUT,
+    *,
+    verify: bool | None = True,
 ) -> Generator["requests.Session", None, None]:
     """Return a :class:`requests.Session` with a default timeout.
 
     The import is deferred so the module can be used without the optional
     ``requests`` dependency installed.
+
+    Parameters
+    ----------
+    timeout:
+        Default timeout in seconds applied to requests made via the session.
+    verify:
+        Optional SSL verification flag mirroring :mod:`requests` semantics.
+        ``None`` leaves the library default untouched, whereas ``True`` and
+        ``False`` explicitly enable or disable certificate checks.
     """
     import requests  # type: ignore[import-untyped]
 
@@ -71,6 +82,8 @@ def get_requests_session(
     # a non-existent proxy and hang until a network timeout occurs.
     session.trust_env = False
     session.proxies = {}
+    if verify is not None:
+        session.verify = verify
     original = session.request
 
     @wraps(original)

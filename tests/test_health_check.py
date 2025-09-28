@@ -1,5 +1,6 @@
 import logging
-from typing import Iterable
+from contextlib import contextmanager
+from typing import Any, Iterable, Iterator
 
 import pytest
 
@@ -53,10 +54,18 @@ def test_check_endpoints_sanitises_logs(monkeypatch: pytest.MonkeyPatch, caplog:
     class DummyError(hc.requests.RequestException):
         pass
 
-    def fake_get(url: str, timeout: float = 0) -> DummyResponse:
-        raise DummyError("boom\nfail")
+    class DummySession:
+        def get(self, url: str) -> DummyResponse:
+            raise DummyError("boom\nfail")
 
-    monkeypatch.setattr(hc.requests, "get", fake_get)
+        def close(self) -> None:
+            pass
+
+    @contextmanager
+    def fake_session(*_args: Any, **_kwargs: Any) -> Iterator[DummySession]:
+        yield DummySession()
+
+    monkeypatch.setattr(hc, "get_requests_session", fake_session)
     caplog.set_level(logging.ERROR)
     result = _call_check("http://localhost:8000", ["/bad\nendpoint"])
     assert result == 1
