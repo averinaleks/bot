@@ -11,7 +11,7 @@ import math
 import os
 import sys
 import threading
-from typing import Any, Mapping, cast
+from typing import Any, Awaitable, Mapping, TypeVar, cast
 
 import httpx
 from bot.ray_compat import ray
@@ -68,8 +68,8 @@ except AttributeError:  # pragma: no cover - older Flask versions
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
 
-# For simple logging/testing of received orders
-POSITIONS = []
+
+_T = TypeVar("_T")
 
 
 class TradeManagerFactory:
@@ -119,6 +119,19 @@ def _manager_with_loop() -> tuple[TradeManager | None, asyncio.AbstractEventLoop
     if loop is None and manager is not None:
         loop = getattr(manager, "loop", None)
     return manager, loop
+
+
+def _await_manager_result(
+    loop: asyncio.AbstractEventLoop, awaitable: Awaitable[_T], timeout: float | None = 10.0
+) -> _T:
+    """Wait for an awaitable to finish on the TradeManager loop."""
+
+    future = asyncio.run_coroutine_threadsafe(awaitable, loop)
+    try:
+        return future.result(timeout)
+    except Exception:
+        future.cancel()
+        raise
 
 # Determine test mode at import time, considering both environment and core flag
 IS_TEST_MODE = os.getenv("TEST_MODE") == "1" or CORE_TEST_MODE
@@ -425,7 +438,6 @@ def open_position_route():
         )
     except ValidationError as exc:
         return _validation_error_response(exc)
-    POSITIONS.append(info)
     loop.call_soon_threadsafe(
         asyncio.create_task,
         manager.open_position(symbol, side, price, info),
@@ -460,7 +472,15 @@ def positions_route():
     err = _require_token()
     if err:
         return err
-    return jsonify({"positions": POSITIONS})
+    manager, loop = _manager_with_loop()
+    if not _ready_event.is_set() or manager is None or loop is None:
+        return jsonify({"error": "not ready"}), 503
+    try:
+        positions = _await_manager_result(loop, manager.get_positions_snapshot())
+    except Exception:
+        logger.exception("Не удалось получить позиции")
+        return jsonify({"error": "internal error"}), 500
+    return jsonify({"positions": positions})
 
 
 @api_app.route("/stats")

@@ -5,6 +5,7 @@ import inspect
 import asyncio
 import concurrent.futures
 import logging
+import threading
 import pytest
 
 
@@ -63,12 +64,19 @@ def _setup_module(monkeypatch):
     sys.modules.pop("bot.trade_manager.service", None)
     tm = importlib.import_module("bot.trade_manager.service")
     loop = DummyLoop()
+
     stub = types.SimpleNamespace(
         loop=loop,
         open_position=dummy_coroutine,
         run=dummy_coroutine,
         get_stats=lambda: {"win_rate": 1.0},
     )
+    stub._positions_data = []
+
+    async def _positions_snapshot():
+        return list(stub._positions_data)
+
+    stub.get_positions_snapshot = _positions_snapshot
     tm.trade_manager_factory.reset()
     tm.trade_manager_factory.set(stub, loop=loop)
     tm._ready_event.set()
@@ -111,6 +119,32 @@ def test_stats_route_returns_data(monkeypatch):
     resp = client.get("/stats")
     assert resp.status_code == 200
     assert resp.json["stats"]["win_rate"] == 1.0
+
+
+def test_positions_route_returns_manager_snapshot(monkeypatch):
+    tm, _, stub = _setup_module(monkeypatch)
+    loop = asyncio.new_event_loop()
+
+    def _run_loop():
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    thread = threading.Thread(target=_run_loop, daemon=True)
+    thread.start()
+    try:
+        tm.trade_manager_factory.set(stub, loop=loop)
+        stub.loop = loop
+        stub._positions_data = [
+            {"symbol": "BTCUSDT", "side": "buy", "timestamp": "2024-01-01T00:00:00+00:00"}
+        ]
+        client = tm.api_app.test_client()
+        resp = client.get("/positions")
+        assert resp.status_code == 200
+        assert resp.json == {"positions": stub._positions_data}
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=2)
+        loop.close()
 
 
 def test_open_position_route_concurrent(monkeypatch):
