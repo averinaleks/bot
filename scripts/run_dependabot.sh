@@ -13,8 +13,18 @@ if [[ -z "${token}" ]]; then
     exit 1
 fi
 
+# Store all temporary responses in an isolated directory so that mktemp never
+# writes into shared world-writable locations. This avoids Semgrep's
+# ``shell.lang.security.insecure-mktemp`` finding and guarantees cleanup on
+# abnormal exits.
+tmp_dir="$(mktemp -d -t run_dependabot.XXXXXX)"
+cleanup() {
+  rm -rf "${tmp_dir}"
+}
+trap cleanup EXIT
+
 for ecosystem in pip github-actions; do
-  tmp_response=$(mktemp -t run_dependabot.XXXXXX)
+  tmp_response="$(mktemp "${tmp_dir}/${ecosystem}.XXXXXX")"
   http_status=$(curl -S -s -o "${tmp_response}" -w "%{http_code}" -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
