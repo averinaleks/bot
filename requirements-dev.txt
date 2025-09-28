@@ -1,8 +1,17 @@
 pytest
 pytest-timeout
 pytest-cov
+requests
 requests-mock
+httpx
 flask
+numpy
+pandas
+polars
+aiohttp
+pydantic
+joblib
+cloudpickle
 hypothesis>=6.90.0
 pytest-asyncio
 iniconfig
