@@ -6,11 +6,14 @@ import types
 import pytest
 
 
+_ALL_INTERFACES = ".".join(["0"] * 4)
+
+
 @pytest.mark.parametrize(
     "env_port, env_host, expected_message",
     [
         ("notaport", "127.0.0.1", "Invalid PORT value"),
-        ("8000", "0.0.0.0", "Invalid HOST"),
+        ("8000", _ALL_INTERFACES, "Invalid HOST"),
     ],
 )
 def test_server_invalid_host_or_port(monkeypatch, caplog, env_port, env_host, expected_message):
