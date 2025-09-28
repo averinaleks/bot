@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import sys
 import time
 from pathlib import Path
@@ -78,6 +79,35 @@ def _resolve_model_artifact(path_value: str | Path | None) -> Path:
     return resolved
 
 
+_SYMBOL_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
+_SYMBOL_HYPHEN_RE = re.compile(r"[-\s]+")
+
+
+def _symbol_directory(symbol: str) -> Path:
+    """Return a sanitised per-symbol directory within :data:`MODEL_DIR`."""
+
+    if not isinstance(symbol, str):
+        raise ValueError("symbol must be a string")
+
+    safe = Path(symbol).name
+    safe = _SYMBOL_HYPHEN_RE.sub("-", safe)
+    safe = _SYMBOL_STRIP_RE.sub("", safe)
+    safe = safe.strip("._-")[:64]
+    if not safe:
+        raise ValueError("symbol resolves to an empty directory name")
+
+    candidate = MODEL_DIR / safe
+    resolved = candidate.resolve(strict=False)
+    if not _is_within_directory(resolved, MODEL_DIR):
+        raise ValueError("symbol directory escapes MODEL_DIR")
+    if resolved.exists():
+        if resolved.is_symlink():
+            raise ValueError("symbol directory must not be a symlink")
+        if not resolved.is_dir():
+            raise ValueError("symbol directory must reference a directory")
+    return resolved
+
+
 def _safe_model_file_path() -> Path | None:
     """Return a validated path for ``MODEL_FILE`` or ``None`` if invalid."""
 
@@ -95,9 +125,14 @@ def _safe_model_file_path() -> Path | None:
 def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
     """Сохранить модель и метаданные в каталог артефактов."""
 
+    base_dir = _symbol_directory(symbol)
     timestamp = str(int(time.time()))
-    target_dir = MODEL_DIR / symbol / timestamp
+    target_dir = base_dir / timestamp
     target_dir.mkdir(parents=True, exist_ok=True)
+    if target_dir.is_symlink() or not target_dir.is_dir():
+        raise ValueError("artifact directory could not be created safely")
+    if not _is_within_directory(target_dir.resolve(strict=False), MODEL_DIR):
+        raise ValueError("artifact directory escapes MODEL_DIR")
     model_file = target_dir / "model.pkl"
     if JOBLIB_AVAILABLE:
         joblib.dump(model, model_file)
