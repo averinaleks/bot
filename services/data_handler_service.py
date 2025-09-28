@@ -168,10 +168,9 @@ def _require_api_key() -> "ResponseReturnValue | None":
                 return None
 
         logger.warning(
-            "Запрос к %s отклонён: ключ доступа к Data Handler не настроен. Настройте переменную окружения %s "
-            "или, только для локальной отладки, установите %s=1.",
+            "Запрос к %s отклонён: ключ доступа к Data Handler не настроен. "
+            "Настройте переменную окружения DATA_HANDLER_API_KEY или, только для локальной отладки, установите %s=1.",
             sanitize_log_value(request.path),
-            API_KEY_ENV_VAR,
             ALLOW_ANONYMOUS_ENV_VAR,
         )
         return jsonify({'error': 'unauthorized'}), 401

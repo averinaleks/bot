@@ -374,7 +374,21 @@ def _start_trade_manager() -> None:
 
 
 class ValidationError(ValueError):
-    """Raised when request payload validation fails."""
+    """Raised when request payload validation fails with a user-facing message."""
+
+    def __init__(self, message: str) -> None:
+        # ``ValueError`` stores the message inside ``args`` which can include
+        # debugging information when arbitrary exceptions are re-raised.  The
+        # validator always provides a short, deterministic message, so persist a
+        # copy explicitly to avoid accidentally exposing stack traces or
+        # implementation details if ``str(exc)`` is used elsewhere.
+        safe_message = str(message)
+        super().__init__(safe_message)
+        self._public_message = safe_message
+
+    @property
+    def public_message(self) -> str:
+        return self._public_message
 
 
 def _validate_payload_is_object(data: Any) -> dict[str, Any]:
@@ -426,7 +440,8 @@ def _validate_close_position(info: Any) -> tuple[str, float, dict[str, Any]]:
 
 
 def _validation_error_response(exc: ValidationError) -> tuple[Response, int]:
-    return jsonify({"error": str(exc)}), 400
+    message = exc.public_message if isinstance(exc, ValidationError) else "invalid request"
+    return jsonify({"error": message}), 400
 
 
 @api_app.route("/open_position", methods=["POST"])

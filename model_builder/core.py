@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import hashlib
 import math
 import os
 import random
@@ -1655,12 +1656,45 @@ class ModelBuilder:
                 return
             torch_mods = _get_torch_modules()
             torch = torch_mods["torch"]
-            safe_symbol = re.sub(r"[^A-Za-z0-9_-]", "_", symbol)
-            cache_dir = getattr(self.cache, "cache_dir", None)
-            if not cache_dir:
+            cache_root_obj = getattr(self, "cache_dir", None)
+            if cache_root_obj is None:
                 logger.error("Не задана директория кэша SHAP")
                 return
-            cache_file = Path(cache_dir) / "shap" / f"shap_{safe_symbol}.pkl"
+            cache_root = Path(cache_root_obj).resolve(strict=False)
+            symbol_hash = hashlib.sha256(symbol.encode("utf-8", "replace")).hexdigest()
+            cache_file = cache_root / "shap" / f"shap_{symbol_hash}.pkl"
+            try:
+                resolved_cache_file = cache_file.resolve(strict=False)
+            except OSError as exc:
+                logger.warning(
+                    "Не удалось вычислить путь к SHAP кэшу %s: %s",
+                    cache_file,
+                    exc,
+                )
+                return
+            try:
+                resolved_cache_file.relative_to(cache_root)
+            except ValueError:
+                logger.warning(
+                    "Отказ записи SHAP значений: путь %s выходит за пределы cache_dir",
+                    resolved_cache_file,
+                )
+                return
+            if cache_file.exists():
+                try:
+                    if cache_file.is_symlink() or not cache_file.is_file():
+                        logger.warning(
+                            "Отказ записи SHAP: %s не является обычным файлом",
+                            cache_file,
+                        )
+                        return
+                except OSError as exc:
+                    logger.warning(
+                        "Не удалось проверить SHAP файл %s: %s",
+                        cache_file,
+                        exc,
+                    )
+                    return
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
                 return
@@ -1693,15 +1727,15 @@ class ModelBuilder:
                 )
                 return
             try:
-                cache_file.parent.mkdir(parents=True, exist_ok=True)
-                joblib.dump(values, str(cache_file))
-                if cache_file.exists():
-                    logger.info("SHAP значения сохранены в %s", cache_file)
+                resolved_cache_file.parent.mkdir(parents=True, exist_ok=True)
+                joblib.dump(values, str(resolved_cache_file))
+                if resolved_cache_file.exists():
+                    logger.info("SHAP значения сохранены в %s", resolved_cache_file)
                 else:  # pragma: no cover - stubbed joblib may not create file
-                    logger.warning("SHAP файл %s не создан, пропуск", cache_file)
+                    logger.warning("SHAP файл %s не создан, пропуск", resolved_cache_file)
                     return
             except Exception as e:
-                logger.error("Ошибка записи SHAP в %s: %s", cache_file, e)
+                logger.error("Ошибка записи SHAP в %s: %s", resolved_cache_file, e)
                 return
             mean_abs = np.mean(np.abs(values[0]), axis=(0, 1))
             feature_names = [
