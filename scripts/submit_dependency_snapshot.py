@@ -74,7 +74,8 @@ _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
 _REQUESTS_REQUIRED_MESSAGE = (
-    "Dependency snapshot submission requires the 'requests' package."
+    "Dependency snapshot submission requires the 'requests' package. "
+    "Install it with 'pip install requests'."
 )
 
 
