@@ -6,6 +6,11 @@ import secrets
 
 import pytest
 
+# Явно включаем тестовый режим для всех тестов. Ранее конфигурация
+# определяла запуск под ``pytest`` автоматически, но теперь управление
+# осуществляется только через переменную ``TEST_MODE``.
+os.environ.setdefault("TEST_MODE", "1")
+
 from bot import http_client as _http_client
 
 

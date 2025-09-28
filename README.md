@@ -182,7 +182,9 @@ pytest tests/test_password_utils.py
   --app ... run` порт задаётся параметром `--port`.
 - `TEST_MODE` — установка значения `1` включает тестовый режим: сокращаются
   задержки повторных попыток и отключаются тяжёлые операции, например диск и
-  сетевые вызовы.
+  сетевые вызовы. Автоматическое определение запуска через `pytest` больше не
+  используется, поэтому переменную необходимо задавать явно (набор тестов
+  делает это в `tests/conftest.py`).
 - `SERVICE_SCHEME` — схема (`http` или `https`), которую использует `trading_bot`
   для формирования URL сервисов (по умолчанию `http`).
 - `LOG_LEVEL` и `LOG_DIR` — уровень логирования и каталог с логами. Значение
@@ -916,7 +918,8 @@ pytest -m integration
 The `requirements.txt` file already bundles `pytest` and all other
 packages needed by the test suite.
 
-Unit tests automatically set the environment variable `TEST_MODE=1`.
+Unit tests automatically set the environment variable `TEST_MODE=1` via
+`tests/conftest.py`.
 This disables the Telegram logger's background worker thread so tests
 run without spawning extra threads.
 
