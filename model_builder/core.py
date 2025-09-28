@@ -13,6 +13,7 @@ import tempfile
 import time
 from collections import deque
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -50,10 +51,88 @@ logger = _utils.logger
 reset_tempdir_cache = _utils.reset_tempdir_cache
 validate_host = _utils.validate_host
 
-def _load_gym() -> tuple[object, object]:
+
+class _RayConfigStub:
+    """Lightweight stand-in for RLlib ``Config`` classes used in tests."""
+
+    def environment(self, *_args: Any, **_kwargs: Any) -> "_RayConfigStub":
+        return self
+
+    def rollouts(self, *_args: Any, **_kwargs: Any) -> "_RayConfigStub":
+        return self
+
+    def build(self) -> "_RayConfigStub":
+        return self
+
+    def train(self) -> dict[str, Any]:  # pragma: no cover - simple stub
+        return {}
+
+
+def _install_ray_stubs() -> None:
+    """Register minimal RLlib modules used in the tests when Ray is absent."""
+
+    import types
+
+    if "ray.rllib.algorithms" in sys.modules:
+        return
+
+    rllib_base = types.ModuleType("ray.rllib")
+    alg_mod = types.ModuleType("ray.rllib.algorithms")
+    dqn_mod = types.ModuleType("ray.rllib.algorithms.dqn")
+    ppo_mod = types.ModuleType("ray.rllib.algorithms.ppo")
+
+    setattr(dqn_mod, "DQNConfig", _RayConfigStub)
+    setattr(ppo_mod, "PPOConfig", _RayConfigStub)
+    setattr(alg_mod, "dqn", dqn_mod)
+    setattr(alg_mod, "ppo", ppo_mod)
+    setattr(rllib_base, "algorithms", alg_mod)
+    sys.modules.setdefault("ray.rllib", rllib_base)
+    sys.modules.setdefault("ray.rllib.algorithms", alg_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
+    sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
+
+
+def _install_sb3_stubs() -> None:
+    """Register minimal stable-baselines3 modules for the CI environment."""
+
+    import types
+
+    if "stable_baselines3" in sys.modules:
+        return
+
+    sb3 = types.ModuleType("stable_baselines3")
+
+    class _SB3DummyModel:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def learn(self, *args: Any, **kwargs: Any) -> "_SB3DummyModel":
+            return self
+
+        def predict(self, obs, deterministic: bool = True):  # type: ignore[no-untyped-def]
+            return np.array([1]), None
+
+    setattr(sb3, "PPO", _SB3DummyModel)
+    setattr(sb3, "DQN", _SB3DummyModel)
+    common = types.ModuleType("stable_baselines3.common")
+    vec_env = types.ModuleType("stable_baselines3.common.vec_env")
+
+    class _DummyVecEnv:
+        def __init__(self, env_fns):
+            self.envs = [fn() for fn in env_fns]
+
+    setattr(vec_env, "DummyVecEnv", _DummyVecEnv)
+    setattr(common, "vec_env", vec_env)
+    setattr(sb3, "common", common)
+    sys.modules.setdefault("stable_baselines3", sb3)
+    sys.modules.setdefault("stable_baselines3.common", common)
+    sys.modules.setdefault("stable_baselines3.common.vec_env", vec_env)
+
+
+def _load_gym() -> tuple[Any, Any]:
     """Import gymnasium or fall back to lightweight stubs in test mode."""
 
-    def _ensure_stub() -> tuple[object, object]:
+    def _ensure_stub() -> tuple[Any, Any]:
         import types
 
         gym_mod = sys.modules.get("gymnasium")
@@ -67,7 +146,7 @@ def _load_gym() -> tuple[object, object]:
         class _Env:  # pragma: no cover - simple placeholder
             metadata: dict[str, object] = {}
 
-        gym_mod.Env = _Env
+        setattr(gym_mod, "Env", _Env)
 
         spaces_mod = types.ModuleType("gymnasium.spaces")
 
@@ -90,9 +169,9 @@ def _load_gym() -> tuple[object, object]:
                     return np.array(self.low, dtype=self.dtype)
                 return np.full(self.shape, self.low, dtype=self.dtype)
 
-        spaces_mod.Discrete = _Discrete
-        spaces_mod.Box = _Box
-        gym_mod.spaces = spaces_mod
+        setattr(spaces_mod, "Discrete", _Discrete)
+        setattr(spaces_mod, "Box", _Box)
+        setattr(gym_mod, "spaces", spaces_mod)
         gym_mod.__dict__["__model_builder_stub__"] = True
         spaces_mod.__dict__["__model_builder_stub__"] = True
         sys.modules.setdefault("gymnasium", gym_mod)
@@ -135,40 +214,19 @@ def _load_gym() -> tuple[object, object]:
         return gym, spaces
 
 
-gym, spaces = _load_gym()
+_gym_module, _spaces_module = _load_gym()
+gym = cast(Any, _gym_module)
+spaces = cast(Any, _spaces_module)
+
+if hasattr(gym, "Env"):
+    GymEnvBase: type[Any] = cast(type[Any], getattr(gym, "Env"))
+else:
+    GymEnvBase = object
 
 # ``ray`` предоставляется через bot.ray_compat и может быть как настоящим пакетом,
 # так и заглушкой, если зависимость не установлена.
 if IS_RAY_STUB:
-    import types
-
-    rllib_base = types.ModuleType("ray.rllib")
-    alg_mod = types.ModuleType("ray.rllib.algorithms")
-    dqn_mod = types.ModuleType("ray.rllib.algorithms.dqn")
-    ppo_mod = types.ModuleType("ray.rllib.algorithms.ppo")
-
-    class _Cfg:
-        def environment(self, *_a, **_k):
-            return self
-
-        def rollouts(self, *_a, **_k):
-            return self
-
-        def build(self):
-            return self
-
-        def train(self):
-            return {}
-
-    dqn_mod.DQNConfig = _Cfg
-    ppo_mod.PPOConfig = _Cfg
-    alg_mod.dqn = dqn_mod
-    alg_mod.ppo = ppo_mod
-    rllib_base.algorithms = alg_mod
-    sys.modules.setdefault("ray.rllib", rllib_base)
-    sys.modules.setdefault("ray.rllib.algorithms", alg_mod)
-    sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
-    sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
+    _install_ray_stubs()
 # ``configure_logging`` may be missing in test stubs; provide a no-op fallback
 try:  # pragma: no cover - optional in tests
     from bot.utils import configure_logging
@@ -221,63 +279,8 @@ shap = None
 
 
 if os.getenv("TEST_MODE") == "1":
-    import types
-
-    sb3 = types.ModuleType("stable_baselines3")
-
-    class DummyModel:
-        def __init__(self, *a, **k):
-            pass
-
-        def learn(self, *a, **k):
-            return self
-
-        def predict(self, obs, deterministic=True):
-            return np.array([1]), None
-
-    sb3.PPO = DummyModel
-    sb3.DQN = DummyModel
-    common = types.ModuleType("stable_baselines3.common")
-    vec_env = types.ModuleType("stable_baselines3.common.vec_env")
-
-    class DummyVecEnv:
-        def __init__(self, env_fns):
-            self.envs = [fn() for fn in env_fns]
-
-    vec_env.DummyVecEnv = DummyVecEnv
-    common.vec_env = vec_env
-    sb3.common = common
-    sys.modules["stable_baselines3"] = sb3
-    sys.modules["stable_baselines3.common"] = common
-    sys.modules["stable_baselines3.common.vec_env"] = vec_env
-
-    rllib_base = types.ModuleType("ray.rllib")
-    alg_mod = types.ModuleType("ray.rllib.algorithms")
-    dqn_mod = types.ModuleType("ray.rllib.algorithms.dqn")
-    ppo_mod = types.ModuleType("ray.rllib.algorithms.ppo")
-
-    class _Cfg:
-        def environment(self, *_a, **_k):
-            return self
-
-        def rollouts(self, *_a, **_k):
-            return self
-
-        def build(self):
-            return self
-
-        def train(self):
-            return {}
-
-    dqn_mod.DQNConfig = _Cfg
-    ppo_mod.PPOConfig = _Cfg
-    alg_mod.dqn = dqn_mod
-    alg_mod.ppo = ppo_mod
-    rllib_base.algorithms = alg_mod
-    sys.modules.setdefault("ray.rllib", rllib_base)
-    sys.modules.setdefault("ray.rllib.algorithms", alg_mod)
-    sys.modules.setdefault("ray.rllib.algorithms.dqn", dqn_mod)
-    sys.modules.setdefault("ray.rllib.algorithms.ppo", ppo_mod)
+    _install_sb3_stubs()
+    _install_ray_stubs()
 
 try:
     from stable_baselines3 import PPO, DQN
@@ -842,7 +845,7 @@ class ModelBuilder:
         self.model_type = config.get("model_type", "transformer")
         self.nn_framework = config.get("nn_framework", "pytorch").lower()
         # Predictive models for each trading symbol
-        self.predictive_models = {}
+        self.predictive_models: dict[str, Any] = {}
         # Backwards compatibility alias
         self.lstm_models = self.predictive_models
         if self.nn_framework in {"pytorch", "lightning"}:
@@ -875,18 +878,18 @@ class ModelBuilder:
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.last_save_time = time.time()
         self.save_interval = 900
-        self.scalers = {}
-        self.prediction_history = {}
+        self.scalers: dict[str, Any] = {}
+        self.prediction_history: dict[str, deque[tuple[float, int | None]]] = {}
         self.threshold_offset = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
-        self.base_thresholds = {}
-        self.calibrators = {}
-        self.calibration_metrics = {}
-        self.performance_metrics = {}
-        self.feature_cache = {}
-        self.shap_cache_times = {}
+        self.base_thresholds: dict[str, float] = {}
+        self.calibrators: dict[str, Any | None] = {}
+        self.calibration_metrics: dict[str, dict[str, float]] = {}
+        self.performance_metrics: dict[str, dict[str, float]] = {}
+        self.feature_cache: dict[str, pd.DataFrame | None] = {}
+        self.shap_cache_times: dict[str, float] = {}
         self.shap_cache_duration = config.get("shap_cache_duration", 86400)
         self.last_backtest_time = 0
-        self.backtest_results = {}
+        self.backtest_results: dict[str, float] = {}
         logger.info("Инициализация ModelBuilder завершена")
 
     @staticmethod
@@ -1615,8 +1618,9 @@ class ModelBuilder:
                 base_short,
             )
             return base_long, base_short
-        mean_pred = float(np.mean(hist))
-        std_pred = float(np.std(hist))
+        probs = [prob for prob, _ in hist]
+        mean_pred = float(np.mean(probs)) if probs else base_long
+        std_pred = float(np.std(probs)) if len(probs) > 1 else 0.0
         sharpe = await self.trade_manager.get_sharpe_ratio(symbol)
         ohlcv = self.data_handler.ohlcv
         if "symbol" in ohlcv.index.names and symbol in ohlcv.index.get_level_values(
@@ -1825,7 +1829,7 @@ class ModelBuilder:
                 await asyncio.sleep(1)
 
 
-class TradingEnv(gym.Env if gym else object):
+class TradingEnv(GymEnvBase):
     """Simple trading environment for offline training."""
 
     def __init__(self, df: pd.DataFrame, config: BotConfig | None = None):
@@ -1895,7 +1899,7 @@ class RLAgent:
         self.config = config
         self.data_handler = data_handler
         self.model_builder = model_builder
-        self.models = {}
+        self.models: dict[str, Any] = {}
 
     async def _prepare_features(self, symbol: str, indicators) -> pd.DataFrame:
         ohlcv = self.data_handler.ohlcv

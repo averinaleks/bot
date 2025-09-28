@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import types
+
+from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -11,6 +16,7 @@ from .core import (
     RLAgent,
     SB3_AVAILABLE,
     TradingEnv,
+    KERAS_FRAMEWORKS,
     _freeze_keras_base_layers,
     _freeze_torch_base_layers,
     _get_torch_modules,
@@ -100,6 +106,7 @@ __all__ = [
     "RLAgent",
     "SB3_AVAILABLE",
     "TradingEnv",
+    "KERAS_FRAMEWORKS",
     "_freeze_keras_base_layers",
     "_freeze_torch_base_layers",
     "_get_torch_modules",
