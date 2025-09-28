@@ -42,7 +42,9 @@ async def test_run_trading_cycle_reraises_domain_error(caplog):
         with pytest.raises(DummyDomainError) as excinfo:
             await run_trading_cycle(manager, runtime=None)
 
-    assert str(excinfo.value) == "domain failure"
+    message = str(excinfo.value)
+    assert message.startswith("Trading loop aborted after TradeManager error")
+    assert message.endswith("domain failure")
 
     frames = traceback.extract_tb(excinfo.value.__traceback__)
     assert any(frame.name == "run" for frame in frames)
