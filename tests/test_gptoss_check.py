@@ -82,6 +82,43 @@ def test_run_without_api(monkeypatch, caplog):
     assert "GPT_OSS_API" in caplog.text
 
 
+def test_send_telegram_logs_http_errors(monkeypatch, caplog):
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+
+    events: dict[str, object] = {}
+
+    class DummyResponse:
+        def raise_for_status(self):
+            raise check_code.HTTPError("403 Forbidden")
+
+        def close(self):
+            events["closed"] = True
+
+    class DummyClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, data):
+            events["url"] = url
+            events["data"] = data
+            return DummyResponse()
+
+    monkeypatch.setattr(check_code, "get_httpx_client", lambda **_: DummyClient())
+
+    with caplog.at_level(logging.WARNING):
+        check_code.send_telegram("Привет, мир!")
+
+    assert events.get("closed") is True
+    assert events["url"].endswith("/sendMessage")
+    assert events["data"] == {"chat_id": "chat", "text": "Привет, мир!"}
+    assert "Failed to send Telegram message" in caplog.text
+
+
 def test_run_handles_unexpected_query_error(monkeypatch, caplog):
     monkeypatch.setenv("GPT_OSS_API", "http://gptoss:8000")
     monkeypatch.setenv("CHECK_CODE_PATH", "gptoss_check/main.py")
