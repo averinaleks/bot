@@ -9,8 +9,107 @@ on:
   schedule:
     - cron: "21 10 * * 2"
 
+env:
+  TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+
 jobs:
-  scan:
+  scan_pull_request:
+    name: Scan (pull requests)
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        # v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare Trivy cache directory
+        run: |
+          mkdir -p "$TRIVY_CACHE_DIR"
+
+      - name: Install Trivy CLI
+        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        # v0.2.4
+        with:
+          trivy-version: v0.66.0
+
+      - id: trivy
+        name: Run Trivy scan
+        run: |
+          set -euo pipefail
+          trivy fs \
+            --scanners vuln \
+            --format sarif \
+            --output trivy-results.sarif \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 0 \
+            .
+
+      - name: Ensure jq is available
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
+      - name: Parse Trivy results
+        id: parse_trivy
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        run: |
+          set -euo pipefail
+          if [ ! -f trivy-results.sarif ]; then
+            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
+            echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
+            echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! count=$(jq '[.runs[]?.results[]?] | length' trivy-results.sarif); then
+            echo "::error::Failed to parse trivy-results.sarif with jq." >&2
+            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
+            echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
+            echo "parsing_failed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "sarif_exists=true" >> "$GITHUB_OUTPUT"
+          echo "vulnerability_count=${count}" >> "$GITHUB_OUTPUT"
+          echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize Trivy scan
+        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        run: |
+          if [ "${{ steps.parse_trivy.outputs.sarif_exists }}" != 'true' ]; then
+            printf '### Trivy scan summary\n\n* No SARIF report was generated.\n' >> "$GITHUB_STEP_SUMMARY"
+          else
+            count="${{ steps.parse_trivy.outputs.vulnerability_count }}"
+            printf '### Trivy scan summary\n\n* High/Critical findings: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail if Trivy scan failed unexpectedly
+        if: ${{ steps.trivy.conclusion == 'failure' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
+        run: |
+          echo "::error::Trivy scan failed before producing a SARIF report."
+          exit 1
+
+      - name: Fail if Trivy results parsing failed
+        if: ${{ steps.parse_trivy.outputs.parsing_failed == 'true' }}
+        run: |
+          echo "::error::Unable to parse Trivy SARIF output."
+          exit 1
+
+      - name: Fail if vulnerabilities found
+        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && steps.parse_trivy.outputs.vulnerability_count != '0' }}
+        run: |
+          echo "::error::Trivy detected ${{ steps.parse_trivy.outputs.vulnerability_count }} high or critical vulnerabilities."
+          exit 1
+
+  scan_default:
+    name: Scan (pushes and schedule)
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,8 +125,6 @@ jobs:
       - name: Prepare Trivy cache directory
         run: |
           mkdir -p "$TRIVY_CACHE_DIR"
-        env:
-          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
 
       - name: Restore Trivy vulnerability database
         # GitHub deprecated older cache runner implementations on 2024-12-05.
@@ -36,7 +133,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         # v4.3.0
         with:
-          path: ${{ runner.temp }}/trivy-cache
+          path: ${{ env.TRIVY_CACHE_DIR }}
           key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'Dockerfile*') }}
           restore-keys: |
             ${{ runner.os }}-trivy-db-
@@ -49,8 +146,6 @@ jobs:
 
       - id: trivy
         name: Run Trivy scan
-        env:
-          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         run: |
           set -euo pipefail
           trivy fs \
@@ -103,14 +198,14 @@ jobs:
           fi
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo != null && github.event.pull_request.head.repo.full_name == github.repository)) }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
         uses: github/codeql-action/upload-sarif@3599b3baa15b485a2e49ef411a7a4bb2452e7f93
         # v3.30.5
         with:
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' && github.event_name != 'pull_request' }}
+        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
