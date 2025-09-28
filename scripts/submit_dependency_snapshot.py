@@ -671,6 +671,11 @@ def submit_dependency_snapshot() -> None:
                 if ref_candidate:
                     ref = ref_candidate
                     payload_used = True
+        if not sha and isinstance(payload, dict):
+            sha_candidate = _extract_payload_value(payload, "after", "sha", "head_sha")
+            if sha_candidate:
+                sha = sha_candidate
+                payload_used = True
         if not ref and isinstance(payload, dict):
             ref_candidate = _extract_payload_value(payload, "ref")
             if ref_candidate:
