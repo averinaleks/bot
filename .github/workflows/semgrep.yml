@@ -50,6 +50,8 @@ jobs:
           SEMGREP_SEND_METRICS: "off"
         run: |
           semgrep --config p/ci --error --sarif --output semgrep.sarif
+      - name: Ensure SARIF report exists
+        run: python scripts/ensure_semgrep_sarif.py
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Check for SARIF results
