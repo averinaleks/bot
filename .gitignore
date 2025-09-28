@@ -10,3 +10,5 @@ default.pkl
 nonexistent
 
 default.pkl.sig
+# Semgrep CI artifacts
+semgrep.sarif
