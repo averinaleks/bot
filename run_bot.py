@@ -369,7 +369,32 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         if domain_errors and isinstance(exc, domain_errors):
             message = "Trading loop aborted after TradeManager error"
             logger.error("%s: %s", message, exc, exc_info=True)
-            raise
+            original_text = str(exc)
+            should_augment = type(exc).__name__.endswith("TradeManagerTaskError")
+            if should_augment and message not in original_text:
+                replacement = f"{message}: {original_text}" if original_text else message
+            else:
+                replacement = original_text or message
+
+            if exc.args:
+                new_args = (replacement, *exc.args[1:])
+            else:
+                new_args = (replacement,)
+
+            try:
+                augmented_exc = type(exc)(*new_args)
+            except Exception:  # pragma: no cover - extremely defensive
+                augmented_exc = RuntimeError(replacement)
+            else:
+                try:
+                    augmented_exc.__dict__.update(getattr(exc, "__dict__", {}))
+                except Exception:  # pragma: no cover - defensive attribute copy
+                    pass
+            try:
+                augmented_exc.__traceback__ = exc.__traceback__
+            except Exception:  # pragma: no cover - defensive traceback copy
+                pass
+            raise augmented_exc from exc
         logger.exception("Unexpected error during trading loop")
         raise
     finally:
