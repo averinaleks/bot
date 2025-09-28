@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
@@ -79,10 +81,20 @@ class _ModelBuilderModule(types.ModuleType):
         else:
             super().__setattr__(name, value)
             if hasattr(_core_module, name):
-                setattr(_core_module, name, value)
+                _core_module.__dict__[name] = value
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule
+
+if os.getenv("ALLOW_GYM_STUB", "1").strip().lower() in {"0", "false", "no"}:
+    if getattr(_core_module.gym, "_BOT_GYM_STUB", False):
+        raise ImportError("gymnasium package is required")
+    import importlib
+
+    try:
+        importlib.import_module("gymnasium")
+    except ImportError as exc:
+        raise ImportError("gymnasium package is required") from exc
 
 __all__ = [
     "IS_RAY_STUB",

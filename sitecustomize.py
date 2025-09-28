@@ -5,7 +5,9 @@ import importlib.util
 import os
 import runpy
 import sys
+import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Callable, Iterable, Iterator, Sequence, cast
 
 _PipMain = Callable[[list[str] | None], int]
@@ -130,3 +132,33 @@ if sys.version_info < (3, 12):
     _required_packages.append(("sklearn", "scikit-learn==1.7.2"))
 
 _ensure_packages(_required_packages)
+
+
+def _wrap_tempfile_mkdtemp() -> None:
+    """Ensure ``tempfile.mkdtemp`` always creates the parent directory."""
+
+    original = getattr(tempfile, "_bot_original_mkdtemp", None)
+    if original is None:
+        original = tempfile.mkdtemp
+        tempfile._bot_original_mkdtemp = original  # type: ignore[attr-defined]
+
+        def _safe_mkdtemp(*args, **kwargs):
+            target_dir = kwargs.get("dir")
+            if target_dir is None:
+                target_dir = tempfile.gettempdir()
+            if target_dir:
+                try:
+                    Path(target_dir).mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+            try:
+                return original(*args, **kwargs)
+            except FileNotFoundError:
+                if target_dir:
+                    Path(target_dir).mkdir(parents=True, exist_ok=True)
+                return original(*args, **kwargs)
+
+        tempfile.mkdtemp = _safe_mkdtemp
+
+
+_wrap_tempfile_mkdtemp()

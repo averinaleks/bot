@@ -39,6 +39,7 @@ _utils = require_utils(
     "ensure_writable_directory",
     "is_cuda_available",
     "logger",
+    "reset_tempdir_cache",
     "validate_host",
 )
 
@@ -46,6 +47,7 @@ check_dataframe_empty = _utils.check_dataframe_empty
 ensure_writable_directory = _utils.ensure_writable_directory
 is_cuda_available = _utils.is_cuda_available
 logger = _utils.logger
+reset_tempdir_cache = _utils.reset_tempdir_cache
 validate_host = _utils.validate_host
 
 def _load_gym() -> tuple[object, object]:
@@ -60,6 +62,7 @@ def _load_gym() -> tuple[object, object]:
             return gym_mod, spaces_mod
 
         gym_mod = types.ModuleType("gymnasium")
+        setattr(gym_mod, "_BOT_GYM_STUB", True)
 
         class _Env:  # pragma: no cover - simple placeholder
             metadata: dict[str, object] = {}
@@ -879,6 +882,7 @@ class ModelBuilder:
         fallback_dir = os.path.abspath(
             os.path.join(tempfile.gettempdir(), "model_builder_cache")
         )
+        reset_tempdir_cache()
         candidates: list[str] = []
         if requested_dir:
             candidates.append(requested_dir)
