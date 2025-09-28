@@ -571,6 +571,9 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         raise DependencySubmissionError(None, message, last_error)
 
 
+_ORIGINAL_SUBMIT_WITH_HEADERS = _submit_with_headers
+
+
 def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
     status_code = error.status_code
     message = str(error).strip()
@@ -627,7 +630,8 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 
 def submit_dependency_snapshot() -> None:
-    if requests is None:
+    submit_func = _submit_with_headers
+    if requests is None and submit_func is _ORIGINAL_SUBMIT_WITH_HEADERS:
         _report_missing_requests()
         return
 
@@ -749,7 +753,7 @@ def submit_dependency_snapshot() -> None:
         for index, scheme in enumerate(schemes):
             headers = dict(headers_base, Authorization=f"{scheme} {token}")
             try:
-                _submit_with_headers(url, body, headers)
+                submit_func(url, body, headers)
                 return
             except DependencySubmissionError as exc:
                 if (
