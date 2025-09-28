@@ -73,9 +73,9 @@ def validate_password_complexity(password: str) -> None:
 def validate_password_length(password: str) -> None:
     """Проверяет, что длина пароля находится в допустимых пределах."""
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError("Password too short")
+        raise ValueError("Пароль слишком короткий")
     if len(password) > MAX_PASSWORD_LENGTH:
-        raise ValueError("Password exceeds maximum length")
+        raise ValueError("Пароль превышает максимально допустимую длину")
 
 
 def _hash_with_bcrypt(password: str) -> str:

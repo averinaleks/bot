@@ -2,6 +2,7 @@ import pytest
 
 import password_utils
 from password_utils import (
+    MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     PBKDF2_PREFIX,
     hash_password,
@@ -22,8 +23,15 @@ def test_hash_password_rejects_short_password():
     too_short = "Aa1!" + "c" * padding
     if len(too_short) >= MIN_PASSWORD_LENGTH:
         too_short = too_short[: MIN_PASSWORD_LENGTH - 1]
-    with pytest.raises(ValueError, match="Password too short"):
+    with pytest.raises(ValueError, match="Пароль слишком короткий"):
         hash_password(too_short)
+
+
+def test_hash_password_rejects_long_password():
+    """Пароль длиннее максимально допустимого вызывает ожидаемую ошибку."""
+    too_long = "Aa1!" + "d" * MAX_PASSWORD_LENGTH
+    with pytest.raises(ValueError, match="Пароль превышает максимально допустимую длину"):
+        hash_password(too_long)
 
 
 def test_hash_password_requires_special_character():
