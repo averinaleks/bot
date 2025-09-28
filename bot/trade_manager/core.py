@@ -14,7 +14,8 @@ import json
 import logging
 import re
 import time
-from typing import Any, Awaitable, Dict, Optional, Tuple, TYPE_CHECKING, cast
+import datetime
+from typing import Any, Awaitable, Dict, List, Optional, Tuple, TYPE_CHECKING, cast
 import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
@@ -56,6 +57,34 @@ is_cuda_available = _utils.is_cuda_available
 _check_df_async = _utils.check_dataframe_empty_async
 safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
+
+
+def _positions_json_default(value: Any) -> Any:
+    """Convert pandas/numpy objects to JSON-serializable representations."""
+
+    pd_timestamp_type = getattr(pd, "Timestamp", None)
+    if pd_timestamp_type is not None:
+        try:
+            if isinstance(value, pd_timestamp_type):  # type: ignore[arg-type]
+                nat = getattr(pd, "NaT", None)
+                if nat is not None and value is nat:
+                    return None
+                return value.isoformat()
+        except TypeError:
+            pass
+    nat = getattr(pd, "NaT", None)
+    if nat is not None and value is nat:
+        return None
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat()
+    if isinstance(value, np.generic):  # type: ignore[arg-type]
+        return value.item()
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except TypeError:
+            pass
+    return str(value)
 
 if TYPE_CHECKING:
     from telegram_logger import TelegramLogger as TelegramLoggerType
@@ -461,6 +490,56 @@ class TradeManager:
             fut = asyncio.run_coroutine_threadsafe(self.compute_stats(), self.loop)
             return fut.result()
         return asyncio.run(self.compute_stats())
+
+    async def _collect_positions(self) -> List[Dict[str, Any]]:
+        """Return a JSON-serializable snapshot of current positions."""
+
+        async with self.position_lock:
+            positions_obj = self.positions
+            if hasattr(positions_obj, "empty") and getattr(positions_obj, "empty"):
+                return []
+            if hasattr(positions_obj, "reset_index"):
+                try:
+                    json_payload = positions_obj.reset_index().to_json(
+                        orient="records", date_format="iso"
+                    )
+                except Exception:
+                    pass
+                else:
+                    return cast(List[Dict[str, Any]], json.loads(json_payload))
+                try:
+                    records = positions_obj.reset_index().to_dict(orient="records")
+                except Exception:
+                    records = []
+            elif hasattr(positions_obj, "to_dict"):
+                try:
+                    records = positions_obj.to_dict(orient="records")  # type: ignore[call-arg]
+                except Exception:
+                    records = []
+            elif isinstance(positions_obj, list):
+                records = [
+                    dict(entry) if isinstance(entry, dict) else entry
+                    for entry in positions_obj
+                ]
+            else:
+                records = []
+        if not records:
+            return []
+        serialized = json.loads(json.dumps(records, default=_positions_json_default))
+        return cast(List[Dict[str, Any]], serialized)
+
+    async def get_positions_data(self) -> List[Dict[str, Any]]:
+        """Asynchronously fetch a snapshot of current positions."""
+
+        return await self._collect_positions()
+
+    def get_positions(self) -> List[Dict[str, Any]]:
+        """Return the current positions in a thread-safe manner."""
+
+        if self.loop and self.loop.is_running():
+            fut = asyncio.run_coroutine_threadsafe(self.get_positions_data(), self.loop)
+            return fut.result()
+        return asyncio.run(self.get_positions_data())
 
     def save_state(self):
         if not self.positions_changed or (

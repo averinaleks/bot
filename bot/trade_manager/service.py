@@ -67,10 +67,6 @@ except AttributeError:  # pragma: no cover - older Flask versions
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()
 
-# For simple logging/testing of received orders
-POSITIONS = []
-
-
 class TradeManagerFactory:
     """Manage lifecycle of a singleton :class:`TradeManager` instance."""
 
@@ -363,7 +359,6 @@ def open_position_route():
     if not _ready_event.is_set() or manager is None or loop is None:
         return jsonify({"error": "not ready"}), 503
     info = request.get_json(force=True)
-    POSITIONS.append(info)
     symbol = info.get("symbol")
     side = info.get("side")
     price = float(info.get("price", 0))
@@ -398,7 +393,17 @@ def positions_route():
     err = _require_token()
     if err:
         return err
-    return jsonify({"positions": POSITIONS})
+    manager, _ = _manager_with_loop()
+    if not _ready_event.is_set() or manager is None:
+        return jsonify({"error": "not ready"}), 503
+    try:
+        positions = manager.get_positions()
+    except Exception as exc:  # pragma: no cover - unexpected runtime failure
+        logger.exception(
+            "Failed to retrieve positions (%s): %s", type(exc).__name__, exc
+        )
+        return jsonify({"error": "internal error"}), 500
+    return jsonify({"positions": positions})
 
 
 @api_app.route("/stats")

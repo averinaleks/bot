@@ -68,6 +68,7 @@ def _setup_module(monkeypatch):
         open_position=dummy_coroutine,
         run=dummy_coroutine,
         get_stats=lambda: {"win_rate": 1.0},
+        get_positions=lambda: [],
     )
     tm.trade_manager_factory.reset()
     tm.trade_manager_factory.set(stub, loop=loop)
@@ -111,6 +112,22 @@ def test_stats_route_returns_data(monkeypatch):
     resp = client.get("/stats")
     assert resp.status_code == 200
     assert resp.json["stats"]["win_rate"] == 1.0
+
+
+def test_positions_route_uses_manager_snapshot(monkeypatch):
+    tm, _, stub = _setup_module(monkeypatch)
+    expected = [
+        {
+            "symbol": "BTCUSDT",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "size": 1.0,
+        }
+    ]
+    stub.get_positions = lambda: expected
+    client = tm.api_app.test_client()
+    resp = client.get("/positions")
+    assert resp.status_code == 200
+    assert resp.json["positions"] == expected
 
 
 def test_open_position_route_concurrent(monkeypatch):
