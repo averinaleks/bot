@@ -82,3 +82,44 @@ def test_verify_password_rejects_malformed_bcrypt_hash(valid_password: str):
     malformed = "$2b$12$short"
     with pytest.raises(ValueError, match="bcrypt"):
         verify_password(valid_password, malformed)
+
+
+def test_verify_password_treats_pyo3_runtime_error_as_corrupted(
+    valid_password: str, monkeypatch: pytest.MonkeyPatch
+):
+    """Ошибки PyO3 при проверке bcrypt считаются повреждённым хэшем."""
+
+    class PyO3RuntimeError(RuntimeError):
+        __module__ = "pyo3_runtime"
+
+    class FakeBcrypt:
+        @staticmethod
+        def checkpw(password: bytes, stored: bytes) -> bool:
+            raise PyO3RuntimeError("panic")
+
+    monkeypatch.setattr(password_utils, "bcrypt", FakeBcrypt)
+    monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", True)
+
+    bcrypt_hash = "$2b$12$" + "a" * 53
+
+    with pytest.raises(ValueError, match="bcrypt"):
+        verify_password(valid_password, bcrypt_hash)
+
+
+def test_verify_password_does_not_swallow_system_exit(
+    valid_password: str, monkeypatch: pytest.MonkeyPatch
+):
+    """Системные исключения не подавляются при проверке bcrypt."""
+
+    class FakeBcrypt:
+        @staticmethod
+        def checkpw(password: bytes, stored: bytes) -> bool:
+            raise SystemExit("terminate")
+
+    monkeypatch.setattr(password_utils, "bcrypt", FakeBcrypt)
+    monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", True)
+
+    bcrypt_hash = "$2b$12$" + "b" * 53
+
+    with pytest.raises(SystemExit):
+        verify_password(valid_password, bcrypt_hash)
