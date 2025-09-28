@@ -2,20 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-import os
-import sys
-import types
-
-_core_module = importlib.import_module(".core", __name__)
-_allow_stub_env = os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {
-    "0",
-    "false",
-    "no",
-}
-if not _allow_stub_env:
-    _core_module = importlib.reload(_core_module)
-
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -94,6 +80,16 @@ class _ModelBuilderModule(types.ModuleType):
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule
+
+if os.getenv("ALLOW_GYM_STUB", "1").strip().lower() in {"0", "false", "no"}:
+    if getattr(_core_module.gym, "_BOT_GYM_STUB", False):
+        raise ImportError("gymnasium package is required")
+    import importlib
+
+    try:
+        importlib.import_module("gymnasium")
+    except ImportError as exc:
+        raise ImportError("gymnasium package is required") from exc
 
 __all__ = [
     "IS_RAY_STUB",

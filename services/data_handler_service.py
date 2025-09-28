@@ -11,7 +11,11 @@ from typing import Any
 from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
 from services.logging_utils import sanitize_log_value
+from bot.utils_loader import require_utils
 from services.exchange_provider import ExchangeProvider
+
+_utils = require_utils("reset_tempdir_cache")
+reset_tempdir_cache = _utils.reset_tempdir_cache
 
 load_dotenv()
 
@@ -201,6 +205,7 @@ def _create_history_cache() -> "HistoricalDataCache | None":
     if env_path:
         candidates.append(env_path)
     tmp_path = os.path.join(tempfile.gettempdir(), "cache")
+    reset_tempdir_cache()
     if not env_path or env_path != tmp_path:
         candidates.append(tmp_path)
 

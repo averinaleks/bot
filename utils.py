@@ -41,6 +41,57 @@ logger = logging.getLogger("TradingBot")
 T = TypeVar("T")
 
 
+def _wrap_tempfile_mkdtemp() -> None:
+    original = getattr(tempfile, "_bot_original_mkdtemp", None)
+    if original is not None:
+        return
+
+    original = tempfile.mkdtemp
+    tempfile._bot_original_mkdtemp = original  # type: ignore[attr-defined]
+
+    def _safe_mkdtemp(*args, **kwargs):
+        target_dir = kwargs.get("dir")
+        if target_dir is None:
+            target_dir = tempfile.gettempdir()
+        if target_dir:
+            try:
+                Path(target_dir).mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+        try:
+            return original(*args, **kwargs)
+        except FileNotFoundError:
+            if target_dir:
+                Path(target_dir).mkdir(parents=True, exist_ok=True)
+            return original(*args, **kwargs)
+
+    tempfile.mkdtemp = _safe_mkdtemp
+
+
+_wrap_tempfile_mkdtemp()
+
+
+def reset_tempdir_cache() -> None:
+    """Clear :mod:`tempfile`'s cached temp directory.
+
+    ``tempfile`` stores the last successful directory in ``tempfile.tempdir``.
+    Tests monkeypatch :func:`tempfile.gettempdir` to point at short-lived
+    locations and expect the cache to be rebuilt after the directory is
+    removed.  Without clearing the cache, later calls such as
+    :func:`tempfile.mkdtemp` continue to use the now-deleted directory which
+    results in ``FileNotFoundError`` during unrelated tests.  Resetting the
+    cache forces :mod:`tempfile` to recompute the appropriate base directory on
+    the next access.
+    """
+
+    try:
+        tempfile.tempdir = None  # type: ignore[assignment]
+    except Exception:
+        # ``tempfile`` guarantees the attribute exists, but guard against
+        # environments that restrict attribute assignment on the module.
+        pass
+
+
 def ensure_writable_directory(
     path: Path,
     *,
@@ -56,6 +107,7 @@ def ensure_writable_directory(
 
     if fallback_subdir:
         fallback = Path(tempfile.gettempdir(), fallback_subdir).resolve()
+        reset_tempdir_cache()
         if fallback not in candidates:
             candidates.append(fallback)
 
