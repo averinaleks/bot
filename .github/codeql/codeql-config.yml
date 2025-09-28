@@ -1,11 +1,12 @@
 name: bot CodeQL configuration
 paths-ignore:
-  # Ensure Git metadata created during checkout (including reference logs) is never
-  # analysed by CodeQL. CodeQL interprets any *.py file it discovers as Python
-  # source, so logs for remote refs with names that end in ".py" must be
-  # excluded explicitly. We therefore ignore .git directories (and everything
-  # beneath them) no matter where they appear in the workspace tree to avoid
-  # future false parse errors when CodeQL walks the workspace.
+  # Ignore Git metadata everywhere in the checkout so that CodeQL never walks
+  # into reference logs for remote branches that happen to end with the .py
+  # suffix. Those logs are plain text, but the extractor interprets the file
+  # extension literally and attempts to parse them as Python modules, which
+  # surfaces hundreds of misleading syntax errors. Explicitly excluding all
+  # .git directories (and everything under them) keeps the analysis focused on
+  # real source files while remaining resilient to future branch names.
   - /.git
   - /.git/**
   - .git
