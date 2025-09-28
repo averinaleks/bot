@@ -181,8 +181,20 @@ def _normalise_name(name: str) -> str:
 
 def _derive_scope(manifest_name: str) -> str:
     lowered = manifest_name.lower()
-    if any(token in lowered for token in ("dev", "test", "ci", "health")):
-        return "development"
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9]+", lowered)
+        if token
+    ]
+
+    for token in tokens:
+        if token.startswith("dev") or token.startswith("test"):
+            return "development"
+        if token.startswith("health"):
+            return "development"
+        if token == "ci" or (token.startswith("ci") and len(token) <= 4):
+            return "development"
+
     return "runtime"
 
 
