@@ -285,6 +285,48 @@ def test_submit_dependency_snapshot_uses_repository_dispatch_payload(
     assert submitted["ref"] == "refs/heads/auto"
 
 
+def test_submit_dependency_snapshot_uses_root_payload_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps({"after": "cafebabe", "ref": "refs/heads/root"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "repository_dispatch")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {},
+    }
+    monkeypatch.setattr(
+        snapshot,
+        "_build_manifests",
+        lambda _: {"requirements.txt": manifest},
+    )
+
+    captured_payload: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        captured_payload.update(json.loads(body))
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    assert captured_payload["sha"] == "cafebabe"
+    assert captured_payload["ref"] == "refs/heads/root"
+
+
 def test_submit_dependency_snapshot_uses_string_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
