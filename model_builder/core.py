@@ -93,6 +93,8 @@ def _load_gym() -> tuple[object, object]:
         spaces_mod.Discrete = _Discrete
         spaces_mod.Box = _Box
         gym_mod.spaces = spaces_mod
+        gym_mod.__dict__["__model_builder_stub__"] = True
+        spaces_mod.__dict__["__model_builder_stub__"] = True
         sys.modules.setdefault("gymnasium", gym_mod)
         sys.modules.setdefault("gymnasium.spaces", spaces_mod)
         return gym_mod, spaces_mod
@@ -103,21 +105,34 @@ def _load_gym() -> tuple[object, object]:
     test_mode = os.getenv("TEST_MODE") == "1"
     allow_stub = test_mode and allow_stub_env
 
+    def _record(using_stub: bool) -> None:
+        globals()["_GYM_ALLOW_STUB_ENV"] = allow_stub_env
+        globals()["_GYM_STUB_ALLOWED"] = allow_stub
+        globals()["_GYM_USING_STUB"] = using_stub
+
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
-        return gym, spaces
     except ImportError as gymnasium_error:
         if allow_stub:
-            return _ensure_stub()
+            gym_mod, spaces_mod = _ensure_stub()
+            _record(True)
+            return gym_mod, spaces_mod
         if allow_stub_env:
             try:
                 import gym  # type: ignore
                 from gym import spaces  # type: ignore
+            except ImportError as gym_error:
+                _record(False)
+                raise ImportError("gymnasium package is required") from gym_error
+            else:
+                _record(False)
                 return gym, spaces
-            except ImportError:
-                pass
+        _record(False)
         raise ImportError("gymnasium package is required") from gymnasium_error
+    else:
+        _record(False)
+        return gym, spaces
 
 
 gym, spaces = _load_gym()

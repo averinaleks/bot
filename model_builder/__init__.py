@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -33,8 +30,6 @@ from .core import (
     spaces,
     validate_host,
 )
-import sys
-import types
 
 from . import api as _api
 from .storage import (

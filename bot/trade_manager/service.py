@@ -11,6 +11,7 @@ import math
 import os
 import sys
 import threading
+import concurrent.futures
 from typing import Any, Awaitable, Mapping, TypeVar, cast
 
 import httpx
@@ -126,7 +127,12 @@ def _await_manager_result(
 ) -> _T:
     """Wait for an awaitable to finish on the TradeManager loop."""
 
-    future = asyncio.run_coroutine_threadsafe(awaitable, loop)
+    async def _coerce() -> _T:
+        return await awaitable
+
+    future: concurrent.futures.Future[_T] = asyncio.run_coroutine_threadsafe(
+        _coerce(), loop
+    )
     try:
         return future.result(timeout)
     except Exception:

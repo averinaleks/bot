@@ -11,7 +11,7 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, TypedDict
+from typing import Any, Dict, Iterable, Mapping, TypedDict
 
 from urllib.parse import quote, urlparse
 
@@ -76,6 +76,32 @@ _SKIPPED_PACKAGES = {"ccxtpro"}
 _REQUESTS_REQUIRED_MESSAGE = (
     "Dependency snapshot submission requires the 'requests' package."
 )
+
+
+def _extract_payload_value(payload: Mapping[str, object], *keys: str) -> str:
+    for key in keys:
+        candidate = payload.get(key)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return ""
+
+
+def _load_event_payload() -> dict[str, Any] | None:
+    path = os.getenv("GITHUB_EVENT_PATH")
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as stream:
+            data = json.load(stream)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(
+            f"::warning::Unable to read GitHub event payload: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
 
 
 def _report_missing_requests() -> None:
@@ -608,8 +634,6 @@ def submit_dependency_snapshot() -> None:
     try:
         repository = _env("GITHUB_REPOSITORY")
         token = _env("GITHUB_TOKEN")
-        sha = _env("GITHUB_SHA")
-        ref = _env("GITHUB_REF")
     except MissingEnvironmentVariableError as exc:
         print(str(exc), file=sys.stderr)
         print(
@@ -617,6 +641,55 @@ def submit_dependency_snapshot() -> None:
             file=sys.stderr,
         )
         return
+
+    sha = os.getenv("GITHUB_SHA") or ""
+    ref = os.getenv("GITHUB_REF") or ""
+    payload_used = False
+
+    if not sha or not ref:
+        payload = _load_event_payload()
+        client_payload: Mapping[str, object] | None = None
+        if isinstance(payload, dict):
+            raw_client = payload.get("client_payload")
+            if isinstance(raw_client, dict):
+                client_payload = raw_client
+        if client_payload is not None:
+            if not sha:
+                sha_candidate = _extract_payload_value(
+                    client_payload, "after", "sha", "head_sha"
+                )
+                if sha_candidate:
+                    sha = sha_candidate
+                    payload_used = True
+            if not ref:
+                ref_candidate = _extract_payload_value(client_payload, "ref")
+                if ref_candidate:
+                    ref = ref_candidate
+                    payload_used = True
+        if not ref and isinstance(payload, dict):
+            ref_candidate = _extract_payload_value(payload, "ref")
+            if ref_candidate:
+                ref = ref_candidate
+                payload_used = True
+
+    try:
+        if not sha:
+            raise MissingEnvironmentVariableError("GITHUB_SHA")
+        if not ref:
+            raise MissingEnvironmentVariableError("GITHUB_REF")
+    except MissingEnvironmentVariableError as exc:
+        print(str(exc), file=sys.stderr)
+        print(
+            "Dependency snapshot submission skipped из-за отсутствия переменных окружения.",
+            file=sys.stderr,
+        )
+        return
+
+    if payload_used:
+        print(
+            "Using repository_dispatch payload to populate snapshot metadata.",
+            flush=True,
+        )
 
     try:
         manifests = _build_manifests(Path("."))

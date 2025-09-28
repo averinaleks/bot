@@ -212,6 +212,11 @@ def apply() -> None:
             async def aread(self) -> bytes:
                 return self.content
 
+            async def aiter_bytes(self):
+                if not self.content:
+                    return
+                yield self.content
+
         def _return_response(method: str, url: str, *, timeout: Any | None = None, **kwargs: Any) -> _HTTPXResponse:
             """Fallback network client using :mod:`http.client`."""
 
@@ -288,8 +293,26 @@ def apply() -> None:
                 await self.aclose()
                 return None
 
-            async def stream(self, *args: Any, **kwargs: Any):  # pragma: no cover - patched in tests
-                raise NotImplementedError
+            def stream(self, method: str, url: str, **kwargs: Any):  # pragma: no cover - patched in tests
+                if self.is_closed:
+                    raise RuntimeError("Client closed")
+
+                response = _return_response(method, url, **kwargs)
+
+                class _StreamContext:
+                    def __init__(self, resp: _HTTPXResponse) -> None:
+                        self._response = resp
+
+                    async def __aenter__(self) -> _HTTPXResponse:
+                        return self._response
+
+                    async def __aexit__(self, exc_type, exc, tb) -> None:
+                        close = getattr(self._response, "close", None)
+                        if callable(close):
+                            close()
+                        return False
+
+                return _StreamContext(response)
 
             async def get(self, url: str, **kwargs: Any) -> _HTTPXResponse:
                 if self.is_closed:
