@@ -13,8 +13,14 @@ httpx = pytest.importorskip("httpx")
 
 try:
     HTTPX_VERSION = httpx.__version__
-except AttributeError:  # pragma: no cover - fallback for older releases
-    HTTPX_VERSION = metadata.version("httpx")
+except AttributeError:  # pragma: no cover - fallback for older or metadata-less releases
+    try:
+        HTTPX_VERSION = metadata.version("httpx")
+    except metadata.PackageNotFoundError:  # pragma: no cover - skip when dist metadata absent
+        pytest.skip(
+            "httpx distribution metadata is unavailable",
+            allow_module_level=True,
+        )
 
 HTTPX_REQUIREMENT = f"httpx=={HTTPX_VERSION}"
 HTTPX_PURL = f"pkg:pypi/httpx@{snapshot._encode_version_for_purl(HTTPX_VERSION)}"
