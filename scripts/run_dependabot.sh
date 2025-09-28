@@ -25,13 +25,32 @@ trap cleanup EXIT
 
 for ecosystem in pip github-actions; do
   tmp_response="$(mktemp "${tmp_dir}/${ecosystem}.XXXXXX")"
+  curl_exit=0
   http_status=$(curl -S -s -o "${tmp_response}" -w "%{http_code}" -X POST \
     -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
     -H "Content-Type: application/json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${repo}/dependabot/updates" \
-    -d "{\"package-ecosystem\":\"${ecosystem}\",\"directory\":\"/\"}")
+    -d "{\"package-ecosystem\":\"${ecosystem}\",\"directory\":\"/\"}") || curl_exit=$?
+
+  if [[ ${curl_exit} -ne 0 && ${curl_exit} -ne 22 ]]; then
+    echo "curl failed with exit code ${curl_exit} when triggering Dependabot for ${ecosystem}" >&2
+    if [[ -s "${tmp_response}" ]]; then
+      cat "${tmp_response}" >&2
+    fi
+    rm -f "${tmp_response}"
+    exit "${curl_exit}"
+  fi
+
+  if [[ -z "${http_status}" ]]; then
+    echo "Dependabot API request for ${ecosystem} did not return a status code" >&2
+    if [[ -s "${tmp_response}" ]]; then
+      cat "${tmp_response}" >&2
+    fi
+    rm -f "${tmp_response}"
+    exit 1
+  fi
   if [[ ${http_status} -eq 404 ]]; then
     echo "Dependabot endpoint returned 404 for ${ecosystem}" >&2
     cat "${tmp_response}" >&2
