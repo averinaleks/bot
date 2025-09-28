@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -212,6 +213,31 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         logger.warning("TradeManager has no run() coroutine; nothing to execute")
         return
 
+    domain_errors: tuple[type[BaseException], ...] = ()
+    module_name = getattr(type(trade_manager), "__module__", "")
+    module_candidates = [module_name]
+    if module_name and "." in module_name:
+        module_candidates.append(module_name.rsplit(".", 1)[0])
+
+    seen: set[type[BaseException]] = set()
+    collected: list[type[BaseException]] = []
+    for candidate in module_candidates:
+        module = sys.modules.get(candidate)
+        if module is None:
+            continue
+        for attr in ("TradeManagerTaskError", "InvalidHostError"):
+            error_cls = getattr(module, attr, None)
+            if (
+                isinstance(error_cls, type)
+                and issubclass(error_cls, BaseException)
+                and error_cls not in seen
+            ):
+                seen.add(error_cls)
+                collected.append(error_cls)
+
+    if collected:
+        domain_errors = tuple(collected)
+
     try:
         if runtime is not None:
             await asyncio.wait_for(run_coro(), timeout=runtime)
@@ -219,8 +245,13 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
             await run_coro()
     except asyncio.TimeoutError:
         logger.info("Runtime limit reached; stopping trading loop")
-    except Exception:
-        logger.exception("Trading loop terminated due to an unexpected error")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        if domain_errors and isinstance(exc, domain_errors):
+            message = f"Trading loop aborted after TradeManager error: {exc}"
+            logger.error(message, exc_info=True)
+            raise exc.__class__(message) from exc
         raise
     finally:
         stop = getattr(trade_manager, "stop", None)
