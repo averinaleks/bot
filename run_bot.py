@@ -368,7 +368,24 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
     except Exception as exc:
         if domain_errors and isinstance(exc, domain_errors):
             message = "Trading loop aborted after TradeManager error"
-            logger.error("%s: %s", message, exc, exc_info=True)
+            original_text = str(exc)
+            logger.error("%s: %s", message, original_text, exc_info=True)
+            if issubclass(type(exc), RuntimeError):
+                new_exc: BaseException | None = None
+                original_args = getattr(exc, "args", ())
+                if original_args:
+                    adjusted_args = (f"{message}: {original_text}",) + tuple(original_args[1:])
+                    try:
+                        new_exc = type(exc)(*adjusted_args)
+                    except Exception:
+                        new_exc = None
+                if new_exc is None:
+                    try:
+                        new_exc = type(exc)(f"{message}: {original_text}")
+                    except Exception:
+                        new_exc = None
+                if new_exc is not None:
+                    raise new_exc from exc
             raise
         logger.exception("Unexpected error during trading loop")
         raise
