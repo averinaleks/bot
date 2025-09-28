@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import types
+
+from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -77,7 +82,6 @@ class _ModelBuilderModule(types.ModuleType):
             super().__setattr__(name, value)
             if hasattr(_core_module, name):
                 _core_module.__dict__[name] = value
-
 
 sys.modules[__name__].__class__ = _ModelBuilderModule
 
