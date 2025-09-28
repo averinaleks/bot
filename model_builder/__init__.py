@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -65,13 +66,20 @@ class _ModelBuilderModule(types.ModuleType):
     def __getattr__(self, name: str):  # type: ignore[override]
         if name == "_model":
             return _api._model
-        return super().__getattr__(name)
+        try:
+            return super().__getattribute__(name)
+        except AttributeError:
+            if hasattr(_core_module, name):
+                return getattr(_core_module, name)
+            raise
 
     def __setattr__(self, name: str, value) -> None:  # type: ignore[override]
         if name == "_model":
             _api._model = value
         else:
             super().__setattr__(name, value)
+            if hasattr(_core_module, name):
+                setattr(_core_module, name, value)
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule
