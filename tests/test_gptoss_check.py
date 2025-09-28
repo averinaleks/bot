@@ -410,6 +410,36 @@ def test_skip_flag_accepts_inline_comment(tmp_path: Path) -> None:
     assert _load_skip_flag(cfg) is True
 
 
+def test_main_fallback_imports_module(monkeypatch, tmp_path: Path) -> None:
+    module_path = Path("gptoss_check/main.py")
+    spec = importlib.util.spec_from_file_location(
+        "gptoss_check_main_fallback",
+        module_path,
+    )
+    assert spec is not None and spec.loader is not None
+
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+
+    monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.setenv("GPT_OSS_API", "http://gptoss:8000")
+
+    captured: dict[str, object] = {}
+
+    def fake_import_module(name: str):
+        assert name == "gptoss_check.check_code"
+        captured["called"] = True
+        return types.SimpleNamespace(run=lambda: captured.setdefault("run", True))
+
+    monkeypatch.setattr(module, "import_module", fake_import_module)
+
+    module.main(config_path=tmp_path / "missing.cfg")
+
+    assert captured["called"] is True
+    assert captured["run"] is True
+
+
 def test_fallback_simple_response_json(monkeypatch):
     module_path = Path("gptoss_check/check_code.py")
     spec = importlib.util.spec_from_file_location(
