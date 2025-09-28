@@ -8,6 +8,7 @@ from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from ipaddress import ip_address
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from services.logging_utils import sanitize_log_value
@@ -202,11 +203,51 @@ except Exception as import_error:  # pragma: no cover - fallback for CI containe
 
     logger.debug("Using fallback HTTP client for GPT-OSS check: %s", _fallback_reason)
 else:  # pragma: no cover - import succeeds in fully configured environments
-    import httpx as _httpx
+    try:
+        # ``http_client`` exposes the resolved ``httpx`` module (either the real
+        # library or the lightweight stub used in offline environments).  Reusing
+        # it avoids importing ``httpx`` directly when the dependency is not
+        # installed inside the container – a situation that previously caused the
+        # GitHub Actions ``docker compose`` job to fail with
+        # ``ModuleNotFoundError``.
+        from http_client import httpx as _httpx_module
+    except Exception:  # pragma: no cover - ``http_client`` import should succeed
+        _httpx_module = None
+
+    if _httpx_module is not None and hasattr(_httpx_module, "HTTPError"):
+        httpx = _httpx_module
+        HTTPError = _httpx_module.HTTPError  # type: ignore[assignment]
+        _fallback_reason = None
+    else:  # pragma: no cover - executed only when the attribute is unavailable
+        try:
+            import httpx as _httpx_module  # type: ignore[import-not-found]
+        except Exception as httpx_error:  # pragma: no cover - graceful fallback
+            httpx = SimpleNamespace(HTTPError=RuntimeError)
+            HTTPError = RuntimeError
+            _fallback_reason = httpx_error
+        else:
+            httpx = _httpx_module
+            HTTPError = _httpx_module.HTTPError  # type: ignore[assignment]
+            _fallback_reason = None
 
     get_httpx_client = _get_httpx_client
-    HTTPError = _httpx.HTTPError
-    httpx = _httpx
+
+    if _fallback_reason:
+        logger.debug("Using fallback HTTP client for GPT-OSS check: %s", _fallback_reason)
+
+
+def _close_response(response: Any) -> None:
+    """Close ``response`` if it exposes a ``close`` method."""
+
+    close = getattr(response, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception as exc:  # pragma: no cover - best effort cleanup
+            logger.debug(
+                "Failed to close HTTP response: %s",
+                sanitize_log_value(str(exc)),
+            )
 
 try:  # pragma: no cover - exercised via docker compose integration
     from gpt_client import GPTClientError as _GPTClientError, query_gpt as _query_gpt
@@ -269,7 +310,7 @@ except Exception as import_error_gpt:  # pragma: no cover - fallback for CI cont
             except ValueError as exc:  # pragma: no cover - unexpected API response
                 raise RuntimeError("Некорректный JSON-ответ от GPT-OSS") from exc
             finally:
-                response.close()
+                _close_response(response)
 
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
@@ -330,7 +371,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                 try:
                     response.raise_for_status()
                 finally:
-                    response.close()
+                    _close_response(response)
             return
         except HTTPError:
             pass
@@ -349,7 +390,7 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                         return
                     response.raise_for_status()
                 finally:
-                    response.close()
+                    _close_response(response)
         except HTTPError:
             time.sleep(1)
 
@@ -390,7 +431,7 @@ def send_telegram(msg: str) -> None:
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     data={"chat_id": chat_id, "text": msg[:4000]},
                 )
-                response.close()
+                _close_response(response)
         except HTTPError as err:
             logger.warning("⚠️ Failed to send Telegram message: %s", err)
 
