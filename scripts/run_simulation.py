@@ -16,7 +16,7 @@ from bot.config import load_config
 from bot.data_handler import DataHandler
 from bot.model_builder import ModelBuilder
 from bot.trade_manager import TradeManager
-from bot.simulation import HistoricalSimulator
+from bot.simulation import HistoricalSimulator, SimulationDataError
 from bot.utils import logger
 
 
@@ -40,7 +40,23 @@ async def main() -> None:
     mb = ModelBuilder(cfg, dh, None)
     tm = TradeManager(cfg, dh, mb, None, None)
     sim = HistoricalSimulator(dh, tm)
-    await sim.run(start_ts, end_ts, args.speed)
+    try:
+        result = await sim.run(start_ts, end_ts, args.speed)
+    except SimulationDataError as exc:
+        logger.error("Simulation failed: %s", exc)
+        return
+
+    if result.missing_symbols:
+        logger.warning(
+            "Symbols without data: %s",
+            ", ".join(result.missing_symbols),
+        )
+    logger.info(
+        "Simulation completed: %d iterations, %d updates across %d symbols",
+        result.total_iterations,
+        result.total_updates,
+        len(result.processed_symbols),
+    )
 
 if __name__ == "__main__":
     from bot.utils import configure_logging

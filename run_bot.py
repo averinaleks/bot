@@ -232,12 +232,28 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
 async def run_simulation_cycle(args: argparse.Namespace, data_handler, trade_manager) -> None:
     """Run the historical simulator with the provided arguments."""
 
-    from bot.simulation import HistoricalSimulator
+    from bot.simulation import HistoricalSimulator, SimulationDataError
 
     start_ts = pd.to_datetime(args.start, utc=True)
     end_ts = pd.to_datetime(args.end, utc=True)
     simulator = HistoricalSimulator(data_handler, trade_manager)
-    await simulator.run(start_ts, end_ts, args.speed)
+    try:
+        result = await simulator.run(start_ts, end_ts, args.speed)
+    except SimulationDataError as exc:
+        logger.error("Simulation failed: %s", exc)
+        return
+
+    if result.missing_symbols:
+        logger.warning(
+            "Symbols without data: %s",
+            ", ".join(result.missing_symbols),
+        )
+    logger.info(
+        "Simulation completed: %d iterations, %d updates across %d symbols",
+        result.total_iterations,
+        result.total_updates,
+        len(result.processed_symbols),
+    )
 
 
 async def main() -> None:
