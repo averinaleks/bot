@@ -113,7 +113,7 @@ def _run_pip_install(requirement: str) -> None:
 
 
 _required_packages: list[tuple[str, str]] = [
-    ("numpy", "numpy==2.2.2"),
+    ("numpy", "numpy==2.2.6"),
     ("pandas", "pandas==2.3.2"),
     ("pydantic", "pydantic==2.11.9"),
     ("flask", "flask>=3.0.3,<4"),

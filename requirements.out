@@ -298,7 +298,7 @@ numba==0.62.0
     # via
     #   -r requirements.txt
     #   shap
-numpy==2.2.2
+numpy==2.2.6
     # via
     #   -r requirements.txt
     #   contourpy
