@@ -24,9 +24,11 @@ def isolated_model_builder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
     monkeypatch.setenv("MODEL_DIR", str(tmp_path))
     monkeypatch.setenv("MODEL_FILE", "model.pkl")
+    package_path = Path(__file__).resolve().parent.parent / "model_builder"
     spec = importlib.util.spec_from_file_location(
         "test_model_builder_module",
-        Path(__file__).resolve().parent.parent / "model_builder.py",
+        package_path / "__init__.py",
+        submodule_search_locations=[str(package_path)],
     )
     assert spec and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -35,7 +37,9 @@ def isolated_model_builder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         spec.loader.exec_module(module)
         yield module
     finally:
-        sys.modules.pop(spec.name, None)
+        for name in list(sys.modules):
+            if name == spec.name or name.startswith(f"{spec.name}."):
+                sys.modules.pop(name, None)
 
 
 def _model_path(module) -> Path:

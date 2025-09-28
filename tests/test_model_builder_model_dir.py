@@ -7,9 +7,11 @@ import pytest
 
 
 def _load_model_builder(module_name: str) -> object:
+    package_path = Path(__file__).resolve().parents[1] / "model_builder"
     spec = importlib.util.spec_from_file_location(
         module_name,
-        Path(__file__).resolve().parents[1] / "model_builder.py",
+        package_path / "__init__.py",
+        submodule_search_locations=[str(package_path)],
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -17,7 +19,9 @@ def _load_model_builder(module_name: str) -> object:
     try:
         spec.loader.exec_module(module)
     finally:
-        sys.modules.pop(module_name, None)
+        for name in list(sys.modules):
+            if name == module_name or name.startswith(f"{module_name}."):
+                sys.modules.pop(name, None)
     return module
 
 
