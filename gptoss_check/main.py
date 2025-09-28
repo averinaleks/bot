@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib
+from importlib import import_module
 import logging
 import os
 import sys
@@ -56,7 +56,7 @@ def main(config_path: Optional[Path] = None) -> None:
             )
         if str(parent_dir) not in sys.path:
             sys.path.insert(0, str(parent_dir))
-        check_code = importlib.import_module(f"{PACKAGE_NAME}.check_code")
+        check_code = import_module(f"{PACKAGE_NAME}.check_code")
     logger.info("Running GPT-OSS check...")
     check_code.run()
     logger.info("GPT-OSS check completed")
