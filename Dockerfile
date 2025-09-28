@@ -89,7 +89,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Устанавливаем зависимости (pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает свежие уязвимости)
 RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
-    $VIRTUAL_ENV/bin/python - <<'PY' && \
+    $VIRTUAL_ENV/bin/python - <<'PY'
 from __future__ import annotations
 import os
 from pathlib import Path
@@ -132,7 +132,8 @@ else:
             f"{commons_lang3_sha256}, got {digest}"
         )
 PY
-    find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
+
+RUN find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -type f -name '*.pyc' -delete && \
     pip uninstall -y pip setuptools wheel && \
     find /app/venv -name "*.so" -exec strip --strip-unneeded {} +
