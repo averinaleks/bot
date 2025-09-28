@@ -20,6 +20,7 @@ from urllib.parse import urlparse, urlunparse
 import requests  # type: ignore[import-untyped]
 
 from services.logging_utils import sanitize_log_value
+from http_client import get_requests_session
 
 
 logger = logging.getLogger(__name__)
@@ -154,39 +155,48 @@ def check_endpoints(
         return 1
 
     base = normalised.rstrip("/")
-    for endpoint in endpoints:
-        suffix = endpoint if endpoint.startswith("/") else f"/{endpoint}"
-        url = f"{base}{suffix}"
-        attempts_left = max(1, max_attempts)
-        while attempts_left:
-            try:
-                response = requests.get(url, timeout=10)
-                response.raise_for_status()
-            except requests.RequestException as exc:
-                attempts_left -= 1
-                if attempts_left <= 0:
-                    logger.error(
-                        "Health check failed for %s: %s",
+    with get_requests_session(timeout=10.0, verify=True) as session:
+        for endpoint in endpoints:
+            suffix = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+            url = f"{base}{suffix}"
+            parsed = urlparse(url)
+            if parsed.scheme == "http" and not _is_local_host(parsed.hostname):
+                logger.error(
+                    "Refusing insecure HTTP health check for non-local endpoint %s",
+                    sanitize_log_value(url),
+                )
+                return 1
+
+            attempts_left = max(1, max_attempts)
+            while attempts_left:
+                try:
+                    response = session.get(url)
+                    response.raise_for_status()
+                except requests.RequestException as exc:
+                    attempts_left -= 1
+                    if attempts_left <= 0:
+                        logger.error(
+                            "Health check failed for %s: %s",
+                            sanitize_log_value(url),
+                            sanitize_log_value(str(exc)),
+                        )
+                        return 1
+                    logger.warning(
+                        "Attempt %s for %s failed: %s – retrying in %.1fs",
+                        max_attempts - attempts_left,
                         sanitize_log_value(url),
                         sanitize_log_value(str(exc)),
+                        delay_seconds,
                     )
-                    return 1
-                logger.warning(
-                    "Attempt %s for %s failed: %s – retrying in %.1fs",
-                    max_attempts - attempts_left,
-                    sanitize_log_value(url),
-                    sanitize_log_value(str(exc)),
-                    delay_seconds,
-                )
-                time.sleep(max(0.0, delay_seconds))
-                continue
+                    time.sleep(max(0.0, delay_seconds))
+                    continue
 
-            logger.info(
-                "%s -> %s",
-                sanitize_log_value(url),
-                response.status_code,
-            )
-            break
+                logger.info(
+                    "%s -> %s",
+                    sanitize_log_value(url),
+                    response.status_code,
+                )
+                break
     return 0
 
 
