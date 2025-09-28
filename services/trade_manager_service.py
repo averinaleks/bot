@@ -5,10 +5,6 @@ Bybit. API keys are taken from ``BYBIT_API_KEY`` and ``BYBIT_API_SECRET``
 environment variables.
 """
 
-from flask import Flask, request, jsonify
-from werkzeug.exceptions import BadRequest
-from typing import Any, Mapping, cast
-from pathlib import Path
 import json
 import logging
 import math
@@ -17,6 +13,11 @@ import stat
 import tempfile
 import threading
 import time
+from pathlib import Path
+from typing import Any, Mapping, cast
+
+from flask import Flask, jsonify, request
+from werkzeug.exceptions import BadRequest
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
@@ -24,11 +25,11 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 
 from bot.trade_manager import server_common
 from bot.utils_loader import require_utils
+from services.logging_utils import sanitize_log_value
 
 _utils = require_utils("validate_host", "safe_int")
 validate_host = _utils.validate_host
 safe_int = _utils.safe_int
-from services.logging_utils import sanitize_log_value
 
 server_common.load_environment()
 
