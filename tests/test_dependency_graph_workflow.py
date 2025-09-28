@@ -39,6 +39,8 @@ def test_dependency_graph_permissions_are_valid() -> None:
     permissions = _extract_permissions(workflow)
 
     assert permissions, "permissions block must be present"
+    assert workflow.count("permissions:") == 1, "workflow must not define nested permission blocks"
+    assert "dependency-graph:" not in workflow, "GitHub rejects the dependency-graph permission scope"
 
     allowed_keys = {"contents", "security-events"}
     assert set(permissions) <= allowed_keys
