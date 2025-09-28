@@ -5,6 +5,8 @@ import types
 import pytest
 import logging
 import httpx
+import run_bot
+import sys
 
 
 @pytest.mark.asyncio
@@ -214,6 +216,63 @@ def test_load_env_service_scheme_https(monkeypatch):
     assert env['data_handler_url'] == 'https://localhost:8000'
     assert env['model_builder_url'] == 'https://localhost:8001'
     assert env['trade_manager_url'] == 'https://localhost:8002'
+
+
+@pytest.mark.asyncio
+async def test_run_trading_cycle_propagates_unexpected_exceptions():
+    class DummyTradeManager:
+        def __init__(self):
+            self.stop_called = False
+
+        async def run(self):
+            raise RuntimeError('boom')
+
+        async def stop(self):
+            self.stop_called = True
+
+    tm = DummyTradeManager()
+
+    with pytest.raises(RuntimeError, match='boom'):
+        await run_bot.run_trading_cycle(tm, None)
+
+    assert tm.stop_called is True
+
+
+@pytest.mark.asyncio
+async def test_run_trading_cycle_wraps_trade_manager_errors():
+    module_name = 'tests.fake_trade_manager_module'
+    fake_module = types.ModuleType(module_name)
+
+    class FakeTradeManagerTaskError(RuntimeError):
+        pass
+
+    FakeTradeManagerTaskError.__module__ = module_name
+    fake_module.TradeManagerTaskError = FakeTradeManagerTaskError
+    sys.modules[module_name] = fake_module
+
+    class DummyTradeManager:
+        __module__ = module_name
+
+        def __init__(self):
+            self.stop_called = False
+
+        async def run(self):
+            raise FakeTradeManagerTaskError('original')
+
+        async def stop(self):
+            self.stop_called = True
+
+    tm = DummyTradeManager()
+
+    try:
+        with pytest.raises(FakeTradeManagerTaskError) as excinfo:
+            await run_bot.run_trading_cycle(tm, None)
+    finally:
+        sys.modules.pop(module_name, None)
+
+    assert tm.stop_called is True
+    assert 'Trading loop aborted after TradeManager error' in str(excinfo.value)
+    assert excinfo.value.__cause__ is not None
 
 
 @pytest.mark.asyncio
