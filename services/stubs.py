@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from types import SimpleNamespace
 from typing import Any, Dict
@@ -52,6 +53,7 @@ def create_httpx_stub() -> SimpleNamespace:
             self.status_code = status_code
             self.headers: Headers = Headers(headers or {})
             self.request = request or Request("GET", "offline://stub")
+            self._closed = False
             if content is None:
                 body = b""
             elif isinstance(content, bytes):
@@ -86,6 +88,17 @@ def create_httpx_stub() -> SimpleNamespace:
         def raise_for_status(self) -> None:
             if self.status_code >= 400:
                 raise HTTPError(f"Offline stub status {self.status_code}")
+
+        def close(self) -> None:
+            self._closed = True
+
+        async def aclose(self) -> None:
+            self._closed = True
+
+        async def aiter_bytes(self):
+            if not self._content:
+                return
+            yield self._content
 
     def _build_response(method: str, url: str, **kwargs: Any) -> Response:
         json_payload = kwargs.get("json")
@@ -150,6 +163,32 @@ def create_httpx_stub() -> SimpleNamespace:
 
         async def post(self, url: str, **kwargs: Any) -> Response:
             return await self.request("POST", url, **kwargs)
+
+        def stream(self, method: str, url: str, **kwargs: Any):
+            response = _build_response(method, url, **kwargs)
+
+            class _StreamContext:
+                def __init__(self, resp: Response) -> None:
+                    self._response = resp
+
+                async def __aenter__(self) -> Response:
+                    return self._response
+
+                async def __aexit__(self, exc_type, exc, tb) -> None:
+                    # Mirror httpx behaviour by closing the response when leaving
+                    # the streaming context.  ``aclose`` is available on the real
+                    # response object while ``close`` is defined on this stub.
+                    close_async = getattr(self._response, "aclose", None)
+                    if callable(close_async):
+                        result = close_async()
+                        if inspect.isawaitable(result):
+                            await result
+                    close_sync = getattr(self._response, "close", None)
+                    if callable(close_sync):
+                        close_sync()
+                    return False
+
+            return _StreamContext(response)
 
         async def aclose(self) -> None:
             self._closed = True
