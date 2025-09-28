@@ -46,6 +46,8 @@ from .storage import (
     _safe_model_file_path,
 )
 
+_core_module.ensure_gym_available()
+
 api_app = _api.api_app
 configure_logging = _api.configure_logging
 api_main = _api.main
@@ -76,10 +78,23 @@ class _ModelBuilderModule(types.ModuleType):
     def __setattr__(self, name: str, value) -> None:  # type: ignore[override]
         if name == "_model":
             _api._model = value
-        else:
-            super().__setattr__(name, value)
-            if hasattr(_core_module, name):
-                setattr(_core_module, name, value)
+            return
+
+        super().__setattr__(name, value)
+
+        core_dict = getattr(_core_module, "__dict__", None)
+        if core_dict is not None:
+            core_dict[name] = value
+
+    def __delattr__(self, name: str) -> None:  # type: ignore[override]
+        if name == "_model":
+            raise AttributeError("_model attribute cannot be deleted")
+
+        super().__delattr__(name)
+
+        core_dict = getattr(_core_module, "__dict__", None)
+        if core_dict is not None and name in core_dict:
+            del core_dict[name]
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule

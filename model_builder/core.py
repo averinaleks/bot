@@ -48,6 +48,17 @@ is_cuda_available = _utils.is_cuda_available
 logger = _utils.logger
 validate_host = _utils.validate_host
 
+
+def _module_has_package_spec(module: object) -> bool:
+    """Return ``True`` if ``module`` resembles an installed package."""
+
+    spec = getattr(module, "__spec__", None)
+    if spec is None:
+        return False
+    locations = getattr(spec, "submodule_search_locations", None)
+    return bool(locations)
+
+
 def _load_gym() -> tuple[object, object]:
     """Import gymnasium or fall back to lightweight stubs in test mode."""
 
@@ -100,10 +111,15 @@ def _load_gym() -> tuple[object, object]:
     test_mode = os.getenv("TEST_MODE") == "1"
     allow_stub = test_mode and allow_stub_env
 
+    if not allow_stub_env:
+        for module_name in ("gymnasium", "gymnasium.spaces"):
+            module_obj = sys.modules.get(module_name)
+            if module_obj is not None and not _module_has_package_spec(module_obj):
+                sys.modules.pop(module_name, None)
+
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
-        return gym, spaces
     except ImportError as gymnasium_error:
         if allow_stub:
             return _ensure_stub()
@@ -115,9 +131,28 @@ def _load_gym() -> tuple[object, object]:
             except ImportError:
                 pass
         raise ImportError("gymnasium package is required") from gymnasium_error
+    else:
+        if not allow_stub_env and (
+            not _module_has_package_spec(gym)
+            or not _module_has_package_spec(spaces)
+        ):
+            raise ImportError("gymnasium package is required (stub detected)")
+        return gym, spaces
 
 
 gym, spaces = _load_gym()
+
+
+def ensure_gym_available() -> None:
+    """Raise :class:`ImportError` when only stub gym modules are available."""
+
+    allow_stub_env = (
+        os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {"0", "false", "no"}
+    )
+    if allow_stub_env:
+        return
+    if not _module_has_package_spec(gym) or not _module_has_package_spec(spaces):
+        raise ImportError("gymnasium package is required")
 
 # ``ray`` предоставляется через bot.ray_compat и может быть как настоящим пакетом,
 # так и заглушкой, если зависимость не установлена.
@@ -875,52 +910,58 @@ class ModelBuilder:
     def _prepare_history_cache(cache_dir: str) -> tuple[HistoricalDataCache | None, str]:
         """Initialise the historical data cache with graceful fallbacks."""
 
-        requested_dir = os.path.abspath(os.fspath(cache_dir)) if cache_dir else ""
-        fallback_dir = os.path.abspath(
-            os.path.join(tempfile.gettempdir(), "model_builder_cache")
-        )
-        candidates: list[str] = []
-        if requested_dir:
-            candidates.append(requested_dir)
-        if fallback_dir not in candidates:
-            candidates.append(fallback_dir)
+        original_tempdir = getattr(tempfile, "tempdir", None)
+        try:
+            requested_dir = os.path.abspath(os.fspath(cache_dir)) if cache_dir else ""
+            fallback_dir = os.path.abspath(
+                os.path.join(tempfile.gettempdir(), "model_builder_cache")
+            )
+            candidates: list[str] = []
+            if requested_dir:
+                candidates.append(requested_dir)
+            if fallback_dir not in candidates:
+                candidates.append(fallback_dir)
 
-        if HistoricalDataCache is None:
+            if HistoricalDataCache is None:
+                for path in candidates:
+                    try:
+                        os.makedirs(path, exist_ok=True)
+                        return None, path
+                    except Exception:
+                        logger.exception(
+                            "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                        )
+                return None, fallback_dir
+
             for path in candidates:
                 try:
-                    os.makedirs(path, exist_ok=True)
-                    return None, path
+                    cache = HistoricalDataCache(path)
+                except PermissionError:
+                    logger.warning(
+                        "Нет прав на запись в каталог ModelBuilder %s, пробуем временную директорию",
+                        path,
+                    )
                 except Exception:
                     logger.exception(
-                        "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                        "Не удалось инициализировать кэш ModelBuilder в %s",
+                        path,
                     )
-            return None, fallback_dir
+                else:
+                    return cache, cache.cache_dir
 
-        for path in candidates:
+            chosen = candidates[-1]
             try:
-                cache = HistoricalDataCache(path)
-            except PermissionError:
-                logger.warning(
-                    "Нет прав на запись в каталог ModelBuilder %s, пробуем временную директорию",
-                    path,
-                )
+                os.makedirs(chosen, exist_ok=True)
             except Exception:
                 logger.exception(
-                    "Не удалось инициализировать кэш ModelBuilder в %s",
-                    path,
+                    "Не удалось создать резервный каталог кэша ModelBuilder %s",
+                    chosen,
                 )
-            else:
-                return cache, cache.cache_dir
-
-        chosen = candidates[-1]
-        try:
-            os.makedirs(chosen, exist_ok=True)
-        except Exception:
-            logger.exception(
-                "Не удалось создать резервный каталог кэша ModelBuilder %s",
-                chosen,
-            )
-        return None, chosen
+            return None, chosen
+        finally:
+            current_tempdir = getattr(tempfile, "tempdir", None)
+            if current_tempdir is not original_tempdir:
+                setattr(tempfile, "tempdir", original_tempdir)
 
     def compute_prediction_metrics(self, symbol: str):
         """Return accuracy and Brier score over recent predictions."""
