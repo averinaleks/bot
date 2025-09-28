@@ -3,7 +3,6 @@ import asyncio
 import hmac
 import logging
 import re
-import sys
 from contextlib import asynccontextmanager
 from typing import Any, List, Mapping
 
@@ -70,6 +69,12 @@ from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
+
+
+class ServerConfigurationError(RuntimeError):
+    """Raised when mandatory server configuration is invalid."""
+
+    pass
 
 _MASKED_HEADER_VALUE = "***"
 _SENSITIVE_BOUNDARY_RE = re.compile(r"(^|[^a-z0-9])(auth|key|cookie)([^a-z0-9]|$)")
@@ -339,12 +344,19 @@ host = os.getenv(
 port_str = os.getenv("PORT", "8000")
 try:
     port = int(port_str)
-except ValueError:
-    logging.error(
-        "Invalid PORT value '%s'; must be an integer",
-        sanitize_log_value(port_str),
+except ValueError as exc:  # pragma: no cover - exercised in tests
+    safe_port = sanitize_log_value(port_str)
+    logger.error("Invalid PORT value '%s'; must be an integer", safe_port)
+    raise ServerConfigurationError(
+        f"Invalid PORT value '{safe_port}'; must be an integer"
+    ) from exc
+
+if host not in ALLOWED_HOSTS:
+    safe_host = sanitize_log_value(host)
+    logger.error("Invalid HOST '%s'; allowed values are %s", safe_host, ALLOWED_HOSTS)
+    raise ServerConfigurationError(
+        f"Invalid HOST '{safe_host}'; allowed values are {sorted(ALLOWED_HOSTS)}"
     )
-    sys.exit(1)
 
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 
@@ -508,12 +520,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     import uvicorn
 
-    if host in ALLOWED_HOSTS:
-        uvicorn.run("server:app", host=host, port=port)
-    else:
-        logging.error(
-            "Invalid HOST '%s'; allowed values are %s",
-            sanitize_log_value(host),
-            ALLOWED_HOSTS,
-        )
-        sys.exit(1)
+    uvicorn.run("server:app", host=host, port=port)
