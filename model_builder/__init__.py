@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
-from . import core as _core_module
+import importlib
+import os
+import sys
+import types
+
+_core_module = importlib.import_module(".core", __name__)
+_allow_stub_env = os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
+if not _allow_stub_env:
+    _core_module = importlib.reload(_core_module)
+
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -31,8 +44,6 @@ from .core import (
     spaces,
     validate_host,
 )
-import sys
-import types
 
 from . import api as _api
 from .storage import (
@@ -79,7 +90,7 @@ class _ModelBuilderModule(types.ModuleType):
         else:
             super().__setattr__(name, value)
             if hasattr(_core_module, name):
-                setattr(_core_module, name, value)
+                _core_module.__dict__[name] = value
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule
