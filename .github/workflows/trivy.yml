@@ -25,7 +25,7 @@ jobs:
 
       - name: Set Trivy cache directory
         run: |
-          echo "TRIVY_CACHE_DIR=${{ runner.temp }}/trivy-cache" >> "$GITHUB_ENV"
+          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
 
       - name: Prepare Trivy cache directory
         run: |
@@ -125,7 +125,7 @@ jobs:
 
       - name: Set Trivy cache directory
         run: |
-          echo "TRIVY_CACHE_DIR=${{ runner.temp }}/trivy-cache" >> "$GITHUB_ENV"
+          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
 
       - name: Prepare Trivy cache directory
         run: |
