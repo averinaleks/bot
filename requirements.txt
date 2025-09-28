@@ -24,16 +24,22 @@ anyio==4.10.0
     #   httpx
     #   openai
     #   starlette
+async-timeout==5.0.1
+    # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
+backports-asyncio-runner==1.2.0 ; python_version < "3.11"
+    # via
+    #   -r requirements-core.in
+    #   pytest-asyncio
 bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
     # via flask
-ccxt==4.5.5
+ccxt==4.5.6
     # via -r requirements-core.in
 certifi==2025.8.3
     # via
@@ -64,6 +70,10 @@ cycler==0.12.1
     # via matplotlib
 distro==1.9.0
     # via openai
+exceptiongroup==1.3.0
+    # via
+    #   anyio
+    #   pytest
 farama-notifications==0.0.4
     # via gymnasium
 fastapi==0.117.1
@@ -183,43 +193,6 @@ numpy==2.2.6
     #   ta
     #   torchmetrics
     #   transformers
-nvidia-cublas-cu12==12.8.4.1
-    # via
-    #   nvidia-cudnn-cu12
-    #   nvidia-cusolver-cu12
-    #   torch
-nvidia-cuda-cupti-cu12==12.8.90
-    # via torch
-nvidia-cuda-nvrtc-cu12==12.8.93
-    # via torch
-nvidia-cuda-runtime-cu12==12.8.90
-    # via torch
-nvidia-cudnn-cu12==9.10.2.21
-    # via torch
-nvidia-cufft-cu12==11.3.3.83
-    # via torch
-nvidia-cufile-cu12==1.13.1.3
-    # via torch
-nvidia-curand-cu12==10.3.9.90
-    # via torch
-nvidia-cusolver-cu12==11.7.3.90
-    # via torch
-nvidia-cusparse-cu12==12.5.8.93
-    # via
-    #   nvidia-cusolver-cu12
-    #   torch
-nvidia-cusparselt-cu12==0.7.1
-    # via torch
-nvidia-nccl-cu12==2.27.3
-    # via torch
-nvidia-nvjitlink-cu12==12.8.93
-    # via
-    #   nvidia-cufft-cu12
-    #   nvidia-cusolver-cu12
-    #   nvidia-cusparse-cu12
-    #   torch
-nvidia-nvtx-cu12==12.8.90
-    # via torch
 openai==1.109.1
     # via -r requirements-core.in
 packaging==25.0
@@ -360,7 +333,9 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.22.0
     # via transformers
-torch==2.8.0
+tomli==2.2.1
+    # via pytest
+torch==2.8.0+cpu
     # via
     #   pytorch-lightning
     #   stable-baselines3
@@ -376,17 +351,19 @@ tqdm==4.67.1
     #   transformers
 transformers==4.56.2
     # via -r requirements-core.in
-triton==3.4.0
-    # via torch
 typing-extensions==4.14.1
     # via
+    #   a2wsgi
     #   aiosignal
     #   anyio
     #   ccxt
+    #   cryptography
+    #   exceptiongroup
     #   fastapi
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
+    #   multidict
     #   openai
     #   pydantic
     #   pydantic-core
