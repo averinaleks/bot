@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import types
+
+from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
