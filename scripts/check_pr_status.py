@@ -177,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
-            f"::error::Неожиданная ошибка при проверке PR: {exc}",
+            f"::warning::Неожиданная ошибка при проверке PR: {exc}",
             file=sys.stderr,
         )
         _write_github_output(skip=True, head_sha="")
@@ -215,7 +215,10 @@ def cli(argv: list[str] | None = None) -> int:
             _write_github_output(skip=True, head_sha="")
         return 0
     except BaseException as exc:  # pragma: no cover - defensive guard
-        print(f"::error::Критическое исключение в check_pr_status: {exc}", file=sys.stderr)
+        print(
+            f"::warning::Критическое исключение в check_pr_status: {exc}",
+            file=sys.stderr,
+        )
         _write_github_output(skip=True, head_sha="")
         return 0
 
