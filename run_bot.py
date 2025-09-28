@@ -9,9 +9,10 @@ import contextlib
 import logging
 import os
 import sys
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 import pandas as pd
 
@@ -171,36 +172,79 @@ def _log_mode(command: str, offline: bool) -> None:
     logger.info("Starting %s mode in %s configuration", command, mode)
 
 
-def _patch_offline_services():
-    from services.offline import OfflineBybit, OfflineTelegram, OfflineGPT
+def _import_from_path(path: str) -> Any:
+    module_name, _, attr_path = path.partition(":")
+    if not module_name or not attr_path:
+        raise ValueError(f"Invalid factory path: {path!r}")
+    module = importlib.import_module(module_name)
+    target: Any = module
+    for part in attr_path.split("."):
+        target = getattr(target, part)
+    return target
 
-    import bot.utils as utils_module
-    import bot.telegram_logger as telegram_logger_module
-    import bot.gpt_client as gpt_client
 
-    utils_module.TelegramLogger = OfflineTelegram
-    telegram_logger_module.TelegramLogger = OfflineTelegram
-    gpt_client.OFFLINE_MODE = True
-    gpt_client.OfflineGPT = OfflineGPT
-    return OfflineBybit
+def _resolve_factory(cfg: "BotConfig", name: str) -> Callable[..., Any] | type | None:
+    mapping = getattr(cfg, "service_factories", {}) or {}
+    raw = mapping.get(name)
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            return _import_from_path(raw)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to import factory for %s from %s: %s", name, raw, exc)
+            return None
+    return raw
+
+
+def _instantiate_factory(factory: Callable[..., Any] | type | None, cfg: "BotConfig") -> Any:
+    if factory is None:
+        return None
+    for creator in (
+        lambda: factory(cfg),
+        lambda: factory(config=cfg),
+        lambda: factory(),
+    ):
+        try:
+            return creator()
+        except TypeError:
+            continue
+    logger.warning("Failed to instantiate %r with supported signatures", factory)
+    return None
 
 
 def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None):
-    exchange_cls = None
+    service_factories = dict(getattr(cfg, "service_factories", {}) or {})
     if offline:
-        exchange_cls = _patch_offline_services()
+        from services.offline import OFFLINE_SERVICE_FACTORIES
+
+        for key, value in OFFLINE_SERVICE_FACTORIES.items():
+            service_factories.setdefault(key, value)
+    cfg.service_factories = service_factories
+
+    exchange_factory = _resolve_factory(cfg, "exchange")
+    exchange = _instantiate_factory(exchange_factory, cfg)
 
     from bot.data_handler import DataHandler
     from bot.model_builder import ModelBuilder
     from bot.trade_manager import TradeManager
 
-    exchange = exchange_cls() if exchange_cls else None
+    telegram_factory = _resolve_factory(cfg, "telegram_logger")
+    gpt_factory = _resolve_factory(cfg, "gpt_client")
 
     data_handler = DataHandler(cfg, None, None, exchange=exchange)
     prepare_data_handler(data_handler, cfg, symbols)
 
-    model_builder = ModelBuilder(cfg, data_handler, None)
-    trade_manager = TradeManager(cfg, data_handler, model_builder, None, None)
+    model_builder = ModelBuilder(cfg, data_handler, None, gpt_client_factory=gpt_factory)
+    trade_manager = TradeManager(
+        cfg,
+        data_handler,
+        model_builder,
+        None,
+        None,
+        telegram_logger_factory=telegram_factory,
+        gpt_client_factory=gpt_factory,
+    )
     model_builder.trade_manager = trade_manager
     return data_handler, model_builder, trade_manager
 
