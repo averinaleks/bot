@@ -377,7 +377,13 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         if matched_attr is not None:
             message = "Trading loop aborted after TradeManager error"
             logger.error("%s: %s", message, exc, exc_info=True)
-            raise
+            if isinstance(exc, RuntimeError) and not getattr(exc, "_trading_loop_wrapped", False):
+                original_args = exc.args
+                original_message = original_args[0] if original_args else ""
+                combined = f"{message}: {original_message}" if original_message else message
+                exc.args = (combined, *original_args[1:])
+                setattr(exc, "_trading_loop_wrapped", True)
+            raise exc from exc
         logger.exception("Unexpected error during trading loop")
         raise
     finally:
