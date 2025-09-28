@@ -572,6 +572,27 @@ class TradeManager:
         if not self.positions.empty:
             self.positions.sort_index(level=["symbol", "timestamp"], inplace=True)
 
+    async def get_positions_snapshot(self) -> list[dict[str, Any]]:
+        """Return a JSON-serializable snapshot of open positions."""
+
+        async with self.position_lock:
+            df = self.positions.copy()
+
+        if df.empty:
+            return []
+
+        if "timestamp" in df.index.names:
+            df = df.reset_index()
+
+        df = df.where(pd.notnull(df), None)
+        records = df.to_dict(orient="records")
+
+        for record in records:
+            for key, value in list(record.items()):
+                if isinstance(value, pd.Timestamp):
+                    record[key] = value.isoformat()
+        return records
+
     def _handle_corrupted_state_file(self, path: str, exc: Exception) -> str:
         sanitized_path = sanitize_log_value(path)
         logger.warning(

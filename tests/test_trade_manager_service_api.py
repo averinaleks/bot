@@ -118,6 +118,7 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
 
 def _setup_trade_manager(monkeypatch):
     tm, loop, stub = tm_routes._setup_module(monkeypatch)
+    stub._positions_data = []
     return tm, loop, stub
 
 
