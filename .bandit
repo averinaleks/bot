@@ -1,4 +1,6 @@
-exclude_dirs:
-  - tests
-  - scripts
-  - gptoss_check
+[bandit]
+# Exclude directories that contain test fixtures, helper scripts, or tooling
+# that intentionally use patterns flagged by Bandit (for example, assertions in
+# tests). Using the INI syntax ensures Bandit can parse the configuration and
+# respect the exclusions during analysis.
+exclude = tests,scripts,gptoss_check
