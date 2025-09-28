@@ -225,3 +225,10 @@ class OfflineGPT:
     @staticmethod
     async def query_json_async(prompt: str) -> dict:
         return {"signal": "hold"}
+
+
+OFFLINE_SERVICE_FACTORIES: dict[str, str] = {
+    "exchange": "services.offline:OfflineBybit",
+    "telegram_logger": "services.offline:OfflineTelegram",
+    "gpt_client": "services.offline:OfflineGPT",
+}
