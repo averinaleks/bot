@@ -203,11 +203,19 @@ jobs:
           fi
 
       - name: Upload Trivy scan results to GitHub Security tab
+        id: upload_trivy_sarif
         if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@3599b3baa15b485a2e49ef411a7a4bb2452e7f93
         # v3.30.5
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Warn when SARIF upload is unavailable
+        if: ${{ steps.upload_trivy_sarif.outcome == 'failure' }}
+        run: |
+          echo "::warning::Не удалось загрузить отчёт Trivy в раздел безопасности GitHub."
+          echo "* SARIF upload failed due to missing permissions." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Trivy report artifact
         if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
