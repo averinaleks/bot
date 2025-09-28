@@ -4,9 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import pandas as pd
-from typing import Dict
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
 from bot.utils import logger
+
+
+@dataclass(frozen=True)
+class SimulationResult:
+    """Structured information returned after a simulation run."""
+
+    start: pd.Timestamp
+    end: pd.Timestamp
+    processed_symbols: List[str]
+    missing_symbols: List[str]
+    total_iterations: int
+    total_updates: int
+
+
+class SimulationDataError(RuntimeError):
+    """Raised when the simulator cannot run due to missing historical data."""
 
 
 class HistoricalSimulator:
@@ -17,20 +34,35 @@ class HistoricalSimulator:
         self.trade_manager = trade_manager
         self.history: Dict[str, pd.DataFrame] = {}
 
-    async def load(self, start_ts: pd.Timestamp, end_ts: pd.Timestamp) -> None:
-        """Load cached OHLCV data for all symbols."""
+    async def load(
+        self, start_ts: pd.Timestamp, end_ts: pd.Timestamp
+    ) -> Tuple[List[str], List[str]]:
+        """Load cached OHLCV data for all symbols.
+
+        Returns:
+            A tuple consisting of a list of symbols that were successfully loaded
+            and a list of symbols for which no data was found in the requested
+            range.
+        """
+        self.history.clear()
+        loaded_symbols: List[str] = []
+        missing_symbols: List[str] = []
         timeframe = self.data_handler.config.get("timeframe", "1m")
         for symbol in self.data_handler.usdt_pairs:
             df = None
             if hasattr(self.data_handler, "history"):
-                df = self.data_handler.history
-                if "symbol" in df.index.names:
-                    df = df.xs(symbol, level="symbol", drop_level=False)
+                candidate = self.data_handler.history
+                if isinstance(candidate, pd.DataFrame):
+                    df = candidate
+                    if "symbol" in df.index.names:
+                        df = df.xs(symbol, level="symbol", drop_level=False)
             else:
                 cache = getattr(self.data_handler, "cache", None)
                 if cache:
                     df = cache.load_cached_data(symbol, timeframe)
             if df is None:
+                if symbol not in missing_symbols:
+                    missing_symbols.append(symbol)
                 continue
             if isinstance(df.index, pd.MultiIndex):
                 ts_level = "timestamp" if "timestamp" in df.index.names else df.index.names[0]
@@ -40,7 +72,13 @@ class HistoricalSimulator:
             else:
                 idx = df.index
             df = df[(idx >= start_ts) & (idx <= end_ts)]
+            if df.empty:
+                if symbol not in missing_symbols:
+                    missing_symbols.append(symbol)
+                continue
             self.history[symbol] = df
+            loaded_symbols.append(symbol)
+        return loaded_symbols, missing_symbols
 
     async def _manage_positions_once(self) -> None:
         async with self.trade_manager.position_lock:
@@ -67,15 +105,17 @@ class HistoricalSimulator:
             if self.trade_manager._has_position(symbol):
                 await self.trade_manager.check_exit_signal(symbol, price)
 
-    async def run(self, start_ts: pd.Timestamp, end_ts: pd.Timestamp, speed: float = 1.0) -> None:
-        await self.load(start_ts, end_ts)
+    async def run(
+        self, start_ts: pd.Timestamp, end_ts: pd.Timestamp, speed: float = 1.0
+    ) -> SimulationResult:
+        loaded_symbols, missing_symbols = await self.load(start_ts, end_ts)
         if not self.history:
-            logger.warning(
-                "No cached OHLCV data found between %s and %s; simulation aborted",
-                start_ts,
-                end_ts,
+            missing = f" for symbols: {', '.join(missing_symbols)}" if missing_symbols else ""
+            message = (
+                "No cached OHLCV data found between "
+                f"{start_ts} and {end_ts}{missing}."
             )
-            return
+            raise SimulationDataError(message)
         timestamps = sorted({
             ts
             for df in self.history.values()
@@ -85,6 +125,7 @@ class HistoricalSimulator:
                 else df.index
             )
         })
+        total_updates = 0
         for i, ts in enumerate(timestamps):
             for symbol, df in self.history.items():
                 if isinstance(df.index, pd.MultiIndex):
@@ -112,6 +153,7 @@ class HistoricalSimulator:
                         self.data_handler.open_interest.get(symbol, 0.0),
                         {"bids": [], "asks": []},
                     )
+                    total_updates += len(row)
             for symbol in self.data_handler.usdt_pairs:
                 signal = await self.trade_manager.evaluate_signal(symbol)
                 if signal:
@@ -135,3 +177,11 @@ class HistoricalSimulator:
                 dt = (timestamps[i + 1] - ts).total_seconds() / max(speed, 1e-6)
                 if dt > 0:
                     await asyncio.sleep(dt)
+        return SimulationResult(
+            start=start_ts,
+            end=end_ts,
+            processed_symbols=sorted(loaded_symbols),
+            missing_symbols=sorted(missing_symbols),
+            total_iterations=len(timestamps),
+            total_updates=total_updates,
+        )

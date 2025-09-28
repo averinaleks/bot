@@ -57,8 +57,8 @@ def trade_manager_classes(monkeypatch):
     sys.modules.pop('trade_manager', None)
     sys.modules.pop('simulation', None)
     from bot.trade_manager import TradeManager
-    from bot.simulation import HistoricalSimulator
-    yield TradeManager, HistoricalSimulator
+    from bot.simulation import HistoricalSimulator, SimulationDataError
+    yield TradeManager, HistoricalSimulator, SimulationDataError
     monkeypatch.delenv("TEST_MODE", raising=False)
 
 class DummyExchange:
@@ -105,7 +105,7 @@ class DummyDataHandler:
 
 @pytest.mark.asyncio
 async def test_simulator_trailing_stop(trade_manager_classes, tmp_path):
-    TradeManager, HistoricalSimulator = trade_manager_classes
+    TradeManager, HistoricalSimulator, _ = trade_manager_classes
     dh = DummyDataHandler(str(tmp_path))
     cfg = BotConfig(
         cache_dir=str(tmp_path),
@@ -124,14 +124,18 @@ async def test_simulator_trailing_stop(trade_manager_classes, tmp_path):
     sim = HistoricalSimulator(dh, tm)
     start = dh.history.index.get_level_values('timestamp').min()
     end = dh.history.index.get_level_values('timestamp').max()
-    await sim.run(start, end, speed=1000)
+    result = await sim.run(start, end, speed=1000)
     assert tm.positions.empty
     assert len(dh.exchange.orders) >= 2
+    assert result.processed_symbols == ["BTCUSDT"]
+    assert result.missing_symbols == []
+    assert result.total_iterations == 3
+    assert result.total_updates == 3
 
 
 @pytest.mark.asyncio
 async def test_simulator_skips_missing_price(trade_manager_classes, tmp_path):
-    TradeManager, HistoricalSimulator = trade_manager_classes
+    TradeManager, HistoricalSimulator, _ = trade_manager_classes
 
     class DummyDataHandler:
         def __init__(self, cache_dir: str):
@@ -210,7 +214,56 @@ async def test_simulator_skips_missing_price(trade_manager_classes, tmp_path):
     sim = HistoricalSimulator(dh, tm)
     start = pd.Timestamp("2020-01-01", tz="UTC")
     end = pd.Timestamp("2020-01-01 00:01", tz="UTC")
-    await sim.run(start, end, speed=1000)
+    result = await sim.run(start, end, speed=1000)
 
     assert first["done"]
     assert open_calls == []
+    assert result.processed_symbols == ["BTCUSDT", "ETHUSDT"]
+    assert result.missing_symbols == []
+    assert result.total_iterations == 2
+    assert result.total_updates == 2
+
+
+@pytest.mark.asyncio
+async def test_simulator_raises_when_no_data(trade_manager_classes, tmp_path):
+    TradeManager, HistoricalSimulator, SimulationDataError = trade_manager_classes
+
+    class EmptyDataHandler:
+        def __init__(self, cache_dir: str):
+            self.exchange = DummyExchange()
+            self.usdt_pairs = ["BTCUSDT", "ETHUSDT"]
+            self.history = None
+            self.cache = types.SimpleNamespace(load_cached_data=lambda *a, **k: None)
+            self.ohlcv = pd.DataFrame()
+            async def _opt(symbol):
+                return {}
+            self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
+            self.funding_rates = {}
+            self.open_interest = {}
+            self.config = BotConfig(cache_dir=cache_dir)
+
+        async def get_atr(self, symbol: str) -> float:
+            return 1.0
+
+        async def is_data_fresh(
+            self, symbol: str, timeframe: str = "primary", max_delay: float = 60
+        ) -> bool:
+            return True
+
+        async def synchronize_and_update(
+            self, symbol, df, fr, oi, ob, timeframe="primary"
+        ) -> None:
+            pass
+
+    dh = EmptyDataHandler(str(tmp_path))
+    tm = TradeManager(BotConfig(cache_dir=str(tmp_path)), dh, None, None, None)
+    sim = HistoricalSimulator(dh, tm)
+    start = pd.Timestamp("2020-01-01", tz="UTC")
+    end = pd.Timestamp("2020-01-02", tz="UTC")
+
+    with pytest.raises(SimulationDataError) as excinfo:
+        await sim.run(start, end, speed=1000)
+
+    message = str(excinfo.value)
+    assert "BTCUSDT" in message
+    assert "ETHUSDT" in message
