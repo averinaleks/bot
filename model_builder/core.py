@@ -1,18 +1,11 @@
-"""Training utilities for predictive and reinforcement learning models.
-
-This module houses the :class:`ModelBuilder` used to train LSTM or RL models,
-remote training helpers and a small REST API for integration tests.
-"""
+"""Training utilities for predictive and reinforcement learning models."""
 
 from __future__ import annotations
 
 import asyncio
 import importlib
-import importlib.metadata
-import json
 import math
 import os
-import platform
 import random
 import re
 import sys
@@ -23,17 +16,14 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from flask import Flask, jsonify, request
 
 from bot.cache import HistoricalDataCache
 from bot.config import BotConfig
-from bot.dotenv_utils import load_dotenv
 from bot.ray_compat import IS_RAY_STUB, ray
 from bot.utils_loader import require_utils
 from models.architectures import KERAS_FRAMEWORKS, create_model
 from security import (
     ArtifactDeserializationError,
-    create_joblib_stub,
     harden_mlflow,
     safe_joblib_load,
     set_model_dir,
@@ -41,6 +31,8 @@ from security import (
     write_model_state_signature,
 )
 from services.logging_utils import sanitize_log_value
+
+from .storage import JOBLIB_AVAILABLE, joblib, save_artifacts, _is_within_directory
 
 _utils = require_utils(
     "check_dataframe_empty",
@@ -55,69 +47,6 @@ ensure_writable_directory = _utils.ensure_writable_directory
 is_cuda_available = _utils.is_cuda_available
 logger = _utils.logger
 validate_host = _utils.validate_host
-
-MODEL_DIR = ensure_writable_directory(
-    Path(os.getenv("MODEL_DIR", ".")),
-    description="моделей",
-    fallback_subdir="trading_bot_models",
-).resolve()
-
-# Keep the security module in sync with the resolved model directory so that
-# signature enforcement reuses the same canonical path regardless of which
-# module imported :mod:`security` first.  Previously ``security`` imported
-# ``MODEL_DIR`` from this module which CodeQL flagged as an unsafe cyclic
-# dependency.  The setter preserves the original behaviour without reintroducing
-# the import cycle.
-set_model_dir(MODEL_DIR)
-
-
-def _is_within_directory(path: Path, directory: Path) -> bool:
-    """Return ``True`` if ``path`` is located within ``directory``."""
-
-    try:
-        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
-    except ValueError:
-        return False
-    return True
-
-
-def _resolve_model_artifact(path_value: str | Path | None) -> Path:
-    """Return a sanitised model path confined to :data:`MODEL_DIR`."""
-
-    if path_value is None:
-        raise ValueError("model path is not set")
-    candidate = Path(path_value)
-    if not candidate.parts or candidate == Path("."):
-        raise ValueError("model path is empty")
-    if candidate.is_absolute():
-        resolved = candidate.resolve(strict=False)
-    else:
-        resolved = (MODEL_DIR / candidate).resolve(strict=False)
-    if not _is_within_directory(resolved, MODEL_DIR):
-        raise ValueError("model path escapes MODEL_DIR")
-    if resolved.exists():
-        if resolved.is_symlink():
-            raise ValueError("model path must not be a symlink")
-        if not resolved.is_file():
-            raise ValueError("model path must reference a regular file")
-    return resolved
-
-
-MODEL_FILE: str | Path | None = os.environ.get("MODEL_FILE", "model.pkl")
-
-
-def _safe_model_file_path() -> Path | None:
-    """Return a validated path for ``MODEL_FILE`` or ``None`` if invalid."""
-
-    try:
-        return _resolve_model_artifact(MODEL_FILE)
-    except ValueError as exc:
-        logger.warning(
-            "Refusing to use MODEL_FILE %s: %s",
-            sanitize_log_value("<unset>" if MODEL_FILE is None else str(MODEL_FILE)),
-            exc,
-        )
-        return None
 
 def _load_gym() -> tuple[object, object]:
     """Import gymnasium or fall back to lightweight stubs in test mode."""
@@ -258,23 +187,6 @@ except Exception as exc:  # pragma: no cover - missing sklearn
     def calibration_curve(y_true, y_prob, n_bins=10):  # pragma: no cover - simplified stub
         bins = np.linspace(0.0, 1.0, n_bins)
         return bins, bins
-# ``joblib`` is used for lightweight serialization but may be missing in test
-# environments. Track availability explicitly so the rest of the module can
-# gracefully degrade instead of falling back to unsafe pickle-based helpers.
-JOBLIB_AVAILABLE = True
-try:  # pragma: no cover - optional dependency
-    import joblib  # type: ignore
-except Exception as exc:  # pragma: no cover - stub for tests
-    JOBLIB_AVAILABLE = False
-    logger.warning(
-        "Не удалось импортировать joblib: %s. Сериализация моделей будет отключена.",
-        exc,
-    )
-    joblib = create_joblib_stub(
-        "joblib недоступен: установите зависимость для сохранения/загрузки моделей"
-    )
-    sys.modules.setdefault("joblib", joblib)
-
 try:
     import mlflow
 except ImportError as e:  # pragma: no cover - optional dependency
@@ -286,59 +198,6 @@ else:
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
 
-
-def save_artifacts(model: object, symbol: str, meta: dict) -> Path:
-    """Сохранить модель и метаданные в каталог артефактов.
-
-    Модель сохраняется в ``MODEL_DIR/<symbol>/<timestamp>/model.pkl``.
-    Дополнительно создаётся ``meta.json`` с объединёнными метаданными и
-    сведениями об окружении.
-    """
-
-    timestamp = str(int(time.time()))
-    target_dir = MODEL_DIR / symbol / timestamp
-    target_dir.mkdir(parents=True, exist_ok=True)
-    model_file = target_dir / "model.pkl"
-    if JOBLIB_AVAILABLE:
-        joblib.dump(model, model_file)
-    else:
-        logger.warning(
-            "joblib недоступен, модель %s не будет сохранена на диск", symbol
-        )
-
-    try:
-        head_file = Path(".git/HEAD")
-        if head_file.is_file():
-            ref = head_file.read_text().strip()
-            if ref.startswith("ref:"):
-                ref_path = Path(".git") / ref.split()[1]
-                code_version = ref_path.read_text().strip()
-            else:
-                code_version = ref
-        else:
-            code_version = "unknown"
-    except Exception:
-        code_version = "unknown"
-
-    try:
-        pip_freeze = sorted(
-            f"{dist.metadata['Name']}=={dist.version}"
-            for dist in importlib.metadata.distributions()
-        )
-    except Exception:
-        pip_freeze = []
-
-    meta_env = {
-        "code_version": code_version,
-        "python_version": platform.python_version(),
-        "pip_freeze": pip_freeze,
-        "platform": platform.platform(),
-    }
-    meta_all = {**meta_env, **(meta or {})}
-    with open(target_dir / "meta.json", "w", encoding="utf-8") as f:
-        json.dump(meta_all, f, ensure_ascii=False, indent=2)
-
-    return target_dir
 
 if os.getenv("TEST_MODE") == "1":
     import types
@@ -2117,65 +1976,6 @@ class RLAgent:
                 return None
             action, _ = model.predict(obs, deterministic=True)
         return self.ACTIONS.get(int(action))
-# ----------------------------------------------------------------------
-# REST API for minimal integration testing
-# ----------------------------------------------------------------------
-
-api_app = Flask(__name__)
-_model = None
-
-
-def _load_model() -> None:
-    global _model
-    if not JOBLIB_AVAILABLE:
-        logger.warning("joblib недоступен, REST API пропускает загрузку модели")
-        _model = None
-        return
-    model_path = _safe_model_file_path()
-    if model_path is None:
-        _model = None
-        return
-    if not model_path.exists():
-        return
-    if model_path.is_symlink():
-        logger.warning(
-            "Отказ от загрузки модели из символьной ссылки %s",
-            sanitize_log_value(model_path),
-        )
-        _model = None
-        return
-    if not model_path.is_file():
-        logger.warning(
-            "Отказ от загрузки модели: %s не является обычным файлом",
-            sanitize_log_value(model_path),
-        )
-        _model = None
-        return
-    if not verify_model_state_signature(model_path):
-        logger.warning(
-            "Отказ от загрузки модели %s: подпись не прошла проверку",
-            sanitize_log_value(model_path),
-        )
-        _model = None
-        return
-    try:
-        _model = safe_joblib_load(model_path)
-    except ArtifactDeserializationError:
-        logger.error(
-            "Отказ от загрузки модели %s: обнаружены недоверенные объекты",
-            sanitize_log_value(model_path),
-        )
-        _model = None
-    except (OSError, ValueError) as e:  # pragma: no cover - model may be corrupted
-        logger.exception("Не удалось загрузить модель: %s", e)
-        _model = None
-    except Exception as exc:  # pragma: no cover - unexpected joblib failure
-        logger.exception(
-            "Неожиданная ошибка десериализации модели %s: %s",
-            sanitize_log_value(model_path),
-            exc,
-        )
-        _model = None
 
 
 def prepare_features(raw_features, raw_labels):
@@ -2233,111 +2033,3 @@ def fit_scaler(features: np.ndarray, labels: np.ndarray):
     return pipeline
 
 
-@api_app.route("/train", methods=["POST"])
-def train_route():
-    data = request.get_json(force=True)
-    features, labels = prepare_features(
-        data.get("features", []), data.get("labels", [])
-    )
-    if features.size == 0 or len(features) != len(labels):
-        return jsonify({"error": "invalid training data"}), 400
-    if len(np.unique(labels)) < 2:
-        return jsonify({"error": "labels must contain at least two classes"}), 400
-    model = fit_scaler(features, labels)
-    if not JOBLIB_AVAILABLE:
-        return jsonify({"error": "joblib unavailable"}), 503
-    model_path = _safe_model_file_path()
-    if model_path is None:
-        return jsonify({"error": "invalid model path"}), 500
-    if model_path.exists():
-        if model_path.is_symlink():
-            logger.warning(
-                "Отказ от сохранения модели: путь %s является символьной ссылкой",
-                sanitize_log_value(model_path),
-            )
-            return jsonify({"error": "model path unavailable"}), 500
-        if not model_path.is_file():
-            logger.warning(
-                "Отказ от сохранения модели: %s не является обычным файлом",
-                sanitize_log_value(model_path),
-            )
-            return jsonify({"error": "model path unavailable"}), 500
-    try:
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:  # pragma: no cover - filesystem errors are rare
-        logger.exception(
-            "Не удалось подготовить каталог модели %s: %s",
-            sanitize_log_value(model_path),
-            exc,
-        )
-        return jsonify({"error": "model path unavailable"}), 500
-    tmp_path = model_path.with_name(f"{model_path.name}.tmp")
-    try:
-        joblib.dump(model, tmp_path)
-        os.replace(tmp_path, model_path)
-        try:
-            write_model_state_signature(model_path)
-        except OSError as exc:  # pragma: no cover - проблемы с ФС крайне редки
-            logger.warning(
-                "Не удалось сохранить подпись модели %s: %s",
-                sanitize_log_value(model_path),
-                exc,
-            )
-    except Exception as exc:  # pragma: no cover - dump failures are rare
-        logger.exception(
-            "Не удалось сохранить модель в %s: %s",
-            sanitize_log_value(model_path),
-            exc,
-        )
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except OSError:
-            logger.debug(
-                "Не удалось удалить временный файл %s",
-                sanitize_log_value(tmp_path),
-            )
-        return jsonify({"error": "model save failed"}), 500
-    global _model
-    _model = model
-    return jsonify({"status": "trained"})
-
-
-@api_app.route("/predict", methods=["POST"])
-def predict_route():
-    data = request.get_json(force=True)
-    features = data.get("features")
-    if features is None:
-        # Backwards compatibility for a single price input
-        price_val = float(data.get("price", 0.0))
-        features = [price_val]
-    features = np.array(features, dtype=np.float32)
-    if features.ndim == 0:
-        features = np.array([[features]], dtype=np.float32)
-    elif features.ndim == 1:
-        features = features.reshape(1, -1)
-    else:
-        features = features.reshape(1, -1)
-    price = float(features[0, 0]) if features.size else 0.0
-    if _model is None:
-        signal = "buy" if price > 0 else None
-        prob = 1.0 if signal else 0.0
-    else:
-        prob = float(_model.predict_proba(features)[0, 1])
-        signal = "buy" if prob >= 0.5 else "sell"
-    return jsonify({"signal": signal, "prob": prob})
-
-
-@api_app.route("/ping")
-def ping():
-    return jsonify({"status": "ok"})
-
-
-if __name__ == "__main__":
-    configure_logging()
-    load_dotenv()
-    host = validate_host()
-    port = int(os.getenv("MODEL_BUILDER_PORT", "8001"))
-    _load_model()
-    logger.info("Запуск сервиса ModelBuilder на %s:%s", host, port)
-    api_app.run(host=host, port=port)  # хост проверен выше
