@@ -71,6 +71,7 @@ _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<ve
 _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
+_TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
 _REQUESTS_REQUIRED_MESSAGE = (
@@ -85,6 +86,12 @@ def _extract_payload_value(payload: Mapping[str, object], *keys: str) -> str:
         if isinstance(candidate, str) and candidate:
             return candidate
     return ""
+
+
+def _extract_payload_token(payload: Mapping[str, object] | None) -> str:
+    if not isinstance(payload, Mapping):
+        return ""
+    return _extract_payload_value(payload, *_TOKEN_PAYLOAD_KEYS)
 
 
 def _load_event_payload() -> dict[str, Any] | None:
@@ -648,9 +655,15 @@ def submit_dependency_snapshot() -> None:
         _report_missing_requests()
         return
 
+    payload = _load_event_payload()
+    client_payload: Mapping[str, object] | None = None
+    if isinstance(payload, dict):
+        raw_client = payload.get("client_payload")
+        if isinstance(raw_client, Mapping):
+            client_payload = raw_client
+
     try:
         repository = _env("GITHUB_REPOSITORY")
-        token = _env("GITHUB_TOKEN")
     except MissingEnvironmentVariableError as exc:
         print(str(exc), file=sys.stderr)
         print(
@@ -659,17 +672,28 @@ def submit_dependency_snapshot() -> None:
         )
         return
 
+    token_env = os.getenv("GITHUB_TOKEN") or ""
     sha = os.getenv("GITHUB_SHA") or ""
     ref = os.getenv("GITHUB_REF") or ""
     payload_used = False
 
+    token_override = _extract_payload_token(client_payload)
+    if not token_override:
+        token_override = _extract_payload_token(payload)
+    token = token_override or token_env
+
+    try:
+        if not token:
+            raise MissingEnvironmentVariableError("GITHUB_TOKEN")
+    except MissingEnvironmentVariableError as exc:
+        print(str(exc), file=sys.stderr)
+        print(
+            "Dependency snapshot submission skipped из-за отсутствия переменных окружения.",
+            file=sys.stderr,
+        )
+        return
+
     if not sha or not ref:
-        payload = _load_event_payload()
-        client_payload: Mapping[str, object] | None = None
-        if isinstance(payload, dict):
-            raw_client = payload.get("client_payload")
-            if isinstance(raw_client, dict):
-                client_payload = raw_client
         if client_payload is not None:
             if not sha:
                 sha_candidate = _extract_payload_value(
@@ -683,12 +707,12 @@ def submit_dependency_snapshot() -> None:
                 if ref_candidate:
                     ref = ref_candidate
                     payload_used = True
-        if not sha and isinstance(payload, dict):
+        if not sha and isinstance(payload, Mapping):
             sha_candidate = _extract_payload_value(payload, "after", "sha", "head_sha")
             if sha_candidate:
                 sha = sha_candidate
                 payload_used = True
-        if not ref and isinstance(payload, dict):
+        if not ref and isinstance(payload, Mapping):
             ref_candidate = _extract_payload_value(payload, "ref")
             if ref_candidate:
                 ref = ref_candidate
