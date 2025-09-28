@@ -159,7 +159,7 @@ def _require_api_key() -> "ResponseReturnValue | None":
             ):
                 logger.info(
                     "Ключ доступа к Data Handler не настроен. Анонимный доступ разрешён, потому что %s=1.",
-                    auto_allow_reason,
+                    sanitize_log_value(auto_allow_reason),
                 )
                 return None
 
@@ -167,8 +167,8 @@ def _require_api_key() -> "ResponseReturnValue | None":
             "Запрос к %s отклонён: ключ доступа к Data Handler не настроен. Настройте переменную окружения %s "
             "или, только для локальной отладки, установите %s=1.",
             sanitize_log_value(request.path),
-            API_KEY_ENV_VAR,
-            ALLOW_ANONYMOUS_ENV_VAR,
+            sanitize_log_value(API_KEY_ENV_VAR),
+            sanitize_log_value(ALLOW_ANONYMOUS_ENV_VAR),
         )
         return jsonify({'error': 'unauthorized'}), 401
 

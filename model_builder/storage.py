@@ -47,13 +47,25 @@ except Exception as exc:  # pragma: no cover - stub for tests
 
 
 def _is_within_directory(path: Path, directory: Path) -> bool:
-    """Return ``True`` if ``path`` is located within ``directory``."""
+    """Return ``True`` when ``path`` is confined to ``directory``."""
 
+    base = directory.resolve(strict=False)
+    target = path.resolve(strict=False)
     try:
-        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+        common = os.path.commonpath([str(base), str(target)])
     except ValueError:
         return False
-    return True
+    return common == str(base)
+
+
+def _safe_join(directory: Path, *parts: str) -> Path:
+    """Join ``parts`` to ``directory`` ensuring the result stays within ``directory``."""
+
+    candidate = directory.joinpath(*parts)
+    resolved = candidate.resolve(strict=False)
+    if not _is_within_directory(resolved, directory):
+        raise ValueError(f"path {resolved} escapes base directory {directory}")
+    return resolved
 
 
 def _resolve_model_artifact(path_value: str | Path | None) -> Path:
@@ -147,6 +159,7 @@ __all__ = [
     "JOBLIB_AVAILABLE",
     "joblib",
     "_is_within_directory",
+    "_safe_join",
     "_resolve_model_artifact",
     "_safe_model_file_path",
     "save_artifacts",

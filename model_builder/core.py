@@ -32,7 +32,13 @@ from security import (
 )
 from services.logging_utils import sanitize_log_value
 
-from .storage import JOBLIB_AVAILABLE, joblib, save_artifacts, _is_within_directory
+from .storage import (
+    JOBLIB_AVAILABLE,
+    joblib,
+    save_artifacts,
+    _is_within_directory,
+    _safe_join,
+)
 
 _utils = require_utils(
     "check_dataframe_empty",
@@ -1637,7 +1643,33 @@ class ModelBuilder:
             if not cache_dir:
                 logger.error("Не задана директория кэша SHAP")
                 return
-            cache_file = Path(cache_dir) / "shap" / f"shap_{safe_symbol}.pkl"
+            cache_root = Path(cache_dir).resolve()
+            if not _is_within_directory(cache_root, self.cache_dir):
+                logger.error(
+                    "Путь к SHAP-кэшу %s выходит за пределы cache_dir %s",
+                    sanitize_log_value(cache_root),
+                    sanitize_log_value(self.cache_dir),
+                )
+                return
+
+            try:
+                shap_dir = _safe_join(cache_root, "shap")
+            except ValueError:
+                logger.error(
+                    "Каталог SHAP выходит за пределы cache_dir %s",
+                    sanitize_log_value(cache_root),
+                )
+                return
+
+            try:
+                cache_file = _safe_join(shap_dir, f"shap_{safe_symbol}.pkl")
+            except ValueError:
+                logger.error(
+                    "Файл SHAP %s выходит за пределы каталога %s",
+                    sanitize_log_value(f"shap_{safe_symbol}.pkl"),
+                    sanitize_log_value(shap_dir),
+                )
+                return
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
                 return

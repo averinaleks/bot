@@ -17,6 +17,8 @@ import httpx
 from bot.ray_compat import ray
 from flask import Flask, Response, jsonify, request
 
+from services.logging_utils import sanitize_log_value
+
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
     TradeManager,
@@ -420,7 +422,11 @@ def _validate_close_position(info: Any) -> tuple[str, float, dict[str, Any]]:
 
 
 def _validation_error_response(exc: ValidationError) -> tuple[Response, int]:
-    return jsonify({"error": str(exc)}), 400
+    logger.info(
+        "Некорректный запрос к TradeManager: %s",
+        sanitize_log_value(str(exc)),
+    )
+    return jsonify({"error": "invalid request"}), 400
 
 
 @api_app.route("/open_position", methods=["POST"])
