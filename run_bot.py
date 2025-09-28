@@ -348,9 +348,10 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         raise
     except Exception as exc:
         if domain_errors and isinstance(exc, domain_errors):
-            message = f"Trading loop aborted after TradeManager error: {exc}"
-            logger.error(message, exc_info=True)
-            raise exc.__class__(message) from exc
+            message = "Trading loop aborted after TradeManager error"
+            logger.error("%s: %s", message, exc, exc_info=True)
+            raise
+        logger.exception("Unexpected error during trading loop")
         raise
     finally:
         stop = getattr(trade_manager, "stop", None)
