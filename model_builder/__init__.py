@@ -2,6 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import types
+
+_ALLOW_GYM_STUB = os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
+
+if not _ALLOW_GYM_STUB:
+    if "gymnasium" in sys.modules and sys.modules["gymnasium"] is None:
+        raise ImportError("gymnasium package is required")
+
 from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
@@ -31,8 +45,6 @@ from .core import (
     spaces,
     validate_host,
 )
-import sys
-import types
 
 from . import api as _api
 from .storage import (
@@ -76,10 +88,17 @@ class _ModelBuilderModule(types.ModuleType):
     def __setattr__(self, name: str, value) -> None:  # type: ignore[override]
         if name == "_model":
             _api._model = value
-        else:
-            super().__setattr__(name, value)
-            if hasattr(_core_module, name):
-                setattr(_core_module, name, value)
+            return
+
+        super().__setattr__(name, value)
+
+        if hasattr(_core_module, name):
+            # ``_core_module`` is a plain :class:`types.ModuleType`.  Using
+            # :func:`setattr` would re-enter this method via the monkeypatching
+            # helper used in the tests which triggered an infinite recursion.
+            # Updating ``__dict__`` writes the attribute directly without
+            # invoking any custom descriptors.
+            _core_module.__dict__[name] = value
 
 
 sys.modules[__name__].__class__ = _ModelBuilderModule

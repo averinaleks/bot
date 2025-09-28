@@ -100,6 +100,25 @@ def _load_gym() -> tuple[object, object]:
     test_mode = os.getenv("TEST_MODE") == "1"
     allow_stub = test_mode and allow_stub_env
 
+    sentinel_missing = "gymnasium" in sys.modules and sys.modules["gymnasium"] is None
+    sentinel_spaces_missing = (
+        "gymnasium.spaces" in sys.modules
+        and sys.modules["gymnasium.spaces"] is None
+    )
+    if sentinel_missing or sentinel_spaces_missing:
+        sys.modules.pop("gymnasium", None)
+        sys.modules.pop("gymnasium.spaces", None)
+        if allow_stub:
+            return _ensure_stub()
+        if allow_stub_env:
+            try:
+                import gym  # type: ignore
+                from gym import spaces  # type: ignore
+                return gym, spaces
+            except ImportError:
+                pass
+        raise ImportError("gymnasium package is required")
+
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
