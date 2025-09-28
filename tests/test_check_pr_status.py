@@ -113,3 +113,16 @@ def test_cli_swallows_system_exit(monkeypatch: pytest.MonkeyPatch, capsys: pytes
     assert result == 0
     assert "кодом 3" in captured.err
 
+
+def test_cli_logs_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def _raise(*_args, **_kwargs):
+        raise KeyboardInterrupt("boom")
+
+    monkeypatch.setattr(check_pr_status, "main", _raise)
+    monkeypatch.setenv("GITHUB_OUTPUT", "")
+
+    result = check_pr_status.cli([])
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "::warning::Критическое исключение" in captured.err
+
