@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import http.client
 import importlib.util
+import socket
 import sys
 from pathlib import Path
 
@@ -28,43 +30,84 @@ def test_dependency_snapshot_import_succeeds_without_requests(monkeypatch) -> No
     assert callable(module.submit_dependency_snapshot)
 
 
-def test_submit_dependency_snapshot_skips_when_requests_missing(monkeypatch, capsys):
-    """The script should report a friendly message when ``requests`` is unavailable."""
-
+def test_submit_with_headers_retries_on_retryable_status(monkeypatch, capsys):
     from scripts import submit_dependency_snapshot as snapshot
 
-    monkeypatch.setattr(snapshot, "requests", None, raising=False)
-    monkeypatch.setattr(
-        snapshot,
-        "_REQUESTS_IMPORT_ERROR",
-        ImportError("requests package is not installed"),
-        raising=False,
+    class DummyResponse:
+        def __init__(self, status: int, reason: str, body: bytes = b"") -> None:
+            self.status = status
+            self.reason = reason
+            self._body = body
+            self.closed = False
+
+        def read(self) -> bytes:
+            return self._body
+
+        def close(self) -> None:
+            self.closed = True
+
+    class DummyConnection:
+        def __init__(self, response: DummyResponse) -> None:
+            self._response = response
+            self.closed = False
+
+        def request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> None:
+            assert method == "POST"
+            assert path == "/graphql"
+
+        def getresponse(self) -> DummyResponse:
+            return self._response
+
+        def close(self) -> None:
+            self.closed = True
+
+    connections = [
+        DummyConnection(DummyResponse(503, "Service Unavailable", b"temporary")),
+        DummyConnection(DummyResponse(201, "Created", b"")),
+    ]
+
+    def fake_https_connection(host: str, *, port: int, timeout: int, context: object) -> DummyConnection:
+        assert host == "example.com"
+        assert port == 443
+        assert timeout == snapshot._HTTP_TIMEOUT
+        assert context is snapshot._SSL_CONTEXT
+        try:
+            return connections.pop(0)
+        except IndexError:
+            pytest.fail("HTTPSConnection called more times than expected")
+
+    monkeypatch.setattr(http.client, "HTTPSConnection", fake_https_connection)
+
+    snapshot._submit_with_headers(
+        "https://example.com/graphql", b"{}", {"User-Agent": "test-agent"}
     )
 
-    snapshot.submit_dependency_snapshot()
-
     captured = capsys.readouterr()
-    assert "requests" in captured.err
-    assert "Skipping submission" in captured.err
+    assert "Retrying" in captured.err
+    assert "Dependency snapshot submitted" in captured.out
 
 
-def test_submit_with_headers_requires_requests(monkeypatch):
-    """Submitting without ``requests`` should raise a descriptive error."""
-
+def test_submit_with_headers_raises_on_network_error(monkeypatch):
     from scripts import submit_dependency_snapshot as snapshot
 
-    monkeypatch.setattr(snapshot, "requests", None, raising=False)
-    missing_error = ImportError("dependency missing")
+    class FailingConnection:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def request(self, *_: object, **__: object) -> None:
+            raise socket.timeout("timed out")
+
+        def close(self) -> None:
+            self.closed = True
+
     monkeypatch.setattr(
-        snapshot,
-        "_REQUESTS_IMPORT_ERROR",
-        missing_error,
-        raising=False,
+        http.client,
+        "HTTPSConnection",
+        lambda *args, **kwargs: FailingConnection(),
     )
 
     with pytest.raises(snapshot.DependencySubmissionError) as excinfo:
-        snapshot._submit_with_headers("https://example.com/api", b"{}", {})
+        snapshot._submit_with_headers("https://example.com/graphql", b"{}", {})
 
-    message = str(excinfo.value)
-    assert "requests" in message
-    assert excinfo.value.__cause__ is missing_error
+    assert excinfo.value.status_code is None
+    assert "timed out" in str(excinfo.value)

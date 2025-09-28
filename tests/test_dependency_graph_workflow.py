@@ -57,12 +57,11 @@ def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
     assert "fnmatch(filename, pattern)" in workflow
 
 
-def test_dependency_graph_installs_requests_before_submission() -> None:
+def test_dependency_graph_avoids_unnecessary_package_installs() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
-    assert "Install dependency snapshot dependencies" in workflow
-    assert "python -m pip install --upgrade pip" in workflow
-    assert "python -m pip install requests" in workflow
+    assert "Install dependency snapshot dependencies" not in workflow
+    assert "pip install" not in workflow
 
 
 def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:

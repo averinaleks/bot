@@ -3,46 +3,21 @@
 from __future__ import annotations
 
 import fnmatch
+import http.client
 import json
 import os
 import re
+import socket
+import ssl
 import sys
 import time
 from collections import OrderedDict
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, TypedDict
 
 from urllib.parse import quote, urlparse
-
-_REQUESTS_IMPORT_ERROR: ImportError | None = None
-
-try:
-    import requests  # type: ignore[import-untyped]
-    from requests import exceptions as requests_exceptions  # type: ignore[import-untyped]
-except ImportError as exc:  # pragma: no cover - exercised via import hook in tests
-    _REQUESTS_IMPORT_ERROR = exc
-    requests = None  # type: ignore[assignment]
-
-    class _RequestsExceptionsModule:
-        """Compatibility shim when the ``requests`` package is unavailable."""
-
-        Timeout = TimeoutError
-        RequestException = Exception
-
-        def __getattr__(self, _name: str) -> type[Exception]:
-            """Return :class:`Exception` for any unrecognised attribute.
-
-            The real ``requests.exceptions`` module exposes a wide variety of
-            exception types.  When the dependency is missing we only emulate the
-            small subset actually used by the script, but returning
-            :class:`Exception` for any other attribute keeps the fallback
-            resilient if the implementation changes in the future.
-            """
-
-            return Exception
-
-    requests_exceptions = _RequestsExceptionsModule()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -73,19 +48,8 @@ _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
-_REQUESTS_REQUIRED_MESSAGE = (
-    "Dependency snapshot submission requires the 'requests' package."
-)
-
-
-def _report_missing_requests() -> None:
-    """Inform the caller that submitting a snapshot is not possible."""
-
-    print(f"{_REQUESTS_REQUIRED_MESSAGE} Skipping submission.", file=sys.stderr)
-    if _REQUESTS_IMPORT_ERROR is not None:
-        detail = str(_REQUESTS_IMPORT_ERROR).strip()
-        if detail:
-            print(detail, file=sys.stderr)
+_SSL_CONTEXT = ssl.create_default_context()
+_HTTP_TIMEOUT = 30
 
 def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
@@ -460,89 +424,85 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     host, port, path = _https_components(url)
-    if port == 443:
-        request_url = f"https://{host}{path}"
-    else:
-        request_url = f"https://{host}:{port}{path}"
 
-    last_error: Exception | None = None
-    if requests is None:
-        raise DependencySubmissionError(
-            None,
-            _REQUESTS_REQUIRED_MESSAGE,
-            cause=_REQUESTS_IMPORT_ERROR,
-        )
-    with requests.Session() as session:
-        for attempt in range(1, 4):
-            try:
-                response = session.post(
-                    request_url,
-                    data=body,
-                    headers=headers,
-                    timeout=30,
-                    allow_redirects=False,
-                )
-            except requests_exceptions.Timeout as exc:
-                message = str(exc) or "timed out"
-                if attempt < 3:
-                    wait_time = 2 ** (attempt - 1)
-                    print(
-                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
-                        file=sys.stderr,
-                    )
-                    time.sleep(wait_time)
-                    last_error = exc
-                    continue
-                last_error = exc
-                break
-            except requests_exceptions.RequestException as exc:
-                message = str(exc).strip() or exc.__class__.__name__
-                if attempt < 3:
-                    wait_time = 2 ** (attempt - 1)
-                    print(
-                        f"Network error '{message}'. Retrying in {wait_time} s...",
-                        file=sys.stderr,
-                    )
-                    time.sleep(wait_time)
-                    last_error = exc
-                    continue
-                last_error = exc
-                break
+    last_error: DependencySubmissionError | None = None
 
-            status_code = int(response.status_code)
-            reason = response.reason or ""
-            payload = response.content
-            response.close()
-
-            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+    for attempt in range(1, 4):
+        connection: http.client.HTTPSConnection | None = None
+        try:
+            connection = http.client.HTTPSConnection(
+                host,
+                port=port,
+                timeout=_HTTP_TIMEOUT,
+                context=_SSL_CONTEXT,
+            )
+            connection.request("POST", path, body=body, headers=headers)
+            response = connection.getresponse()
+        except (socket.timeout, TimeoutError) as exc:
+            message = str(exc).strip() or "timed out"
+            if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
-                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
                     file=sys.stderr,
                 )
                 time.sleep(wait_time)
-                last_error = DependencySubmissionError(
-                    status_code, f"Retryable HTTP {status_code}: {reason}"
-                )
+                last_error = DependencySubmissionError(None, message, exc)
                 continue
-
-            if status_code >= 400:
-                message = payload.decode(errors="replace") or reason
+            raise DependencySubmissionError(None, message, exc)
+        except (ConnectionError, OSError, ssl.SSLError, http.client.HTTPException) as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
                 print(
-                    f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                    f"Network error '{message}'. Retrying in {wait_time} s...",
                     file=sys.stderr,
                 )
-                raise DependencySubmissionError(
-                    status_code,
-                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-                )
+                time.sleep(wait_time)
+                last_error = DependencySubmissionError(None, message, exc)
+                continue
+            raise DependencySubmissionError(None, message, exc)
+        else:
+            try:
+                status_code = int(response.status)
+                reason = response.reason or ""
+                payload = response.read()
+            finally:
+                with suppress(Exception):
+                    response.close()
+        finally:
+            if connection is not None:
+                with suppress(Exception):
+                    connection.close()
 
-            print(f"Dependency snapshot submitted: HTTP {status_code}")
-            return
+        if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+            wait_time = 2 ** (attempt - 1)
+            print(
+                f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_time)
+            last_error = DependencySubmissionError(
+                status_code, f"Retryable HTTP {status_code}: {reason}"
+            )
+            continue
+
+        if status_code >= 400:
+            message = payload.decode(errors="replace") or reason
+            print(
+                f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                file=sys.stderr,
+            )
+            raise DependencySubmissionError(
+                status_code,
+                f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+            )
+
+        print(f"Dependency snapshot submitted: HTTP {status_code}")
+        return
 
     if last_error is not None:
-        message = str(last_error).strip() or last_error.__class__.__name__
-        raise DependencySubmissionError(None, message, last_error)
+        raise last_error
 
 
 def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
@@ -601,10 +561,6 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 
 def submit_dependency_snapshot() -> None:
-    if requests is None:
-        _report_missing_requests()
-        return
-
     try:
         repository = _env("GITHUB_REPOSITORY")
         token = _env("GITHUB_TOKEN")
