@@ -30,8 +30,49 @@ class ServiceEndpoint:
 
 _MODEL_VERSION = 0
 
+_ALLOWED_HOSTS_ENV = "MODEL_BUILDER_ALLOWED_HOSTS"
+_DEFAULT_ALLOWED_HOSTS = frozenset(
+    {"127.0.0.1", "localhost", "::1", "model_builder", "data_handler"}
+)
+
 
 AddrInfo = Tuple[Any, Any, Any, Any, Tuple[Any, ...]]
+
+
+def _normalise_allowed_host(value: str) -> str | None:
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    if trimmed.startswith("[") and trimmed.endswith("]"):
+        trimmed = trimmed[1:-1]
+    return trimmed.lower()
+
+
+def _load_allowed_hosts() -> set[str]:
+    raw = os.getenv(_ALLOWED_HOSTS_ENV)
+    hosts = set(_DEFAULT_ALLOWED_HOSTS)
+    if not raw:
+        return hosts
+    for part in raw.split(","):
+        normalised = _normalise_allowed_host(part)
+        if normalised:
+            hosts.add(normalised)
+    return hosts
+
+
+def _host_is_allowlisted(hostname: str, allowed_hosts: set[str]) -> bool:
+    host = hostname.lower()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    if host in allowed_hosts:
+        return True
+    try:
+        ip_obj = ip_address(host)
+    except ValueError:
+        return False
+    if ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local:
+        return True
+    return host in allowed_hosts
 
 
 def _collect_ip_strings(infos: Iterable[AddrInfo]) -> set[str]:
@@ -93,6 +134,15 @@ def _prepare_endpoint(raw_url: str, *, purpose: str) -> ServiceEndpoint | None:
         )
         return None
 
+    if parsed.username or parsed.password:
+        logger.error(
+            "%s URL %s отклонён: учетные данные в URL запрещены",
+            purpose,
+            safe_url,
+        )
+        return None
+
+    allowed_hosts = _load_allowed_hosts()
     try:
         resolved_ips = _resolve_hostname(parsed.hostname)
     except ValueError as exc:
@@ -105,6 +155,13 @@ def _prepare_endpoint(raw_url: str, *, purpose: str) -> ServiceEndpoint | None:
         )
         return None
 
+    hostname = parsed.hostname
+    if not _host_is_allowlisted(hostname, allowed_hosts):
+        logger.error(
+            "%s URL %s отклонён: хост не входит в список доверенных", purpose, safe_url
+        )
+        return None
+
     if scheme == "http" and not all(_is_private_ip(ip) for ip in resolved_ips):
         logger.error(
             "%s URL %s должен использовать HTTPS или частный адрес", purpose, safe_url
@@ -114,7 +171,7 @@ def _prepare_endpoint(raw_url: str, *, purpose: str) -> ServiceEndpoint | None:
     return ServiceEndpoint(
         scheme=scheme,
         base_url=raw_url.rstrip("/"),
-        hostname=parsed.hostname,
+        hostname=hostname,
         allowed_ips=frozenset(resolved_ips),
     )
 
