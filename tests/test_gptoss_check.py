@@ -1,12 +1,16 @@
 import importlib
 import importlib.util
 from pathlib import Path
+import json
 import logging
 import sys
+import threading
 import types
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
+from services.stubs import create_httpx_stub
 
 from gptoss_check.main import _load_skip_flag
 
@@ -101,6 +105,61 @@ def test_run_handles_unexpected_query_error(monkeypatch, caplog):
     assert "Непредвиденная ошибка GPT-OSS" in caplog.text
     assert telegram_messages
     assert "Непредвиденная ошибка GPT-OSS" in telegram_messages[0]
+
+
+def test_query_gpt_uses_builtin_client_when_http_client_stub(monkeypatch):
+    stub_module = types.ModuleType("http_client")
+    httpx_stub = create_httpx_stub()
+
+    class _StubContext:
+        def __enter__(self):
+            self.client = httpx_stub.Client()
+            return self.client
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_get_httpx_client(*args, **kwargs):
+        return _StubContext()
+
+    stub_module.httpx = httpx_stub
+    stub_module.get_httpx_client = fake_get_httpx_client
+
+    monkeypatch.setitem(sys.modules, "http_client", stub_module)
+    monkeypatch.delitem(sys.modules, "gpt_client", raising=False)
+    reloaded = importlib.reload(check_code)
+    try:
+        assert reloaded._fallback_reason is not None
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                if self.path.rstrip("/") != "/v1/completions":
+                    self.send_error(404)
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                if length:
+                    self.rfile.read(length)
+                payload = json.dumps({"choices": [{"text": "stub-ok"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, fmt, *args):  # pragma: no cover - silence server logs
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            monkeypatch.setenv("GPT_OSS_API", f"http://127.0.0.1:{server.server_port}")
+            assert reloaded.query_gpt("ping") == "stub-ok"
+        finally:
+            server.shutdown()
+            thread.join()
+    finally:
+        importlib.reload(check_code)
 
 
 def test_wait_for_api_http_error(monkeypatch):
