@@ -308,6 +308,28 @@ def _calculate_hmac(path: Path) -> str | None:
     key = _get_model_state_hmac_key()
     if key is None:
         return None
+    try:
+        if path.is_symlink():
+            logger.warning(
+                "Отказ от вычисления подписи модели %s: путь является символьной ссылкой",
+                path,
+            )
+            return None
+        if not path.exists():
+            logger.warning(
+                "Отказ от вычисления подписи модели %s: файл отсутствует",
+                path,
+            )
+            return None
+        if not path.is_file():
+            logger.warning(
+                "Отказ от вычисления подписи модели %s: ожидается обычный файл",
+                path,
+            )
+            return None
+    except OSError as exc:  # pragma: no cover - редкие ошибки ФС
+        logger.warning("Не удалось получить информацию о файле модели %s: %s", path, exc)
+        return None
     digest = hmac.new(key, digestmod=hashlib.sha256)
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(8192), b""):
@@ -355,6 +377,29 @@ def verify_model_state_signature(path: Path) -> bool:
     model_dir = Path(MODEL_DIR)
     path_resolved = path.resolve(strict=False)
     sig_resolved = sig_path.resolve(strict=False)
+
+    try:
+        if path.is_symlink():
+            logger.warning(
+                "Отказ от проверки подписи модели %s: путь является символьной ссылкой",
+                path,
+            )
+            return False
+        if not path.exists():
+            logger.warning(
+                "Отказ от проверки подписи модели %s: файл отсутствует",
+                path,
+            )
+            return False
+        if not path.is_file():
+            logger.warning(
+                "Отказ от проверки подписи модели %s: ожидается обычный файл",
+                path,
+            )
+            return False
+    except OSError as exc:  # pragma: no cover - редкие ошибки ФС
+        logger.warning("Не удалось получить информацию о файле модели %s: %s", path, exc)
+        return False
 
     if _is_within_directory(path_resolved, model_dir):
         # Ensure signatures for models stored in MODEL_DIR never escape it
