@@ -49,6 +49,7 @@ def test_parse_requirements_skips_blocklisted_packages(tmp_path: Path) -> None:
     assert "ccxtpro" not in resolved
     assert "httpx" in resolved
     assert resolved["httpx"]["package_url"] == HTTPX_PURL
+    assert resolved[HTTPX_PURL]["package_url"] == HTTPX_PURL
 
 
 def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
@@ -160,7 +161,7 @@ def test_submit_dependency_snapshot_reports_submission_error(
         "name": "requirements.txt",
         "file": {"source_location": "requirements.txt"},
         "resolved": {
-            HTTPX_PURL: {
+            "httpx": {
                 "package_url": HTTPX_PURL,
                 "relationship": "direct",
                 "scope": "runtime",

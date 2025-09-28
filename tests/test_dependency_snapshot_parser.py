@@ -29,9 +29,9 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
 
     parsed = _parse_requirements(path)
 
-    assert "pkg:pypi/package@1.2.3" in parsed
+    assert list(parsed.keys()) == ["package", "other"]
     assert (
-        parsed["pkg:pypi/package@1.2.3"]["package_url"]
+        parsed["package"]["package_url"]
         == "pkg:pypi/package@1.2.3"
     )
     # Aliases allow lookups by the original requirement including extras and
@@ -39,11 +39,9 @@ def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
     assert parsed["package[extra]"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert parsed["package[extra]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert parsed["PACKAGE"]["package_url"] == "pkg:pypi/package@1.2.3"
-    assert "pkg:pypi/other@4.5.6" in parsed
-    assert (
-        parsed["pkg:pypi/other@4.5.6"]["package_url"]
-        == "pkg:pypi/other@4.5.6"
-    )
+    assert parsed["pkg:pypi/package@1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
+    assert parsed["other"]["package_url"] == "pkg:pypi/other@4.5.6"
+    assert parsed["pkg:pypi/other@4.5.6"]["package_url"] == "pkg:pypi/other@4.5.6"
 
 
 def test_parse_requirements_adds_normalised_requirement_alias(tmp_path: Path) -> None:
@@ -51,6 +49,7 @@ def test_parse_requirements_adds_normalised_requirement_alias(tmp_path: Path) ->
 
     parsed = _parse_requirements(path)
 
+    assert parsed["PACKAGE"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert parsed["PACKAGE[EXTRA]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
     assert parsed["package[extra]==1.2.3"]["package_url"] == "pkg:pypi/package@1.2.3"
 
@@ -67,7 +66,8 @@ def test_parse_requirements_handles_hash_block(tmp_path: Path) -> None:
 
     parsed = _parse_requirements(path)
 
-    assert list(parsed) == ["pkg:pypi/sample@0.1.0"]
+    assert list(parsed) == ["sample"]
+    assert parsed["pkg:pypi/sample@0.1.0"]["package_url"] == "pkg:pypi/sample@0.1.0"
 
 
 def test_auth_schemes_prefers_bearer_for_github_tokens(monkeypatch) -> None:
@@ -142,7 +142,7 @@ def test_submit_snapshot_skips_on_unauthorised_token(monkeypatch, capsys) -> Non
             "name": "requirements.txt",
             "file": {"source_location": "requirements.txt"},
             "resolved": {
-                "pkg:pypi/sample@1.0.0": {
+                "sample": {
                     "package_url": "pkg:pypi/sample@1.0.0",
                     "relationship": "direct",
                     "scope": "runtime",
@@ -179,7 +179,7 @@ def test_submit_snapshot_skips_on_network_issue(monkeypatch, capsys) -> None:
             "name": "requirements.txt",
             "file": {"source_location": "requirements.txt"},
             "resolved": {
-                "pkg:pypi/sample@1.0.0": {
+                "sample": {
                     "package_url": "pkg:pypi/sample@1.0.0",
                     "relationship": "direct",
                     "scope": "runtime",
@@ -216,7 +216,7 @@ def test_submit_snapshot_skips_on_validation_issue(monkeypatch, capsys) -> None:
             "name": "requirements.txt",
             "file": {"source_location": "requirements.txt"},
             "resolved": {
-                "pkg:pypi/sample@1.0.0": {
+                "sample": {
                     "package_url": "pkg:pypi/sample@1.0.0",
                     "relationship": "direct",
                     "scope": "runtime",
@@ -253,7 +253,7 @@ def test_submit_snapshot_skips_on_other_http_error(monkeypatch, capsys) -> None:
             "name": "requirements.txt",
             "file": {"source_location": "requirements.txt"},
             "resolved": {
-                "pkg:pypi/sample@1.0.0": {
+                "sample": {
                     "package_url": "pkg:pypi/sample@1.0.0",
                     "relationship": "direct",
                     "scope": "runtime",
@@ -291,7 +291,7 @@ def test_submit_snapshot_uses_numeric_run_attempt(monkeypatch) -> None:
             "name": "requirements.txt",
             "file": {"source_location": "requirements.txt"},
             "resolved": {
-                "pkg:pypi/sample@1.0.0": {
+                "sample": {
                     "package_url": "pkg:pypi/sample@1.0.0",
                     "relationship": "direct",
                     "scope": "runtime",
