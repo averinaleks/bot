@@ -8,7 +8,8 @@ on:
 
 permissions:
   contents: read
-  # Required by the dependency submission API; avoid granting broader dependency-graph scope.
+  # GitHub rejects the legacy `dependency-graph` scope for this workflow; grant `security-events`
+  # instead to satisfy the dependency submission API while keeping permissions minimal.
   security-events: write
 
 jobs:
