@@ -205,7 +205,11 @@ def test_submit_dependency_snapshot_reports_missing_requests(
     monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
 
     error = snapshot.DependencySubmissionError(
-        None, "Dependency snapshot submission requires the 'requests' package."
+        None,
+        (
+            "Dependency snapshot submission requires the 'requests' package. "
+            "Install it with 'pip install requests'."
+        ),
     )
 
     def raise_missing_dependency(*_: object, **__: object) -> None:
@@ -217,7 +221,8 @@ def test_submit_dependency_snapshot_reports_missing_requests(
 
     captured = capsys.readouterr()
     assert "Dependency snapshot submission skipped из-за сетевой ошибки." in captured.err
-    assert "Dependency snapshot submission requires the 'requests' package." in captured.err
+    assert "Dependency snapshot submission requires the 'requests' package" in captured.err
+    assert "Install it with 'pip install requests'." in captured.err
 
 
 def test_submit_dependency_snapshot_uses_repository_dispatch_payload(
