@@ -94,8 +94,11 @@ def _load_gym() -> tuple[object, object]:
         sys.modules.setdefault("gymnasium.spaces", spaces_mod)
         return gym_mod, spaces_mod
 
+    allow_stub_env = (
+        os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {"0", "false", "no"}
+    )
     test_mode = os.getenv("TEST_MODE") == "1"
-    allow_stub = test_mode and os.getenv("ALLOW_GYM_STUB", "1").strip().lower() not in {"0", "false", "no"}
+    allow_stub = test_mode and allow_stub_env
 
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
@@ -104,14 +107,14 @@ def _load_gym() -> tuple[object, object]:
     except ImportError as gymnasium_error:
         if allow_stub:
             return _ensure_stub()
-        try:
-            import gym  # type: ignore
-            from gym import spaces  # type: ignore
-            return gym, spaces
-        except ImportError:
-            if allow_stub:
-                return _ensure_stub()
-            raise ImportError("gymnasium package is required") from gymnasium_error
+        if allow_stub_env:
+            try:
+                import gym  # type: ignore
+                from gym import spaces  # type: ignore
+                return gym, spaces
+            except ImportError:
+                pass
+        raise ImportError("gymnasium package is required") from gymnasium_error
 
 
 gym, spaces = _load_gym()
@@ -1638,7 +1641,11 @@ class ModelBuilder:
             last_time = self.shap_cache_times.get(symbol, 0)
             if time.time() - last_time < self.shap_cache_duration:
                 return
-            sample = torch.tensor(X[:50], dtype=torch.float32, device=self.device)
+            tensor_kwargs = {"device": self.device}
+            torch_float32 = getattr(torch, "float32", None)
+            if torch_float32 is not None:
+                tensor_kwargs["dtype"] = torch_float32
+            sample = torch.tensor(X[:50], **tensor_kwargs)
             if self.model_type == "mlp":
                 sample = sample.view(sample.size(0), -1)
             was_training = model.training
