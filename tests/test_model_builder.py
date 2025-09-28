@@ -1,5 +1,6 @@
 import sys
 
+import hashlib
 import numpy as np
 import pandas as pd
 import types
@@ -605,6 +606,8 @@ async def test_compute_shap_values_creates_cache(tmp_path, monkeypatch):
 
     model = DummyTorch.nn.Linear(1, 1)
     X = np.random.rand(5, 1, 1).astype(np.float32)
-    await mb.compute_shap_values("BTCUSDT", model, X)
-    assert (tmp_path / "shap" / "shap_BTCUSDT.pkl").exists()
+    symbol = "BTCUSDT"
+    await mb.compute_shap_values(symbol, model, X)
+    expected_name = hashlib.sha256(symbol.encode("utf-8", "replace")).hexdigest()
+    assert (tmp_path / "shap" / f"shap_{expected_name}.pkl").exists()
 
