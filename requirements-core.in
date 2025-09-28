@@ -22,8 +22,9 @@ stable-baselines3==2.7.0
 gymnasium>=0.29.1
 pytorch-lightning>=2.5.2
 transformers==4.56.2
+fastapi>=0.116.1
 fastapi-csrf-protect>=1.0.7
-flask>=3.0.2
+flask>=3.1.2
 pybit>=5.11.0
 gunicorn>=23.0.0
 a2wsgi>=1.4
