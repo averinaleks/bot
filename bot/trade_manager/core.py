@@ -236,6 +236,9 @@ class TradeManager:
         telegram_bot,
         chat_id,
         rl_agent=None,
+        *,
+        telegram_logger_factory=None,
+        gpt_client=None,
     ):
         # Ensure environment variables from optional .env file are available
         # before we read Telegram-related settings. ``load_dotenv`` is a no-op
@@ -258,6 +261,7 @@ class TradeManager:
         self.data_handler = data_handler
         self.model_builder = model_builder
         self.rl_agent = rl_agent
+        self.gpt_client = gpt_client
         if (
             not config.enable_notifications
             or not os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -275,6 +279,11 @@ class TradeManager:
                 send_telegram_message=_noop,
             )
         else:
+            logger_factory = (
+                telegram_logger_factory
+                or getattr(config, "telegram_logger_factory", None)
+                or TelegramLogger
+            )
             unsent_path = None
             if config.save_unsent_telegram:
                 try:
@@ -291,14 +300,14 @@ class TradeManager:
                     )
                     unsent_path = None
             try:
-                self.telegram_logger = TelegramLogger(
+                self.telegram_logger = logger_factory(
                     telegram_bot,
                     chat_id,
                     max_queue_size=config.get("telegram_queue_size"),
                     unsent_path=unsent_path,
                 )
             except TypeError:  # pragma: no cover - stub without args
-                self.telegram_logger = TelegramLogger()  # type: ignore[call-arg]
+                self.telegram_logger = logger_factory()  # type: ignore[call-arg]
             if not hasattr(self.telegram_logger, "send_telegram_message"):
                 async def _noop(*a, **k):
                     pass

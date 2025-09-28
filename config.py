@@ -333,6 +333,9 @@ class BotConfig:
     enable_notifications: bool = _get_default("enable_notifications", True)
     save_unsent_telegram: bool = _get_default("save_unsent_telegram", False)
     unsent_telegram_path: str = _get_default("unsent_telegram_path", "unsent_telegram.log")
+    service_factories: Dict[str, str] = field(
+        default_factory=lambda: _get_default("service_factories", {})
+    )
 
     def __post_init__(self) -> None:
         if self.ws_subscription_batch_size is None:

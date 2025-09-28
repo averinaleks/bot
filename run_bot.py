@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib
+import inspect
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 import pandas as pd
 
@@ -19,6 +22,159 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 
 
 logger = logging.getLogger("TradingBot")
+
+
+class ExchangeFactory(Protocol):
+    """Callable returning an exchange-like object."""
+
+    def __call__(self) -> Any:
+        ...
+
+
+class TelegramLoggerFactory(Protocol):
+    """Factory returning a Telegram logger handler."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> logging.Handler:
+        ...
+
+
+class GPTClientProtocol(Protocol):
+    """Subset of GPT client behaviour used by the bot."""
+
+    def query(self, prompt: str) -> str:  # pragma: no cover - simple delegation
+        ...
+
+    async def query_async(self, prompt: str) -> str:
+        ...
+
+    async def query_json_async(self, prompt: str) -> dict[str, Any]:
+        ...
+
+
+@dataclass(slots=True)
+class ServiceBundle:
+    """Resolved service implementations used across the application."""
+
+    exchange: Any | None
+    telegram_logger_factory: TelegramLoggerFactory | None
+    gpt_client: GPTClientProtocol | None
+
+
+def _import_object(spec: str) -> Any:
+    """Return the object referenced by *spec* (``pkg.mod:attr`` syntax)."""
+
+    module_name: str
+    attr_name: str
+    if ":" in spec:
+        module_name, attr_name = spec.split(":", 1)
+    else:
+        module_name, attr_name = spec.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    try:
+        return getattr(module, attr_name)
+    except AttributeError as exc:  # pragma: no cover - defensive branch
+        raise ImportError(f"{spec!r} is not importable") from exc
+
+
+def _resolve_service_object(raw: Any) -> Any:
+    """Resolve dotted-path strings to Python objects."""
+
+    if isinstance(raw, str):
+        return _import_object(raw)
+    return raw
+
+
+def _instantiate_service(candidate: Any) -> Any:
+    """Instantiate *candidate* when appropriate, preserving callables."""
+
+    resolved = _resolve_service_object(candidate)
+    if inspect.isclass(resolved):
+        try:
+            return resolved()
+        except TypeError:
+            return resolved
+    if callable(resolved):
+        try:
+            return resolved()
+        except TypeError:
+            return resolved
+    return resolved
+
+
+class ModuleGPTClientAdapter:
+    """Adapter exposing module-level GPT helpers as an object."""
+
+    def query(self, prompt: str) -> str:
+        from bot.gpt_client import query_gpt
+
+        return query_gpt(prompt)
+
+    async def query_async(self, prompt: str) -> str:
+        from bot.gpt_client import query_gpt_async
+
+        return await query_gpt_async(prompt)
+
+    async def query_json_async(self, prompt: str) -> dict[str, Any]:
+        from bot.gpt_client import query_gpt_json_async
+
+        return await query_gpt_json_async(prompt)
+
+
+def _build_service_bundle(cfg: "BotConfig", offline: bool) -> ServiceBundle:
+    """Resolve configured service implementations for the current run."""
+
+    overrides: dict[str, Any] = dict(getattr(cfg, "service_factories", {}) or {})
+    if offline:
+        try:
+            from services.offline import get_offline_service_factories
+
+            for name, spec in get_offline_service_factories().items():
+                overrides.setdefault(name, spec)
+        except Exception:  # pragma: no cover - defensive import
+            logger.exception("Failed to import offline service factories")
+
+    exchange_obj: Any | None = None
+    telegram_factory: TelegramLoggerFactory | None = None
+    gpt_client: GPTClientProtocol | None = None
+
+    exchange_spec = overrides.get("exchange")
+    if exchange_spec is not None:
+        exchange_obj = _instantiate_service(exchange_spec)
+
+    telegram_spec = overrides.get("telegram_logger")
+    if telegram_spec is not None:
+        resolved = _resolve_service_object(telegram_spec)
+        if not callable(resolved):
+            logger.warning(
+                "Telegram logger override %r is not callable; ignoring", telegram_spec
+            )
+        else:
+            telegram_factory = resolved  # type: ignore[assignment]
+    if telegram_factory is None:
+        from bot.telegram_logger import TelegramLogger
+
+        telegram_factory = TelegramLogger
+
+    gpt_spec = overrides.get("gpt_client")
+    if gpt_spec is not None:
+        candidate = _instantiate_service(gpt_spec)
+        if isinstance(candidate, ModuleGPTClientAdapter) or hasattr(
+            candidate, "query_json_async"
+        ):
+            gpt_client = candidate  # type: ignore[assignment]
+        else:
+            logger.warning(
+                "Configured GPT client %r does not expose expected interface; using default",
+                gpt_spec,
+            )
+    if gpt_client is None:
+        gpt_client = ModuleGPTClientAdapter()
+
+    return ServiceBundle(
+        exchange=exchange_obj,
+        telegram_logger_factory=telegram_factory,
+        gpt_client=gpt_client,
+    )
 
 
 def parse_symbols(raw: str | None) -> list[str] | None:
@@ -170,36 +326,26 @@ def _log_mode(command: str, offline: bool) -> None:
     logger.info("Starting %s mode in %s configuration", command, mode)
 
 
-def _patch_offline_services():
-    from services.offline import OfflineBybit, OfflineTelegram, OfflineGPT
-
-    import bot.utils as utils_module
-    import bot.telegram_logger as telegram_logger_module
-    import bot.gpt_client as gpt_client
-
-    utils_module.TelegramLogger = OfflineTelegram
-    telegram_logger_module.TelegramLogger = OfflineTelegram
-    gpt_client.OFFLINE_MODE = True
-    gpt_client.OfflineGPT = OfflineGPT
-    return OfflineBybit
-
-
 def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None):
-    exchange_cls = None
-    if offline:
-        exchange_cls = _patch_offline_services()
+    services = _build_service_bundle(cfg, offline)
 
     from bot.data_handler import DataHandler
     from bot.model_builder import ModelBuilder
     from bot.trade_manager import TradeManager
 
-    exchange = exchange_cls() if exchange_cls else None
-
-    data_handler = DataHandler(cfg, None, None, exchange=exchange)
+    data_handler = DataHandler(cfg, None, None, exchange=services.exchange)
     prepare_data_handler(data_handler, cfg, symbols)
 
-    model_builder = ModelBuilder(cfg, data_handler, None)
-    trade_manager = TradeManager(cfg, data_handler, model_builder, None, None)
+    model_builder = ModelBuilder(cfg, data_handler, None, gpt_client=services.gpt_client)
+    trade_manager = TradeManager(
+        cfg,
+        data_handler,
+        model_builder,
+        None,
+        None,
+        telegram_logger_factory=services.telegram_logger_factory,
+        gpt_client=services.gpt_client,
+    )
     model_builder.trade_manager = trade_manager
     return data_handler, model_builder, trade_manager
 

@@ -948,10 +948,17 @@ def _train_model_remote(
 class ModelBuilder:
     """Simplified model builder used for training LSTM models."""
 
-    def __init__(self, config: BotConfig, data_handler, trade_manager):
+    def __init__(
+        self,
+        config: BotConfig,
+        data_handler,
+        trade_manager,
+        gpt_client=None,
+    ):
         self.config = config
         self.data_handler = data_handler
         self.trade_manager = trade_manager
+        self.gpt_client = gpt_client
         self.model_type = config.get("model_type", "transformer")
         self.nn_framework = config.get("nn_framework", "pytorch").lower()
         # Predictive models for each trading symbol

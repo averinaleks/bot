@@ -16,6 +16,22 @@ logger = logging.getLogger("TradingBot")
 
 _PlaceholderValue = str | Callable[[], str]
 
+# Default dotted-path mappings allowing configuration-driven selection of
+# offline service implementations.  The values intentionally reference
+# concrete classes so configuration files can opt-in to the same shims without
+# relying on monkeypatching.
+OFFLINE_SERVICE_FACTORY_PATHS: dict[str, str] = {
+    "exchange": "services.offline:OfflineBybit",
+    "telegram_logger": "services.offline:OfflineTelegram",
+    "gpt_client": "services.offline:OfflineGPT",
+}
+
+
+def get_offline_service_factories() -> dict[str, str]:
+    """Return a copy of the default offline service factory mapping."""
+
+    return dict(OFFLINE_SERVICE_FACTORY_PATHS)
+
 
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
     """Return a high-entropy placeholder credential for offline usage.
