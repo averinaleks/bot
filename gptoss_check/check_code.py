@@ -401,7 +401,10 @@ def send_telegram(msg: str) -> None:
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     data={"chat_id": chat_id, "text": msg[:4000]},
                 )
-                response.close()
+                try:
+                    response.raise_for_status()
+                finally:
+                    response.close()
         except HTTPError as err:
             logger.warning("⚠️ Failed to send Telegram message: %s", err)
 
