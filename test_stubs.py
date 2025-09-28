@@ -310,7 +310,7 @@ def apply() -> None:
                         close = getattr(self._response, "close", None)
                         if callable(close):
                             close()
-                        return False
+                        return None
 
                 return _StreamContext(response)
 

@@ -186,7 +186,7 @@ def create_httpx_stub() -> SimpleNamespace:
                     close_sync = getattr(self._response, "close", None)
                     if callable(close_sync):
                         close_sync()
-                    return False
+                    return None
 
             return _StreamContext(response)
 
