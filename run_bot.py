@@ -377,14 +377,6 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         if matched_attr is not None:
             message = "Trading loop aborted after TradeManager error"
             logger.error("%s: %s", message, exc, exc_info=True)
-            should_wrap = (
-                matched_attr == "TradeManagerTaskError"
-                and matched_cls is not None
-                and matched_cls.__name__.endswith("TradeManagerTaskError")
-            )
-            if should_wrap:
-                wrapped_exc = matched_cls(f"{message}: {exc}")
-                raise wrapped_exc from exc
             raise
         logger.exception("Unexpected error during trading loop")
         raise

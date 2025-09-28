@@ -16,6 +16,22 @@ except Exception:  # pragma: no cover - optional
 from .utils import expected_ws_rate
 
 
+def _normalise_polars_timestamp(df: Any) -> Any:
+    """Ensure ``timestamp`` columns are comparable in Polars DataFrames."""
+
+    if pl is None or not isinstance(df, pl.DataFrame) or df.height == 0:
+        return df
+    if "timestamp" not in df.columns:
+        return df
+    return df.with_columns(
+        pl.col("timestamp")
+        .map_elements(
+            lambda ts: ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
+        )
+        .cast(pl.Datetime(time_zone="UTC"), strict=False)
+    )
+
+
 class DataHandler:
     """Simplified DataHandler focused on functionality used in tests."""
 
@@ -95,16 +111,37 @@ class DataHandler:
         self.indicators[symbol] = types.SimpleNamespace(df=pdf)
         if getattr(self.cfg, "use_polars", False) and pl is not None:
             subset = pdf[["symbol", "timestamp", "open", "high", "low", "close", "volume"]]
-            self._ohlcv = pl.DataFrame(subset.to_dict("list"))
+            data = subset.to_dict("list")
+            polars_columns: Dict[str, Any] = {}
+            for name, values in data.items():
+                if name == "timestamp":
+                    converted = [
+                        value.to_pydatetime()
+                        if hasattr(value, "to_pydatetime")
+                        else value
+                        for value in values
+                    ]
+                    polars_columns[name] = pl.Series(
+                        name,
+                        converted,
+                        dtype=pl.Datetime(time_zone="UTC"),
+                    )
+                else:
+                    polars_columns[name] = values
+            self._ohlcv = pl.DataFrame(polars_columns)
+            self._ohlcv = _normalise_polars_timestamp(self._ohlcv)
 
     async def cleanup_old_data(self) -> None:
         while True:
             await asyncio.sleep(getattr(self.cfg, "data_cleanup_interval", 1))
             cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(seconds=getattr(self.cfg, "forget_window", 0))
+            cutoff_dt = cutoff.to_pydatetime()
             if pl is not None and isinstance(self._ohlcv, pl.DataFrame) and self._ohlcv.height > 0:
-                self._ohlcv = self._ohlcv.filter(pl.col("timestamp") >= cutoff)
+                self._ohlcv = _normalise_polars_timestamp(self._ohlcv)
+                self._ohlcv = self._ohlcv.filter(pl.col("timestamp") >= cutoff_dt)
             if pl is not None and isinstance(self._ohlcv_2h, pl.DataFrame) and self._ohlcv_2h.height > 0:
-                self._ohlcv_2h = self._ohlcv_2h.filter(pl.col("timestamp") >= cutoff)
+                self._ohlcv_2h = _normalise_polars_timestamp(self._ohlcv_2h)
+                self._ohlcv_2h = self._ohlcv_2h.filter(pl.col("timestamp") >= cutoff_dt)
             if isinstance(self._ohlcv, pd.DataFrame) and not self._ohlcv.empty:
                 ts_index = self._ohlcv.index.get_level_values("timestamp")
                 self._ohlcv = self._ohlcv[ts_index >= cutoff]
