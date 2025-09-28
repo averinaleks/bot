@@ -26,23 +26,23 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Purge Python-looking Git reference logs
+      - name: Purge Git reference logs that look like Python modules
         run: |
           # CodeQL interprets any file ending in .py as Python source. Git keeps
           # reference logs for remote branches inside .git/logs/, and branch
           # names that end with ".py" therefore look like legitimate modules to
-          # the extractor, even though the files are plaintext Git logs. When a
+          # the extractor even though the files are plaintext Git logs. When a
           # workflow fetches the entire history (fetch-depth: 0), those logs are
           # recreated and CodeQL tries to parse them, triggering hundreds of
-          # syntax errors. Rather than deleting the entire .git directory (which
-          # we might want for other tooling), remove only the misleading *.py
-          # files from any Git log directories that exist in the workspace.
+          # syntax errors. Removing the logs entirely is safe (Git will recreate
+          # them on demand) and guarantees the extractor never sees them.
           if [ -d ".git/logs" ]; then
-            find .git/logs -name '*.py' -delete
+            rm -rf .git/logs
           fi
           # Some actions (such as caching or submodules) can leave additional
-          # .git directories behind, so sweep the whole workspace just in case.
-          find "$PWD" -path '*/.git/logs/*' -name '*.py' -delete
+          # .git directories behind, so sweep the whole workspace just in case
+          # and remove any stray log directories those actions may have left.
+          find "$PWD" -path '*/.git/logs' -type d -prune -exec rm -rf {} +
 
       - name: Set up Python
         uses: actions/setup-python@v6
