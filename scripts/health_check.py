@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 _ALLOWED_HOSTS_ENV = "HEALTH_CHECK_ALLOWED_HOSTS"
+_BASE_URL_ENV = "HEALTH_CHECK_BASE_URL"
+_ENDPOINTS_ENV = "HEALTH_CHECK_ENDPOINTS"
+_MAX_ATTEMPTS_ENV = "HEALTH_CHECK_MAX_ATTEMPTS"
+_DELAY_SECONDS_ENV = "HEALTH_CHECK_DELAY_SECONDS"
 _DEFAULT_ALLOWED_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -101,6 +105,40 @@ def _normalise_base_url(base_url: str, allowed_hosts: Set[str]) -> str:
     return normalised.rstrip("/") or normalised
 
 
+def _safe_int_env(name: str, default: int, *, minimum: int = 1) -> int:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning(
+            "Env %s=%s is not an integer, using default %s",
+            name,
+            sanitize_log_value(raw),
+            default,
+        )
+        return default
+    return max(minimum, value)
+
+
+def _safe_float_env(name: str, default: float, *, minimum: float = 0.0) -> float:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning(
+            "Env %s=%s is not a number, using default %s",
+            name,
+            sanitize_log_value(raw),
+            default,
+        )
+        return default
+    return value if value > minimum else minimum
+
+
 def check_endpoints(
     base_url: str,
     endpoints: Iterable[str],
@@ -154,9 +192,26 @@ def check_endpoints(
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO)
-    base_url = "http://localhost:8000"
-    endpoints = ["/health", "/ping"]
-    return check_endpoints(base_url, endpoints)
+    base_url = os.getenv(_BASE_URL_ENV, "http://localhost:8000")
+    raw_endpoints = os.getenv(_ENDPOINTS_ENV)
+    if raw_endpoints:
+        endpoints = [
+            part.strip()
+            for part in raw_endpoints.split(",")
+            if part.strip()
+        ]
+        if not endpoints:
+            endpoints = ["/health", "/ping"]
+    else:
+        endpoints = ["/health", "/ping"]
+    max_attempts = _safe_int_env(_MAX_ATTEMPTS_ENV, 5, minimum=1)
+    delay_seconds = _safe_float_env(_DELAY_SECONDS_ENV, 2.0, minimum=0.0)
+    return check_endpoints(
+        base_url,
+        endpoints,
+        max_attempts=max_attempts,
+        delay_seconds=delay_seconds,
+    )
 
 
 if __name__ == "__main__":

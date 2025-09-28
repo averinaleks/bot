@@ -235,6 +235,8 @@ jobs:
         if: ${{ steps.start_service.outputs.service_running == 'true' }}
         env:
           TEST_MODE: "1"
+          HEALTH_CHECK_MAX_ATTEMPTS: "10"
+          HEALTH_CHECK_DELAY_SECONDS: "3"
         run: python scripts/health_check.py
       - name: Cleanup
         if: ${{ always() && steps.start_service.outputs.service_running == 'true' }}
