@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 import signal
@@ -41,9 +40,6 @@ class DiffStats:
     additions: int
     deletions: int
     issues: list[str]
-
-
-_DIFF_HEADER_RE = re.compile(r"^\+\+\+ b/(.+)$")
 
 
 def _iter_messages_content(messages: Sequence[dict]) -> Iterable[str]:
@@ -76,6 +72,43 @@ def _extract_diff(messages: Sequence[dict]) -> str:
     return next(reversed(list(_iter_messages_content(messages))), "")
 
 
+def _parse_diff_header(line: str) -> str | None:
+    """Return a sanitised path from a unified diff header line."""
+
+    prefix = "+++ b/"
+    if not line.startswith(prefix):
+        return None
+
+    candidate = line[len(prefix) :]
+    # Remove diff metadata such as tabs or trailing spaces
+    candidate = candidate.split("\t", 1)[0].rstrip()
+    if not candidate or candidate == "/dev/null":
+        return None
+
+    # Strip optional quoting and redundant leading ./ segments
+    if candidate.startswith("\"") and candidate.endswith("\""):
+        candidate = candidate[1:-1]
+    while candidate.startswith("./"):
+        candidate = candidate[2:]
+
+    if not candidate:
+        return None
+
+    # Reject absolute paths and traversal attempts
+    if candidate.startswith(("/", "\\")):
+        return None
+    if candidate.startswith(".."):  # blocks ../ and ..\ styles
+        return None
+
+    # Avoid control characters or excessive paths that could exhaust memory
+    if any(ord(ch) < 32 for ch in candidate):
+        return None
+    if len(candidate) > 512:
+        return None
+
+    return candidate
+
+
 def _record_line_issue(content: str, current_file: str, issues: list[str]) -> None:
     """Append a human readable warning for ``content`` if needed."""
 
@@ -104,10 +137,12 @@ def _analyze_diff(diff: str) -> DiffStats:
     for raw_line in diff.splitlines():
         line = raw_line.rstrip("\n")
         if line.startswith("+++ "):
-            match = _DIFF_HEADER_RE.match(line)
-            if match:
-                current_file = match.group(1)
-                files.add(current_file)
+            header_path = _parse_diff_header(line)
+            if header_path is not None:
+                current_file = header_path
+                files.add(header_path)
+            else:
+                current_file = ""
             continue
         if line.startswith("@@"):
             continue
