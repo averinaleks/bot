@@ -100,6 +100,19 @@ def _load_gym() -> tuple[object, object]:
     test_mode = os.getenv("TEST_MODE") == "1"
     allow_stub = test_mode and allow_stub_env
 
+    sentinel = sys.modules.get("gymnasium", ...)
+    if sentinel is None:
+        if allow_stub:
+            return _ensure_stub()
+        if allow_stub_env:
+            try:
+                import gym  # type: ignore
+                from gym import spaces  # type: ignore
+                return gym, spaces
+            except ImportError:
+                pass
+        raise ImportError("gymnasium package is required")
+
     try:  # prefer gymnasium if available
         import gymnasium as gym  # type: ignore
         from gymnasium import spaces  # type: ignore
@@ -875,52 +888,61 @@ class ModelBuilder:
     def _prepare_history_cache(cache_dir: str) -> tuple[HistoricalDataCache | None, str]:
         """Initialise the historical data cache with graceful fallbacks."""
 
-        requested_dir = os.path.abspath(os.fspath(cache_dir)) if cache_dir else ""
-        fallback_dir = os.path.abspath(
-            os.path.join(tempfile.gettempdir(), "model_builder_cache")
-        )
-        candidates: list[str] = []
-        if requested_dir:
-            candidates.append(requested_dir)
-        if fallback_dir not in candidates:
-            candidates.append(fallback_dir)
+        previous_tempdir = getattr(tempfile, "tempdir", None)
+        fallback_root = os.path.abspath(os.fspath(tempfile.gettempdir()))
+        fallback_dir = os.path.abspath(os.path.join(fallback_root, "model_builder_cache"))
 
-        if HistoricalDataCache is None:
+        try:
+            requested_dir = os.path.abspath(os.fspath(cache_dir)) if cache_dir else ""
+            candidates: list[str] = []
+            if requested_dir:
+                candidates.append(requested_dir)
+            if fallback_dir not in candidates:
+                candidates.append(fallback_dir)
+
+            if HistoricalDataCache is None:
+                for path in candidates:
+                    try:
+                        os.makedirs(path, exist_ok=True)
+                        return None, path
+                    except Exception:
+                        logger.exception(
+                            "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                        )
+                return None, fallback_dir
+
             for path in candidates:
                 try:
-                    os.makedirs(path, exist_ok=True)
-                    return None, path
+                    cache = HistoricalDataCache(path)
+                except PermissionError:
+                    logger.warning(
+                        "Нет прав на запись в каталог ModelBuilder %s, пробуем временную директорию",
+                        path,
+                    )
                 except Exception:
                     logger.exception(
-                        "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                        "Не удалось инициализировать кэш ModelBuilder в %s",
+                        path,
                     )
-            return None, fallback_dir
+                else:
+                    return cache, cache.cache_dir
 
-        for path in candidates:
+            chosen = candidates[-1]
             try:
-                cache = HistoricalDataCache(path)
-            except PermissionError:
-                logger.warning(
-                    "Нет прав на запись в каталог ModelBuilder %s, пробуем временную директорию",
-                    path,
-                )
+                os.makedirs(chosen, exist_ok=True)
             except Exception:
                 logger.exception(
-                    "Не удалось инициализировать кэш ModelBuilder в %s",
-                    path,
+                    "Не удалось создать резервный каталог кэша ModelBuilder %s",
+                    chosen,
                 )
-            else:
-                return cache, cache.cache_dir
-
-        chosen = candidates[-1]
-        try:
-            os.makedirs(chosen, exist_ok=True)
-        except Exception:
-            logger.exception(
-                "Не удалось создать резервный каталог кэша ModelBuilder %s",
-                chosen,
-            )
-        return None, chosen
+            return None, chosen
+        finally:
+            try:
+                setattr(tempfile, "tempdir", previous_tempdir)
+            except Exception:
+                logger.debug(
+                    "Не удалось восстановить исходный tempfile.tempdir", exc_info=True
+                )
 
     def compute_prediction_metrics(self, symbol: str):
         """Return accuracy and Brier score over recent predictions."""
