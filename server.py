@@ -362,6 +362,26 @@ MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
 @app.middleware("http")
+async def enforce_csrf(request: Request, call_next):
+    if request.method == "POST":
+        safe_method = sanitize_log_value(request.method)
+        safe_url = sanitize_log_value(str(request.url))
+        safe_headers = _format_headers_for_log(getattr(request, "headers", None))
+        try:
+            await csrf_protect.validate_csrf(request)
+        except CsrfProtectError as exc:
+            logging.warning(
+                "CSRF validation failed: method=%s url=%s headers=%s error=%s",
+                safe_method,
+                safe_url,
+                safe_headers,
+                sanitize_log_value(str(exc)),
+            )
+            raise HTTPException(status_code=403, detail="CSRF token missing or invalid") from exc
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def check_api_key(request: Request, call_next):
     safe_method = sanitize_log_value(request.method)
     safe_url = sanitize_log_value(str(request.url))
@@ -395,24 +415,6 @@ async def check_api_key(request: Request, call_next):
             safe_headers,
         )
         return Response(status_code=401)
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def enforce_csrf(request: Request, call_next):
-    if request.method == "POST":
-        auth = request.headers.get("Authorization")
-        token = auth[7:] if auth and auth.startswith("Bearer ") else None
-        if token and any(hmac.compare_digest(token, key) for key in API_KEYS):
-            try:
-                await csrf_protect.validate_csrf(request)
-            except CsrfProtectError:
-                logging.warning(
-                    "CSRF validation failed: method=%s url=%s",
-                    sanitize_log_value(request.method),
-                    sanitize_log_value(str(request.url)),
-                )
-                raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     return await call_next(request)
 
 
