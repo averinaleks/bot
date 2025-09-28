@@ -11,7 +11,9 @@ import tempfile
 import httpx
 import aiohttp
 import cloudpickle
+import os
 from pathlib import Path
+from typing import Any
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -63,21 +65,57 @@ sys.modules.pop('bot.trade_manager.core', None)
 
 
 joblib_mod = types.ModuleType('joblib')
+_JOBLIB_OBJECT_STORE: dict[str, Any] = {}
+
+
+def _normalise_joblib_path(candidate: str | os.PathLike[str]) -> str:
+    """Return an absolute representation for *candidate* suitable as a key.
+
+    The helper mirrors ``joblib``'s behaviour by resolving the supplied path
+    relative to the current working directory without requiring the file to
+    exist in advance.  Using a stable key allows the stub ``load`` function to
+    retrieve objects stored via ``dump`` without reintroducing unsafe pickle
+    deserialisation APIs which CodeQL rightfully flags as dangerous.
+    """
+
+    return str(Path(candidate).resolve(strict=False))
+
+
+def _register_joblib_object(path: str, obj: Any) -> None:
+    _JOBLIB_OBJECT_STORE[path] = obj
 
 
 def _joblib_dump(obj, file, *args, **kwargs):
     if hasattr(file, 'write'):
-        cloudpickle.dump(obj, file)
+        target = getattr(file, 'name', None)
+        if target:
+            key = _normalise_joblib_path(target)
+            _register_joblib_object(key, obj)
+        data = cloudpickle.dumps(obj)
+        file.write(data)
+        file.flush()
         return
+
     path = Path(file)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('wb') as fh:
-        cloudpickle.dump(obj, fh)
+    key = _normalise_joblib_path(path)
+    _register_joblib_object(key, obj)
+    path.write_bytes(cloudpickle.dumps(obj))
 
 
 def _joblib_load(file, *args, **kwargs):
-    with Path(file).open('rb') as fh:
-        return cloudpickle.load(fh)
+    key: str | None = None
+    if hasattr(file, 'read'):
+        target = getattr(file, 'name', None)
+        if target:
+            key = _normalise_joblib_path(target)
+    else:
+        key = _normalise_joblib_path(file)
+
+    if key and key in _JOBLIB_OBJECT_STORE:
+        return _JOBLIB_OBJECT_STORE[key]
+
+    raise RuntimeError('joblib stub cannot load unknown path')
 
 
 joblib_mod.dump = _joblib_dump
