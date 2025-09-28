@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import types
+
+from . import core as _core_module
 from .core import (
     IS_RAY_STUB,
     DQN,
@@ -30,6 +35,8 @@ from .core import (
     spaces,
     validate_host,
 )
+
+_current_module = sys.modules[__name__]
 
 from . import api as _api
 from .storage import (
@@ -79,7 +86,7 @@ class _ModelBuilderModule(types.ModuleType):
                 _core_module.__dict__[name] = value
 
 
-sys.modules[__name__].__class__ = _ModelBuilderModule
+_current_module.__class__ = _ModelBuilderModule
 
 if os.getenv("ALLOW_GYM_STUB", "1").strip().lower() in {"0", "false", "no"}:
     if getattr(_core_module.gym, "_BOT_GYM_STUB", False):
