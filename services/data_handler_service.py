@@ -15,6 +15,9 @@ from services.exchange_provider import ExchangeProvider
 
 load_dotenv()
 
+API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"
+ALLOW_ANONYMOUS_ENV_VAR = "DATA_HANDLER_ALLOW_ANONYMOUS"
+
 try:  # optional dependency
     import flask
 except Exception:  # pragma: no cover - flask missing entirely
@@ -113,8 +116,8 @@ exchange_provider: ExchangeProvider[Any] | None = None
 def _require_api_key() -> "ResponseReturnValue | None":
     """Ensure protected endpoints require a shared token when configured."""
 
-    token = os.getenv("DATA_HANDLER_API_KEY", "").strip()
-    allow_anonymous_raw = os.getenv("DATA_HANDLER_ALLOW_ANONYMOUS", "")
+    token = os.getenv(API_KEY_ENV_VAR, "").strip()
+    allow_anonymous_raw = os.getenv(ALLOW_ANONYMOUS_ENV_VAR, "")
     allow_anonymous = allow_anonymous_raw.strip().lower() in {
         "1",
         "true",
@@ -131,8 +134,9 @@ def _require_api_key() -> "ResponseReturnValue | None":
     if not token:
         if allow_anonymous:
             logger.warning(
-                "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что "
-                "DATA_HANDLER_ALLOW_ANONYMOUS=%s. Используйте только для локальной отладки.",
+                "Ключ доступа к Data Handler не настроен. Анонимный доступ разрешён, потому что %s=%s. "
+                "Используйте только для локальной отладки.",
+                ALLOW_ANONYMOUS_ENV_VAR,
                 sanitize_log_value(allow_anonymous_raw or "1"),
             )
             return None
@@ -154,16 +158,17 @@ def _require_api_key() -> "ResponseReturnValue | None":
                 _serve_requests_with_auto_allow or auto_allow_reason == "OFFLINE_MODE"
             ):
                 logger.info(
-                    "DATA_HANDLER_API_KEY не задан. Анонимный доступ разрешён, потому что %s=1.",
+                    "Ключ доступа к Data Handler не настроен. Анонимный доступ разрешён, потому что %s=1.",
                     auto_allow_reason,
                 )
                 return None
 
         logger.warning(
-            "DATA_HANDLER_API_KEY не настроен. Запрос к %s отклонён. Настройте "
-            "переменную окружения или, только для локальной отладки, установите "
-            "DATA_HANDLER_ALLOW_ANONYMOUS=1.",
+            "Запрос к %s отклонён: ключ доступа к Data Handler не настроен. Настройте переменную окружения %s "
+            "или, только для локальной отладки, установите %s=1.",
             sanitize_log_value(request.path),
+            API_KEY_ENV_VAR,
+            ALLOW_ANONYMOUS_ENV_VAR,
         )
         return jsonify({'error': 'unauthorized'}), 401
 
