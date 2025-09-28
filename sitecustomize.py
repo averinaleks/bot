@@ -149,8 +149,10 @@ def _wrap_tempfile_mkdtemp() -> None:
             if target_dir:
                 try:
                     Path(target_dir).mkdir(parents=True, exist_ok=True)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"Не удалось подготовить каталог временных файлов: {target_dir!s}"
+                    ) from exc
             try:
                 return original(*args, **kwargs)
             except FileNotFoundError:

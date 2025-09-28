@@ -56,8 +56,15 @@ def _wrap_tempfile_mkdtemp() -> None:
         if target_dir:
             try:
                 Path(target_dir).mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.error(
+                    "Не удалось подготовить каталог временных файлов %s: %s",
+                    target_dir,
+                    exc,
+                )
+                raise RuntimeError(
+                    "Не удалось подготовить каталог временных файлов"
+                ) from exc
         try:
             return original(*args, **kwargs)
         except FileNotFoundError:
@@ -86,10 +93,13 @@ def reset_tempdir_cache() -> None:
 
     try:
         tempfile.tempdir = None  # type: ignore[assignment]
-    except Exception:
+    except (AttributeError, TypeError, PermissionError) as exc:
         # ``tempfile`` guarantees the attribute exists, but guard against
         # environments that restrict attribute assignment on the module.
-        pass
+        logger.warning(
+            "Не удалось сбросить кеш временного каталога tempfile: %s",
+            exc,
+        )
 
 
 def ensure_writable_directory(
