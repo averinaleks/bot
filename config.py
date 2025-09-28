@@ -11,7 +11,6 @@ import importlib.util
 import json
 import logging
 import os
-import sys
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
@@ -76,10 +75,11 @@ def validate_env(required_keys: list[str]) -> None:
     ----------
     required_keys:
         List of environment variable names that must be defined. The check is
-        skipped during tests (``TEST_MODE=1`` or when ``pytest`` is running).
+        skipped when ``TEST_MODE=1`` so tests can run without configuring the
+        full environment.
     """
 
-    if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
+    if os.getenv("TEST_MODE") == "1":
         return
 
     missing_keys: list[str] = []
