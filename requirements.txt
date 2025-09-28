@@ -24,17 +24,11 @@ anyio==4.10.0
     #   httpx
     #   openai
     #   starlette
-async-timeout==5.0.1
-    # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.2.0 ; python_version < "3.11"
-    # via
-    #   -r requirements-core.in
-    #   pytest-asyncio
 bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
@@ -70,12 +64,10 @@ cycler==0.12.1
     # via matplotlib
 distro==1.9.0
     # via openai
-exceptiongroup==1.3.0
-    # via
-    #   anyio
-    #   pytest
 farama-notifications==0.0.4
     # via gymnasium
+fastapi==0.117.1
+    # via -r requirements-core.in
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
 filelock==3.19.1
@@ -275,6 +267,7 @@ pycryptodome==3.23.0
     # via pybit
 pydantic==2.11.9
     # via
+    #   fastapi
     #   fastapi-csrf-protect
     #   openai
     #   pydantic-settings
@@ -352,7 +345,9 @@ sniffio==1.3.1
 stable-baselines3==2.7.0
     # via -r requirements-core.in
 starlette==0.47.3
-    # via fastapi-csrf-protect
+    # via
+    #   fastapi
+    #   fastapi-csrf-protect
 statsmodels==0.14.5
     # via -r requirements-core.in
 sympy==1.14.0
@@ -365,8 +360,6 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.22.0
     # via transformers
-tomli==2.2.1
-    # via pytest
 torch==2.8.0
     # via
     #   pytorch-lightning
@@ -387,16 +380,13 @@ triton==3.4.0
     # via torch
 typing-extensions==4.14.1
     # via
-    #   a2wsgi
     #   aiosignal
     #   anyio
     #   ccxt
-    #   cryptography
-    #   exceptiongroup
+    #   fastapi
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
-    #   multidict
     #   openai
     #   pydantic
     #   pydantic-core
