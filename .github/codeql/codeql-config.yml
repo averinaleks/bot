@@ -1,4 +1,5 @@
 name: bot CodeQL configuration
+
 paths-ignore:
   # Ignore Git metadata everywhere in the checkout so that CodeQL never walks
   # into reference logs for remote branches that happen to end with the .py
@@ -7,10 +8,6 @@ paths-ignore:
   # surfaces hundreds of misleading syntax errors. Explicitly excluding all
   # .git directories (and everything under them) keeps the analysis focused on
   # real source files while remaining resilient to future branch names.
-  - /.git
-  - /.git/**
-  - .git
   - .git/**
-  - '**/.git'
   - '**/.git/**'
   - '**/.git/logs/**'
