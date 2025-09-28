@@ -154,6 +154,13 @@ jobs:
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout workflow helpers
+        if: ${{ steps.validate_event.outputs.skip != 'true' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+
       - name: Проверка статуса PR
         if: ${{ steps.validate_event.outputs.skip != 'true' }}
         id: ensure_pr_ready
