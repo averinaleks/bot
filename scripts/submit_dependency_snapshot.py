@@ -193,6 +193,13 @@ class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
             return alias
         return key
 
+    def _register_alias(self, alias: str, canonical: str) -> None:
+        if not alias:
+            return
+        self._aliases[alias] = canonical
+        normalised = _normalise_name(alias)
+        self._aliases[normalised] = canonical
+
     def add(
         self,
         original_name: str,
@@ -202,19 +209,28 @@ class ResolvedDependencies(OrderedDict[str, ResolvedDependency]):
         *,
         extra_aliases: Iterable[str] = (),
     ) -> None:
-        if not super().__contains__(package_url):
-            super().__setitem__(package_url, dependency)
+        canonical_name = _normalise_name(base_name) or _normalise_name(original_name)
+        if not canonical_name:
+            canonical_name = package_url
+
+        existing = super().get(canonical_name)
+        if existing is None or existing.get("package_url") != package_url:
+            super().__setitem__(canonical_name, dependency)
 
         alias_candidates = {
             original_name,
             base_name,
+            canonical_name,
+            package_url,
             _normalise_name(original_name),
             _normalise_name(base_name),
         }
         alias_candidates.update(extra_aliases)
+
         for alias in alias_candidates:
-            if alias:
-                self._aliases[alias] = package_url
+            if not alias:
+                continue
+            self._register_alias(alias, canonical_name)
 
     def __getitem__(self, key: str) -> ResolvedDependency:  # type: ignore[override]
         return super().__getitem__(self._resolve_alias(key))
