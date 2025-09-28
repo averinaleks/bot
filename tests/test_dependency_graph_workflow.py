@@ -72,3 +72,11 @@ def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
     assert 'stripped_lower = stripped.lower()' in workflow
     assert 'if stripped_lower.startswith("ccxtpro")' in workflow
     assert 'if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower' in workflow
+
+
+def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+    assert "repository_dispatch" in workflow
+    assert "dependency_graph/auto_submission" in workflow
+    assert "github.event_name == 'repository_dispatch'" in workflow
