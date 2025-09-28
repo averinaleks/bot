@@ -246,9 +246,9 @@ def _resolve_factory(cfg: "BotConfig", name: str) -> Callable[..., Any] | type |
     if isinstance(raw, str):
         try:
             return _import_from_path(raw)
-        except Exception as exc:  # pragma: no cover - defensive logging
+        except (ImportError, AttributeError, ValueError) as exc:
             logger.error("Failed to import factory for %s from %s: %s", name, raw, exc)
-            return None
+            raise
     return raw
 
 
@@ -277,15 +277,34 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
             service_factories.setdefault(key, value)
     cfg.service_factories = service_factories
 
-    exchange_factory = _resolve_factory(cfg, "exchange")
+    def _load_factory(name: str, *, optional: bool = False):
+        try:
+            factory = _resolve_factory(cfg, name)
+        except (ImportError, AttributeError, ValueError) as exc:
+            configured = service_factories.get(name)
+            hint = "; no offline fallback is available" if not offline else ""
+            raise ValueError(
+                "Failed to load service factory %r from %r: %s%s"
+                % (name, configured, exc, hint)
+            ) from exc
+        if factory is None:
+            if optional:
+                return None
+            hint = "; no offline fallback is available" if not offline else ""
+            raise ValueError(
+                "No service factory configured for %r%s" % (name, hint)
+            )
+        return factory
+
+    exchange_factory = _load_factory("exchange")
     exchange = _instantiate_factory(exchange_factory, cfg)
 
     from bot.data_handler import DataHandler
     from bot.model_builder import ModelBuilder
     from bot.trade_manager import TradeManager
 
-    telegram_factory = _resolve_factory(cfg, "telegram_logger")
-    gpt_factory = _resolve_factory(cfg, "gpt_client")
+    telegram_factory = _load_factory("telegram_logger", optional=True)
+    gpt_factory = _load_factory("gpt_client", optional=True)
 
     data_handler = DataHandler(cfg, None, None, exchange=exchange)
     prepare_data_handler(data_handler, cfg, symbols)
