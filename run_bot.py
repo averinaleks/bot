@@ -9,9 +9,9 @@ import contextlib
 import logging
 import os
 import sys
-import importlib
+import importlib.util
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable
 
 import pandas as pd
@@ -172,13 +172,68 @@ def _log_mode(command: str, offline: bool) -> None:
     logger.info("Starting %s mode in %s configuration", command, mode)
 
 
+_SAFE_FACTORY_MODULE_PREFIXES = ("bot.", "services.")
+_SAFE_FACTORY_ROOTS = frozenset({"bot", "services"})
+_REPO_ROOT = Path(__file__).resolve().parent
+
+
+def _validate_identifier_path(path: str, *, what: str) -> tuple[str, ...]:
+    parts = tuple(part for part in path.split(".") if part)
+    if not parts:
+        raise ValueError(f"{what} must contain at least one identifier")
+    for part in parts:
+        if not part.isidentifier():
+            raise ValueError(f"{what} contains invalid identifier segment {part!r}")
+    return parts
+
+
+def _ensure_safe_factory_module(module_name: str) -> None:
+    if module_name in _SAFE_FACTORY_ROOTS:
+        return
+    if any(module_name.startswith(prefix) for prefix in _SAFE_FACTORY_MODULE_PREFIXES):
+        return
+    raise ValueError(
+        "Factory modules must reside within the bot or services packages"
+    )
+
+
+def _load_factory_module(module_name: str) -> ModuleType:
+    module = sys.modules.get(module_name)
+    if module is not None:
+        return module
+
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.loader is None or getattr(spec.loader, "exec_module", None) is None:
+        raise ValueError(f"Unable to resolve factory module {module_name!r}")
+
+    origin = getattr(spec, "origin", None)
+    if not origin:
+        raise ValueError(f"Factory module {module_name!r} has no import origin")
+
+    module_path = Path(origin).resolve()
+    try:
+        module_path.relative_to(_REPO_ROOT)
+    except ValueError as exc:
+        raise ValueError(
+            f"Factory module {module_name!r} must reside within the project directory"
+        ) from exc
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    return module
+
+
 def _import_from_path(path: str) -> Any:
     module_name, _, attr_path = path.partition(":")
     if not module_name or not attr_path:
         raise ValueError(f"Invalid factory path: {path!r}")
-    module = importlib.import_module(module_name)
+    _validate_identifier_path(module_name, what="Module name")
+    _ensure_safe_factory_module(module_name)
+    attr_parts = _validate_identifier_path(attr_path, what="Attribute path")
+    module = _load_factory_module(module_name)
     target: Any = module
-    for part in attr_path.split("."):
+    for part in attr_parts:
         target = getattr(target, part)
     return target
 
