@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.submit_dependency_snapshot import (
     _auth_schemes,
     _build_manifests,
+    _derive_scope,
     _job_metadata,
     _normalise_run_attempt,
     _parse_requirements,
@@ -125,6 +126,17 @@ def test_build_manifests_discovers_nested_requirement_files(tmp_path: Path) -> N
     manifests = _build_manifests(tmp_path)
 
     assert set(manifests) == {"nested/configs/requirements-extra.txt"}
+
+
+def test_derive_scope_uses_token_boundaries() -> None:
+    assert _derive_scope("requirements.txt") == "runtime"
+    assert _derive_scope("requirements-dev.txt") == "development"
+    assert _derive_scope("requirements-test-utils.txt") == "development"
+    assert _derive_scope("requirements-healthcheck.txt") == "development"
+    assert _derive_scope("requirements-ci.txt") == "development"
+    assert _derive_scope("requirements-cicd.txt") == "development"
+    assert _derive_scope("requirements-client.txt") == "runtime"
+    assert _derive_scope("requirements-runtime.txt") == "runtime"
 
 def test_job_metadata_adds_html_url_when_run_id_numeric(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_SERVER_URL", "https://example.com")
