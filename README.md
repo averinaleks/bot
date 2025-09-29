@@ -116,14 +116,17 @@ pytest tests/test_password_utils.py
    Если вы устанавливаете зависимости вручную, добавьте `pip install flask`.
    В CI применяются только стандартные колёса PyTorch без поддержки CUDA.
    Если вам нужна GPU‑сборка с CUDA 12.4, установите PyTorch
-   отдельно, указав дополнительный индекс:
+   отдельно, указав дополнительный индекс (версия закреплена на `2.8.0` и должна
+   совпадать с зависимостями из `requirements-gpu.txt`):
 
    ```bash
-   pip install torch>=2.7.1 --extra-index-url https://download.pytorch.org/whl/cu124
+   pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu124
    ```
    Эта команда ставит версии с поддержкой CUDA 12.4. Выполните её до
    `python -m pip install -r requirements.txt -r requirements-gpu.txt` (или вместо него, если
    остальные зависимости уже установлены).
+   При обновлении PyTorch не забудьте пересобрать `requirements-gpu.txt`, чтобы ручная
+   установка и зафиксированные зависимости не расходились.
    Эта утилита устанавливает пакеты, необходимые для запуска тестов. Выполните
    её перед `pytest`, чтобы все проверки прошли успешно.
     Файл `requirements-gpu.txt` уже включает `cupy-cuda12x` для систем с CUDA 12.x. Системы без GPU могут пропустить этот шаг и использовать только `requirements.txt`
