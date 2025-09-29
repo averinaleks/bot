@@ -40,6 +40,7 @@ if hasattr(app, "config"):
 
 logger = logging.getLogger(__name__)
 POSITIONS_LOCK = threading.RLock()
+EXCHANGE_LOCK = threading.Lock()
 
 _exchange_runtime: server_common.ExchangeRuntime | None = None
 exchange: Any | None = None
@@ -54,6 +55,17 @@ def _current_exchange() -> Any | None:
     if current is not None:
         exchange = current
     return exchange
+
+
+def _call_exchange_method(target: Any, method: str, *args, **kwargs) -> Any:
+    """Invoke an exchange method under a global lock."""
+
+    if target is None:
+        raise RuntimeError("exchange is not initialized")
+
+    fn = getattr(target, method)
+    with EXCHANGE_LOCK:
+        return fn(*args, **kwargs)
 
 
 def init_exchange() -> None:
@@ -514,33 +526,64 @@ def open_position() -> ResponseReturnValue:
             exchange, 'create_order_with_trailing_stop'
         ):
             app.logger.info('using create_order_with_trailing_stop')
-            order = exchange.create_order_with_trailing_stop(
-                symbol, 'market', side, amount, None, trailing_stop, None
+            order = _call_exchange_method(
+                exchange,
+                'create_order_with_trailing_stop',
+                symbol,
+                'market',
+                side,
+                amount,
+                None,
+                trailing_stop,
+                None,
             )
         elif (tp is not None or sl is not None) and hasattr(
             exchange, 'create_order_with_take_profit_and_stop_loss'
         ):
             app.logger.info('using create_order_with_take_profit_and_stop_loss')
-            order = exchange.create_order_with_take_profit_and_stop_loss(
-                symbol, 'market', side, amount, None, tp, sl, None
+            order = _call_exchange_method(
+                exchange,
+                'create_order_with_take_profit_and_stop_loss',
+                symbol,
+                'market',
+                side,
+                amount,
+                None,
+                tp,
+                sl,
+                None,
             )
         else:
             app.logger.info('using fallback order placement')
-            order = exchange.create_order(symbol, 'market', side, amount)
+            order = _call_exchange_method(
+                exchange, 'create_order', symbol, 'market', side, amount
+            )
             opp_side = 'sell' if side == 'buy' else 'buy'
             if sl is not None:
                 stop_order = None
                 delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
                 for attempt in range(3):
                     try:
-                        stop_order = exchange.create_order(
-                            symbol, 'stop', opp_side, amount, sl
+                        stop_order = _call_exchange_method(
+                            exchange,
+                            'create_order',
+                            symbol,
+                            'stop',
+                            opp_side,
+                            amount,
+                            sl,
                         )
                     except CCXT_BASE_ERROR as exc:
                         app.logger.debug('stop order failed: %s', exc)
                         try:
-                            stop_order = exchange.create_order(
-                                symbol, 'stop_market', opp_side, amount, sl
+                            stop_order = _call_exchange_method(
+                                exchange,
+                                'create_order',
+                                symbol,
+                                'stop_market',
+                                opp_side,
+                                amount,
+                                sl,
                             )
                         except CCXT_BASE_ERROR as exc:
                             app.logger.debug('stop_market order failed: %s', exc)
@@ -561,8 +604,14 @@ def open_position() -> ResponseReturnValue:
                 delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
                 for attempt in range(3):
                     try:
-                        tp_order = exchange.create_order(
-                            symbol, 'limit', opp_side, amount, tp
+                        tp_order = _call_exchange_method(
+                            exchange,
+                            'create_order',
+                            symbol,
+                            'limit',
+                            opp_side,
+                            amount,
+                            tp,
                         )
                     except CCXT_BASE_ERROR as exc:
                         app.logger.debug('take profit order failed: %s', exc)
@@ -582,14 +631,26 @@ def open_position() -> ResponseReturnValue:
                 tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
                 stop_order = None
                 try:
-                    stop_order = exchange.create_order(
-                        symbol, 'stop', opp_side, amount, tprice
+                    stop_order = _call_exchange_method(
+                        exchange,
+                        'create_order',
+                        symbol,
+                        'stop',
+                        opp_side,
+                        amount,
+                        tprice,
                     )
                 except CCXT_BASE_ERROR as exc:
                     app.logger.debug('trailing stop order failed: %s', exc)
                     try:
-                        stop_order = exchange.create_order(
-                            symbol, 'stop_market', opp_side, amount, tprice
+                        stop_order = _call_exchange_method(
+                            exchange,
+                            'create_order',
+                            symbol,
+                            'stop_market',
+                            opp_side,
+                            amount,
+                            tprice,
                         )
                     except CCXT_BASE_ERROR as exc:
                         app.logger.debug('trailing stop_market failed: %s', exc)
@@ -635,7 +696,9 @@ def open_position() -> ResponseReturnValue:
             cancel_success = False
             if hasattr(exchange, 'cancel_order'):
                 try:
-                    exchange.cancel_order(order.get('id'), symbol)
+                    _call_exchange_method(
+                        exchange, 'cancel_order', order.get('id'), symbol
+                    )
                     cancel_success = True
                     mitigation_actions.append('primary_order_cancelled')
                     app.logger.info(
@@ -652,7 +715,9 @@ def open_position() -> ResponseReturnValue:
             if not cancel_success:
                 emergency_close_success = False
                 try:
-                    close_order = exchange.create_order(
+                    close_order = _call_exchange_method(
+                        exchange,
+                        'create_order',
                         symbol,
                         'market',
                         'sell' if side == 'buy' else 'buy',
@@ -736,7 +801,15 @@ def close_position() -> ResponseReturnValue:
 
     params = {'reduce_only': True}
     try:
-        order = exchange.create_order(symbol, 'market', side, amount, params=params)
+        order = _call_exchange_method(
+            exchange,
+            'create_order',
+            symbol,
+            'market',
+            side,
+            amount,
+            params=params,
+        )
         if not order or order.get('id') is None:
             app.logger.error('failed to create close order')
             return jsonify({'error': 'order creation failed'}), 500
