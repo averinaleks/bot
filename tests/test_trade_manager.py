@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from typing import Any
 from bot.config import BotConfig
+from bot.trade_manager import order_utils
 
 # Stub heavy dependencies before importing the trade manager
 if 'torch' not in sys.modules:
@@ -321,9 +322,33 @@ def test_position_calculations():
     size = asyncio.run(tm.calculate_position_size('BTCUSDT', 100, 1.0, 1.5))
     assert size == pytest.approx(10 / (1.5 * 10))
 
+    direct_size = order_utils.calculate_position_size(
+        equity=1000,
+        risk_per_trade=0.01,
+        atr=1.0,
+        sl_multiplier=1.5,
+        leverage=tm.leverage,
+        price=100,
+        max_position_pct=tm.max_position_pct,
+    )
+    assert direct_size == pytest.approx(size)
+
     sl, tp = tm.calculate_stop_loss_take_profit('buy', 100, 1.0, 1.5, 2.5)
     assert sl == pytest.approx(98.5)
     assert tp == pytest.approx(102.5)
+
+    sl_calc, tp_calc = order_utils.calculate_stop_loss_take_profit(
+        'buy', 100, 1.0, 1.5, 2.5
+    )
+    assert sl_calc == pytest.approx(sl)
+    assert tp_calc == pytest.approx(tp)
+    plan = order_utils.build_protective_order_plan(
+        'buy', entry_price=100, stop_loss_price=sl, take_profit_price=tp
+    )
+    assert plan.opposite_side == 'sell'
+    assert plan.stop_loss_price == pytest.approx(sl)
+    assert plan.take_profit_price == pytest.approx(tp)
+    assert plan.trailing_stop_price is None
 
 
 def test_open_position_places_tp_sl_orders():
