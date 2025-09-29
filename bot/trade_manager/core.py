@@ -1962,13 +1962,20 @@ class TradeManager:
             await self.open_position(info["symbol"], info["signal"], info["price"], params)
 
     async def ranked_signal_loop(self):
+        """Continuously execute ranked trading decisions with retry logic."""
         while True:
             try:
                 await self.execute_top_signals_once()
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError) as e:
+            except (
+                aiohttp.ClientError,
+                httpx.HTTPError,
+                ConnectionError,
+                ValueError,
+                RuntimeError,
+            ) as e:
                 logger.exception(
                     "Error processing ranked signals (%s): %s",
                     type(e).__name__,
@@ -2073,62 +2080,4 @@ class TradeManager:
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
-
-    async def process_symbol(self, symbol: str):
-        if self.http_client is None:
-            self.http_client = await get_http_client()
-        while symbol not in self.model_builder.predictive_models:
-            logger.debug("Ожидание модели для %s", symbol)
-            await asyncio.sleep(30)
-        while True:
-            try:
-                signal = await self.evaluate_signal(symbol)
-                async with self.position_lock:
-                    condition = (
-                        "symbol" not in self.positions.index.names
-                        or symbol
-                        not in self.positions.index.get_level_values("symbol")
-                    )
-                if signal and condition:
-                    ohlcv = self.data_handler.ohlcv
-                    if (
-                        "symbol" in ohlcv.index.names
-                        and symbol in ohlcv.index.get_level_values("symbol")
-                    ):
-                        df = ohlcv.xs(symbol, level="symbol", drop_level=False)
-                    else:
-                        df = None
-                    empty = await _check_df_async(df, f"process_symbol {symbol}")
-                    if empty:
-                        continue
-                    current_price = df["close"].iloc[-1]
-                    opt_res = self.data_handler.parameter_optimizer.optimize(symbol)
-                    if inspect.isawaitable(opt_res):
-                        params = await opt_res
-                    else:
-                        params = opt_res
-                    op_res = self.open_position(symbol, signal, current_price, params)
-                    if inspect.isawaitable(op_res):
-                        await op_res
-                await asyncio.sleep(
-                    self.config["check_interval"] / len(self.data_handler.usdt_pairs)
-                )
-            except asyncio.CancelledError:
-                raise
-            except (
-                aiohttp.ClientError,
-                httpx.HTTPError,
-                ConnectionError,
-                RuntimeError,
-            ) as e:
-                logger.warning(
-                    "Transient error processing %s (%s): %s",
-                    symbol,
-                    type(e).__name__,
-                    e,
-                    exc_info=True,
-                )
-                await asyncio.sleep(1)
-                continue
-
 

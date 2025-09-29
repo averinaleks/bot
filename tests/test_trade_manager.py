@@ -1031,46 +1031,51 @@ async def test_evaluate_signal_raises_on_http_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_symbol_retries_on_client_error(monkeypatch):
-    dh = DummyDataHandler()
+async def test_execute_top_signals_once_uses_ranked_scores(monkeypatch):
+    dh = DummyDataHandler(pairs=['BTCUSDT', 'ETHUSDT'])
 
     class MB:
         def __init__(self):
-            self.predictive_models = {"BTCUSDT": object()}
+            self.predictive_models = {}
 
     tm = TradeManager(
-        BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp(), check_interval=0.01),
+        BotConfig(
+            lstm_timesteps=2,
+            cache_dir=tempfile.mkdtemp(),
+            check_interval=0.01,
+            top_signals=1,
+        ),
         dh,
         MB(),
         None,
         None,
     )
 
-    calls = {"n": 0}
+    async def fake_gather():
+        return [
+            {"symbol": "ETHUSDT", "signal": "sell", "score": 2.0, "price": 200.0},
+            {"symbol": "BTCUSDT", "signal": "buy", "score": 1.0, "price": 100.0},
+        ]
 
-    async def fake_eval(symbol):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise aiohttp.ClientError("boom")
-        raise asyncio.CancelledError()
+    async def fake_optimize(symbol: str):
+        return {"symbol": symbol}
 
-    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+    calls: list[tuple[str, str, float, dict[str, object]]] = []
 
-    orig_sleep = asyncio.sleep
+    async def fake_open(symbol, signal, price, params):
+        calls.append((symbol, signal, price, params))
 
-    async def fast_sleep(_):
-        await orig_sleep(0)
+    monkeypatch.setattr(tm, "gather_pending_signals", fake_gather)
+    monkeypatch.setattr(tm.data_handler.parameter_optimizer, "optimize", fake_optimize)
+    monkeypatch.setattr(tm, "open_position", fake_open)
 
-    monkeypatch.setattr(trade_manager.asyncio, "sleep", fast_sleep)
+    await tm.execute_top_signals_once()
 
-    task = asyncio.create_task(tm.process_symbol("BTCUSDT"))
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert calls["n"] >= 2
+    assert calls == [("ETHUSDT", "sell", 200.0, {"symbol": "ETHUSDT"})]
 
 
 @pytest.mark.asyncio
-async def test_process_symbol_propagates_unexpected_error(monkeypatch):
+async def test_ranked_signal_loop_propagates_unexpected_error(monkeypatch):
     dh = DummyDataHandler()
 
     class MB:
@@ -1085,13 +1090,13 @@ async def test_process_symbol_propagates_unexpected_error(monkeypatch):
         None,
     )
 
-    async def fake_eval(symbol):
-        raise ValueError("boom")
+    async def fake_execute():
+        raise KeyError("boom")
 
-    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+    monkeypatch.setattr(tm, "execute_top_signals_once", fake_execute)
 
-    with pytest.raises(ValueError):
-        await tm.process_symbol("BTCUSDT")
+    with pytest.raises(KeyError):
+        await tm.ranked_signal_loop()
 
 
 @pytest.mark.asyncio
