@@ -1,5 +1,7 @@
 import json
 import logging
+import threading
+import time
 
 import pytest
 
@@ -254,6 +256,57 @@ def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     assert 'details' in warning
     assert not tms.POSITIONS
     assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
+
+
+def test_exchange_calls_are_serialized(monkeypatch):
+    from services import trade_manager_service as tms
+
+    call_sequence: list[int] = []
+    in_call = threading.Event()
+    first_entered = threading.Event()
+    release_first = threading.Event()
+
+    def create_order(*_args, **_kwargs):
+        assert not in_call.is_set(), 'create_order re-entered concurrently'
+        in_call.set()
+        try:
+            if not first_entered.is_set():
+                first_entered.set()
+                assert release_first.wait(timeout=1), 'release not signalled'
+            time.sleep(0.01)
+            call_sequence.append(len(call_sequence) + 1)
+            return {'id': call_sequence[-1]}
+        finally:
+            in_call.clear()
+
+    exchange = type('Exchange', (), {'create_order': create_order})()
+
+    results: list[dict[str, int]] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            result = tms._call_exchange_method(
+                exchange, 'create_order', 'BTCUSDT', 'market', 'buy', 1.0
+            )
+            results.append(result)
+        except BaseException as exc:  # pragma: no cover - diagnostic
+            errors.append(exc)
+
+    first = threading.Thread(target=worker)
+    second = threading.Thread(target=worker)
+
+    first.start()
+    assert first_entered.wait(timeout=1)
+    second.start()
+    time.sleep(0.05)
+    release_first.set()
+    first.join()
+    second.join()
+
+    assert not errors
+    assert [result['id'] for result in results] == [1, 2]
+    assert call_sequence == [1, 2]
 
 
 def _setup_trade_manager(monkeypatch):
