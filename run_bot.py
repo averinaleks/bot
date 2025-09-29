@@ -380,11 +380,18 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
             # Дополнительно обогащаем исходное исключение сообщением домена, чтобы
             # внешний код и тесты получали контекст, а тип исключения
             # сохранялся без оборачивания.
+            extra_args: tuple[object, ...]
             try:
-                exc.args = (f"{message}: {exc}", *exc.args[1:])
+                extra_args = tuple(exc.args[1:])
+            except Exception:  # pragma: no cover - крайне редкие случаи нестандартных args
+                extra_args = ()
+            enriched_message = f"{message}: {exc}"
+            try:
+                exc.args = (enriched_message, *extra_args)
             except Exception:  # pragma: no cover - крайне редкие случаи нестандартных args
                 pass
-            raise
+            new_exc = matched_cls(enriched_message, *extra_args)
+            raise new_exc.with_traceback(exc.__traceback__) from exc
         logger.exception("Unexpected error during trading loop")
         raise
     finally:

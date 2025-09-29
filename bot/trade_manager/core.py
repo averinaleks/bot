@@ -13,6 +13,7 @@ import types
 import json
 import logging
 import re
+import sys
 import time
 from typing import Any, Awaitable, Dict, Optional, Tuple, TYPE_CHECKING, cast
 import shutil
@@ -2016,7 +2017,13 @@ class TradeManager:
                                 await asyncio.gather(
                                     *pending, return_exceptions=True
                                 )
-                            raise TradeManagerTaskError(str(exc)) from exc
+                            module = sys.modules.get(self.__class__.__module__)
+                            error_cls = (
+                                getattr(module, "TradeManagerTaskError")
+                                if module is not None
+                                else TradeManagerTaskError
+                            )
+                            raise error_cls(str(exc)) from exc
             finally:
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:

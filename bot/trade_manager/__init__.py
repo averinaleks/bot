@@ -28,9 +28,6 @@ else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
     from bot.utils_loader import require_utils
 
-    _utils = require_utils("TelegramLogger")
-    TelegramLogger = cast(type[TelegramLoggerType], _utils.TelegramLogger)
-
     from .core import TradeManager as _TradeManager
     from .service import (
         InvalidHostError,
@@ -48,6 +45,12 @@ else:  # pragma: no cover - реальная инициализация
     # Псевдонимы синхронных помощников оставлены для обратной совместимости
     get_http_client = get_async_http_client
     close_http_client = close_async_http_client
+
+    def __getattr__(name: str) -> Any:
+        if name == "TelegramLogger":
+            utils_mod = require_utils("TelegramLogger")
+            return cast(type[TelegramLoggerType], utils_mod.TelegramLogger)
+        raise AttributeError(name)
 
     __all__ = [
         "TradeManager",

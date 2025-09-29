@@ -20,6 +20,7 @@ __all__ = [
     "validate_token",
     "load_trade_manager_config",
     "ExchangeRuntime",
+    "allow_unauthenticated_requests",
 ]
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,14 @@ def _allow_offline_mode() -> bool:
         or os.getenv("TEST_MODE") == "1"
         or os.getenv("TRADE_MANAGER_USE_STUB") == "1"
     )
+
+
+def allow_unauthenticated_requests() -> bool:
+    """Return ``True`` when TradeManager may operate without API authentication."""
+
+    # Offline integration tests and stubbed runtime scenarios intentionally skip
+    # token validation so the service can be exercised without credentials.
+    return os.getenv("OFFLINE_MODE") == "1" or os.getenv("TRADE_MANAGER_USE_STUB") == "1"
 
 
 def _close_exchange_instance(instance: Any) -> None:

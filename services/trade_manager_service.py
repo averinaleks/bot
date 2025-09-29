@@ -82,6 +82,15 @@ def init_exchange() -> None:
 API_TOKEN = (server_common.get_api_token() or '').strip()
 
 
+def _current_api_token() -> str | None:
+    """Return the configured API token, including runtime overrides."""
+
+    token = (API_TOKEN or '').strip()
+    if token:
+        return token
+    return server_common.get_api_token()
+
+
 if hasattr(app, "before_first_request"):
     app.before_first_request(init_exchange)
 
@@ -101,8 +110,10 @@ def _require_api_token() -> ResponseReturnValue | None:
     if request.method != 'POST' and request.path != '/positions':
         return None
 
-    expected = API_TOKEN
+    expected = _current_api_token()
     if not expected:
+        if server_common.allow_unauthenticated_requests():
+            return None
         remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
         logger.warning(
             'Rejected TradeManager request to %s from %s: API token is not configured',
