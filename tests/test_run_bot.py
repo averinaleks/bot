@@ -13,7 +13,7 @@ if "pandas" not in sys.modules:
     sys.modules["pandas"] = pandas_stub
 
 
-from run_bot import run_trading_cycle
+from run_bot import _maybe_load_initial, run_trading_cycle
 
 
 class DummyDomainError(Exception):
@@ -68,3 +68,30 @@ async def test_run_trading_cycle_logs_and_reraises_unexpected_error(caplog):
 
     record = next(record for record in caplog.records if record.message == "Unexpected error during trading loop")
     assert record.exc_info is not None
+
+
+@pytest.mark.asyncio
+async def test_maybe_load_initial_logs_expected_errors(caplog):
+    class DummyHandler:
+        def load_initial(self):
+            raise RuntimeError("broken")
+
+    handler = DummyHandler()
+
+    with caplog.at_level(logging.WARNING):
+        await _maybe_load_initial(handler)
+
+    record = next(record for record in caplog.records if record.message.startswith("Initial data load failed"))
+    assert record.exc_info is not None
+
+
+@pytest.mark.asyncio
+async def test_maybe_load_initial_propagates_unexpected_errors():
+    class DummyHandler:
+        def load_initial(self):
+            raise ValueError("invalid state")
+
+    handler = DummyHandler()
+
+    with pytest.raises(ValueError, match="invalid state"):
+        await _maybe_load_initial(handler)

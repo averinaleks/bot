@@ -421,6 +421,21 @@ async def run_simulation_cycle(args: argparse.Namespace, data_handler, trade_man
     )
 
 
+async def _maybe_load_initial(data_handler: Any) -> None:
+    """Attempt to invoke ``load_initial`` on the data handler with safe error handling."""
+
+    load_initial = getattr(data_handler, "load_initial", None)
+    if not callable(load_initial):
+        return
+
+    try:
+        result = load_initial()
+        if asyncio.iscoroutine(result):
+            await result
+    except (OSError, IOError, RuntimeError) as exc:  # noqa: PERF203 - narrow defensive guard
+        logger.warning("Initial data load failed: %s", exc, exc_info=True)
+
+
 async def main() -> None:
     args = parse_args()
     offline_mode = configure_environment(args)
@@ -443,14 +458,7 @@ async def main() -> None:
 
     data_handler, _model_builder, trade_manager = _build_components(cfg, offline_mode, args.symbols)
 
-    load_initial = getattr(data_handler, "load_initial", None)
-    if callable(load_initial):
-        try:
-            result = load_initial()
-            if asyncio.iscoroutine(result):
-                await result
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Initial data load failed: %s", exc)
+    await _maybe_load_initial(data_handler)
 
     if args.command == "simulate":
         await run_simulation_cycle(args, data_handler, trade_manager)
