@@ -384,7 +384,7 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
                 exc.args = (f"{message}: {exc}", *exc.args[1:])
             except Exception:  # pragma: no cover - крайне редкие случаи нестандартных args
                 pass
-            raise exc from exc
+            raise
         logger.exception("Unexpected error during trading loop")
         raise
     finally:
