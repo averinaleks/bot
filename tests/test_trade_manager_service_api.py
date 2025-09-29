@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -132,6 +134,54 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
 
     assert len(tms_reload.POSITIONS) == 1
 
+
+def test_open_position_serializes_exchange_calls(monkeypatch):
+    from services import trade_manager_service as tms
+
+    class NonThreadSafeExchange:
+        def __init__(self):
+            self._in_call = False
+            self.calls = []
+
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            if self._in_call:
+                raise RuntimeError('concurrent create_order')
+            self._in_call = True
+            try:
+                time.sleep(0.01)
+                order_id = f'order-{len(self.calls) + 1}'
+                self.calls.append(
+                    {
+                        'symbol': symbol,
+                        'type': typ,
+                        'side': side,
+                        'amount': amount,
+                        'price': price,
+                        'params': params,
+                        'id': order_id,
+                    }
+                )
+                return {'id': order_id}
+            finally:
+                self._in_call = False
+
+    exchange = NonThreadSafeExchange()
+    tms.exchange_provider.override(exchange)
+
+    def _send_request() -> int:
+        with tms.app.test_client() as client:
+            response = _post_open_position(
+                client,
+                {'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
+            )
+            return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        statuses = list(pool.map(lambda _: _send_request(), range(2)))
+
+    assert statuses == [200, 200]
+    assert len(exchange.calls) == 2
+    assert all(call['type'] == 'market' for call in exchange.calls)
 
 def _setup_trade_manager(monkeypatch):
     tm, loop, stub = tm_routes._setup_module(monkeypatch)
