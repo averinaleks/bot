@@ -188,35 +188,6 @@ async def test_manage_positions_recovery(monkeypatch):
     assert call['n'] >= 2
 
 @pytest.mark.asyncio
-async def test_process_symbol_recovery(monkeypatch):
-    dh = DummyDataHandler()
-    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
-    monkeypatch.setattr(tm, 'open_position', lambda *a, **k: None)
-
-    call = {'n': 0}
-    async def fake_eval(symbol):
-        call['n'] += 1
-        if call['n'] == 1:
-            raise RuntimeError('boom')
-        return 'buy'
-    monkeypatch.setattr(tm, 'evaluate_signal', fake_eval)
-
-    orig_sleep = asyncio.sleep
-    async def fast_sleep(_):
-        await orig_sleep(0)
-    monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
-
-    task = asyncio.create_task(tm.process_symbol('BTCUSDT'))
-    with contextlib.suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(task, 0.05)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    assert call['n'] >= 2
-
-
-@pytest.mark.asyncio
 async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
@@ -256,41 +227,6 @@ async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_symbol_data_fresh_error(monkeypatch):
-    dh = DummyDataHandler()
-    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
-
-    call = {'n': 0}
-
-    async def fake_eval(symbol):
-        call['n'] += 1
-        return 'buy'
-
-    async def raise_conn_error(*a, **k):
-        raise ConnectionError('offline')
-
-    monkeypatch.setattr(tm, 'evaluate_signal', fake_eval)
-    monkeypatch.setattr(dh, 'is_data_fresh', raise_conn_error)
-
-    orig_sleep = asyncio.sleep
-
-    async def fast_sleep(_):
-        await orig_sleep(0)
-
-    monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
-
-    task = asyncio.create_task(tm.process_symbol('BTCUSDT'))
-    with contextlib.suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(task, 0.05)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    assert call['n'] >= 2
-    assert dh.exchange.orders == []
-
-
-@pytest.mark.asyncio
 async def test_open_and_close_short_loop():
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
@@ -309,5 +245,35 @@ async def test_open_and_close_short_loop():
 
     assert len(tm.returns_by_symbol['BTCUSDT']) == 1
     assert tm.returns_by_symbol['BTCUSDT'][0][1] > 0
+
+
+@pytest.mark.asyncio
+async def test_ranked_signal_loop_recovery(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    call = {'n': 0}
+
+    async def fake_execute():
+        call['n'] += 1
+        if call['n'] == 1:
+            raise RuntimeError('boom')
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(tm, 'execute_top_signals_once', fake_execute)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
+
+    task = asyncio.create_task(tm.ranked_signal_loop())
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call['n'] >= 2
 
 sys.modules.pop('utils', None)
