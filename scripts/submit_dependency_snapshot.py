@@ -6,7 +6,8 @@ import fnmatch
 import json
 import os
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404: используется только для контролируемых вызовов git
 import sys
 import time
 from collections import OrderedDict
@@ -73,6 +74,7 @@ _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
+_DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
 _REQUESTS_REQUIRED_MESSAGE = (
@@ -95,12 +97,33 @@ def _extract_payload_token(payload: Mapping[str, object] | None) -> str:
     return _extract_payload_value(payload, *_TOKEN_PAYLOAD_KEYS)
 
 
+_ALLOWED_GIT_SUBCOMMANDS = {"rev-parse", "symbolic-ref", "for-each-ref"}
+_GIT_EXECUTABLE = shutil.which("git")
+
+
 def _run_git_command(*args: str) -> str | None:
     """Return the trimmed stdout from ``git`` or ``None`` on failure."""
 
+    git_binary = _GIT_EXECUTABLE or shutil.which("git")
+    if git_binary is None:
+        print("Git недоступен в PATH; пропускаем команды git", file=sys.stderr)
+        return None
+
+    if not args:
+        raise ValueError("Ожидается минимум один аргумент git")
+
+    subcommand = args[0]
+    if subcommand not in _ALLOWED_GIT_SUBCOMMANDS:
+        raise ValueError(f"Недопустимая git-команда: {subcommand}")
+
+    if any("\x00" in arg or "\n" in arg or "\r" in arg for arg in args):
+        raise ValueError("Аргументы git не должны содержать управляющих символов")
+
+    command = (git_binary,) + args
+
     try:
-        completed = subprocess.run(
-            ("git",) + args,
+        completed = subprocess.run(  # nosec B603: аргументы заданы жёстко и не берутся из пользовательского ввода
+            command,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -252,7 +275,10 @@ def _derive_scope(manifest_name: str) -> str:
             return "development"
         if token.startswith("health"):
             return "development"
-        if token == "ci" or (token.startswith("ci") and len(token) <= 4):
+        if token in _DEVELOPMENT_TOKEN_HINTS or any(
+            token.startswith(prefix) and len(token) <= len(prefix) + 2
+            for prefix in _DEVELOPMENT_TOKEN_HINTS
+        ):
             return "development"
 
     return "runtime"
