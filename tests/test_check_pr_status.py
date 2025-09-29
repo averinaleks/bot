@@ -52,6 +52,31 @@ def test_evaluate_payload_handles_unexpected_format() -> None:
     assert "неожиданный формат" in status.notices[0]
 
 
+def test_evaluate_payload_detects_draft_pr() -> None:
+    payload = _build_payload(draft=True)
+    status = check_pr_status._evaluate_payload(payload, "owner/repo")
+    assert status.skip is True
+    assert any("draft" in notice for notice in status.notices)
+
+
+def test_evaluate_payload_detects_locked_pr() -> None:
+    payload = _build_payload(locked=True)
+    status = check_pr_status._evaluate_payload(payload, "owner/repo")
+    assert status.skip is True
+    assert any("заблокирован" in notice for notice in status.notices)
+
+
+def test_evaluate_payload_rejects_invalid_head_sha() -> None:
+    payload = _build_payload()
+    payload["head"] = {"sha": "123", "repo": {"full_name": "owner/repo"}}
+
+    status = check_pr_status._evaluate_payload(payload, "owner/repo")
+
+    assert status.skip is True
+    assert status.head_sha == ""
+    assert any("некорректный sha" in notice.lower() for notice in status.notices)
+
+
 def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _build_payload()
 
