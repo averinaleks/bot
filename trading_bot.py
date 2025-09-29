@@ -16,10 +16,14 @@ from pathlib import Path
 from bot.config import BotConfig, OFFLINE_MODE
 from bot.dotenv_utils import load_dotenv
 from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_async
+from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
 from telegram_logger import TelegramLogger, resolve_unsent_path
-from bot.utils import retry, suppress_tf_logs
+
+_utils = require_utils("retry", "suppress_tf_logs")
+retry = _utils.retry
+suppress_tf_logs = _utils.suppress_tf_logs
 
 _OFFLINE_ENV = is_offline_env()
 

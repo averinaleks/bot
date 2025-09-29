@@ -377,14 +377,16 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
         if matched_attr is not None:
             message = "Trading loop aborted after TradeManager error"
             logger.error("%s: %s", message, exc, exc_info=True)
-            # Дополнительно обогащаем исходное исключение сообщением домена, чтобы
-            # внешний код и тесты получали контекст, а тип исключения
-            # сохранялся без оборачивания.
+            if matched_cls is None:  # pragma: no cover - defensive guard
+                raise
             try:
-                exc.args = (f"{message}: {exc}", *exc.args[1:])
-            except Exception:  # pragma: no cover - крайне редкие случаи нестандартных args
-                pass
-            raise
+                enriched = matched_cls(f"{message}: {exc}")
+            except Exception:  # pragma: no cover - extremely defensive fallback
+                raise
+            tb = getattr(exc, "__traceback__", None)
+            if tb is not None:
+                enriched = enriched.with_traceback(tb)
+            raise enriched from exc
         logger.exception("Unexpected error during trading loop")
         raise
     finally:

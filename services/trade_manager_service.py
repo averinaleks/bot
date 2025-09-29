@@ -82,6 +82,14 @@ def init_exchange() -> None:
 API_TOKEN = (server_common.get_api_token() or '').strip()
 
 
+def _offline_auth_disabled() -> bool:
+    """Return ``True`` when offline/test environments should bypass auth."""
+
+    return any(
+        os.getenv(flag) == "1" for flag in ("OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
+    )
+
+
 if hasattr(app, "before_first_request"):
     app.before_first_request(init_exchange)
 
@@ -103,6 +111,8 @@ def _require_api_token() -> ResponseReturnValue | None:
 
     expected = API_TOKEN
     if not expected:
+        if _offline_auth_disabled():
+            return None
         remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
         logger.warning(
             'Rejected TradeManager request to %s from %s: API token is not configured',

@@ -32,8 +32,8 @@ else:  # pragma: no cover - реальная инициализация
     TelegramLogger = cast(type[TelegramLoggerType], _utils.TelegramLogger)
 
     from .core import TradeManager as _TradeManager
+    from .errors import InvalidHostError
     from .service import (
-        InvalidHostError,
         api_app,
         asgi_app,
         create_trade_manager,

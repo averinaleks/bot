@@ -39,6 +39,7 @@ from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 import inspect  # noqa: E402
+from bot.trade_manager.errors import InvalidHostError, TradeManagerTaskError  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
 
 _utils = require_utils(
@@ -133,10 +134,6 @@ except Exception:  # pragma: no cover - minimal stubs
 import multiprocessing as mp  # noqa: E402
 
 
-class TradeManagerTaskError(RuntimeError):
-    """Raised when one of the TradeManager background tasks fails."""
-
-
 def setup_multiprocessing() -> None:
     """Ensure multiprocessing uses the 'spawn' start method."""
     if mp.get_start_method(allow_none=True) != "spawn":
@@ -147,10 +144,6 @@ def setup_multiprocessing() -> None:
 device_type = "cuda" if is_cuda_available() else "cpu"
 
 _HOSTNAME_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$")
-
-
-class InvalidHostError(ValueError):
-    pass
 
 
 def _predict_model(model, tensor) -> np.ndarray:
