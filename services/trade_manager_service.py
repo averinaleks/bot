@@ -90,7 +90,13 @@ def _require_api_token() -> ResponseReturnValue | None:
 
     expected = API_TOKEN
     if not expected:
-        return None
+        remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
+        logger.warning(
+            'Rejected TradeManager request to %s from %s: API token is not configured',
+            sanitize_log_value(request.path),
+            sanitize_log_value(remote),
+        )
+        return jsonify({'error': 'unauthorized'}), 401
 
     headers: Mapping[str, str] = cast(Mapping[str, str], request.headers)
     reason = server_common.validate_token(headers, expected)

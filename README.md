@@ -220,10 +220,10 @@ pytest tests/test_password_utils.py
 - Для работы с реальной биржей установите `ccxt`. Если зависимость недоступна,
   включите `OFFLINE_MODE=1` или задайте `TRADE_MANAGER_USE_STUB=1`, и сервис
   использует `OfflineBybit` из `services.offline`.
-- `TRADE_MANAGER_TOKEN` — опциональный токен авторизации. При заданном
-  значении POST-запросы и `/positions` требуют заголовок
-  `Authorization: Bearer <token>` (или `X-API-KEY`). Если токен не задан,
-  сервис обслуживает запросы без проверки.
+- `TRADE_MANAGER_TOKEN` — **обязательный** токен авторизации. Все POST-запросы и
+  `/positions` требуют заголовок `Authorization: Bearer <token>` (или
+  `X-API-KEY`). Если токен не задан, сервис немедленно отвечает `401` и пишет в
+  логи предупреждение о необходимости настройки.
 - Для использования TradeManager в скриптах импортируйте его напрямую из
   пакета: `from bot.trade_manager import TradeManager` и `TelegramLogger` для
   реального режима. Обёртка `import trade_manager` сохранена только ради

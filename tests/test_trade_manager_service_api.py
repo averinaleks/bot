@@ -1,4 +1,5 @@
 import json
+import logging
 
 import pytest
 
@@ -23,6 +24,22 @@ def _post_open_position(client, payload):
         '/open_position',
         data=json.dumps(payload),
         headers={'Content-Type': 'application/json', 'Authorization': 'Bearer test-token'},
+    )
+
+
+def test_post_without_token_rejected_when_not_configured(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    monkeypatch.setattr(tms, 'API_TOKEN', '')
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = client.post('/open_position', json={'symbol': 'BTCUSDT'})
+
+    assert response.status_code == 401
+    assert response.get_json() == {'error': 'unauthorized'}
+    assert any(
+        'API token is not configured' in message
+        for message in (record.getMessage() for record in caplog.records)
     )
 
 
