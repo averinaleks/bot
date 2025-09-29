@@ -23,7 +23,7 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
-from bot.trade_manager import server_common
+from bot.trade_manager import order_utils, server_common
 from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 
@@ -418,7 +418,6 @@ def open_position() -> ResponseReturnValue:
     tp = float(tp) if tp is not None else None
     sl = float(sl) if sl is not None else None
     trailing_stop = float(trailing_stop) if trailing_stop is not None else None
-    risk_usd = 0.0
     if amount <= 0:
         raw_risk = os.getenv('TRADE_RISK_USD', '0') or 0
         try:
@@ -428,7 +427,7 @@ def open_position() -> ResponseReturnValue:
         if risk_usd > 0:
             if not math.isfinite(price) or price <= 0:
                 return jsonify({'error': 'invalid order'}), 400
-            amount = risk_usd / price
+            amount = order_utils.amount_from_risk(risk_usd, price)
     if not math.isfinite(amount) or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
     exchange = _current_exchange()
@@ -457,74 +456,71 @@ def open_position() -> ResponseReturnValue:
             app.logger.info('using fallback order placement')
             order = exchange.create_order(symbol, 'market', side, amount)
             opp_side = 'sell' if side == 'buy' else 'buy'
+            base_delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
+            safe_symbol = sanitize_log_value(symbol)
             if sl is not None:
-                stop_order = None
-                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
-                for attempt in range(3):
-                    try:
-                        stop_order = exchange.create_order(
+                stop_order = order_utils.place_protective_order_with_fallback(
+                    [
+                        lambda: exchange.create_order(
                             symbol, 'stop', opp_side, amount, sl
-                        )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('stop order failed: %s', exc)
-                        try:
-                            stop_order = exchange.create_order(
-                                symbol, 'stop_market', opp_side, amount, sl
-                            )
-                        except CCXT_BASE_ERROR as exc:
-                            app.logger.debug('stop_market order failed: %s', exc)
-                            stop_order = None
-                    if stop_order and stop_order.get('id') is not None:
-                        break
-                    if attempt < 2:
-                        time.sleep(delay)
-                        delay *= 2
-                if not stop_order or stop_order.get('id') is None:
-                    safe_symbol = sanitize_log_value(symbol)
+                        ),
+                        lambda: exchange.create_order(
+                            symbol, 'stop_market', opp_side, amount, sl
+                        ),
+                    ],
+                    attempts=3,
+                    initial_delay=base_delay,
+                    success=order_utils.order_has_id,
+                    sleep=time.sleep,
+                    logger=app.logger,
+                    log_context=f'stop loss {safe_symbol}',
+                    exceptions=(CCXT_BASE_ERROR,),
+                )
+                if not order_utils.order_has_id(stop_order):
                     warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'stop_loss', 'message': warn_msg})
             if tp is not None:
-                tp_order = None
-                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
-                for attempt in range(3):
-                    try:
-                        tp_order = exchange.create_order(
+                tp_order = order_utils.place_protective_order_with_fallback(
+                    [
+                        lambda: exchange.create_order(
                             symbol, 'limit', opp_side, amount, tp
                         )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('take profit order failed: %s', exc)
-                        tp_order = None
-                    if tp_order and tp_order.get('id') is not None:
-                        break
-                    if attempt < 2:
-                        time.sleep(delay)
-                        delay *= 2
-                if not tp_order or tp_order.get('id') is None:
-                    safe_symbol = sanitize_log_value(symbol)
+                    ],
+                    attempts=3,
+                    initial_delay=base_delay,
+                    success=order_utils.order_has_id,
+                    sleep=time.sleep,
+                    logger=app.logger,
+                    log_context=f'take profit {safe_symbol}',
+                    exceptions=(CCXT_BASE_ERROR,),
+                )
+                if not order_utils.order_has_id(tp_order):
                     warn_msg = f"не удалось создать take profit ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'take_profit', 'message': warn_msg})
             if trailing_stop is not None and price > 0:
-                tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
-                stop_order = None
-                try:
-                    stop_order = exchange.create_order(
-                        symbol, 'stop', opp_side, amount, tprice
-                    )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('trailing stop order failed: %s', exc)
-                    try:
-                        stop_order = exchange.create_order(
+                tprice = order_utils.calculate_trailing_stop_price(side, price, trailing_stop)
+                trailing_order = order_utils.place_protective_order_with_fallback(
+                    [
+                        lambda: exchange.create_order(
+                            symbol, 'stop', opp_side, amount, tprice
+                        ),
+                        lambda: exchange.create_order(
                             symbol, 'stop_market', opp_side, amount, tprice
-                        )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('trailing stop_market failed: %s', exc)
-                        stop_order = None
-                if not stop_order or stop_order.get('id') is None:
-                    safe_symbol = sanitize_log_value(symbol)
+                        ),
+                    ],
+                    attempts=3,
+                    initial_delay=base_delay,
+                    success=order_utils.order_has_id,
+                    sleep=time.sleep,
+                    logger=app.logger,
+                    log_context=f'trailing stop {safe_symbol}',
+                    exceptions=(CCXT_BASE_ERROR,),
+                )
+                if not order_utils.order_has_id(trailing_order):
                     warn_msg = f"не удалось создать trailing stop ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
