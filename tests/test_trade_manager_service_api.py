@@ -90,6 +90,36 @@ def test_open_position_records_even_when_stop_loss_fails(monkeypatch):
     assert len(tms_reload.POSITIONS) == 1
 
 
+def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    class Exchange:
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            return {'id': 'primary'}
+
+    tms.exchange_provider.override(Exchange())
+
+    def failing_replace(*_args, **_kwargs):
+        raise OSError('disk full')
+
+    monkeypatch.setattr(tms.os, 'replace', failing_replace)
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'price': 100},
+        )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['status'] == 'ok'
+    warning = payload['warnings']['positions_cache_failed']
+    assert warning['message'] == 'не удалось обновить кэш позиций'
+    assert 'details' in warning
+    assert len(tms.POSITIONS) == 1
+    assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
+
+
 def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
     from services import trade_manager_service as tms
 
@@ -131,6 +161,40 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
     from services import trade_manager_service as tms_reload
 
     assert len(tms_reload.POSITIONS) == 1
+
+
+def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    class Exchange:
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            return {'id': 'close'}
+
+    tms.exchange_provider.override(Exchange())
+    tms.POSITIONS.append(
+        {'id': 'open-order', 'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'action': 'open'}
+    )
+
+    def failing_dump(*_args, **_kwargs):
+        raise OSError('disk full')
+
+    monkeypatch.setattr(tms.json, 'dump', failing_dump)
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = client.post(
+            '/close_position',
+            json={'order_id': 'open-order', 'side': 'sell'},
+            headers={'Authorization': 'Bearer test-token'},
+        )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['status'] == 'ok'
+    warning = payload['warnings']['positions_cache_failed']
+    assert warning['message'] == 'не удалось обновить кэш позиций'
+    assert 'details' in warning
+    assert not tms.POSITIONS
+    assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
 
 
 def _setup_trade_manager(monkeypatch):

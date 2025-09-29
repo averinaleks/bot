@@ -222,6 +222,7 @@ def _write_positions_locked() -> None:
             tmp_path.unlink()
         except OSError:
             pass
+        raise
 
 
 def _save_positions() -> None:
@@ -532,17 +533,29 @@ def open_position() -> ResponseReturnValue:
         if not order or order.get('id') is None:
             app.logger.error('failed to create primary order')
             return jsonify({'error': 'order creation failed'}), 500
-        _record(
-            order,
-            symbol,
-            side,
-            amount,
-            'open',
-            trailing_stop,
-            tp,
-            sl,
-            price if math.isfinite(price) and price > 0 else None,
-        )
+        cache_warning: dict[str, str] | None = None
+        try:
+            _record(
+                order,
+                symbol,
+                side,
+                amount,
+                'open',
+                trailing_stop,
+                tp,
+                sl,
+                price if math.isfinite(price) and price > 0 else None,
+            )
+        except OSError as exc:
+            safe_symbol = sanitize_log_value(symbol or 'unknown')
+            safe_exc = sanitize_log_value(str(exc))
+            warn_msg = f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
+            app.logger.warning(warn_msg)
+            logger.warning(warn_msg)
+            cache_warning = {
+                'message': 'не удалось обновить кэш позиций',
+                'details': safe_exc,
+            }
         response: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
         if protective_failures:
             safe_symbol = sanitize_log_value(symbol)
@@ -591,12 +604,14 @@ def open_position() -> ResponseReturnValue:
                     )
                 if not emergency_close_success:
                     mitigation_actions.append('emergency_close_failed')
+        warnings_payload: dict[str, Any] = {}
         if protective_failures:
-            warnings_payload: dict[str, Any] = {
-                'protective_orders_failed': protective_failures,
-            }
+            warnings_payload['protective_orders_failed'] = protective_failures
             if mitigation_actions:
                 warnings_payload['mitigations'] = mitigation_actions
+        if cache_warning is not None:
+            warnings_payload['positions_cache_failed'] = cache_warning
+        if warnings_payload:
             response['warnings'] = warnings_payload
         return jsonify(response)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
@@ -655,6 +670,7 @@ def close_position() -> ResponseReturnValue:
         if not order or order.get('id') is None:
             app.logger.error('failed to create close order')
             return jsonify({'error': 'order creation failed'}), 500
+        cache_warning: dict[str, str] | None = None
         with POSITIONS_LOCK:
             rec_index = next(
                 (
@@ -671,8 +687,24 @@ def close_position() -> ResponseReturnValue:
                     POSITIONS.pop(rec_index)
                 else:
                     current['amount'] = remaining
-                _write_positions_locked()
-        return jsonify({'status': 'ok', 'order_id': order.get('id')})
+                try:
+                    _write_positions_locked()
+                except OSError as exc:
+                    safe_symbol = sanitize_log_value(symbol or 'unknown')
+                    safe_exc = sanitize_log_value(str(exc))
+                    warn_msg = (
+                        f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
+                    )
+                    app.logger.warning(warn_msg)
+                    logger.warning(warn_msg)
+                    cache_warning = {
+                        'message': 'не удалось обновить кэш позиций',
+                        'details': safe_exc,
+                    }
+        response_payload: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
+        if cache_warning is not None:
+            response_payload['warnings'] = {'positions_cache_failed': cache_warning}
+        return jsonify(response_payload)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error closing position: %s', exc)
         return jsonify({'error': 'network error contacting exchange'}), 503
