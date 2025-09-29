@@ -137,7 +137,10 @@ class TelegramLogger(logging.Handler):
             try:
                 await self._send(text, chat_id, urgent)
             except (RetryAfter, Forbidden, BadRequest) as exc:
-                logger.error("Ошибка отправки сообщения в Telegram: %s", exc)
+                logger.error(
+                    "Ошибка отправки сообщения в Telegram: %s",
+                    sanitize_log_value(str(exc)),
+                )
                 if self.unsent_path:
                     self._save_unsent(chat_id, text)
             except Exception as exc:
@@ -148,7 +151,10 @@ class TelegramLogger(logging.Handler):
                     lambda: "",
                 )().startswith("builtins")
                 if is_httpx_error and not httpx_is_generic:
-                    logger.error("Ошибка отправки сообщения в Telegram: %s", exc)
+                    logger.error(
+                        "Ошибка отправки сообщения в Telegram: %s",
+                        sanitize_log_value(str(exc)),
+                    )
                     if self.unsent_path:
                         self._save_unsent(chat_id, text)
                 else:
@@ -264,12 +270,15 @@ class TelegramLogger(logging.Handler):
                     logger.warning(
                         "Refusing to write Telegram fallback message to %s: %s",
                         sanitize_log_value(str(path)),
-                        exc,
+                        sanitize_log_value(str(exc)),
                     )
                     return
                 raise
         except OSError as exc:  # pragma: no cover - file system errors
-            logger.error("Не удалось сохранить сообщение Telegram: %s", exc)
+            logger.error(
+                "Не удалось сохранить сообщение Telegram: %s",
+                sanitize_log_value(str(exc)),
+            )
 
     async def send_telegram_message(self, message: str, urgent: bool = False) -> None:
         if self._queue is None:
@@ -300,7 +309,10 @@ class TelegramLogger(logging.Handler):
                         daemon=True,
                     ).start()
         except (ValueError, RuntimeError) as exc:
-            logger.error("Ошибка в TelegramLogger: %s", exc)
+            logger.error(
+                "Ошибка в TelegramLogger: %s",
+                sanitize_log_value(str(exc)),
+            )
 
     async def _shutdown(self) -> None:
         if self._stop_event is None:
