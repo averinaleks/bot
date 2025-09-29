@@ -374,17 +374,29 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
                 matched_cls = cls
                 break
 
-        if matched_attr is not None:
-            message = "Trading loop aborted after TradeManager error"
-            logger.error("%s: %s", message, exc, exc_info=True)
-            # Дополнительно обогащаем исходное исключение сообщением домена, чтобы
-            # внешний код и тесты получали контекст, а тип исключения
-            # сохранялся без оборачивания.
+        if matched_attr is not None and matched_cls is not None:
+            base_message = "Trading loop aborted after TradeManager error"
+            logger.error("%s: %s", base_message, exc, exc_info=True)
+
+            original_args = getattr(exc, "args", ())
+            if original_args:
+                new_args = (f"{base_message}: {original_args[0]}", *original_args[1:])
+            else:
+                new_args = (f"{base_message}: {exc}",)
+
             try:
-                exc.args = (f"{message}: {exc}", *exc.args[1:])
-            except Exception:  # pragma: no cover - крайне редкие случаи нестандартных args
-                pass
-            raise
+                new_exc = matched_cls(*new_args)
+            except Exception:  # pragma: no cover - constructor mismatch
+                new_exc = matched_cls(f"{base_message}: {exc}")
+
+            # Preserve custom attributes from the original instance where possible.
+            for attr, value in getattr(exc, "__dict__", {}).items():
+                try:
+                    setattr(new_exc, attr, value)
+                except Exception:  # pragma: no cover - ignore read-only attrs
+                    continue
+
+            raise new_exc.with_traceback(exc.__traceback__) from exc
         logger.exception("Unexpected error during trading loop")
         raise
     finally:
