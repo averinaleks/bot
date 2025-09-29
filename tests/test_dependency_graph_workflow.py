@@ -57,6 +57,13 @@ def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
     assert "fnmatch(filename, pattern)" in workflow
 
 
+def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+    assert "github.event.client_payload.base_sha" in workflow
+    assert "github.event.client_payload.head_sha" in workflow
+
+
 def test_dependency_graph_installs_requests_before_submission() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
