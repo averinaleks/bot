@@ -17,6 +17,8 @@ from typing import Any, Dict, Iterable, Mapping, TypedDict
 
 from urllib.parse import quote, urlparse
 
+from scripts.github_paths import resolve_github_path
+
 _REQUESTS_IMPORT_ERROR: ImportError | None = None
 
 try:
@@ -171,11 +173,14 @@ def _discover_git_ref() -> str | None:
 
 
 def _load_event_payload() -> dict[str, Any] | None:
-    path = os.getenv("GITHUB_EVENT_PATH")
-    if not path:
+    path = resolve_github_path(
+        os.getenv("GITHUB_EVENT_PATH"),
+        description="GitHub event payload path",
+    )
+    if path is None:
         return None
     try:
-        with open(path, "r", encoding="utf-8") as stream:
+        with path.open("r", encoding="utf-8") as stream:
             data = json.load(stream)
     except (OSError, json.JSONDecodeError) as exc:
         print(

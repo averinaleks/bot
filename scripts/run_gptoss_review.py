@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from scripts.github_paths import resolve_github_path
+
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
 
@@ -351,11 +353,15 @@ def generate_review(
 def _write_github_output(has_content: bool) -> None:
     """Append workflow outputs to the special file if available."""
 
-    output_path = os.getenv("GITHUB_OUTPUT")
-    if not output_path:
+    path = resolve_github_path(
+        os.getenv("GITHUB_OUTPUT"),
+        allow_missing=True,
+        description="GITHUB_OUTPUT",
+    )
+    if path is None:
         return
     try:
-        with open(output_path, "a", encoding="utf-8") as fh:
+        with path.open("a", encoding="utf-8") as fh:
             fh.write(f"has_content={'true' if has_content else 'false'}\n")
     except OSError as exc:  # pragma: no cover - extremely rare on GH runners
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)

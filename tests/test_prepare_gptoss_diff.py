@@ -106,6 +106,7 @@ def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, t
     )
 
     gh_output = tmp_path / "output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(gh_output))
 
     exit_code = prepare_gptoss_diff.main(
@@ -129,6 +130,7 @@ def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, t
 
 def test_main_handles_unknown_args(monkeypatch: pytest.MonkeyPatch) -> None:
     dummy_output = Path("nonexistent")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(Path.cwd()))
     monkeypatch.setenv("GITHUB_OUTPUT", str(dummy_output))
     exit_code = prepare_gptoss_diff.main(["--unknown"])
     assert exit_code == 0

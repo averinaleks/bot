@@ -31,6 +31,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPSHandler, Request, build_opener
 
+from scripts.github_paths import resolve_github_path
+
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _GIT_REF_RE = re.compile(r"^(?!-)(?!.*\.\.)(?!.*//)(?!.*@\{)(?!.*\\0)[\w./-]+$")
@@ -152,12 +154,16 @@ def _validate_path_argument(path: str) -> str:
 def _write_github_output(**outputs: str | bool) -> None:
     """Append key/value pairs to ``GITHUB_OUTPUT`` if available."""
 
-    output_path = os.getenv("GITHUB_OUTPUT")
-    if not output_path:
+    path = resolve_github_path(
+        os.getenv("GITHUB_OUTPUT"),
+        allow_missing=True,
+        description="GITHUB_OUTPUT",
+    )
+    if path is None:
         return
 
     try:
-        with open(output_path, "a", encoding="utf-8") as handle:
+        with path.open("a", encoding="utf-8") as handle:
             for key, value in outputs.items():
                 if isinstance(value, bool):
                     value = "true" if value else "false"
