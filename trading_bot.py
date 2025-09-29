@@ -169,6 +169,7 @@ async def send_telegram_alert(message: str) -> None:
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = 1
     payload = {"chat_id": chat_id, "text": message}
+    redaction = "***"
     for attempt in range(1, max_attempts + 1):
         try:
                 try:
@@ -181,14 +182,15 @@ async def send_telegram_alert(message: str) -> None:
                 return
         except httpx.HTTPError as exc:  # pragma: no cover - network errors
             req_url = getattr(getattr(exc, "request", None), "url", url)
-            redacted_url = str(req_url).replace(token, "***")
+            redacted_url = sanitize_log_value(str(req_url).replace(token, redaction))
+            sanitized_error = sanitize_log_value(str(exc).replace(token, redaction))
             logger.warning(
                 "Failed to send Telegram alert (attempt %s/%s): %s (%s) %s",
                 attempt,
                 max_attempts,
                 redacted_url,
                 exc.__class__.__name__,
-                str(exc).replace(token, "***"),
+                sanitized_error,
             )
             if attempt == max_attempts:
                 logger.error(
