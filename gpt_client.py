@@ -16,6 +16,8 @@ import asyncio
 import threading
 from typing import Any, Coroutine, Mapping
 
+from openai import OpenAI
+
 # NOTE: httpx is imported for exception types only.
 import httpx
 
@@ -60,6 +62,144 @@ def _insecure_allowed() -> bool:
     """Return True if insecure GPT URLs are explicitly permitted."""
 
     return ALLOW_INSECURE_GPT_URL or os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
+
+
+def _parse_timeout(raw_timeout: str | None) -> float:
+    """Return a positive timeout value parsed from ``raw_timeout``."""
+
+    if not raw_timeout:
+        return 5.0
+    try:
+        timeout = float(raw_timeout)
+        if timeout <= 0:
+            logger.warning(
+                "Non-positive GPT_OSS_TIMEOUT value %r; defaulting to 5.0",
+                raw_timeout,
+            )
+            return 5.0
+        return timeout
+    except ValueError:
+        logger.warning(
+            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0",
+            raw_timeout,
+        )
+        return 5.0
+
+
+def _should_use_openai(api_url: str | None) -> bool:
+    """Return ``True`` when the OpenAI client should service requests."""
+
+    if OFFLINE_MODE:
+        return False
+    if not api_url:
+        return bool(os.getenv("OPENAI_API_KEY"))
+    trimmed = api_url.strip().lower()
+    if trimmed in {"openai", "openai://"}:
+        return True
+    parsed = urlparse(api_url)
+    scheme = parsed.scheme.lower()
+    return scheme.startswith("openai")
+
+
+def _resolve_openai_base_url(api_url: str | None) -> str | None:
+    """Return the base URL that should be passed to the OpenAI client."""
+
+    base_url = os.getenv("OPENAI_BASE_URL")
+    if not api_url:
+        return base_url
+    parsed = urlparse(api_url)
+    scheme = parsed.scheme.lower()
+    if scheme in {"openai", "openai+https", "openai+http"}:
+        transport = "https" if scheme != "openai+http" else "http"
+        netloc = parsed.netloc
+        path = parsed.path.rstrip("/")
+        if netloc:
+            return f"{transport}://{netloc}{path}"
+        return base_url
+    return base_url
+
+
+def _serialise_openai_response(response: Any) -> bytes:
+    """Serialise *response* to JSON bytes compatible with :func:`_parse_gpt_response`."""
+
+    if hasattr(response, "model_dump_json"):
+        dumped = response.model_dump_json()
+        if isinstance(dumped, str):
+            return dumped.encode("utf-8")
+    if hasattr(response, "model_dump"):
+        data = response.model_dump()
+    elif hasattr(response, "dict"):
+        try:
+            data = response.dict()  # type: ignore[assignment]
+        except TypeError:
+            data = response.dict()  # type: ignore[assignment]
+    elif hasattr(response, "to_dict"):
+        data = response.to_dict()
+    elif isinstance(response, Mapping):
+        data = response
+    else:
+        data = getattr(response, "__dict__", None)
+    if not isinstance(data, Mapping):
+        raise GPTClientResponseError("Unexpected response structure from OpenAI API")
+    try:
+        return json.dumps(data).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise GPTClientResponseError(
+            "Unexpected response structure from OpenAI API",
+        ) from exc
+
+
+def _query_openai(prompt: str, api_url: str | None) -> str:
+    """Send *prompt* to the OpenAI API and return the first completion text."""
+
+    timeout = _parse_timeout(os.getenv("GPT_OSS_TIMEOUT"))
+    model_name = os.getenv("OPENAI_MODEL") or os.getenv("GPT_MODEL") or "gpt-4o-mini"
+    client_kwargs: dict[str, Any] = {"timeout": timeout}
+    base_url = _resolve_openai_base_url(api_url)
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    organization = os.getenv("OPENAI_ORGANIZATION") or os.getenv("OPENAI_ORG")
+    if organization:
+        client_kwargs["organization"] = organization
+
+    logger.debug("Using OpenAI client with kwargs: %s", client_kwargs)
+    client = OpenAI(**client_kwargs)
+
+    completion_kwargs: dict[str, Any] = {}
+    max_tokens_raw = os.getenv("OPENAI_MAX_TOKENS")
+    if max_tokens_raw:
+        try:
+            max_tokens = int(max_tokens_raw)
+            if max_tokens <= 0:
+                raise ValueError
+        except ValueError:
+            logger.warning(
+                "Invalid OPENAI_MAX_TOKENS value %r; ignoring", max_tokens_raw
+            )
+        else:
+            completion_kwargs["max_tokens"] = max_tokens
+    temperature_raw = os.getenv("OPENAI_TEMPERATURE")
+    if temperature_raw:
+        try:
+            completion_kwargs["temperature"] = float(temperature_raw)
+        except ValueError:
+            logger.warning(
+                "Invalid OPENAI_TEMPERATURE value %r; ignoring", temperature_raw
+            )
+
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=timeout,
+            **completion_kwargs,
+        )
+    except Exception as exc:  # pragma: no cover - depends on runtime env
+        logger.exception("Error querying OpenAI API: %s", exc)
+        raise GPTClientNetworkError("Failed to query OpenAI API") from exc
+
+    content = _serialise_openai_response(response)
+    return _parse_gpt_response(content)
 
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
@@ -322,20 +462,7 @@ def _get_api_url_timeout() -> tuple[str, float, str, set[str]]:
     allowed_hosts = _load_allowed_hosts()
     hostname, allowed_ips = _validate_api_url(api_url, allowed_hosts)
 
-    timeout_env = os.getenv("GPT_OSS_TIMEOUT", "5")
-    try:
-        timeout = float(timeout_env)
-        if timeout <= 0:
-            logger.warning(
-                "Non-positive GPT_OSS_TIMEOUT value %r; defaulting to 5.0",
-                timeout_env,
-            )
-            timeout = 5.0
-    except ValueError:
-        logger.warning(
-            "Invalid GPT_OSS_TIMEOUT value %r; defaulting to 5.0", timeout_env
-        )
-        timeout = 5.0
+    timeout = _parse_timeout(os.getenv("GPT_OSS_TIMEOUT"))
 
     api_url = api_url.rstrip("/")
     url = urljoin(api_url + "/", "v1/completions")
@@ -435,16 +562,21 @@ def query_gpt(prompt: str) -> str:
     """Send *prompt* to the GPT OSS API and return the first completion text.
 
     The API endpoint is read from the ``GPT_OSS_API`` environment variable. If
-    it is not set a :class:`GPTClientNetworkError` is raised. Request timeout is
-    read from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are
-    retried up to MAX_RETRIES times with exponential backoff between one and ten
-    seconds before giving up. Prompts longer than :data:`MAX_PROMPT_BYTES` are
-    truncated with a warning.
+    it is not set but ``OPENAI_API_KEY`` is configured the OpenAI Chat
+    Completions API is used instead. Request timeout is read from
+    ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are retried up
+    to MAX_RETRIES times with exponential backoff between one and ten seconds
+    before giving up. Prompts longer than :data:`MAX_PROMPT_BYTES` are truncated
+    with a warning.
     """
     if OFFLINE_MODE:
         return OfflineGPT.query(prompt)
 
     prompt = _truncate_prompt(prompt)
+    api_url = os.getenv("GPT_OSS_API")
+    if _should_use_openai(api_url):
+        return _query_openai(prompt, api_url)
+
     url, timeout, hostname, allowed_ips = _get_api_url_timeout()
 
     # Maximum time to wait for the asynchronous task considering retries and backoff
@@ -508,10 +640,10 @@ async def query_gpt_async(prompt: str) -> str:
     """Asynchronously send *prompt* to the GPT OSS API and return the first completion text.
 
     The API endpoint is taken from the ``GPT_OSS_API`` environment variable. If it
-    is not set a :class:`GPTClientNetworkError` is raised. Request timeout is read
-    from ``GPT_OSS_TIMEOUT`` (seconds, default ``5``). Network errors are retried
-    up to MAX_RETRIES times with exponential backoff between one and ten seconds
-    before giving up.
+    is not set but ``OPENAI_API_KEY`` is configured, the OpenAI Chat Completions
+    API is used instead. Request timeout is read from ``GPT_OSS_TIMEOUT`` (seconds,
+    default ``5``). Network errors are retried up to MAX_RETRIES times with
+    exponential backoff between one and ten seconds before giving up.
 
     Uses :class:`httpx.AsyncClient` for the HTTP request but mirrors the behaviour of
     :func:`query_gpt` including error handling and environment configuration.
@@ -521,6 +653,10 @@ async def query_gpt_async(prompt: str) -> str:
         return await OfflineGPT.query_async(prompt)
 
     prompt = _truncate_prompt(prompt)
+    api_url = os.getenv("GPT_OSS_API")
+    if _should_use_openai(api_url):
+        return await asyncio.to_thread(_query_openai, prompt, api_url)
+
     url, timeout, hostname, allowed_ips = await asyncio.to_thread(
         _get_api_url_timeout
     )
