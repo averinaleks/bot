@@ -87,7 +87,7 @@ def _authentication_optional() -> bool:
 
     return any(
         os.getenv(flag) == '1'
-        for flag in ("TEST_MODE", "OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
+        for flag in ("OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
     )
 
 
