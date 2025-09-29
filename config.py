@@ -437,16 +437,20 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
 def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
     cfg: Dict[str, Any] = {}
-    resolved_path = Path(path).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = (_CONFIG_DIR / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
     allowed_dir = Path(CONFIG_PATH).resolve().parent
-    if not resolved_path.is_relative_to(allowed_dir):
-        raise ValueError(f"Path {resolved_path} is outside of {allowed_dir}")
-    if resolved_path.exists():
-        with open(resolved_path, "r", encoding="utf-8") as f:
+    if not candidate.is_relative_to(allowed_dir):
+        raise ValueError(f"Path {candidate} is outside of {allowed_dir}")
+    if candidate.exists():
+        with open(candidate, "r", encoding="utf-8") as f:
             try:
                 cfg.update(json.load(f))
             except json.JSONDecodeError as exc:
-                logger.warning("Failed to decode %s: %s", resolved_path, exc)
+                logger.warning("Failed to decode %s: %s", candidate, exc)
                 f.seek(0)
                 content = f.read()
                 end = content.rfind("}")
