@@ -2120,6 +2120,8 @@ class TradeManager:
                 httpx.HTTPError,
                 ConnectionError,
                 RuntimeError,
+                ValueError,
+                KeyError,
             ) as e:
                 logger.warning(
                     "Transient error processing %s (%s): %s",
