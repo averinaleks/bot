@@ -29,8 +29,8 @@ jobs:
       - name: Detect dependency manifest changes
         id: detect
         env:
-          BEFORE: ${{ github.event.before || github.event.client_payload.before || '' }}
-          AFTER: ${{ github.sha || github.event.client_payload.after || github.event.client_payload.sha || '' }}
+          BEFORE: ${{ github.event.before || github.event.client_payload.before || github.event.client_payload.base_sha || '' }}
+          AFTER: ${{ github.sha || github.event.client_payload.after || github.event.client_payload.head_sha || github.event.client_payload.sha || '' }}
         run: |
           python <<'PY'
           from __future__ import annotations
