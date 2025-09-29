@@ -149,13 +149,17 @@ _GPT_SAFE_MODE = False
 
 async def send_telegram_alert(message: str) -> None:
     """Send a Telegram notification if credentials are configured."""
+    log_message = sanitize_log_value(message)
+
     if OFFLINE_MODE:
-        logger.debug("Offline mode enabled, Telegram alert suppressed: %s", message)
+        logger.debug(
+            "Offline mode enabled, Telegram alert suppressed: %s", log_message
+        )
         return
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        logger.warning("Telegram inactive, message not sent: %s", message)
+        logger.warning("Telegram inactive, message not sent: %s", log_message)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     client = await get_http_client()
@@ -187,7 +191,7 @@ async def send_telegram_alert(message: str) -> None:
                 logger.error(
                     "Failed to send Telegram alert after %s attempts: %s",
                     max_attempts,
-                    message,
+                    log_message,
                 )
                 if CFG.save_unsent_telegram and _UNSENT_FALLBACK_PATH is not None:
                     _logger = type("_TL", (), {"unsent_path": _UNSENT_FALLBACK_PATH})()
