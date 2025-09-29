@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import ssl
 import sys
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from scripts.github_paths import resolve_github_path
 
 
 _DEFAULT_TIMEOUT = 10.0
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 @dataclass(slots=True)
@@ -110,6 +112,8 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
         return PRStatus(skip=True, head_sha="", notices=["Ответ GitHub API имеет неожиданный формат"])
 
     state = str(payload.get("state") or "").strip()
+    draft_flag = payload.get("draft")
+    locked_flag = payload.get("locked")
 
     head_repo = ""
     head_block = payload.get("head") or {}
@@ -130,18 +134,29 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
         else:
             notices.append("GitHub API не вернул статус PR")
 
+    if isinstance(draft_flag, bool) and draft_flag:
+        skip = True
+        notices.append("PR находится в состоянии draft")
+
+    if isinstance(locked_flag, bool) and locked_flag:
+        skip = True
+        notices.append("PR заблокирован для изменений")
+
     if not head_repo:
         skip = True
         notices.append("head-репозиторий недоступен (ветка могла быть удалена)")
-    elif repository and head_repo != repository:
+    elif repository and head_repo.lower() != repository.lower():
         skip = True
         notices.append(f"PR создан из репозитория {head_repo}, ожидается {repository}")
 
-    if not head_sha:
+    if not head_sha or not _SHA_RE.fullmatch(head_sha):
         skip = True
-        notices.append("Не удалось получить SHA head-коммита PR")
+        if head_sha:
+            notices.append("Получен некорректный SHA head-коммита PR")
+        else:
+            notices.append("Не удалось получить SHA head-коммита PR")
 
-    return PRStatus(skip=skip, head_sha=head_sha, notices=notices)
+    return PRStatus(skip=skip, head_sha=head_sha if _SHA_RE.fullmatch(head_sha or "") else "", notices=notices)
 
 
 def _build_api_url(repo: str, pr_number: str) -> str:
