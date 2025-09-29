@@ -14,6 +14,8 @@ import cloudpickle
 import os
 from pathlib import Path
 from typing import Any
+
+from bot.trade_manager import order_utils
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -586,6 +588,31 @@ def test_open_position_retries_until_success(monkeypatch):
 
     assert len(tm.positions) == 1
     assert attempts["n"] == 2
+
+
+def test_open_position_uses_retry_helper(monkeypatch):
+    dh = DummyDataHandler()
+
+    async def fake_compute(symbol, vol):
+        return 0.01
+
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm.compute_risk_per_trade = fake_compute
+
+    original_retry = order_utils.retry_async
+    call_count = {"n": 0}
+
+    async def spy_retry(*args, **kwargs):
+        call_count["n"] += 1
+        return await original_retry(*args, **kwargs)
+
+    monkeypatch.setattr(order_utils, "retry_async", spy_retry)
+
+    import asyncio
+
+    asyncio.run(tm.open_position("BTCUSDT", "buy", 100, {}))
+
+    assert call_count["n"] == 1
 
 
 def test_open_position_skips_when_atr_zero():

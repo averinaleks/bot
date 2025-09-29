@@ -3,6 +3,7 @@ import logging
 
 import pytest
 
+from bot.trade_manager import order_utils
 from tests import test_trade_manager_routes as tm_routes
 
 
@@ -147,6 +148,41 @@ def test_open_position_records_even_when_stop_loss_fails(monkeypatch):
     from services import trade_manager_service as tms_reload
 
     assert len(tms_reload.POSITIONS) == 1
+
+
+def test_service_open_position_uses_protective_helper(monkeypatch):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            if typ == 'market' and params is None:
+                return {'id': 'primary'}
+            return {'id': typ}
+
+    tms.exchange_provider.override(DummyExchange())
+    call_count = {"n": 0}
+
+    def fake_place(*args, **kwargs):
+        call_count["n"] += 1
+        return []
+
+    monkeypatch.setattr(order_utils, "place_protective_orders", fake_place)
+
+    with tms.app.test_client() as client:
+        response = _post_open_position(
+            client,
+            {
+                'symbol': 'BTCUSDT',
+                'side': 'buy',
+                'price': 100,
+                'amount': 1,
+                'sl': 95,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['status'] == 'ok'
+    assert call_count["n"] == 1
 
 
 def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
