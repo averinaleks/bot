@@ -5,6 +5,7 @@ import json
 
 import pytest
 import httpx
+from typing import Any
 
 from bot.gpt_client import (
     GPTClientError,
@@ -62,6 +63,7 @@ def allow_test_hosts(monkeypatch):
         "GPT_OSS_ALLOWED_HOSTS",
         "example.com,foo.local,localhost,127.0.0.1,::1",
     )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     yield
 
 
@@ -579,6 +581,74 @@ async def test_query_gpt_json_async_invalid_payload(monkeypatch, caplog):
         result = await query_gpt_json_async("hi")
     assert result == {"signal": "hold"}
     assert "Invalid JSON from GPT OSS API" in caplog.text
+
+
+def _install_dummy_openai(monkeypatch, recorder):
+    class DummyResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def model_dump(self):
+            return self._data
+
+    class DummyCompletions:
+        def __init__(self, record):
+            self._record = record
+
+        def create(self, **kwargs):
+            self._record["request"] = kwargs
+            return DummyResponse({"choices": [{"message": {"content": "ok"}}]})
+
+    class DummyChat:
+        def __init__(self, record):
+            self.completions = DummyCompletions(record)
+
+    class DummyOpenAI:
+        def __init__(self, **kwargs):
+            recorder["client_kwargs"] = kwargs
+            self.chat = DummyChat(recorder)
+
+    monkeypatch.setattr("bot.gpt_client.OpenAI", DummyOpenAI)
+
+
+def test_query_gpt_openai_fallback(monkeypatch):
+    monkeypatch.delenv("GPT_OSS_API", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    recorder: dict[str, Any] = {}
+    _install_dummy_openai(monkeypatch, recorder)
+
+    result = query_gpt("привет")
+
+    assert result == "ok"
+    assert recorder["client_kwargs"].get("timeout") == 5.0
+    assert recorder["request"]["messages"][0]["content"] == "привет"
+
+
+def test_query_gpt_openai_scheme(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "openai://api.openai.com/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    recorder: dict[str, Any] = {}
+    _install_dummy_openai(monkeypatch, recorder)
+
+    result = query_gpt("test")
+
+    assert result == "ok"
+    assert recorder["client_kwargs"].get("base_url") == "https://api.openai.com/v1"
+
+
+def test_query_gpt_openai_invalid_max_tokens(monkeypatch, caplog):
+    monkeypatch.delenv("GPT_OSS_API", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_MAX_TOKENS", "oops")
+    recorder: dict[str, Any] = {}
+    _install_dummy_openai(monkeypatch, recorder)
+
+    with caplog.at_level(logging.WARNING):
+        result = query_gpt("text")
+
+    assert result == "ok"
+    assert "Invalid OPENAI_MAX_TOKENS value 'oops'; ignoring" in caplog.text
+    assert "max_tokens" not in recorder["request"]
 
 
 @pytest.mark.asyncio
