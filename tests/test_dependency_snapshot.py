@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import github_paths
 from scripts import submit_dependency_snapshot as snapshot
 
 
@@ -131,6 +132,7 @@ def test_submit_dependency_snapshot_skips_when_env_missing(
 def test_submit_dependency_snapshot_handles_manifest_errors(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(Path.cwd()))
     monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
     monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
@@ -243,6 +245,7 @@ def test_submit_dependency_snapshot_uses_repository_dispatch_payload(
         encoding="utf-8",
     )
 
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
     monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
@@ -304,6 +307,7 @@ def test_submit_dependency_snapshot_prefers_payload_token(
         encoding="utf-8",
     )
 
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
     monkeypatch.setenv("GITHUB_EVENT_NAME", "repository_dispatch")
     monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
@@ -358,6 +362,7 @@ def test_submit_dependency_snapshot_uses_root_payload_values(
         encoding="utf-8",
     )
 
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
     monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
@@ -388,6 +393,31 @@ def test_submit_dependency_snapshot_uses_root_payload_values(
 
     assert captured_payload["sha"] == "cafebabe"
     assert captured_payload["ref"] == "refs/heads/root"
+
+
+def test_load_event_payload_rejects_outside_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    unsafe_path = tmp_path / "outside.json"
+    unsafe_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(unsafe_path))
+    monkeypatch.setattr(
+        github_paths,
+        "allowed_github_directories",
+        lambda: [workspace.resolve()],
+    )
+
+    payload = snapshot._load_event_payload()
+    captured = capsys.readouterr()
+
+    assert payload is None
+    assert "outside trusted directories" in captured.err
 
 
 def test_submit_dependency_snapshot_uses_string_metadata(

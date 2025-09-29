@@ -20,6 +20,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, Request, build_opener
 
+from scripts.github_paths import resolve_github_path
+
 
 _DEFAULT_TIMEOUT = 10.0
 
@@ -36,12 +38,16 @@ class PRStatus:
 def _write_github_output(skip: bool, head_sha: str) -> None:
     """Append outputs for downstream workflow steps if possible."""
 
-    output_path = os.getenv("GITHUB_OUTPUT")
-    if not output_path:
+    path = resolve_github_path(
+        os.getenv("GITHUB_OUTPUT"),
+        allow_missing=True,
+        description="GITHUB_OUTPUT",
+    )
+    if path is None:
         return
 
     try:
-        with open(output_path, "a", encoding="utf-8") as handle:
+        with path.open("a", encoding="utf-8") as handle:
             handle.write(f"skip={'true' if skip else 'false'}\n")
             handle.write(f"head_sha={head_sha}\n")
     except OSError as exc:  # pragma: no cover - extremely rare on GitHub runners

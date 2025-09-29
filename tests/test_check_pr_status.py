@@ -66,6 +66,7 @@ def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(check_pr_status, "_fetch_pull_request", fake_fetch)
 
     output_file = tmp_path / "output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
 
     result = check_pr_status.main([

@@ -73,6 +73,7 @@ def test_main_writes_review_and_output(tmp_path: Path, gptoss_server_port: int, 
     review_path = tmp_path / "review.md"
     github_output = tmp_path / "gh_output.txt"
     _write_diff(diff_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     exit_code = run_gptoss_review.main(
@@ -97,6 +98,7 @@ def test_main_handles_missing_diff(tmp_path: Path, monkeypatch) -> None:
     diff_path = tmp_path / "missing.patch"
     review_path = tmp_path / "review.md"
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     exit_code = run_gptoss_review.main(
@@ -267,6 +269,7 @@ def test_main_handles_timeout(monkeypatch, tmp_path):
     diff_path = tmp_path / "diff.patch"
     diff_path.write_text("dummy", encoding="utf-8")
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     def _timeout(parsed, data, headers, timeout):
@@ -346,6 +349,7 @@ def test_parse_args_rejects_unknown_arguments() -> None:
 
 def test_main_handles_unknown_arguments(monkeypatch, tmp_path) -> None:
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     exit_code = run_gptoss_review.main(["--unknown"])  # type: ignore[arg-type]
@@ -358,6 +362,7 @@ def test_main_handles_unexpected_exception(monkeypatch, tmp_path):
     diff_path = tmp_path / "diff.patch"
     diff_path.write_text("dummy", encoding="utf-8")
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     def _boom(*_args, **_kwargs):  # pragma: no cover - executed via test
@@ -373,6 +378,7 @@ def test_main_handles_unexpected_exception(monkeypatch, tmp_path):
 
 def test_cli_converts_system_exit(monkeypatch, tmp_path):
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     def _boom(_argv=None):
@@ -388,6 +394,7 @@ def test_cli_converts_system_exit(monkeypatch, tmp_path):
 
 def test_cli_handles_base_exception(monkeypatch, tmp_path):
     github_output = tmp_path / "gh_output.txt"
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     def _boom(*_args, **_kwargs):
