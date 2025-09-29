@@ -85,9 +85,13 @@ API_TOKEN = (server_common.get_api_token() or '').strip()
 def _authentication_optional() -> bool:
     """Return ``True`` when the API token requirement may be skipped."""
 
+    # ``TEST_MODE`` is enabled for the pytest suite where we still want to
+    # exercise the authentication branch.  Only explicit offline or stub modes
+    # should bypass the token requirement to avoid accidentally exposing the
+    # API without protection when running the service locally.
     return any(
         os.getenv(flag) == '1'
-        for flag in ("TEST_MODE", "OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
+        for flag in ("OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
     )
 
 
