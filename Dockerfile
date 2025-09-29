@@ -20,7 +20,7 @@ WORKDIR /tmp/build
 
 RUN set -eux; \
     apt-get update; \
-    apt-get upgrade -y; \
+    apt-get dist-upgrade -y; \
     apt-get install -y --no-install-recommends \
         tzdata \
         linux-libc-dev \
@@ -156,13 +156,16 @@ COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
 COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
     coreutils \
     zlib1g \
     libpam0g \
     libpam-modules \
+    libssl3t64 \
+    openssl \
+    ca-certificates \
     && python3 -m ensurepip --upgrade \
     && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81' \
     && dpkg -i /tmp/pam-fixed/*.deb \
