@@ -15,7 +15,7 @@ import threading
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, Callable, Mapping, cast
 
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import BadRequest
@@ -24,7 +24,7 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - fallback when flask.typing missing
     ResponseReturnValue = Any  # type: ignore
 
-from bot.trade_manager import server_common
+from bot.trade_manager import order_utils, server_common
 from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 
@@ -558,104 +558,116 @@ def open_position() -> ResponseReturnValue:
             order = _call_exchange_method(
                 exchange, 'create_order', symbol, 'market', side, amount
             )
-            opp_side = 'sell' if side == 'buy' else 'buy'
-            if sl is not None:
-                stop_order = None
-                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
-                for attempt in range(3):
-                    try:
-                        stop_order = _call_exchange_method(
-                            exchange,
-                            'create_order',
-                            symbol,
-                            'stop',
-                            opp_side,
-                            amount,
-                            sl,
-                        )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('stop order failed: %s', exc)
-                        try:
-                            stop_order = _call_exchange_method(
-                                exchange,
-                                'create_order',
-                                symbol,
-                                'stop_market',
-                                opp_side,
-                                amount,
-                                sl,
-                            )
-                        except CCXT_BASE_ERROR as exc:
-                            app.logger.debug('stop_market order failed: %s', exc)
-                            stop_order = None
-                    if stop_order and stop_order.get('id') is not None:
-                        break
-                    if attempt < 2:
-                        time.sleep(delay)
-                        delay *= 2
-                if not stop_order or stop_order.get('id') is None:
+            entry_price = price if math.isfinite(price) and price > 0 else None
+            plan = order_utils.build_protective_order_plan(
+                side,
+                entry_price=entry_price,
+                stop_loss_price=sl,
+                take_profit_price=tp,
+                trailing_offset=trailing_stop,
+            )
+            opp_side = plan.opposite_side
+            base_delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
+
+            def _delay(attempt: int) -> float:
+                return base_delay * (2 ** attempt)
+
+            def _submit_protective(order_type: str, price_arg: float | None) -> dict | None:
+                return _call_exchange_method(
+                    exchange,
+                    'create_order',
+                    symbol,
+                    order_type,
+                    opp_side,
+                    amount,
+                    price_arg,
+                )
+
+            def _log_exception(prefix: str) -> Callable[[int, BaseException], None]:
+                def _inner(attempt: int, exc: BaseException) -> None:
+                    app.logger.debug('%s failed: %s', prefix, exc)
+
+                return _inner
+
+            def _log_failed(prefix: str) -> Callable[[int, Any], None]:
+                def _inner(attempt: int, result: Any) -> None:
+                    app.logger.debug('%s returned: %s', prefix, result)
+
+                return _inner
+
+            if plan.stop_loss_price is not None:
+                stop_order = order_utils.execute_with_retries_sync(
+                    lambda: _submit_protective('stop', plan.stop_loss_price),
+                    attempts=3,
+                    delay=_delay,
+                    logger=app.logger,
+                    description=f'{symbol} stop_loss order',
+                    exceptions=(CCXT_BASE_ERROR,),
+                    should_retry=order_utils.order_needs_retry,
+                    on_exception=_log_exception('stop order'),
+                    on_failed_result=_log_failed('stop order'),
+                )
+                if order_utils.order_needs_retry(stop_order):
+                    stop_order = order_utils.execute_with_retries_sync(
+                        lambda: _submit_protective('stop_market', plan.stop_loss_price),
+                        attempts=3,
+                        delay=_delay,
+                        logger=app.logger,
+                        description=f'{symbol} stop_loss fallback',
+                        exceptions=(CCXT_BASE_ERROR,),
+                        should_retry=order_utils.order_needs_retry,
+                        on_exception=_log_exception('stop_market order'),
+                        on_failed_result=_log_failed('stop_market order'),
+                    )
+                if order_utils.order_needs_retry(stop_order):
                     safe_symbol = sanitize_log_value(symbol)
                     warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'stop_loss', 'message': warn_msg})
-            if tp is not None:
-                tp_order = None
-                delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
-                for attempt in range(3):
-                    try:
-                        tp_order = _call_exchange_method(
-                            exchange,
-                            'create_order',
-                            symbol,
-                            'limit',
-                            opp_side,
-                            amount,
-                            tp,
-                        )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('take profit order failed: %s', exc)
-                        tp_order = None
-                    if tp_order and tp_order.get('id') is not None:
-                        break
-                    if attempt < 2:
-                        time.sleep(delay)
-                        delay *= 2
-                if not tp_order or tp_order.get('id') is None:
+            if plan.take_profit_price is not None:
+                tp_order = order_utils.execute_with_retries_sync(
+                    lambda: _submit_protective('limit', plan.take_profit_price),
+                    attempts=3,
+                    delay=_delay,
+                    logger=app.logger,
+                    description=f'{symbol} take_profit order',
+                    exceptions=(CCXT_BASE_ERROR,),
+                    should_retry=order_utils.order_needs_retry,
+                    on_exception=_log_exception('take profit order'),
+                    on_failed_result=_log_failed('take profit order'),
+                )
+                if order_utils.order_needs_retry(tp_order):
                     safe_symbol = sanitize_log_value(symbol)
                     warn_msg = f"не удалось создать take profit ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'take_profit', 'message': warn_msg})
-            if trailing_stop is not None and price > 0:
-                tprice = price - trailing_stop if side == 'buy' else price + trailing_stop
-                stop_order = None
-                try:
-                    stop_order = _call_exchange_method(
-                        exchange,
-                        'create_order',
-                        symbol,
-                        'stop',
-                        opp_side,
-                        amount,
-                        tprice,
+            if plan.trailing_stop_price is not None:
+                trailing_order = order_utils.execute_with_retries_sync(
+                    lambda: _submit_protective('stop', plan.trailing_stop_price),
+                    attempts=3,
+                    delay=_delay,
+                    logger=app.logger,
+                    description=f'{symbol} trailing_stop order',
+                    exceptions=(CCXT_BASE_ERROR,),
+                    should_retry=order_utils.order_needs_retry,
+                    on_exception=_log_exception('trailing stop order'),
+                    on_failed_result=_log_failed('trailing stop order'),
+                )
+                if order_utils.order_needs_retry(trailing_order):
+                    trailing_order = order_utils.execute_with_retries_sync(
+                        lambda: _submit_protective('stop_market', plan.trailing_stop_price),
+                        attempts=3,
+                        delay=_delay,
+                        logger=app.logger,
+                        description=f'{symbol} trailing_stop fallback',
+                        exceptions=(CCXT_BASE_ERROR,),
+                        should_retry=order_utils.order_needs_retry,
+                        on_exception=_log_exception('trailing stop_market order'),
+                        on_failed_result=_log_failed('trailing stop_market order'),
                     )
-                except CCXT_BASE_ERROR as exc:
-                    app.logger.debug('trailing stop order failed: %s', exc)
-                    try:
-                        stop_order = _call_exchange_method(
-                            exchange,
-                            'create_order',
-                            symbol,
-                            'stop_market',
-                            opp_side,
-                            amount,
-                            tprice,
-                        )
-                    except CCXT_BASE_ERROR as exc:
-                        app.logger.debug('trailing stop_market failed: %s', exc)
-                        stop_order = None
-                if not stop_order or stop_order.get('id') is None:
+                if order_utils.order_needs_retry(trailing_order):
                     safe_symbol = sanitize_log_value(symbol)
                     warn_msg = f"не удалось создать trailing stop ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)

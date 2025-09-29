@@ -40,9 +40,9 @@ from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 import inspect  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
+from bot.trade_manager import order_utils  # noqa: E402
 
 _utils = require_utils(
-    "retry",
     "logger",
     "is_cuda_available",
     "check_dataframe_empty_async",
@@ -50,7 +50,6 @@ _utils = require_utils(
     "TelegramLogger",
 )
 
-retry = _utils.retry
 logger = _utils.logger
 is_cuda_available = _utils.is_cuda_available
 _check_df_async = _utils.check_dataframe_empty_async
@@ -682,7 +681,6 @@ class TradeManager:
                     )
 
 
-    @retry(3, lambda attempt: min(2 ** attempt, 5))
     async def place_order(
         self,
         symbol: str,
@@ -695,7 +693,7 @@ class TradeManager:
     ) -> Optional[Dict]:
         params = params or {}
 
-        async def _execute_order() -> Optional[Dict]:
+        async def _execute_once() -> Optional[Dict]:
             try:
                 order_params = {"category": "linear", **params}
                 order_type = order_params.get("type", "market")
@@ -770,11 +768,46 @@ class TradeManager:
                 )
                 raise
 
+        async def _submit() -> Optional[Dict]:
+            attempts = max(1, int(self.config.get("order_retry_attempts", 3)))
+            delay = float(self.config.get("order_retry_delay", 1))
+            description = f"order {symbol}"
+
+            def _on_exception(attempt: int, exc: BaseException) -> None:
+                logger.error(
+                    "Order attempt %s for %s failed (%s): %s",
+                    attempt + 1,
+                    symbol,
+                    type(exc).__name__,
+                    exc,
+                )
+
+            def _on_failed(attempt: int, result: Any) -> None:
+                logger.warning(
+                    "Order attempt %s for %s returned error: %s",
+                    attempt + 1,
+                    symbol,
+                    result,
+                )
+
+            return await order_utils.execute_with_retries(
+                _execute_once,
+                attempts=attempts,
+                delay=delay,
+                sleep=asyncio.sleep,
+                logger=logger,
+                description=description,
+                exceptions=(httpx.HTTPError, RuntimeError),
+                should_retry=order_utils.order_needs_retry,
+                on_exception=_on_exception,
+                on_failed_result=_on_failed,
+            )
+
         if use_lock:
             async with self.position_lock:
-                return await _execute_order()
+                return await _submit()
         else:
-            return await _execute_order()
+            return await _submit()
 
     async def calculate_position_size(
         self, symbol: str, price: float, atr: float, sl_multiplier: float
@@ -814,21 +847,23 @@ class TradeManager:
                 else self.config.get("volatility_threshold", 0.02)
             )
             risk_per_trade = await self.compute_risk_per_trade(symbol, volatility)
-            risk_amount = equity * risk_per_trade
-            stop_loss_distance = atr * sl_multiplier
-            if stop_loss_distance <= 0:
-                logger.warning("Некорректный stop_loss_distance для %s", symbol)
-                return 0.0
-            position_size = risk_amount / (stop_loss_distance * self.leverage)
-            position_size = min(
-                position_size,
-                equity * self.leverage / price * self.max_position_pct,
+            position_size = order_utils.calculate_position_size(
+                equity=equity,
+                risk_per_trade=risk_per_trade,
+                atr=atr,
+                sl_multiplier=sl_multiplier,
+                leverage=self.leverage,
+                price=price,
+                max_position_pct=self.max_position_pct,
             )
+            if position_size <= 0:
+                logger.warning("Некорректный размер позиции для %s", symbol)
+                return 0.0
             logger.info(
                 "Position size for %s: %.4f (risk %.2f USDT, ATR %.2f)",
                 symbol,
                 position_size,
-                risk_amount,
+                equity * risk_per_trade,
                 atr,
             )
             return position_size
@@ -850,13 +885,9 @@ class TradeManager:
         tp_multiplier: float,
     ) -> Tuple[float, float]:
         """Return stop-loss and take-profit prices."""
-        stop_loss_price = (
-            price - sl_multiplier * atr if side == "buy" else price + sl_multiplier * atr
+        return order_utils.calculate_stop_loss_take_profit(
+            side, price, atr, sl_multiplier, tp_multiplier
         )
-        take_profit_price = (
-            price + tp_multiplier * atr if side == "buy" else price - tp_multiplier * atr
-        )
-        return stop_loss_price, take_profit_price
 
     async def open_position(self, symbol: str, side: str, price: float, params: Dict):
         try:
@@ -894,54 +925,21 @@ class TradeManager:
             stop_loss_price, take_profit_price = self.calculate_stop_loss_take_profit(
                 side, price, atr, sl_mult, tp_mult
             )
-
-            order_params = {
-                "leverage": self.leverage,
-                "stopLossPrice": stop_loss_price,
-                "takeProfitPrice": take_profit_price,
-                "tpslMode": "full",
-            }
-            max_attempts = self.config.get("order_retry_attempts", 3)
-            retry_delay = self.config.get("order_retry_delay", 1)
-            order = None
-            for attempt in range(max_attempts):
-                if attempt > 0:
-                    logger.info(
-                        "Retrying order for %s (attempt %s/%s)",
-                        symbol,
-                        attempt + 1,
-                        max_attempts,
-                    )
-                    await asyncio.sleep(retry_delay)
-                try:
-                    order = await self.place_order(
-                        symbol, side, size, price, order_params, use_lock=False
-                    )
-                except (httpx.HTTPError, RuntimeError) as exc:  # pragma: no cover - network issues
-                    logger.error(
-                        "Order attempt %s for %s failed (%s): %s",
-                        attempt + 1,
-                        symbol,
-                        type(exc).__name__,
-                        exc,
-                    )
-                    order = None
-                ret_code = None
-                if isinstance(order, dict):
-                    ret_code = order.get("retCode") or order.get("ret_code")
-                if order and (ret_code is None or ret_code == 0):
-                    break
-                logger.warning(
-                    "Order attempt %s for %s failed: %s",
-                    attempt + 1,
-                    symbol,
-                    order,
-                )
-            else:
+            protective_plan = order_utils.build_protective_order_plan(
+                side,
+                entry_price=price,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+            )
+            order_params = protective_plan.as_order_params(self.leverage)
+            order = await self.place_order(
+                symbol, side, size, price, order_params, use_lock=False
+            )
+            if order_utils.order_needs_retry(order):
                 logger.error(
                     "Order failed for %s after %s attempts",
                     symbol,
-                    max_attempts,
+                    self.config.get("order_retry_attempts", 3),
                 )
                 await self.telegram_logger.send_telegram_message(
                     f"❌ Order failed {symbol}: retries exhausted"
