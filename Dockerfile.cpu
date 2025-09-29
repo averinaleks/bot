@@ -5,23 +5,25 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
 # Обновляем систему перед установкой зависимостей
-RUN set -eux; \
-    apt-get update; \
-    apt-get upgrade -y; \
-    apt-get install -y --no-install-recommends \
-        linux-libc-dev \
-        libssl3t64 \
-        python3.12-minimal \
-        build-essential patch \
-        curl \
-        python3 python3-venv python3-dev python3-pip \
-        zlib1g-dev; \
-    python3 -m pip install --no-cache-dir --break-system-packages \
-        'pip>=24.0' \
-        'setuptools>=78.1.1,<81' \
-        wheel; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
+RUN <<'EOSHELL'
+set -eux
+apt-get update
+apt-get upgrade -y
+apt-get install -y --no-install-recommends \
+    linux-libc-dev \
+    libssl3t64 \
+    python3.12-minimal \
+    build-essential patch \
+    curl \
+    python3 python3-venv python3-dev python3-pip \
+    zlib1g-dev
+python3 -m pip install --no-cache-dir --break-system-packages \
+    'pip>=24.0' \
+    'setuptools>=78.1.1,<81' \
+    wheel
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EOSHELL
 
 WORKDIR /app
 
@@ -107,25 +109,27 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Обновляем систему перед установкой зависимостей выполнения
-RUN set -eux; \
-    apt-get update; \
-    # Используем upgrade вместо dist-upgrade, чтобы избежать конфликтов зависимостей
-    apt-get upgrade -y; \
-    apt-get install -y --no-install-recommends \
-        libssl3t64 \
-        python3.12-minimal \
-        # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
-        libgomp1 \
-        curl \
-        python3 \
-        # Исключаем tar, чтобы избежать CVE-2025-45582
-        coreutils libgcrypt20 login passwd; \
-    # ``ensurepip`` отключён в системном Python Ubuntu, а рантайм использует
-    # виртуальное окружение из стадии сборки, поэтому дополнительные операции с pip
-    # не требуются.
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*; \
-    python3 --version
+RUN <<'EOSHELL'
+set -eux
+apt-get update
+# Используем upgrade вместо dist-upgrade, чтобы избежать конфликтов зависимостей
+apt-get upgrade -y
+apt-get install -y --no-install-recommends \
+    libssl3t64 \
+    python3.12-minimal \
+    # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
+    libgomp1 \
+    curl \
+    python3 \
+    # Исключаем tar, чтобы избежать CVE-2025-45582
+    coreutils libgcrypt20 login passwd
+# ``ensurepip`` отключён в системном Python Ubuntu, а рантайм использует
+# виртуальное окружение из стадии сборки, поэтому дополнительные операции с pip
+# не требуются.
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+python3 --version
+EOSHELL
 
 WORKDIR /app
 

@@ -45,16 +45,24 @@ _ALLOW_OFFLINE = (
     or os.getenv("TEST_MODE") == "1"
     or os.getenv("DATA_HANDLER_USE_STUB") == "1"
 )
+_FORCE_OFFLINE = os.getenv("DATA_HANDLER_USE_STUB") == "1"
 
 try:
+    if _FORCE_OFFLINE:
+        raise ImportError("Offline stub requested via DATA_HANDLER_USE_STUB=1")
     import ccxt  # type: ignore
 except ImportError as exc:  # pragma: no cover - optional in offline mode
     logger = logging.getLogger(__name__)
     if _ALLOW_OFFLINE:
-        logger.warning(
-            "`ccxt` не найден: DataHandlerService использует OfflineBybit. "
-            "Для онлайн-запуска установите зависимость `pip install ccxt`."
-        )
+        if _FORCE_OFFLINE:
+            logger.info(
+                "DATA_HANDLER_USE_STUB=1: DataHandlerService использует OfflineBybit без загрузки ccxt"
+            )
+        else:
+            logger.warning(
+                "`ccxt` не найден: DataHandlerService использует OfflineBybit. "
+                "Для онлайн-запуска установите зависимость `pip install ccxt`."
+            )
         from services.offline import OfflineBybit
 
         ccxt = SimpleNamespace(  # type: ignore[assignment]
