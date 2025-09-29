@@ -291,6 +291,7 @@ class ModelManager:
 
 
 model_manager = ModelManager()
+model_lock = asyncio.Lock()
 
 
 @asynccontextmanager
@@ -485,13 +486,16 @@ async def chat_completions(request: Request):
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
     prompt = "\n".join(message.content for message in req.messages)
-    text = await asyncio.to_thread(
-        generate_text,
-        model_manager,
-        prompt,
-        temperature=req.temperature,
-        max_new_tokens=req.max_tokens,
-    )
+    if model_lock.locked():
+        raise HTTPException(status_code=429, detail="Model is busy")
+    async with model_lock:
+        text = await asyncio.to_thread(
+            generate_text,
+            model_manager,
+            prompt,
+            temperature=req.temperature,
+            max_new_tokens=req.max_tokens,
+        )
     return {"choices": [{"message": {"role": "assistant", "content": text}}]}
 
 
@@ -508,13 +512,16 @@ async def completions(request: Request):
         raise HTTPException(status_code=422, detail=exc.errors())
     if model_manager.tokenizer is None or model_manager.model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
-    text = await asyncio.to_thread(
-        generate_text,
-        model_manager,
-        req.prompt,
-        temperature=req.temperature,
-        max_new_tokens=req.max_tokens,
-    )
+    if model_lock.locked():
+        raise HTTPException(status_code=429, detail="Model is busy")
+    async with model_lock:
+        text = await asyncio.to_thread(
+            generate_text,
+            model_manager,
+            req.prompt,
+            temperature=req.temperature,
+            max_new_tokens=req.max_tokens,
+        )
     return {"choices": [{"text": text}]}
 
 

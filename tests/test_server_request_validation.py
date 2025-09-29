@@ -1,5 +1,7 @@
+import concurrent.futures
 import os
 import secrets
+import threading
 
 import pytest
 pytest.importorskip("transformers")
@@ -19,6 +21,24 @@ from fastapi_csrf_protect import CsrfProtect
 
 
 HEADERS = {"Authorization": "Bearer testkey"}
+
+
+def _make_chat_payload() -> dict[str, object]:
+    return {"messages": [{"role": "user", "content": "hi"}]}
+
+
+def _make_completion_payload() -> dict[str, object]:
+    return {"prompt": "hi"}
+
+
+def _extract_chat_content(response) -> str:
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _extract_completion_text(response) -> str:
+    data = response.json()
+    return data["choices"][0]["text"]
 
 
 @contextmanager
@@ -76,4 +96,51 @@ def test_completions_validation(monkeypatch):
             headers=headers,
         )
         assert resp.status_code == 422
+    assert not server.API_KEYS
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "payload_factory", "extract_content"),
+    (
+        ("/v1/chat/completions", _make_chat_payload, _extract_chat_content),
+        ("/v1/completions", _make_completion_payload, _extract_completion_text),
+    ),
+)
+def test_model_busy_returns_429(monkeypatch, endpoint, payload_factory, extract_content):
+    start_event = threading.Event()
+    release_event = threading.Event()
+    slow_text = "slow-response"
+
+    def slow_generate_text(*args, **kwargs):
+        start_event.set()
+        if not release_event.wait(timeout=1):
+            raise RuntimeError("Timed out waiting for release_event")
+        return slow_text
+
+    monkeypatch.setattr(server, "generate_text", slow_generate_text)
+
+    with make_client(monkeypatch) as (client, headers):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(
+                client.post,
+                endpoint,
+                json=payload_factory(),
+                headers=headers,
+            )
+            if not start_event.wait(timeout=1):
+                release_event.set()
+                pytest.fail("Model generation did not start in time")
+            try:
+                busy_response = client.post(
+                    endpoint,
+                    json=payload_factory(),
+                    headers=headers,
+                )
+            finally:
+                release_event.set()
+            assert busy_response.status_code == 429
+            assert busy_response.json() == {"detail": "Model is busy"}
+            first_response = first_future.result(timeout=1)
+            assert first_response.status_code == 200
+            assert extract_content(first_response) == slow_text
     assert not server.API_KEYS
