@@ -85,9 +85,14 @@ API_TOKEN = (server_common.get_api_token() or '').strip()
 def _authentication_optional() -> bool:
     """Return ``True`` when the API token requirement may be skipped."""
 
+    # ``TEST_MODE`` is intentionally excluded here so automated tests still
+    # exercise the authentication code paths even when they rely on the flag to
+    # relax other environment validations.  Authentication is skipped only when
+    # the service explicitly runs in offline mode or when the Trade Manager stub
+    # is enabled.
     return any(
         os.getenv(flag) == '1'
-        for flag in ("TEST_MODE", "OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
+        for flag in ("OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
     )
 
 
