@@ -478,7 +478,7 @@ def test_trade_manager_service_invalid_json(ctx):
             headers={**TOKEN_HEADERS, 'Content-Type': 'application/json'},
         )
         assert resp.status_code == 400
-        assert resp.json() == {'error': 'invalid json'}
+        assert resp.json() == {'error': 'invalid json', 'code': 'invalid_json'}
 
 
 @pytest.mark.integration
