@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
-import subprocess
+import shutil
+import subprocess  # nosec B404: используется только для чтения списка файлов через git
 from pathlib import Path
+
+import pytest
+
+
+GIT_EXECUTABLE = shutil.which("git")
+
+if GIT_EXECUTABLE is None:  # pragma: no cover - защитный сценарий окружения
+    pytest.skip("Для теста требуется установленный git", allow_module_level=True)
 
 
 def _tracked_python_files(root: Path) -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "--", "*.py"],
+    command = [GIT_EXECUTABLE, "ls-files", "--", "*.py"]
+    result = subprocess.run(  # nosec B603: команда git формируется из фиксированных аргументов
+        command,
         check=True,
         cwd=root,
         stdout=subprocess.PIPE,

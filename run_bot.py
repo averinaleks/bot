@@ -394,8 +394,12 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
                 new_exc = matched_cls(enriched_args[0]) if matched_cls else RuntimeError(enriched_args[0])
             try:
                 new_exc.args = enriched_args
-            except Exception:  # pragma: no cover - unusual exception types
-                pass
+            except Exception as assignment_error:  # pragma: no cover - defensive
+                logger.debug(
+                    "Не удалось заменить аргументы для исключения %s: %s",
+                    type(new_exc).__name__,
+                    assignment_error,
+                )
             if hasattr(exc, "__dict__") and hasattr(new_exc, "__dict__"):
                 new_exc.__dict__.update({k: v for k, v in exc.__dict__.items() if k not in new_exc.__dict__})
 
