@@ -36,6 +36,10 @@ jobs:
           # recreated and CodeQL tries to parse them, triggering hundreds of
           # syntax errors. Removing the logs entirely is safe (Git will recreate
           # them on demand) and guarantees the extractor never sees them.
+          # Disable creation of new reference logs for the remainder of the job.
+          # Without this, subsequent fetch operations performed by actions can
+          # silently recreate .git/logs and reintroduce the parsing problem.
+          git config --global core.logAllRefUpdates false
           if [ -d ".git/logs" ]; then
             rm -rf .git/logs
           fi
