@@ -27,6 +27,65 @@ def _post_open_position(client, payload):
     )
 
 
+def test_open_position_missing_symbol_returns_code(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        pass
+
+    tms.exchange_provider.override(DummyExchange())
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = _post_open_position(client, {'side': 'buy', 'price': 100})
+
+    assert response.status_code == 400
+    assert response.get_json() == {'error': 'symbol is required', 'code': 'missing_symbol'}
+    messages = [record.getMessage() for record in caplog.records]
+    assert any('open_position_error[missing_symbol]' in message for message in messages)
+
+
+def test_open_position_invalid_price_returns_code(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        pass
+
+    tms.exchange_provider.override(DummyExchange())
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'buy', 'price': 'oops'},
+        )
+
+    assert response.status_code == 400
+    assert response.get_json() == {'error': 'invalid price', 'code': 'invalid_price'}
+    messages = [record.getMessage() for record in caplog.records]
+    assert any('open_position_error[invalid_price]' in message for message in messages)
+    assert any('BTCUSDT' in message for message in messages)
+
+
+def test_open_position_negative_risk_returns_code(monkeypatch, caplog):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        pass
+
+    tms.exchange_provider.override(DummyExchange())
+    monkeypatch.setenv('TRADE_RISK_USD', '-5')
+
+    with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'buy', 'price': 100, 'amount': 0},
+        )
+
+    assert response.status_code == 400
+    assert response.get_json() == {'error': 'risk must be positive', 'code': 'negative_risk'}
+    messages = [record.getMessage() for record in caplog.records]
+    assert any('open_position_error[negative_risk]' in message for message in messages)
+
+
 def test_post_without_token_rejected_when_not_configured(monkeypatch, caplog):
     from services import trade_manager_service as tms
 

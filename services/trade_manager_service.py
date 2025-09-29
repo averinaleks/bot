@@ -13,6 +13,7 @@ import stat
 import tempfile
 import threading
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, cast
 
@@ -114,6 +115,35 @@ def _require_api_token() -> ResponseReturnValue | None:
 
 POSITIONS: list[dict] = []
 POSITIONS_FILE = Path('cache/positions.json')
+
+
+class OpenPositionErrorCode(str, Enum):
+    INVALID_JSON = 'invalid_json'
+    MISSING_SYMBOL = 'missing_symbol'
+    INVALID_PRICE = 'invalid_price'
+    INVALID_AMOUNT = 'invalid_amount'
+    NEGATIVE_RISK = 'negative_risk'
+    EXCHANGE_NOT_INITIALIZED = 'exchange_not_initialized'
+
+
+def _open_position_error(
+    code: OpenPositionErrorCode,
+    message: str,
+    status: int,
+    *,
+    symbol: str | None = None,
+    log_level: int = logging.WARNING,
+) -> ResponseReturnValue:
+    log_template = 'open_position_error[%s]: %s'
+    log_args: tuple[Any, ...]
+    if symbol:
+        safe_symbol = sanitize_log_value(symbol)
+        log_template += ' (symbol=%s)'
+        log_args = (code.value, message, safe_symbol)
+    else:
+        log_args = (code.value, message)
+    app.logger.log(log_level, log_template, *log_args)
+    return jsonify({'error': message, 'code': code.value}), status
 
 
 def _positions_directory_is_safe(path: Path) -> bool:
@@ -401,17 +431,38 @@ def open_position() -> ResponseReturnValue:
     try:
         data = request.get_json(force=True)
     except BadRequest:
-        return jsonify({'error': 'invalid json'}), 400
-    symbol = data.get('symbol')
+        return _open_position_error(
+            OpenPositionErrorCode.INVALID_JSON,
+            'invalid json',
+            400,
+        )
+    raw_symbol = data.get('symbol')
+    symbol = raw_symbol.strip() if isinstance(raw_symbol, str) else None
+    if not symbol:
+        return _open_position_error(
+            OpenPositionErrorCode.MISSING_SYMBOL,
+            'symbol is required',
+            400,
+        )
     side = str(data.get('side', 'buy')).lower()
     try:
         price = float(data.get('price', 0) or 0)
     except (TypeError, ValueError):
-        return jsonify({'error': 'invalid order'}), 400
+        return _open_position_error(
+            OpenPositionErrorCode.INVALID_PRICE,
+            'invalid price',
+            400,
+            symbol=symbol,
+        )
     try:
         amount = float(data.get('amount', 0) or 0)
     except (TypeError, ValueError):
-        return jsonify({'error': 'invalid order'}), 400
+        return _open_position_error(
+            OpenPositionErrorCode.INVALID_AMOUNT,
+            'invalid amount',
+            400,
+            symbol=symbol,
+        )
     tp = data.get('tp')
     sl = data.get('sl')
     trailing_stop = data.get('trailing_stop')
@@ -425,17 +476,36 @@ def open_position() -> ResponseReturnValue:
             risk_usd = float(raw_risk)
         except (TypeError, ValueError):
             risk_usd = 0.0
-        if risk_usd > 0:
-            if not math.isfinite(price) or price <= 0:
-                return jsonify({'error': 'invalid order'}), 400
-            amount = risk_usd / price
+        if risk_usd <= 0:
+            return _open_position_error(
+                OpenPositionErrorCode.NEGATIVE_RISK,
+                'risk must be positive',
+                400,
+                symbol=symbol,
+            )
+        if not math.isfinite(price) or price <= 0:
+            return _open_position_error(
+                OpenPositionErrorCode.INVALID_PRICE,
+                'invalid price',
+                400,
+                symbol=symbol,
+            )
+        amount = risk_usd / price
     if not math.isfinite(amount) or amount <= 0:
-        return jsonify({'error': 'invalid order'}), 400
+        return _open_position_error(
+            OpenPositionErrorCode.INVALID_AMOUNT,
+            'invalid amount',
+            400,
+            symbol=symbol,
+        )
     exchange = _current_exchange()
     if exchange is None:
-        return jsonify({'error': 'exchange not initialized'}), 503
-    if not symbol:
-        return jsonify({'error': 'invalid order'}), 400
+        return _open_position_error(
+            OpenPositionErrorCode.EXCHANGE_NOT_INITIALIZED,
+            'exchange not initialized',
+            503,
+            log_level=logging.ERROR,
+        )
     try:
         protective_failures: list[dict[str, str]] = []
         mitigation_actions: list[str] = []
