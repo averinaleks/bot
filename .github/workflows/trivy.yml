@@ -16,16 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         # v4
         with:
           persist-credentials: false
-
-      - name: Set Trivy cache directory
-        run: |
-          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
 
       - name: Prepare Trivy cache directory
         run: |
@@ -116,16 +114,14 @@ jobs:
       contents: read
       security-events: write
       actions: write  # required for uploading artifacts such as SARIF reports
+    env:
+      TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         # v4
         with:
           persist-credentials: false
-
-      - name: Set Trivy cache directory
-        run: |
-          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
 
       - name: Prepare Trivy cache directory
         run: |
