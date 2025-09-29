@@ -1070,6 +1070,45 @@ async def test_process_symbol_retries_on_client_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_process_symbol_recovers_from_value_error(monkeypatch):
+    dh = DummyDataHandler()
+
+    class MB:
+        def __init__(self):
+            self.predictive_models = {"BTCUSDT": object()}
+
+    tm = TradeManager(
+        BotConfig(lstm_timesteps=2, cache_dir=tempfile.mkdtemp(), check_interval=0.01),
+        dh,
+        MB(),
+        None,
+        None,
+    )
+
+    calls = {"n": 0}
+
+    async def fake_eval(symbol):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("boom")
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
+
+    orig_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await orig_sleep(0)
+
+    monkeypatch.setattr(trade_manager.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(tm.process_symbol("BTCUSDT"))
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert calls["n"] >= 2
+
+
+@pytest.mark.asyncio
 async def test_process_symbol_propagates_unexpected_error(monkeypatch):
     dh = DummyDataHandler()
 
@@ -1086,11 +1125,11 @@ async def test_process_symbol_propagates_unexpected_error(monkeypatch):
     )
 
     async def fake_eval(symbol):
-        raise ValueError("boom")
+        raise TypeError("boom")
 
     monkeypatch.setattr(tm, "evaluate_signal", fake_eval)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         await tm.process_symbol("BTCUSDT")
 
 
