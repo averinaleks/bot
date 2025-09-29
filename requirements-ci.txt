@@ -34,5 +34,5 @@ hypothesis>=6.90.0
 # Keep numpy aligned with requirements-core.txt and Docker builds
 numpy==2.2.6
 pip-audit==2.9.0
-pybit==5.11.0
+pybit==5.12.0
 
