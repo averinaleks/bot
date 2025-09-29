@@ -112,7 +112,7 @@ def _require_api_token() -> ResponseReturnValue | None:
 
     expected = API_TOKEN
     if not expected:
-        if _authentication_optional():
+        if _authentication_optional() and request.method != 'POST':
             return None
         remote = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
         logger.warning(
