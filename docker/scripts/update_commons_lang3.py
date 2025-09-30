@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
 
 import requests
@@ -47,38 +48,58 @@ def update_commons_lang3() -> None:
             f"{parsed_url.netloc}"
         )
 
-    with requests.Session() as session:
-        adapter = requests.adapters.HTTPAdapter()
-        session.mount("https://", adapter)
+    temp_path: Path | None = None
 
-        with session.get(
-            COMMONS_LANG3_URL,
-            stream=True,
-            timeout=30,
-            allow_redirects=False,
-        ) as response:
-            if 300 <= response.status_code < 400:
-                location = response.headers.get("Location", "")
-                raise RuntimeError(
-                    "commons-lang3 download unexpectedly redirected"
-                    + (f" to {location}" if location else "")
-                )
-            response.raise_for_status()
-            with destination.open("wb") as fh:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if not chunk:
-                        continue
-                    fh.write(chunk)
-                    hasher.update(chunk)
+    try:
+        with requests.Session() as session:
+            adapter = requests.adapters.HTTPAdapter()
+            session.mount("https://", adapter)
+            session.trust_env = False
+
+            with session.get(
+                COMMONS_LANG3_URL,
+                stream=True,
+                timeout=30,
+                allow_redirects=False,
+            ) as response:
+                if 300 <= response.status_code < 400:
+                    location = response.headers.get("Location", "")
+                    raise RuntimeError(
+                        "commons-lang3 download unexpectedly redirected"
+                        + (f" to {location}" if location else "")
+                    )
+                response.raise_for_status()
+                with NamedTemporaryFile(
+                    "wb", delete=False, dir=jars_dir
+                ) as temp_file:
+                    temp_path = Path(temp_file.name)
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if not chunk:
+                            continue
+                        temp_file.write(chunk)
+                        hasher.update(chunk)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
+
+    if temp_path is None:
+        raise RuntimeError("Failed to create temporary commons-lang3 download")
 
     digest = hasher.hexdigest()
     if digest != COMMONS_LANG3_SHA256:
         destination.unlink(missing_ok=True)
+        temp_path.unlink(missing_ok=True)
         raise RuntimeError(
             "SHA256 mismatch while downloading commons-lang3: expected "
             f"{COMMONS_LANG3_SHA256}, got {digest}"
         )
 
+    try:
+        temp_path.replace(destination)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
 def main() -> int:
     update_commons_lang3()
