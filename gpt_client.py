@@ -16,7 +16,10 @@ import asyncio
 import threading
 from typing import Any, Coroutine, Mapping
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ModuleNotFoundError:  # pragma: no cover - depends on optional dependency
+    OpenAI = None  # type: ignore[assignment]
 
 # NOTE: httpx is imported for exception types only.
 import httpx
@@ -163,6 +166,11 @@ def _query_openai(prompt: str, api_url: str | None) -> str:
         client_kwargs["organization"] = organization
 
     logger.debug("Using OpenAI client with kwargs: %s", client_kwargs)
+    if OpenAI is None:  # pragma: no cover - exercised when optional dependency missing
+        raise GPTClientError(
+            "OpenAI client library is required but not installed"
+        )
+
     client = OpenAI(**client_kwargs)
 
     completion_kwargs: dict[str, Any] = {}
