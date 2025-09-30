@@ -1,7 +1,23 @@
 import os
+import secrets
+import shutil
 import subprocess  # nosec B404
 from pathlib import Path
 from textwrap import dedent
+
+
+BASH_EXECUTABLE = shutil.which("bash") or "/bin/bash"
+
+
+def _run_dependabot(script: Path, env: dict[str, str]):
+    """Выполнить скрипт dependabot через абсолютный путь до bash."""
+
+    return subprocess.run(  # nosec B603
+        [BASH_EXECUTABLE, str(script)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 def _fake_curl(
@@ -44,10 +60,8 @@ def test_run_dependabot_requires_token():
     env.pop("TOKEN", None)
     env.pop("GITHUB_TOKEN", None)
 
-    # Bandit: the script executes within a temporary environment controlled by the test.
-    proc = subprocess.run(  # nosec
-        ["bash", str(script)], capture_output=True, text=True, env=env
-    )
+    # Bandit note - the script executes within a temporary environment controlled by the test.
+    proc = _run_dependabot(script, env)
 
     assert proc.returncode == 1
     assert "TOKEN or GITHUB_TOKEN is not set" in proc.stderr
@@ -64,15 +78,13 @@ def test_run_dependabot_ignores_already_queued_requests(tmp_path):
     summary = tmp_path / "summary.md"
     env = os.environ.copy()
     env["GITHUB_REPOSITORY"] = "owner/repo"
-    # Bandit: a non-sensitive placeholder token is sufficient for test isolation.
-    env["TOKEN"] = "dummy"  # nosec
+    # Bandit note - a non-sensitive placeholder token is sufficient for test isolation.
+    env["TOKEN"] = secrets.token_hex(8)
     env["PATH"] = f"{fake_path}:{env['PATH']}"
     env["GITHUB_STEP_SUMMARY"] = str(summary)
 
-    # Bandit: repeated invocation uses the same controlled environment as above.
-    proc = subprocess.run(  # nosec
-        ["bash", str(script)], capture_output=True, text=True, env=env
-    )
+    # Bandit note - repeated invocation uses the same controlled environment as above.
+    proc = _run_dependabot(script, env)
 
     assert proc.returncode == 0
     assert "status 422" in proc.stderr
@@ -84,12 +96,10 @@ def test_run_dependabot_handles_missing_endpoint(tmp_path):
     fake_path = _fake_curl(tmp_path, status="404", body='{"message":"Not Found"}', exit_code=22)
     env = os.environ.copy()
     env["GITHUB_REPOSITORY"] = "owner/repo"
-    env["TOKEN"] = "dummy"  # nosec - non-sensitive test token
+    env["TOKEN"] = secrets.token_hex(8)
     env["PATH"] = f"{fake_path}:{env['PATH']}"
 
-    proc = subprocess.run(  # nosec - executes controlled test script
-        ["bash", str(script)], capture_output=True, text=True, env=env
-    )
+    proc = _run_dependabot(script, env)
 
     assert proc.returncode == 0
     assert "Dependabot endpoint returned 404" in proc.stderr
@@ -100,12 +110,10 @@ def test_run_dependabot_propagates_unexpected_curl_failure(tmp_path):
     fake_path = _fake_curl(tmp_path, status="000", body="{}", exit_code=7)
     env = os.environ.copy()
     env["GITHUB_REPOSITORY"] = "owner/repo"
-    env["TOKEN"] = "dummy"  # nosec - non-sensitive test token
+    env["TOKEN"] = secrets.token_hex(8)
     env["PATH"] = f"{fake_path}:{env['PATH']}"
 
-    proc = subprocess.run(  # nosec - executes controlled test script
-        ["bash", str(script)], capture_output=True, text=True, env=env
-    )
+    proc = _run_dependabot(script, env)
 
     assert proc.returncode == 7
     assert "curl failed with exit code 7" in proc.stderr

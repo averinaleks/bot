@@ -1,5 +1,6 @@
 import importlib
 import json
+import secrets
 import sys
 import types
 
@@ -17,8 +18,8 @@ def _reload_service(monkeypatch, tmp_path, exchange):
     service.POSITIONS_FILE = tmp_path / 'positions.json'
     service.POSITIONS[:] = []
     service.exchange_provider.override(exchange)
-    # Bandit: a placeholder token is used solely for fixture initialisation.
-    service.API_TOKEN = 'token'  # nosec
+    # Bandit note - a placeholder token is used solely for fixture initialisation.
+    service.API_TOKEN = secrets.token_hex(8)
     return service
 
 
