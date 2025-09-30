@@ -7,7 +7,10 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types:
-      - 'dependency_graph/auto_submission'
+      # Custom type used by auto-submission hooks. GitHub restricts repository
+      # dispatch event names to alphanumeric characters plus '-' and '_', so we
+      # cannot include a '/' separator here.
+      - dependency-graph-auto-submission
 
 permissions:
   # GitHub requires write access to repository contents for dependency snapshot
