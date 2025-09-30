@@ -45,7 +45,7 @@ def test_dependency_graph_permissions_are_valid() -> None:
     allowed_keys = {"contents", "security-events"}
     assert set(permissions) <= allowed_keys
 
-    assert permissions.get("contents") == "read"
+    assert permissions.get("contents") == "write"
     assert permissions.get("security-events") == "write"
 
 
