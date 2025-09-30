@@ -2,15 +2,11 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
-import contextlib
 import fnmatch
-import http.client
 import json
 import os
 import re
 import shutil
-import socket
-import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -19,6 +15,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
 from urllib.parse import quote, urlparse
+
+try:  # pragma: no cover - import guard exercised in tests
+    import requests  # type: ignore
+except ImportError as import_error:  # pragma: no cover - requests may be absent in CI
+    requests = None  # type: ignore[assignment]
+    _REQUESTS_IMPORT_ERROR = import_error
+else:
+    _REQUESTS_IMPORT_ERROR = None
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -595,23 +599,68 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
+    _https_components(url)
+
+    if requests is None:
+        message = "requests package is required to submit dependency snapshots"
+        if _REQUESTS_IMPORT_ERROR is not None:
+            message = f"{message}: {_REQUESTS_IMPORT_ERROR}"
+        raise DependencySubmissionError(None, message, _REQUESTS_IMPORT_ERROR)
+
     last_error: Exception | None = None
 
     for attempt in range(1, 4):
-        connection: http.client.HTTPSConnection | None = None
         try:
-            context = ssl.create_default_context()
-            connection = http.client.HTTPSConnection(
-                host,
-                port,
-                timeout=30,
-                context=context,
-            )
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-        except (socket.timeout, TimeoutError) as exc:
-            message = str(exc) or "timed out"
+            with requests.Session() as session:  # type: ignore[union-attr]
+                response = session.post(url, data=body, headers=headers, timeout=30)
+                status_code = int(response.status_code)
+                reason = response.reason or ""
+                redirect_location = response.headers.get("Location", "")
+                try:
+                    if hasattr(response, 'text'):
+                        payload_text = response.text
+                    else:
+                        payload_bytes = getattr(response, 'content', b'')
+                        if isinstance(payload_bytes, bytes):
+                            payload_text = payload_bytes.decode('utf-8', errors='replace')
+                        else:
+                            payload_text = str(payload_bytes)
+                finally:
+                    response.close()
+
+            if 300 <= status_code < 400:
+                target = redirect_location or reason or "redirect"
+                raise DependencySubmissionError(
+                    status_code,
+                    f"Failed to submit dependency snapshot: HTTP {status_code}: unexpected redirect to {target}",
+                )
+
+            if status_code in _RETRYABLE_STATUS_CODES:
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        "GitHub вернул временную ошибку при отправке snapshot. "
+                        f"Повторяем попытку через {wait_time} с...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    continue
+                raise DependencySubmissionError(
+                    status_code,
+                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {payload_text.strip() or reason}",
+                )
+
+            if status_code >= 400:
+                message = payload_text.strip() or reason or ""
+                raise DependencySubmissionError(
+                    status_code,
+                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+                )
+
+            print(f"Dependency snapshot submitted: HTTP {status_code}")
+            return
+        except requests.exceptions.Timeout as exc:  # type: ignore[union-attr]
+            message = str(exc).strip() or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
                 print(
@@ -623,7 +672,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        except (http.client.HTTPException, OSError, socket.error) as exc:
+        except requests.exceptions.RequestException as exc:  # type: ignore[union-attr]
             message = str(exc).strip() or exc.__class__.__name__
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -636,60 +685,11 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        else:
-            status_code = int(response.status)
-            reason = response.reason or ""
-            payload = response.read()
-            headers_map = {key: value for key, value in response.getheaders()}
-            redirect_location = headers_map.get("Location", "")
-            response.close()
-
-            if status_code >= 300 and status_code < 400:
-                target = redirect_location or reason or "redirect"
-                print(
-                    "Failed to submit dependency snapshot: "
-                    f"HTTP {status_code}: unexpected redirect to {target}",
-                    file=sys.stderr,
-                )
-                raise DependencySubmissionError(
-                    status_code,
-                    f"Unexpected redirect during dependency snapshot submission ({status_code})",
-                )
-
-            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
-                last_error = DependencySubmissionError(
-                    status_code,
-                    f"Retryable HTTP {status_code}: {reason}",
-                )
-                continue
-
-            if status_code >= 400:
-                message = payload.decode(errors="replace") or reason
-                print(
-                    f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
-                    file=sys.stderr,
-                )
-                raise DependencySubmissionError(
-                    status_code,
-                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-                )
-
-            print(f"Dependency snapshot submitted: HTTP {status_code}")
-            return
-        finally:
-            if connection is not None:
-                with contextlib.suppress(Exception):
-                    connection.close()
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
         raise DependencySubmissionError(None, message, last_error)
+
 
 
 _ORIGINAL_SUBMIT_WITH_HEADERS = _submit_with_headers
@@ -752,6 +752,15 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 def submit_dependency_snapshot() -> None:
     submit_func = _submit_with_headers
+
+    if requests is None:
+        message = "Dependency snapshot submission skipped: requests package is unavailable. Skipping submission."
+        print(message, file=sys.stderr)
+        if _REQUESTS_IMPORT_ERROR is not None:
+            details = str(_REQUESTS_IMPORT_ERROR).strip()
+            if details:
+                print(details, file=sys.stderr)
+        return
 
     payload = _load_event_payload()
     client_payload: Mapping[str, object] | None = None

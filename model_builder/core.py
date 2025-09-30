@@ -29,8 +29,10 @@ from security import (
     set_model_dir,
     verify_model_state_signature,
     write_model_state_signature,
+    _is_within_directory,
 )
 from services.logging_utils import sanitize_log_value
+from .storage import JOBLIB_AVAILABLE, joblib
 
 
 _utils = require_utils(
