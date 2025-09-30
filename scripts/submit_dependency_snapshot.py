@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
-import http.client
 import json
 import os
 import re
 import shutil
-import socket
-import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -18,7 +15,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -37,6 +34,14 @@ if __package__ in {None, ""}:
     # adjustment only the ``scripts`` directory is on ``sys.path`` which makes
     # ``import scripts`` fail.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+try:
+    import requests  # type: ignore[import-untyped]
+except Exception as exc:  # pragma: no cover - handled during runtime checks
+    requests = None  # type: ignore[assignment]
+    _REQUESTS_IMPORT_ERROR: Exception | None = exc
+else:
+    _REQUESTS_IMPORT_ERROR: Exception | None = None
 
 from scripts.github_paths import resolve_github_path  # noqa: E402
 
@@ -528,22 +533,6 @@ def _api_base_url() -> str:
     return api_url.rstrip("/")
 
 
-def _https_components(url: str) -> tuple[str, int, str]:
-    parsed = urlparse(url)
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise DependencySubmissionError(
-            None, "Запрос зависимостей разрешён только по HTTPS"
-        )
-    if parsed.username or parsed.password:
-        raise DependencySubmissionError(
-            None, "URL snapshot не должен содержать учетные данные"
-        )
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-    return parsed.hostname, parsed.port or 443, path
-
-
 def _job_metadata(repository: str, run_id: str, correlator: str) -> dict[str, str]:
     job: dict[str, str] = {"id": run_id, "correlator": correlator}
     server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
@@ -595,22 +584,40 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
-    last_error: Exception | None = None
+    if requests is None:
+        missing = _REQUESTS_IMPORT_ERROR or ImportError(
+            "The requests package is required to submit dependency snapshots."
+        )
+        raise DependencySubmissionError(
+            None,
+            "requests dependency missing; unable to submit dependency snapshot.",
+            cause=missing,
+        )
+
+    session_factory = getattr(requests, "Session", None)
+    if session_factory is None:
+        missing = RuntimeError("requests.Session is not available")
+        raise DependencySubmissionError(
+            None,
+            "requests Session API is unavailable; unable to submit dependency snapshot.",
+            cause=missing,
+        )
+
+    timeout_exc = getattr(requests, "Timeout", TimeoutError)
+    request_exc = getattr(requests, "RequestException", Exception)
+
+    last_error: DependencySubmissionError | Exception | None = None
 
     for attempt in range(1, 4):
-        connection: http.client.HTTPSConnection | None = None
         try:
-            context = ssl.create_default_context()
-            connection = http.client.HTTPSConnection(
-                host,
-                port,
-                timeout=30,
-                context=context,
-            )
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-        except (socket.timeout, TimeoutError) as exc:
+            with session_factory() as session:
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                )
+        except timeout_exc as exc:  # type: ignore[misc]
             message = str(exc) or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -623,7 +630,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        except (http.client.HTTPException, OSError, socket.error) as exc:
+        except request_exc as exc:  # type: ignore[misc]
             message = str(exc).strip() or exc.__class__.__name__
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -637,14 +644,35 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             last_error = exc
             break
         else:
-            status_code = int(response.status)
-            reason = response.reason or ""
-            payload = response.read()
-            headers_map = {key: value for key, value in response.getheaders()}
-            redirect_location = headers_map.get("Location", "")
-            response.close()
+            try:
+                status_code = int(getattr(response, "status_code", 0))
+            except Exception:
+                status_code = 0
+            reason = str(getattr(response, "reason", "") or "")
+            raw_headers = getattr(response, "headers", {}) or {}
+            if hasattr(raw_headers, "items"):
+                headers_iter = raw_headers.items()  # type: ignore[call-arg]
+            else:
+                headers_iter = raw_headers
+            headers_map = {str(key): str(value) for key, value in headers_iter}
+            redirect_location = (
+                headers_map.get("Location")
+                or headers_map.get("location")
+                or ""
+            )
+            content_bytes = getattr(response, "content", b"") or b""
+            if not isinstance(content_bytes, (bytes, bytearray)):
+                try:
+                    content_bytes = bytes(content_bytes)
+                except Exception:
+                    content_bytes = str(content_bytes).encode()
+            content_text = content_bytes.decode(errors="replace")
+            with contextlib.suppress(Exception):
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
 
-            if status_code >= 300 and status_code < 400:
+            if 300 <= status_code < 400:
                 target = redirect_location or reason or "redirect"
                 print(
                     "Failed to submit dependency snapshot: "
@@ -670,7 +698,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
 
             if status_code >= 400:
-                message = payload.decode(errors="replace") or reason
+                message = content_text or reason
                 print(
                     f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
                     file=sys.stderr,
@@ -682,10 +710,9 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
             print(f"Dependency snapshot submitted: HTTP {status_code}")
             return
-        finally:
-            if connection is not None:
-                with contextlib.suppress(Exception):
-                    connection.close()
+
+    if isinstance(last_error, DependencySubmissionError):
+        raise last_error
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
@@ -752,6 +779,17 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 def submit_dependency_snapshot() -> None:
     submit_func = _submit_with_headers
+
+    if requests is None:
+        print(
+            "requests library is required to submit dependency snapshots. Skipping submission.",
+            file=sys.stderr,
+        )
+        if _REQUESTS_IMPORT_ERROR is not None:
+            detail = str(_REQUESTS_IMPORT_ERROR).strip()
+            if detail:
+                print(detail, file=sys.stderr)
+        return
 
     payload = _load_event_payload()
     client_payload: Mapping[str, object] | None = None
