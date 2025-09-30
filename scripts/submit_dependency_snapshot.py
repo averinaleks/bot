@@ -94,6 +94,22 @@ _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
+_PAYLOAD_SHA_KEYS = (
+    "after",
+    "sha",
+    "head_sha",
+    "commit_oid",
+    "commit_sha",
+    "after_sha",
+    "head_commit_oid",
+    "head_commit_sha",
+)
+_PAYLOAD_REF_KEYS = (
+    "ref",
+    "ref_name",
+    "branch",
+    "head_ref",
+)
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
@@ -305,6 +321,17 @@ def _derive_scope(manifest_name: str) -> str:
             return "development"
 
     return "runtime"
+
+
+def _normalise_ref_value(ref: str) -> str:
+    ref = ref.strip()
+    if not ref:
+        return ref
+    if ref.startswith("refs/"):
+        return ref
+    if ref.startswith("heads/") or ref.startswith("tags/"):
+        return f"refs/{ref}"
+    return f"refs/heads/{ref}"
 
 
 class ResolvedDependency(TypedDict):
@@ -799,25 +826,27 @@ def submit_dependency_snapshot() -> None:
         if client_payload is not None:
             if not sha:
                 sha_candidate = _extract_payload_value(
-                    client_payload, "after", "sha", "head_sha"
+                    client_payload, *_PAYLOAD_SHA_KEYS
                 )
                 if sha_candidate:
                     sha = sha_candidate
                     payload_used = True
             if not ref:
-                ref_candidate = _extract_payload_value(client_payload, "ref")
+                ref_candidate = _extract_payload_value(
+                    client_payload, *_PAYLOAD_REF_KEYS
+                )
                 if ref_candidate:
-                    ref = ref_candidate
+                    ref = _normalise_ref_value(ref_candidate)
                     payload_used = True
         if not sha and isinstance(payload, Mapping):
-            sha_candidate = _extract_payload_value(payload, "after", "sha", "head_sha")
+            sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
             if sha_candidate:
                 sha = sha_candidate
                 payload_used = True
         if not ref and isinstance(payload, Mapping):
-            ref_candidate = _extract_payload_value(payload, "ref")
+            ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
             if ref_candidate:
-                ref = ref_candidate
+                ref = _normalise_ref_value(ref_candidate)
                 payload_used = True
 
     if not sha:

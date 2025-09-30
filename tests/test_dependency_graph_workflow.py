@@ -62,8 +62,14 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
 
     assert "github.event.client_payload.before" in workflow
     assert "github.event.client_payload.base_sha" in workflow
+    assert "github.event.client_payload.before_sha" in workflow
+    assert "github.event.client_payload.previous_sha" in workflow
+    assert "github.event.client_payload.previous_oid" in workflow
     assert "github.event.client_payload.head_sha" in workflow
     assert "github.event.client_payload.after" in workflow
+    assert "github.event.client_payload.after_sha" in workflow
+    assert "github.event.client_payload.commit_oid" in workflow
+    assert "github.event.client_payload.commit_sha" in workflow
     assert "github.event.client_payload.sha" in workflow
 
 
