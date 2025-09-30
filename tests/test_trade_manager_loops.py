@@ -211,8 +211,8 @@ async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
 
         return _runner
 
-    monkeypatch.setattr(tm, 'monitor_performance', failing_task)
-    monkeypatch.setattr(tm, 'manage_positions', make_long_task(0))
+    monkeypatch.setattr(tm, 'monitor_performance', make_long_task(0))
+    monkeypatch.setattr(tm, 'manage_positions', failing_task)
     monkeypatch.setattr(tm, 'ranked_signal_loop', make_long_task(1))
 
     run_task = asyncio.create_task(tm.run())
@@ -224,6 +224,57 @@ async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
 
     for event in cancel_events:
         await asyncio.wait_for(event.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_run_restarts_non_critical_task(monkeypatch, caplog):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    restart_count = 0
+    stop_event = asyncio.Event()
+    messages: list[str] = []
+
+    async def aux_task():
+        nonlocal restart_count
+        restart_count += 1
+        if restart_count == 1:
+            raise RuntimeError('aux failure')
+        await stop_event.wait()
+
+    async def stable_task():
+        while not stop_event.is_set():
+            await asyncio.sleep(0.01)
+
+    async def fake_send(message):
+        messages.append(message)
+
+    tm.telegram_logger.send_telegram_message = fake_send
+
+    monkeypatch.setattr(tm, 'monitor_performance', aux_task)
+    monkeypatch.setattr(tm, 'manage_positions', stable_task)
+    monkeypatch.setattr(tm, 'ranked_signal_loop', stable_task)
+
+    caplog.set_level(logging.ERROR)
+
+    run_task = asyncio.create_task(tm.run())
+
+    for _ in range(100):
+        if restart_count >= 2:
+            break
+        await asyncio.sleep(0.05)
+    else:
+        raise AssertionError('Auxiliary task was not restarted')
+
+    assert any(
+        'Некритичная задача monitor_performance завершилась с ошибкой' in record.message
+        for record in caplog.records
+    )
+    assert messages and 'monitor_performance' in messages[0]
+
+    stop_event.set()
+    await tm.stop()
+    await asyncio.wait_for(run_task, timeout=1)
 
 
 @pytest.mark.asyncio

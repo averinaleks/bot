@@ -14,7 +14,8 @@ import json
 import logging
 import re
 import time
-from typing import Any, Awaitable, Dict, Optional, Tuple, TYPE_CHECKING, cast
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, TYPE_CHECKING, cast
 import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
@@ -131,6 +132,16 @@ import multiprocessing as mp  # noqa: E402
 
 class TradeManagerTaskError(RuntimeError):
     """Raised when one of the TradeManager background tasks fails."""
+
+
+@dataclass(frozen=True)
+class _TaskSpec:
+    """Описание фоновой задачи TradeManager."""
+
+    name: str
+    factory: Callable[[], Awaitable[Any]]
+    critical: bool
+    restart: bool = False
 
 
 def setup_multiprocessing() -> None:
@@ -1971,26 +1982,84 @@ class TradeManager:
                 )
                 await asyncio.sleep(1)
 
+    async def _notify_auxiliary_failure(self, spec: _TaskSpec, exc: Exception) -> None:
+        message = f"⚠️ Task {spec.name} failed: {exc}"
+        try:
+            await self.telegram_logger.send_telegram_message(message)
+        except Exception as send_exc:  # pragma: no cover - defensive logging
+            logger.debug(
+                "Не удалось отправить уведомление Telegram о сбое задачи %s: %s",
+                spec.name,
+                send_exc,
+            )
+
+    async def _run_background_task(self, spec: _TaskSpec) -> None:
+        base_delay = 0.1
+        max_delay = 30.0
+        delay = base_delay
+        while True:
+            try:
+                await spec.factory()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if spec.critical or not spec.restart:
+                    raise
+                logger.exception(
+                    "Некритичная задача %s завершилась с ошибкой: %s",
+                    spec.name,
+                    exc,
+                )
+                await self._notify_auxiliary_failure(spec, exc)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, max_delay)
+                continue
+            else:
+                if not spec.restart:
+                    break
+                delay = base_delay
+                await asyncio.sleep(delay)
+
     async def run(self):
         try:
             self.loop = asyncio.get_running_loop()
             self._failure_notified = False
             self._critical_error = False
-            self.tasks = [
-                asyncio.create_task(
-                    self.monitor_performance(), name="monitor_performance"
+            specs = [
+                _TaskSpec(
+                    name="monitor_performance",
+                    factory=self.monitor_performance,
+                    critical=False,
+                    restart=True,
                 ),
-                asyncio.create_task(self.manage_positions(), name="manage_positions"),
-                asyncio.create_task(self.ranked_signal_loop(), name="ranked_signal_loop"),
+                _TaskSpec(
+                    name="manage_positions",
+                    factory=self.manage_positions,
+                    critical=True,
+                ),
+                _TaskSpec(
+                    name="ranked_signal_loop",
+                    factory=self.ranked_signal_loop,
+                    critical=True,
+                ),
             ]
+            task_map: dict[asyncio.Task[Any], _TaskSpec] = {}
+            self.tasks = []
+            for spec in specs:
+                task = asyncio.create_task(
+                    self._run_background_task(spec), name=spec.name
+                )
+                self.tasks.append(task)
+                task_map[task] = spec
 
-            pending: set[asyncio.Task] = set(self.tasks)
+            pending: set[asyncio.Task[Any]] = set(self.tasks)
             try:
                 while pending:
                     done, pending = await asyncio.wait(
-                        pending, return_when=asyncio.FIRST_EXCEPTION
+                        pending, return_when=asyncio.FIRST_COMPLETED
                     )
                     for finished in done:
+                        spec = task_map.get(finished)
                         try:
                             finished.result()
                         except asyncio.CancelledError:
@@ -2012,6 +2081,22 @@ class TradeManager:
                                     *pending, return_exceptions=True
                                 )
                             raise TradeManagerTaskError(str(exc)) from exc
+                        else:
+                            if spec and spec.critical:
+                                self._failure_notified = True
+                                logger.error(
+                                    "Критическая задача %s завершилась без ошибок, но преждевременно",
+                                    spec.name,
+                                )
+                                for task in pending:
+                                    task.cancel()
+                                if pending:
+                                    await asyncio.gather(
+                                        *pending, return_exceptions=True
+                                    )
+                                raise TradeManagerTaskError(
+                                    f"Task {spec.name} terminated unexpectedly"
+                                )
             finally:
                 await asyncio.gather(*self.tasks, return_exceptions=True)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
