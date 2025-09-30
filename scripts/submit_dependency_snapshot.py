@@ -18,6 +18,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
+from urllib.parse import quote, urlparse
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -30,8 +31,6 @@ REPOSITORY_ROOT = SCRIPT_DIRECTORY.parent
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from urllib.parse import quote, urlparse
-
 if __package__ in {None, ""}:
     # Allow absolute ``scripts`` imports when the module is executed as a
     # script (``python scripts/submit_dependency_snapshot.py``).  Without this
@@ -39,7 +38,7 @@ if __package__ in {None, ""}:
     # ``import scripts`` fail.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.github_paths import resolve_github_path
+from scripts.github_paths import resolve_github_path  # noqa: E402
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
