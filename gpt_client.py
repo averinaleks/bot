@@ -16,7 +16,16 @@ import asyncio
 import threading
 from typing import Any, Coroutine, Mapping
 
-from openai import OpenAI
+try:  # pragma: no cover - import guard is environment dependent
+    from openai import OpenAI
+except ModuleNotFoundError:  # pragma: no cover - exercised implicitly in tests
+    class _MissingOpenAI:
+        """Fallback used when the optional OpenAI dependency is absent."""
+
+        def __init__(self, *args, **kwargs):  # noqa: D401 - behaviour explained below
+            raise RuntimeError("openai package is not installed")
+
+    OpenAI = _MissingOpenAI  # type: ignore[assignment]
 
 # NOTE: httpx is imported for exception types only.
 import httpx
