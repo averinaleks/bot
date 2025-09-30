@@ -19,6 +19,7 @@ from security import (
 
 from .core import fit_scaler, logger, prepare_features, validate_host
 from .storage import JOBLIB_AVAILABLE, _safe_model_file_path, joblib
+from .validation import FeatureValidationError, coerce_feature_vector, coerce_float
 
 api_app = Flask(__name__)
 _model: Any | None = None
@@ -82,6 +83,10 @@ def _load_model() -> None:
 @api_app.route("/train", methods=["POST"])
 def train_route():
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        logger.warning("train_route: payload is not a JSON object")
+        return jsonify({"error": "invalid training data"}), 400
+
     features, labels = prepare_features(
         data.get("features", []), data.get("labels", [])
     )
@@ -152,17 +157,25 @@ def train_route():
 @api_app.route("/predict", methods=["POST"])
 def predict_route():
     data = request.get_json(force=True)
-    features = data.get("features")
-    if features is None:
-        price_val = float(data.get("price", 0.0))
-        features = [price_val]
-    features = np.array(features, dtype=np.float32)
-    if features.ndim == 0:
-        features = np.array([[features]], dtype=np.float32)
-    elif features.ndim == 1:
-        features = features.reshape(1, -1)
-    else:
-        features = features.reshape(1, -1)
+    if not isinstance(data, dict):
+        logger.warning("predict_route: payload is not a JSON object")
+        return jsonify({"error": "invalid payload"}), 400
+
+    raw_features = data.get("features")
+    try:
+        if raw_features is None:
+            price_raw = data.get("price")
+            price_val = coerce_float(price_raw if price_raw is not None else 0.0)
+            features = coerce_feature_vector([price_val])
+        else:
+            features = coerce_feature_vector(raw_features)
+    except FeatureValidationError as exc:
+        logger.warning(
+            "predict_route rejected features: %s",
+            sanitize_log_value(str(exc)),
+        )
+        return jsonify({"error": "invalid features"}), 400
+
     price = float(features[0, 0]) if features.size else 0.0
     if _model is None:
         signal = "buy" if price > 0 else None

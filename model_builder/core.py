@@ -32,7 +32,6 @@ from security import (
 )
 from services.logging_utils import sanitize_log_value
 
-from .storage import JOBLIB_AVAILABLE, joblib, _is_within_directory
 
 _utils = require_utils(
     "check_dataframe_empty",
@@ -2050,22 +2049,32 @@ class RLAgent:
 def prepare_features(raw_features, raw_labels):
     """Return validated feature and label arrays.
 
-    ``raw_features`` and ``raw_labels`` are converted to ``np.float32`` arrays and
-    reshaped to 2D. Rows containing NaN or infinite values are removed from both
-    features and labels. A ``ValueError`` is raised if invalid values remain after
-    cleaning.
+    ``raw_features`` and ``raw_labels`` are converted to ``np.float32`` arrays with
+    strict validation of numeric content. Rows containing NaN or infinite values are
+    removed from both features and labels. A ``ValueError`` is raised if invalid
+    values remain after cleaning.
     """
 
-    features = np.array(raw_features, dtype=np.float32)
-    labels = np.array(raw_labels, dtype=np.float32)
-    if features.ndim == 0:
-        features = np.array([[features]], dtype=np.float32)
-    elif features.ndim == 1:
-        features = features.reshape(-1, 1)
-    else:
-        features = features.reshape(len(features), -1)
-    if features.size == 0 or len(features) != len(labels):
+    try:
+        features = coerce_feature_matrix(
+            raw_features,
+            max_rows=MAX_SAMPLES,
+            max_features=MAX_FEATURES_PER_SAMPLE,
+        )
+    except FeatureValidationError:
         return np.empty((0, 0), dtype=np.float32), np.empty(0, dtype=np.float32)
+
+    if features.size == 0:
+        return np.empty((0, 0), dtype=np.float32), np.empty(0, dtype=np.float32)
+
+    try:
+        labels = coerce_label_vector(raw_labels, max_rows=len(features))
+    except FeatureValidationError:
+        return np.empty((0, 0), dtype=np.float32), np.empty(0, dtype=np.float32)
+
+    if len(features) != len(labels):
+        return np.empty((0, 0), dtype=np.float32), np.empty(0, dtype=np.float32)
+
     df = pd.DataFrame(features)
     mask = pd.isna(df) | ~np.isfinite(df)
     if mask.any().any():
