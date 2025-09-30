@@ -1,8 +1,19 @@
 import os
+import shutil
 import subprocess  # nosec B404
 from unittest.mock import MagicMock, call
 
 import pytest
+
+
+DOCKER_EXECUTABLE = shutil.which("docker") or "/usr/bin/docker"
+
+
+def _run_docker(*args: str, check: bool = True, **kwargs):
+    """Запуск docker с абсолютным путём для проверки вызовов."""
+
+    command = [DOCKER_EXECUTABLE, *args]
+    return subprocess.run(command, check=check, **kwargs)  # nosec B603
 
 
 @pytest.fixture
@@ -23,21 +34,29 @@ def test_build_and_push(tmp_path, docker_env, run_mock):
     dockerfile.write_text("FROM alpine:3.18\nRUN echo test > /test.txt\n")
     image = f"{os.environ['DOCKERHUB_USERNAME']}/bot-test-image:latest"
 
-    # Bandit: subprocess calls are patched to MagicMock during the test.
-    subprocess.run(["docker", "build", "-t", image, str(tmp_path)], check=True)  # nosec
-    subprocess.run(  # nosec
-        ["docker", "login", "-u", os.environ["DOCKERHUB_USERNAME"], "--password-stdin"],
+    # Bandit note - subprocess calls are patched to MagicMock during the test.
+    _run_docker("build", "-t", image, str(tmp_path))
+    _run_docker(
+        "login",
+        "-u",
+        os.environ["DOCKERHUB_USERNAME"],
+        "--password-stdin",
         input=os.environ["DOCKERHUB_TOKEN"].encode(),
-        check=True,
     )
-    subprocess.run(["docker", "push", image], check=True)  # nosec
+    _run_docker("push", image)
 
     assert run_mock.call_args_list == [
-        call(["docker", "build", "-t", image, str(tmp_path)], check=True),
+        call([DOCKER_EXECUTABLE, "build", "-t", image, str(tmp_path)], check=True),
         call(
-            ["docker", "login", "-u", os.environ["DOCKERHUB_USERNAME"], "--password-stdin"],
+            [
+                DOCKER_EXECUTABLE,
+                "login",
+                "-u",
+                os.environ["DOCKERHUB_USERNAME"],
+                "--password-stdin",
+            ],
             input=os.environ["DOCKERHUB_TOKEN"].encode(),
             check=True,
         ),
-        call(["docker", "push", image], check=True),
+        call([DOCKER_EXECUTABLE, "push", image], check=True),
     ]
