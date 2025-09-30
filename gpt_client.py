@@ -14,9 +14,21 @@ from urllib.parse import urlparse, urljoin
 from ipaddress import ip_address
 import asyncio
 import threading
-from typing import Any, Coroutine, Mapping
+import importlib
+import importlib.util
+from typing import Any, Coroutine, Mapping, TYPE_CHECKING
 
-from openai import OpenAI
+if TYPE_CHECKING:  # pragma: no cover - import for typing only
+    from openai import OpenAI as OpenAIType  # noqa: F401
+else:
+    OpenAIType = Any
+
+_openai_spec = importlib.util.find_spec("openai")
+if _openai_spec is not None:
+    _openai_module = importlib.import_module("openai")
+    OpenAI: OpenAIType | None = getattr(_openai_module, "OpenAI", None)
+else:
+    OpenAI = None
 
 # NOTE: httpx is imported for exception types only.
 import httpx
@@ -89,6 +101,8 @@ def _parse_timeout(raw_timeout: str | None) -> float:
 def _should_use_openai(api_url: str | None) -> bool:
     """Return ``True`` when the OpenAI client should service requests."""
 
+    if OpenAI is None:
+        return False
     if OFFLINE_MODE:
         return False
     if not api_url:
@@ -152,6 +166,10 @@ def _serialise_openai_response(response: Any) -> bytes:
 def _query_openai(prompt: str, api_url: str | None) -> str:
     """Send *prompt* to the OpenAI API and return the first completion text."""
 
+    if OpenAI is None:
+        raise GPTClientConfigurationError(
+            "OpenAI client support is not available; install the 'openai' package"
+        )
     timeout = _parse_timeout(os.getenv("GPT_OSS_TIMEOUT"))
     model_name = os.getenv("OPENAI_MODEL") or os.getenv("GPT_MODEL") or "gpt-4o-mini"
     client_kwargs: dict[str, Any] = {"timeout": timeout}
@@ -203,6 +221,10 @@ def _query_openai(prompt: str, api_url: str | None) -> str:
 
 class GPTClientError(Exception):
     """Base exception for GPT client errors."""
+
+
+class GPTClientConfigurationError(GPTClientError):
+    """Raised when GPT client configuration is invalid."""
 
 
 class GPTClientNetworkError(GPTClientError):
