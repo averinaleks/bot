@@ -113,12 +113,25 @@ jobs:
           echo "* SARIF upload failed due to missing permissions." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Trivy report artifact
-        if: ${{ always() && steps.parse_trivy.outputs.sarif_exists == 'true' }}
+        if: >-
+          ${{ always() &&
+              steps.parse_trivy.outputs.sarif_exists == 'true' &&
+              (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Skip artifact upload for forked pull requests
+        if: >-
+          ${{ always() &&
+              steps.parse_trivy.outputs.sarif_exists == 'true' &&
+              github.event_name == 'pull_request' &&
+              github.event.pull_request.head.repo.fork }}
+        run: |
+          echo "::warning::Пропускаем загрузку артефакта Trivy для форк-пулреквеста из-за ограниченных прав."
+          printf '* Загрузка артефакта пропущена: требуется доступ actions:write, недоступный для форк-пулреквестов.\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if Trivy scan failed unexpectedly
         if: ${{ steps.trivy.conclusion == 'failure' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
