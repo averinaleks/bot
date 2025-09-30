@@ -1,10 +1,12 @@
 import os
 import asyncio
 import hmac
+import json
 import logging
 import re
 from contextlib import asynccontextmanager
-from typing import Any, List, Mapping
+from collections.abc import Mapping
+from typing import Any, List
 
 try:  # pragma: no cover - exercised in CI when dependency installed
     from fastapi import FastAPI, HTTPException, Request, Response
@@ -125,11 +127,20 @@ except ImportError as exc:  # pragma: no cover - dependency required
 API_KEYS: set[str] = set()
 
 try:  # pragma: no cover - handled in tests
-    from fastapi_csrf_protect import CsrfProtect, CsrfProtectError
+    from fastapi_csrf_protect import CsrfProtect  # type: ignore[attr-defined]
 except Exception as exc:  # pragma: no cover - dependency required
     raise RuntimeError(
         "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
     ) from exc
+try:  # pragma: no cover - handled in tests
+    from fastapi_csrf_protect import CsrfProtectError  # type: ignore[attr-defined]
+except (ImportError, AttributeError):  # pragma: no cover - export varies by version
+    try:
+        from fastapi_csrf_protect.exceptions import CsrfProtectError  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - dependency required
+        raise RuntimeError(
+            "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+        ) from exc
 
 load_dotenv()
 
@@ -368,6 +379,24 @@ async def enforce_csrf(request: Request, call_next):
         safe_method = sanitize_log_value(request.method)
         safe_url = sanitize_log_value(str(request.url))
         safe_headers = _format_headers_for_log(getattr(request, "headers", None))
+        forbidden_payload = json.dumps({"detail": "CSRF token missing or invalid"})
+
+        def _csrf_error_response() -> Response:
+            response = Response(content=forbidden_payload, status_code=403)
+            try:
+                response.media_type = "application/json"  # type: ignore[assignment]
+            except Exception:  # pragma: no cover - fallback ``Response`` lacks attribute
+                setattr(response, "media_type", "application/json")
+            return response
+
+        cookies = getattr(request, "cookies", {}) or {}
+        header_name = getattr(csrf_protect, "_header_name", "X-CSRF-Token")
+        cookie_name = getattr(csrf_protect, "_cookie_key", "fastapi-csrf-token")
+        header_token = None
+        if hasattr(request, "headers") and request.headers is not None:
+            header_token = request.headers.get(header_name)
+        cookie_token = cookies.get(cookie_name) if isinstance(cookies, Mapping) else None
+        tokens_present = bool(header_token) and bool(cookie_token)
         try:
             await csrf_protect.validate_csrf(request)
         except CsrfProtectError as exc:
@@ -378,7 +407,38 @@ async def enforce_csrf(request: Request, call_next):
                 safe_headers,
                 sanitize_log_value(str(exc)),
             )
-            raise HTTPException(status_code=403, detail="CSRF token missing or invalid") from exc
+            return _csrf_error_response()
+        except Exception as exc:  # pragma: no cover - unexpected library failure
+            logging.exception(
+                "Unexpected CSRF error: method=%s url=%s headers=%s error=%s",
+                safe_method,
+                safe_url,
+                safe_headers,
+                sanitize_log_value(str(exc)),
+            )
+            error_payload = json.dumps({"detail": "Internal Server Error"})
+            response = Response(content=error_payload, status_code=500)
+            try:
+                response.media_type = "application/json"  # type: ignore[assignment]
+            except Exception:  # pragma: no cover - fallback ``Response`` lacks attribute
+                setattr(response, "media_type", "application/json")
+            return response
+        if not tokens_present:
+            missing_parts: list[str] = []
+            if not cookie_token:
+                missing_parts.append("cookie")
+            if not header_token:
+                missing_parts.append("header")
+            logging.warning(
+                "CSRF validation failed: method=%s url=%s headers=%s error=%s",
+                safe_method,
+                safe_url,
+                safe_headers,
+                sanitize_log_value(
+                    f"missing csrf {' and '.join(missing_parts)}"
+                ),
+            )
+            return _csrf_error_response()
     return await call_next(request)
 
 
