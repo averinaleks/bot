@@ -58,6 +58,21 @@ _TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "gptoss"})
 
 
+def _normalise_ip(value: str) -> str:
+    """Return a canonical representation for IPv4 and IPv6 addresses."""
+
+    try:
+        ip_obj = ip_address(value)
+    except ValueError:
+        return value
+
+    # GitHub runners may resolve IPv4 hosts through IPv6-mapped addresses
+    # (``::ffff:127.0.0.1``). Normalising keeps comparison stable.
+    if hasattr(ip_obj, "ipv4_mapped") and ip_obj.ipv4_mapped is not None:
+        return str(ip_obj.ipv4_mapped)
+    return str(ip_obj)
+
+
 def _allow_insecure_url() -> bool:
     """Return True if insecure GPT_OSS_API URLs are explicitly allowed."""
     return os.getenv("ALLOW_INSECURE_GPT_URL") == "1"
@@ -338,11 +353,14 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
         addr_info = socket.getaddrinfo(
             parsed.hostname, None, family=socket.AF_UNSPEC
         )
-        resolved_ips = {info[4][0] for info in addr_info}
+        resolved_ips = {_normalise_ip(info[4][0]) for info in addr_info}
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
             resolution_failed = True
-            resolved_ips = {"127.0.0.1", _TEST_MODE_DNS_FALLBACK}
+            resolved_ips = {
+                _normalise_ip("127.0.0.1"),
+                _TEST_MODE_DNS_FALLBACK,
+            }
         else:
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
@@ -391,6 +409,7 @@ async def _fetch_response(
 ) -> bytes:
     """Resolve hostname, verify IP and return response bytes."""
     skip_ip_verification = False
+    allowed_ips = {_normalise_ip(ip) for ip in allowed_ips}
     allowed_for_check = allowed_ips
     if (
         os.getenv("TEST_MODE") == "1"
@@ -404,7 +423,7 @@ async def _fetch_response(
     try:
         loop = asyncio.get_running_loop()
         current_ips = {
-            info[4][0]
+            _normalise_ip(info[4][0])
             for info in await loop.getaddrinfo(
                 hostname, None, family=socket.AF_UNSPEC
             )
