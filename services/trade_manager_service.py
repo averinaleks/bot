@@ -78,8 +78,30 @@ def init_exchange() -> None:
     exchange = runtime.init()
 
 
-# Expected API token for simple authentication
-API_TOKEN = (server_common.get_api_token() or '').strip()
+# Expected API token for simple authentication.  The service historically read
+# the token during import and stored it in a module level variable.  Tests rely
+# on being able to override the environment at runtime, so we cache the
+# initial value but also re-read it for every request.
+_INITIAL_API_TOKEN = (server_common.get_api_token() or '').strip()
+
+# Backwards compatibility: expose the original module level name so callers or
+# tests that mutate ``API_TOKEN`` continue to work.  The dynamic lookup in
+# ``_expected_api_token`` will honour any runtime override.
+API_TOKEN = _INITIAL_API_TOKEN
+
+
+def _expected_api_token() -> str:
+    """Return the API token configured for the current request."""
+
+    # ``get_api_token`` already trims whitespace and returns ``None`` when the
+    # variable is unset.  When ``None`` is returned we fall back to the value
+    # captured during module import to preserve backwards compatibility with
+    # code that relies on runtime overrides (for example, tests patching the
+    # module attribute directly).
+    token = server_common.get_api_token()
+    if token:
+        return token
+    return API_TOKEN
 
 
 def _authentication_optional() -> bool:
@@ -114,7 +136,7 @@ def _require_api_token() -> ResponseReturnValue | None:
     if request.method != 'POST' and request.path != '/positions':
         return None
 
-    expected = API_TOKEN
+    expected = _expected_api_token()
     if not expected:
         if _authentication_optional():
             return None
