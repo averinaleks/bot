@@ -17,9 +17,13 @@ jobs:
       contents: read
       security-events: write
       actions: write  # required for uploading artifacts such as SARIF reports
-    env:
-      TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
     steps:
+      - name: Configure Trivy cache directory
+        id: trivy_cache
+        run: |
+          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
+          echo "dir=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_OUTPUT"
+
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         # v4
@@ -35,7 +39,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         # v4.3.0
         with:
-          path: ${{ env.TRIVY_CACHE_DIR }}
+          path: ${{ steps.trivy_cache.outputs.dir }}
           key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'Dockerfile*') }}
           restore-keys: |
             ${{ runner.os }}-trivy-db-
@@ -54,7 +58,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           exit-code: '1'
-          cache-dir: ${{ env.TRIVY_CACHE_DIR }}
+          cache-dir: ${{ steps.trivy_cache.outputs.dir }}
 
       - name: Ensure jq is available
         if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
