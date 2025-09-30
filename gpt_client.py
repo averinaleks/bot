@@ -5,18 +5,27 @@ For security reasons, the URL must either use HTTPS or resolve to a local
 or private address (HTTP is allowed only for such addresses).
 """
 
-import logging
-import os
-import json
-import socket
-from enum import Enum
-from urllib.parse import urlparse, urljoin
-from ipaddress import ip_address
 import asyncio
-import threading
 import importlib
 import importlib.util
-from typing import Any, Coroutine, Mapping, TYPE_CHECKING
+import json
+import logging
+import os
+import socket
+import threading
+from enum import Enum
+from ipaddress import ip_address
+from typing import TYPE_CHECKING, Any, Coroutine, Mapping
+from urllib.parse import urljoin, urlparse
+
+import httpx
+
+from bot.config import OFFLINE_MODE
+from bot.pydantic_compat import BaseModel, Field, ValidationError
+from bot.utils import retry
+
+if OFFLINE_MODE:
+    from services.offline import OfflineGPT
 
 if TYPE_CHECKING:  # pragma: no cover - import for typing only
     from openai import OpenAI as OpenAIType  # noqa: F401
@@ -29,18 +38,6 @@ if _openai_spec is not None:
     OpenAI: OpenAIType | None = getattr(_openai_module, "OpenAI", None)
 else:
     OpenAI = None
-
-# NOTE: httpx is imported for exception types only.
-import httpx
-
-from bot.pydantic_compat import BaseModel, Field, ValidationError
-
-from bot.utils import retry
-# Absolute import ensures the project's own configuration module is used
-# instead of any unrelated ``config`` module on the import path.
-from bot.config import OFFLINE_MODE
-if OFFLINE_MODE:
-    from services.offline import OfflineGPT
 
 logger = logging.getLogger("TradingBot")
 

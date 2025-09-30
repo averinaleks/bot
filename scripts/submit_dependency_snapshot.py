@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import importlib
 import json
 import os
 import re
@@ -13,29 +14,30 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, TypedDict
-
-
-# Ensure the repository root is on ``sys.path`` so that sibling modules can be
-# imported when this script is executed directly via ``python
-# scripts/submit_dependency_snapshot.py``.  GitHub Actions invokes the script in
-# this manner and, without the adjustment, Python would attempt to resolve the
-# ``scripts`` package relative to ``scripts/`` instead of the project root.
-SCRIPT_DIRECTORY = Path(__file__).resolve().parent
-REPOSITORY_ROOT = SCRIPT_DIRECTORY.parent
-if str(REPOSITORY_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPOSITORY_ROOT))
-
+from typing import Any, Callable, Dict, Iterable, Mapping, TypedDict
 from urllib.parse import quote, urlparse
 
-if __package__ in {None, ""}:
-    # Allow absolute ``scripts`` imports when the module is executed as a
-    # script (``python scripts/submit_dependency_snapshot.py``).  Without this
-    # adjustment only the ``scripts`` directory is on ``sys.path`` which makes
-    # ``import scripts`` fail.
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.github_paths import resolve_github_path
+def _import_resolve_github_path() -> Callable[[str], Path]:
+    """Return the :func:`resolve_github_path` helper, importing on demand."""
+
+    module_name = "scripts.github_paths"
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:
+        if __package__ not in {None, ""}:
+            raise
+        repository_root = Path(__file__).resolve().parent.parent
+        if str(repository_root) not in sys.path:
+            sys.path.insert(0, str(repository_root))
+        module = importlib.import_module(module_name)
+    return module.resolve_github_path
+
+
+resolve_github_path = _import_resolve_github_path()
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+REPOSITORY_ROOT = SCRIPT_DIRECTORY.parent
 
 _REQUESTS_IMPORT_ERROR: ImportError | None = None
 
