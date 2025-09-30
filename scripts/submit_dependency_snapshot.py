@@ -15,6 +15,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
 
+
+# Ensure the repository root is on ``sys.path`` so that sibling modules can be
+# imported when this script is executed directly via ``python
+# scripts/submit_dependency_snapshot.py``.  GitHub Actions invokes the script in
+# this manner and, without the adjustment, Python would attempt to resolve the
+# ``scripts`` package relative to ``scripts/`` instead of the project root.
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+REPOSITORY_ROOT = SCRIPT_DIRECTORY.parent
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
 from urllib.parse import quote, urlparse
 
 from scripts.github_paths import resolve_github_path
