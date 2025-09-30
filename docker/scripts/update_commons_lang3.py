@@ -51,7 +51,18 @@ def update_commons_lang3() -> None:
         adapter = requests.adapters.HTTPAdapter()
         session.mount("https://", adapter)
 
-        with session.get(COMMONS_LANG3_URL, stream=True, timeout=30) as response:
+        with session.get(
+            COMMONS_LANG3_URL,
+            stream=True,
+            timeout=30,
+            allow_redirects=False,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                location = response.headers.get("Location", "")
+                raise RuntimeError(
+                    "commons-lang3 download unexpectedly redirected"
+                    + (f" to {location}" if location else "")
+                )
             response.raise_for_status()
             with destination.open("wb") as fh:
                 for chunk in response.iter_content(chunk_size=8192):

@@ -89,6 +89,7 @@ def get_requests_session(
     @wraps(original)
     def request(method: str, url: str, **kwargs):
         kwargs.setdefault("timeout", timeout)
+        kwargs.setdefault("allow_redirects", False)
         return original(method, url, **kwargs)
 
     session.request = request  # type: ignore[assignment]

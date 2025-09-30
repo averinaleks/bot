@@ -171,6 +171,12 @@ def check_endpoints(
             while attempts_left:
                 try:
                     response = session.get(url)
+                    if 300 <= response.status_code < 400:
+                        location = response.headers.get("Location", "")
+                        raise requests.HTTPError(
+                            f"unexpected redirect {response.status_code} to {location}",
+                            response=response,
+                        )
                     response.raise_for_status()
                 except requests.RequestException as exc:
                     attempts_left -= 1
