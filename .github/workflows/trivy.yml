@@ -100,6 +100,19 @@ jobs:
             printf '### Trivy scan summary\n\n* High/Critical findings: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Detect forked pull requests
+        id: pr_context
+        if: ${{ always() }}
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = 'pull_request' ] && [ "$IS_FORK_PR" = 'true' ]; then
+            echo "is_fork_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Trivy scan results to GitHub Security tab
         id: upload_trivy_sarif
         if: ${{ always() && github.event_name != 'pull_request' && steps.parse_trivy.outputs.sarif_exists == 'true' }}
@@ -120,7 +133,7 @@ jobs:
         if: >-
           ${{ always() &&
               steps.parse_trivy.outputs.sarif_exists == 'true' &&
-              (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+              steps.pr_context.outputs.is_fork_pr == 'false' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
         with:
@@ -132,7 +145,7 @@ jobs:
           ${{ always() &&
               steps.parse_trivy.outputs.sarif_exists == 'true' &&
               github.event_name == 'pull_request' &&
-              github.event.pull_request.head.repo.fork }}
+              steps.pr_context.outputs.is_fork_pr == 'true' }}
         run: |
           echo "::warning::Пропускаем загрузку артефакта Trivy для форк-пулреквеста из-за ограниченных прав."
           echo '* Загрузка артефакта пропущена: требуется доступ actions:write, недоступный для форк-пулреквестов.' >> "$GITHUB_STEP_SUMMARY"
