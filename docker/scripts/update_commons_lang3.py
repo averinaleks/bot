@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
-from urllib.request import urlopen
+import ssl
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import HTTPSHandler, build_opener
 
 
 COMMONS_LANG3_URL = (
@@ -32,7 +34,23 @@ def update_commons_lang3() -> None:
     destination = jars_dir / "commons-lang3-3.18.0.jar"
     hasher = hashlib.sha256()
 
-    with urlopen(COMMONS_LANG3_URL) as response, destination.open("wb") as fh:
+    parsed_url = urlparse(COMMONS_LANG3_URL)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise RuntimeError(
+            "commons-lang3 download URL must use HTTPS and include a hostname"
+        )
+
+    context = ssl.create_default_context()
+    opener = build_opener(HTTPSHandler(context=context))
+
+    with opener.open(COMMONS_LANG3_URL) as response, destination.open("wb") as fh:
+        final_url = response.geturl()
+        final_parsed = urlparse(final_url)
+        if final_parsed.scheme != "https" or final_parsed.netloc != parsed_url.netloc:
+            destination.unlink(missing_ok=True)
+            raise RuntimeError(
+                "commons-lang3 download redirected to an unexpected host or scheme"
+            )
         for chunk in iter(lambda: response.read(8192), b""):
             fh.write(chunk)
             hasher.update(chunk)
