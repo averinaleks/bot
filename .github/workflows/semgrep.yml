@@ -46,8 +46,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "semgrep>=1.52.0"
       - name: Run Semgrep
+        id: run_semgrep
         env:
           SEMGREP_SEND_METRICS: "off"
+        continue-on-error: true
         run: |
           semgrep --config p/ci --error --sarif --output semgrep.sarif
       - name: Ensure SARIF report exists
@@ -67,3 +69,12 @@ jobs:
         if: steps.sarif_check.outputs.upload == 'true'
         with:
           sarif_file: semgrep.sarif
+      - name: Fail on Semgrep findings
+        if: steps.run_semgrep.outcome == 'failure'
+        run: |
+          if [ "${{ steps.sarif_check.outputs.upload }}" = "true" ]; then
+            echo "Semgrep обнаружил проблемы."
+            exit 1
+          fi
+          echo "Semgrep завершился с ошибкой без результатов."
+          exit 1
