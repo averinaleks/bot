@@ -2,15 +2,11 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
-import contextlib
 import fnmatch
-import http.client
 import json
 import os
 import re
 import shutil
-import socket
-import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -39,6 +35,14 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.github_paths import resolve_github_path  # noqa: E402
+
+try:  # noqa: E402 - optional dependency loaded lazily for CI environments
+    import requests  # type: ignore
+except Exception as exc:  # pragma: no cover - dependency missing in tests
+    requests = None  # type: ignore[assignment]
+    _REQUESTS_IMPORT_ERROR: Exception | None = exc
+else:
+    _REQUESTS_IMPORT_ERROR = None
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -595,22 +599,30 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
-    last_error: Exception | None = None
+    _https_components(url)
+
+    if requests is None:
+        base_error = _REQUESTS_IMPORT_ERROR or ImportError(
+            "requests package is required"
+        )
+        raise DependencySubmissionError(
+            None,
+            "requests package is required for dependency snapshot submission",
+            base_error,
+        ) from base_error
+
+    last_error: Exception | DependencySubmissionError | None = None
 
     for attempt in range(1, 4):
-        connection: http.client.HTTPSConnection | None = None
         try:
-            context = ssl.create_default_context()
-            connection = http.client.HTTPSConnection(
-                host,
-                port,
-                timeout=30,
-                context=context,
-            )
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-        except (socket.timeout, TimeoutError) as exc:
+            with requests.Session() as session:  # type: ignore[attr-defined]
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                )
+        except requests.exceptions.Timeout as exc:  # type: ignore[attr-defined]
             message = str(exc) or "timed out"
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -623,7 +635,7 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 continue
             last_error = exc
             break
-        except (http.client.HTTPException, OSError, socket.error) as exc:
+        except requests.exceptions.RequestException as exc:  # type: ignore[attr-defined]
             message = str(exc).strip() or exc.__class__.__name__
             if attempt < 3:
                 wait_time = 2 ** (attempt - 1)
@@ -637,14 +649,13 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             last_error = exc
             break
         else:
-            status_code = int(response.status)
+            status_code = int(response.status_code)
             reason = response.reason or ""
-            payload = response.read()
-            headers_map = {key: value for key, value in response.getheaders()}
-            redirect_location = headers_map.get("Location", "")
+            redirect_location = response.headers.get("Location", "")
+            payload = response.content or b""
             response.close()
 
-            if status_code >= 300 and status_code < 400:
+            if 300 <= status_code < 400:
                 target = redirect_location or reason or "redirect"
                 print(
                     "Failed to submit dependency snapshot: "
@@ -682,14 +693,12 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
             print(f"Dependency snapshot submitted: HTTP {status_code}")
             return
-        finally:
-            if connection is not None:
-                with contextlib.suppress(Exception):
-                    connection.close()
 
     if last_error is not None:
+        if isinstance(last_error, DependencySubmissionError):
+            raise last_error
         message = str(last_error).strip() or last_error.__class__.__name__
-        raise DependencySubmissionError(None, message, last_error)
+        raise DependencySubmissionError(None, message, last_error) from last_error
 
 
 _ORIGINAL_SUBMIT_WITH_HEADERS = _submit_with_headers
@@ -752,6 +761,19 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 def submit_dependency_snapshot() -> None:
     submit_func = _submit_with_headers
+
+    if requests is None:
+        detail = ""
+        if _REQUESTS_IMPORT_ERROR is not None:
+            error_message = str(_REQUESTS_IMPORT_ERROR).strip()
+            if error_message:
+                detail = f" ({error_message})"
+        print(
+            "Dependency snapshot submission requires the requests package"
+            f"{detail}. Skipping submission.",
+            file=sys.stderr,
+        )
+        return
 
     payload = _load_event_payload()
     client_payload: Mapping[str, object] | None = None
