@@ -2,15 +2,11 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
-import contextlib
 import fnmatch
-import http.client
 import json
 import os
 import re
 import shutil
-import socket
-import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -19,6 +15,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
 from urllib.parse import quote, urlparse
+
+
+try:
+    import requests  # type: ignore
+except Exception as exc:  # pragma: no cover - optional dependency
+    requests = None
+    _REQUESTS_IMPORT_ERROR: Exception | None = exc
+else:
+    _REQUESTS_IMPORT_ERROR: Exception | None = None
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -595,56 +600,66 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
+    if requests is None:
+        error = _REQUESTS_IMPORT_ERROR or ImportError(
+            "requests package is not installed"
+        )
+        message = (
+            "Dependency snapshot submission requires the requests package to be "
+            "installed."
+        )
+        raise DependencySubmissionError(None, message, error)
+
     last_error: Exception | None = None
+    exceptions_module = getattr(requests, "exceptions", None)
+    timeout_exc = getattr(exceptions_module, "Timeout", tuple()) if exceptions_module else ()
+    request_exc = (
+        getattr(exceptions_module, "RequestException", tuple())
+        if exceptions_module
+        else ()
+    )
 
     for attempt in range(1, 4):
-        connection: http.client.HTTPSConnection | None = None
         try:
-            context = ssl.create_default_context()
-            connection = http.client.HTTPSConnection(
-                host,
-                port,
-                timeout=30,
-                context=context,
-            )
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-        except (socket.timeout, TimeoutError) as exc:
-            message = str(exc) or "timed out"
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
+            with requests.Session() as session:  # type: ignore[attr-defined]
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
                 )
-                time.sleep(wait_time)
-                last_error = exc
-                continue
-            last_error = exc
-            break
-        except (http.client.HTTPException, OSError, socket.error) as exc:
+        except Exception as exc:  # pragma: no cover - narrow cases handled below
             message = str(exc).strip() or exc.__class__.__name__
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network error '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
-                last_error = exc
-                continue
+            if timeout_exc and isinstance(exc, timeout_exc):
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
+            elif request_exc and isinstance(exc, request_exc):
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network error '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
+
             last_error = exc
             break
         else:
-            status_code = int(response.status)
+            status_code = int(response.status_code)
             reason = response.reason or ""
-            payload = response.read()
-            headers_map = {key: value for key, value in response.getheaders()}
-            redirect_location = headers_map.get("Location", "")
-            response.close()
+            payload = response.content or b""
+            redirect_location = response.headers.get("Location", "")
 
-            if status_code >= 300 and status_code < 400:
+            if 300 <= status_code < 400:
                 target = redirect_location or reason or "redirect"
                 print(
                     "Failed to submit dependency snapshot: "
@@ -682,10 +697,6 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
             print(f"Dependency snapshot submitted: HTTP {status_code}")
             return
-        finally:
-            if connection is not None:
-                with contextlib.suppress(Exception):
-                    connection.close()
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
@@ -752,6 +763,18 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 def submit_dependency_snapshot() -> None:
     submit_func = _submit_with_headers
+
+    if requests is None:
+        error = _REQUESTS_IMPORT_ERROR
+        detail = "requests package is not installed"
+        if error:
+            detail = str(error).strip() or detail
+        print(f"Skipping submission: requests dependency is missing ({detail}).", file=sys.stderr)
+        print(
+            "Dependency snapshot submission skipped из-за отсутствующей библиотеки requests.",
+            file=sys.stderr,
+        )
+        return
 
     payload = _load_event_payload()
     client_payload: Mapping[str, object] | None = None

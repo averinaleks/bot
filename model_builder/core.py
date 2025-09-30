@@ -22,8 +22,10 @@ from bot.config import BotConfig
 from bot.ray_compat import IS_RAY_STUB, ray
 from bot.utils_loader import require_utils
 from models.architectures import KERAS_FRAMEWORKS, create_model
+from model_builder.storage import JOBLIB_AVAILABLE, joblib
 from security import (
     ArtifactDeserializationError,
+    _is_within_directory,
     harden_mlflow,
     safe_joblib_load,
     set_model_dir,
