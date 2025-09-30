@@ -30,9 +30,26 @@ jobs:
         id: detect
         env:
           BEFORE: >-
-            ${{ github.event.before || github.event.client_payload.before || github.event.client_payload.base_sha || '' }}
+            ${{
+              github.event.before ||
+              github.event.client_payload.before ||
+              github.event.client_payload.base_sha ||
+              github.event.client_payload.before_sha ||
+              github.event.client_payload.previous_sha ||
+              github.event.client_payload.previous_oid ||
+              ''
+            }}
           AFTER: >-
-            ${{ github.sha || github.event.client_payload.after || github.event.client_payload.head_sha || github.event.client_payload.sha || '' }}
+            ${{
+              github.sha ||
+              github.event.client_payload.after ||
+              github.event.client_payload.head_sha ||
+              github.event.client_payload.commit_oid ||
+              github.event.client_payload.commit_sha ||
+              github.event.client_payload.after_sha ||
+              github.event.client_payload.sha ||
+              ''
+            }}
         run: |
           python <<'PY'
           from __future__ import annotations
