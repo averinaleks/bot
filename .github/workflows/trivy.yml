@@ -131,7 +131,7 @@ jobs:
               github.event.pull_request.head.repo.fork }}
         run: |
           echo "::warning::Пропускаем загрузку артефакта Trivy для форк-пулреквеста из-за ограниченных прав."
-          printf '* Загрузка артефакта пропущена: требуется доступ actions:write, недоступный для форк-пулреквестов.\n' >> "$GITHUB_STEP_SUMMARY"
+          echo '* Загрузка артефакта пропущена: требуется доступ actions:write, недоступный для форк-пулреквестов.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if Trivy scan failed unexpectedly
         if: ${{ steps.trivy.conclusion == 'failure' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
