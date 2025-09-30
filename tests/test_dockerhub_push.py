@@ -1,6 +1,6 @@
 import os
 import shutil
-import subprocess  # nosec B404
+import subprocess  # nosec: B404
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -13,7 +13,7 @@ def _run_docker(*args: str, check: bool = True, **kwargs):
     """Запуск docker с абсолютным путём для проверки вызовов."""
 
     command = [DOCKER_EXECUTABLE, *args]
-    return subprocess.run(command, check=check, **kwargs)  # nosec B603
+    return subprocess.run(command, check=check, **kwargs)  # nosec: B603
 
 
 @pytest.fixture
