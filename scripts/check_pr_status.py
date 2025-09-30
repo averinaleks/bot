@@ -17,9 +17,16 @@ import re
 import ssl
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, Request, build_opener
+
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
 
 from scripts.github_paths import resolve_github_path
 

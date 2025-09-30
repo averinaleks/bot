@@ -29,6 +29,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
+
 from scripts.github_paths import resolve_github_path
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
