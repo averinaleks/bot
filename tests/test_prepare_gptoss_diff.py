@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess  # nosec B404
+import subprocess  # nosec: B404
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -22,7 +22,7 @@ def _run_git(*args: str, check: bool = True, **kwargs):
     """Запустить git с абсолютным путём до исполняемого файла."""
 
     command = [GIT_EXECUTABLE, *args]
-    return subprocess.run(command, check=check, **kwargs)  # nosec B603
+    return subprocess.run(command, check=check, **kwargs)  # nosec: B603
 
 
 @pytest.fixture()
