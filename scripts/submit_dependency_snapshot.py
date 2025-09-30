@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
-import http.client
 import json
 import os
 import re
 import shutil
-import socket
-import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -19,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, TypedDict
 from urllib.parse import quote, urlparse
+
+import requests
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -595,97 +594,95 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
-    host, port, path = _https_components(url)
+    _https_components(url)
     last_error: Exception | None = None
 
-    for attempt in range(1, 4):
-        connection: http.client.HTTPSConnection | None = None
-        try:
-            context = ssl.create_default_context()
-            connection = http.client.HTTPSConnection(
-                host,
-                port,
-                timeout=30,
-                context=context,
-            )
-            connection.request("POST", path, body=body, headers=headers)
-            response = connection.getresponse()
-        except (socket.timeout, TimeoutError) as exc:
-            message = str(exc) or "timed out"
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
+    with requests.Session() as session:
+        for attempt in range(1, 4):
+            response: requests.Response | None = None
+            try:
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
                 )
-                time.sleep(wait_time)
+            except requests.exceptions.Timeout as exc:
+                message = str(exc) or "timed out"
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
                 last_error = exc
-                continue
-            last_error = exc
-            break
-        except (http.client.HTTPException, OSError, socket.error) as exc:
-            message = str(exc).strip() or exc.__class__.__name__
-            if attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Network error '{message}'. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
+                break
+            except requests.exceptions.RequestException as exc:
+                message = str(exc).strip() or exc.__class__.__name__
+                if attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Network error '{message}'. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = exc
+                    continue
                 last_error = exc
-                continue
-            last_error = exc
-            break
-        else:
-            status_code = int(response.status)
-            reason = response.reason or ""
-            payload = response.read()
-            headers_map = {key: value for key, value in response.getheaders()}
-            redirect_location = headers_map.get("Location", "")
-            response.close()
+                break
+            else:
+                status_code = int(response.status_code)
+                reason = response.reason or ""
+                payload = response.content
+                headers_map = dict(response.headers)
+                redirect_location = headers_map.get("Location", "")
 
-            if status_code >= 300 and status_code < 400:
-                target = redirect_location or reason or "redirect"
-                print(
-                    "Failed to submit dependency snapshot: "
-                    f"HTTP {status_code}: unexpected redirect to {target}",
-                    file=sys.stderr,
-                )
-                raise DependencySubmissionError(
-                    status_code,
-                    f"Unexpected redirect during dependency snapshot submission ({status_code})",
-                )
+                if status_code >= 300 and status_code < 400:
+                    target = redirect_location or reason or "redirect"
+                    print(
+                        "Failed to submit dependency snapshot: "
+                        f"HTTP {status_code}: unexpected redirect to {target}",
+                        file=sys.stderr,
+                    )
+                    raise DependencySubmissionError(
+                        status_code,
+                        f"Unexpected redirect during dependency snapshot submission ({status_code})",
+                    )
 
-            if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
-                wait_time = 2 ** (attempt - 1)
-                print(
-                    f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
-                    file=sys.stderr,
-                )
-                time.sleep(wait_time)
-                last_error = DependencySubmissionError(
-                    status_code,
-                    f"Retryable HTTP {status_code}: {reason}",
-                )
-                continue
+                if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
+                    wait_time = 2 ** (attempt - 1)
+                    print(
+                        f"Received retryable error HTTP {status_code}. Retrying in {wait_time} s...",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait_time)
+                    last_error = DependencySubmissionError(
+                        status_code,
+                        f"Retryable HTTP {status_code}: {reason}",
+                    )
+                    continue
 
-            if status_code >= 400:
-                message = payload.decode(errors="replace") or reason
-                print(
-                    f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
-                    file=sys.stderr,
-                )
-                raise DependencySubmissionError(
-                    status_code,
-                    f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
-                )
+                if status_code >= 400:
+                    message = payload.decode(errors="replace") or reason
+                    print(
+                        f"Failed to submit dependency snapshot: HTTP {status_code}: {message}",
+                        file=sys.stderr,
+                    )
+                    raise DependencySubmissionError(
+                        status_code,
+                        f"GitHub отклонил snapshot зависимостей: HTTP {status_code}: {message}",
+                    )
 
-            print(f"Dependency snapshot submitted: HTTP {status_code}")
-            return
-        finally:
-            if connection is not None:
-                with contextlib.suppress(Exception):
-                    connection.close()
+                print(f"Dependency snapshot submitted: HTTP {status_code}")
+                return
+            finally:
+                if response is not None:
+                    with contextlib.suppress(Exception):
+                        response.close()
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
