@@ -68,3 +68,33 @@ def test_submit_with_headers_requires_requests(monkeypatch):
     message = str(excinfo.value)
     assert "requests" in message
     assert excinfo.value.__cause__ is missing_error
+
+
+def test_submit_with_headers_rejects_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import submit_dependency_snapshot as snapshot
+
+    class DummyResponse:
+        status_code = 302
+        reason = "Found"
+        headers = {"Location": "https://example.com/other"}
+        content = b""
+
+        def close(self) -> None:
+            pass
+
+    class DummySession:
+        def __enter__(self) -> "DummySession":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, *_args: object, **_kwargs: object) -> DummyResponse:
+            return DummyResponse()
+
+    monkeypatch.setattr(snapshot.requests, "Session", lambda: DummySession())
+
+    with pytest.raises(snapshot.DependencySubmissionError) as excinfo:
+        snapshot._submit_with_headers("https://example.com/api", b"{}", {})
+
+    assert excinfo.value.status_code == 302

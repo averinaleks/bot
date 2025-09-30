@@ -687,7 +687,20 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             status_code = int(response.status_code)
             reason = response.reason or ""
             payload = response.content
+            redirect_location = response.headers.get("Location", "")
             response.close()
+
+            if 300 <= status_code < 400:
+                target = redirect_location or reason or "redirect"
+                print(
+                    "Failed to submit dependency snapshot: "
+                    f"HTTP {status_code}: unexpected redirect to {target}",
+                    file=sys.stderr,
+                )
+                raise DependencySubmissionError(
+                    status_code,
+                    f"Unexpected redirect during dependency snapshot submission ({status_code})",
+                )
 
             if status_code in _RETRYABLE_STATUS_CODES and attempt < 3:
                 wait_time = 2 ** (attempt - 1)

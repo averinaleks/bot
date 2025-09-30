@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Mapping
 
 import pytest
 
@@ -8,8 +8,11 @@ import scripts.health_check as hc
 
 
 class DummyResponse:
-    def __init__(self, status_code: int = 200) -> None:
+    def __init__(
+        self, status_code: int = 200, headers: Mapping[str, str] | None = None
+    ) -> None:
         self.status_code = status_code
+        self.headers = dict(headers or {})
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -73,3 +76,28 @@ def test_check_endpoints_sanitises_logs(monkeypatch: pytest.MonkeyPatch, caplog:
     message = record.getMessage()
     assert "http://localhost:8000/bad\\nendpoint" in message
     assert "boom\\nfail" in message
+
+
+def test_check_endpoints_rejects_redirect(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    class DummySession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url: str) -> DummyResponse:
+            self.calls += 1
+            return DummyResponse(302, {"Location": "https://example.com/next"})
+
+        def close(self) -> None:
+            pass
+
+    @contextmanager
+    def fake_session(*_args: Any, **_kwargs: Any) -> Iterator[DummySession]:
+        yield DummySession()
+
+    monkeypatch.setattr(hc, "get_requests_session", fake_session)
+    caplog.set_level(logging.ERROR)
+
+    result = _call_check("http://localhost:8000", ["/redirect"])
+
+    assert result == 1
+    assert "redirect" in caplog.text.lower()
