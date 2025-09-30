@@ -23,6 +23,15 @@ from numpy.typing import NDArray
 
 from bot.dotenv_utils import load_dotenv
 from bot.utils_loader import require_utils
+from model_builder.validation import (
+    FeatureValidationError,
+    MAX_FEATURES_PER_SAMPLE,
+    MAX_SAMPLES,
+    coerce_feature_matrix,
+    coerce_feature_vector,
+    coerce_label_vector,
+    coerce_float,
+)
 from services.logging_utils import sanitize_log_value
 from security import (
     ArtifactDeserializationError,
@@ -528,6 +537,10 @@ def _compute_ema(prices: list[float], span: int = 3) -> np.ndarray:
 @app.route("/train", methods=["POST"])
 def train() -> ResponseReturnValue:
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        app.logger.warning("/train: payload is not a JSON object")
+        return jsonify({"error": "invalid training data"}), 400
+
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         import asyncio
@@ -542,20 +555,38 @@ def train() -> ResponseReturnValue:
             return jsonify({"error": "training failed"}), 500
 
     prices = data.get("prices")
-    features: NDArray[np.float32]
-    if prices is not None:
-        features = _compute_ema(prices).reshape(-1, 1)
-    else:
-        features = np.array(data.get("features", []), dtype=np.float32)
-    labels = np.array(data.get("labels", []), dtype=np.float32)
-    if features.ndim == 1:
-        features = features.reshape(-1, 1)
-    else:
-        features = features.reshape(len(features), -1)
+    try:
+        if prices is not None:
+            price_series = coerce_label_vector(
+                prices,
+                max_rows=MAX_SAMPLES,
+            )
+            features = _compute_ema(price_series.tolist()).reshape(-1, 1)
+        else:
+            features = coerce_feature_matrix(
+                data.get("features"),
+                max_rows=MAX_SAMPLES,
+                max_features=MAX_FEATURES_PER_SAMPLE,
+            )
+
+        labels = coerce_label_vector(
+            data.get("labels"),
+            max_rows=len(features) if len(features) else MAX_SAMPLES,
+        )
+    except FeatureValidationError as exc:
+        app.logger.warning(
+            "Rejected training payload: %s",
+            sanitize_log_value(str(exc)),
+        )
+        return jsonify({"error": "invalid training data"}), 400
+
+    if features.size == 0 or len(features) != len(labels):
+        return jsonify({"error": "invalid training data"}), 400
+
     mask = ~np.isnan(features).any(axis=1)
     features = features[mask]
     labels = labels[mask]
-    if features.size == 0 or len(features) != len(labels):
+    if features.size == 0:
         return jsonify({"error": "invalid training data"}), 400
     df = pd.DataFrame(features)
     mask = pd.isna(df) | ~np.isfinite(df)
@@ -601,13 +632,29 @@ def train() -> ResponseReturnValue:
 @app.route("/predict", methods=["POST"])
 def predict() -> ResponseReturnValue:
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        app.logger.warning("/predict: payload is not a JSON object")
+        return jsonify({"error": "invalid payload"}), 400
+
     symbol = data.get("symbol", "default")
     if NN_FRAMEWORK != "sklearn":
         if _model_builder is None:
             return jsonify({"error": "ModelBuilder not initialized"}), 500
-        features = np.array(data.get("features", []), dtype=np.float32)
-        if features.ndim == 1:
-            features = features.reshape(1, -1)
+        raw_features = data.get("features")
+        try:
+            if raw_features is None:
+                price_raw = data.get("price")
+                price_val = coerce_float(price_raw if price_raw is not None else 0.0)
+                features = coerce_feature_vector([price_val])
+            else:
+                features = coerce_feature_vector(raw_features)
+        except FeatureValidationError as exc:
+            app.logger.warning(
+                "Rejected prediction payload: %s",
+                sanitize_log_value(str(exc)),
+            )
+            return jsonify({"error": "invalid features"}), 400
+
         model = _model_builder.predictive_models.get(symbol)
         if model is None:
             price = float(features[0, 0]) if features.size else 0.0
@@ -642,18 +689,21 @@ def predict() -> ResponseReturnValue:
         signal = "buy" if prob >= threshold else "sell"
         return jsonify({"signal": signal, "prob": prob, "threshold": threshold})
 
-    features = data.get("features")
-    if features is None:
-        price_val = float(data.get("price", 0.0))
-        features = np.array([price_val], dtype=np.float32)
-    else:
-        features = np.array(features, dtype=np.float32)
-    if features.ndim == 0:
-        features = np.array([[features]], dtype=np.float32)
-    elif features.ndim == 1:
-        features = features.reshape(1, -1)
-    else:
-        features = features.reshape(1, -1)
+    raw_features = data.get("features")
+    try:
+        if raw_features is None:
+            price_raw = data.get("price")
+            price_val = coerce_float(price_raw if price_raw is not None else 0.0)
+            features = coerce_feature_vector([price_val])
+        else:
+            features = coerce_feature_vector(raw_features)
+    except FeatureValidationError as exc:
+        app.logger.warning(
+            "Rejected prediction payload: %s",
+            sanitize_log_value(str(exc)),
+        )
+        return jsonify({"error": "invalid features"}), 400
+
     model = _models.get(symbol)
     scaler = _scalers.get(symbol)
     if model is None:
