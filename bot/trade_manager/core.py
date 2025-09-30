@@ -72,10 +72,7 @@ from bot.config import BotConfig, OFFLINE_MODE  # noqa: E402
 from services.logging_utils import sanitize_log_value  # noqa: E402
 from telegram_logger import resolve_unsent_path  # noqa: E402
 import contextlib  # noqa: E402
-from bot.http_client import (  # noqa: E402
-    get_async_http_client as get_http_client,
-    close_async_http_client as close_http_client,
-)
+from bot.http_client import close_async_http_client as close_http_client  # noqa: E402
 from services.offline import (  # noqa: E402
     ensure_offline_env,
     generate_placeholder_credential,
