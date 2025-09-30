@@ -75,7 +75,7 @@ cloudpickle==3.1.1
     #   gymnasium
     #   shap
     #   stable-baselines3
-contourpy==1.3.2
+contourpy==1.3.3
     # via
     #   -r requirements.txt
     #   matplotlib
@@ -95,7 +95,7 @@ farama-notifications==0.0.4
     # via
     #   -r requirements.txt
     #   gymnasium
-fastapi==0.117.1
+fastapi==0.118.0
     # via -r requirements.txt
 fastapi-csrf-protect==1.0.7
     # via -r requirements.txt
@@ -220,11 +220,11 @@ multidict==6.6.4
     #   -r requirements.txt
     #   aiohttp
     #   yarl
-networkx==3.4.2
+networkx==3.5
     # via
     #   -r requirements.txt
     #   torch
-numba==0.62.0
+numba==0.62.1
     # via
     #   -r requirements.txt
     #   shap
@@ -261,7 +261,7 @@ packaging==25.0
     #   statsmodels
     #   torchmetrics
     #   transformers
-pandas==2.3.2
+pandas==2.3.3
     # via
     #   -r requirements.txt
     #   shap
@@ -291,7 +291,7 @@ psutil==7.1.0
     # via -r requirements.txt
 pyarrow==21.0.0
     # via -r requirements.txt
-pybit==5.11.0
+pybit==5.12.0
     # via -r requirements.txt
 pycares==4.10.0
     # via
@@ -387,7 +387,7 @@ scikit-learn==1.7.2
     #   -r requirements.txt
     #   imbalanced-learn
     #   shap
-scipy==1.15.3
+scipy==1.16.1
     # via
     #   -r requirements.txt
     #   imbalanced-learn

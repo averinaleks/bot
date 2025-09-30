@@ -31,7 +31,7 @@ attrs==25.3.0
     #   aiohttp
     #   jsonschema
     #   referencing
-bcrypt==4.3.0
+bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
     # via flask
@@ -68,7 +68,7 @@ distro==1.9.0
     # via openai
 farama-notifications==0.0.4
     # via gymnasium
-fastapi==0.117.1
+fastapi==0.118.0
     # via -r requirements-core.in
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
@@ -131,7 +131,7 @@ jinja2==3.1.6
     #   torch
 jiter==0.11.0
     # via openai
-joblib==1.5.1
+joblib==1.5.2
     # via
     #   -r requirements-core.in
     #   imbalanced-learn
@@ -163,7 +163,7 @@ multidict==6.6.4
     #   yarl
 networkx==3.5
     # via torch
-numba==0.62.0
+numba==0.62.1
     # via
     #   -r requirements-core.in
     #   shap
@@ -199,7 +199,7 @@ packaging==25.0
     #   statsmodels
     #   torchmetrics
     #   transformers
-pandas==2.3.2
+pandas==2.3.3
     # via
     #   -r requirements-core.in
     #   shap
@@ -212,7 +212,7 @@ pillow==11.3.0
     # via matplotlib
 pluggy==1.6.0
     # via pytest
-polars==1.32.3
+polars==1.33.1
     # via -r requirements-core.in
 propcache==0.3.2
     # via
@@ -222,7 +222,7 @@ psutil==7.1.0
     # via -r requirements-core.in
 pyarrow==21.0.0
     # via -r requirements-core.in
-pybit==5.11.0
+pybit==5.12.0
     # via -r requirements-core.in
 pycares==4.10.0
     # via aiodns
@@ -230,7 +230,7 @@ pycparser==2.22
     # via cffi
 pycryptodome==3.23.0
     # via pybit
-pydantic==2.11.7
+pydantic==2.11.9
     # via
     #   fastapi
     #   fastapi-csrf-protect
@@ -244,9 +244,9 @@ pygments==2.19.2
     # via pytest
 pyparsing==3.2.3
     # via matplotlib
-pytest==8.4.1
+pytest==8.4.2
     # via pytest-asyncio
-pytest-asyncio==1.1.0
+pytest-asyncio==1.2.0
     # via -r requirements-core.in
 python-dateutil==2.9.0.post0
     # via
@@ -256,7 +256,7 @@ python-dotenv==1.1.1
     # via
     #   -r requirements-core.in
     #   pydantic-settings
-python-telegram-bot==22.4
+python-telegram-bot==22.5
     # via -r requirements-core.in
 pytorch-lightning==2.5.5
     # via -r requirements-core.in
