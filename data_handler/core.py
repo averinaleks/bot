@@ -134,7 +134,10 @@ class DataHandler:
     async def cleanup_old_data(self) -> None:
         while True:
             await asyncio.sleep(getattr(self.cfg, "data_cleanup_interval", 1))
-            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(seconds=getattr(self.cfg, "forget_window", 0))
+            forget_window = getattr(self.cfg, "forget_window", 0)
+            if forget_window <= 0:
+                continue
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(seconds=forget_window)
             cutoff_dt = cutoff.to_pydatetime()
             if pl is not None and isinstance(self._ohlcv, pl.DataFrame) and self._ohlcv.height > 0:
                 self._ohlcv = _normalise_polars_timestamp(self._ohlcv)
