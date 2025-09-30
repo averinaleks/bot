@@ -151,6 +151,53 @@ async def test_non_json(monkeypatch, func, client_cls):
 
 
 @pytest.mark.asyncio
+async def test_ipv4_mapped_ipv6_resolution(monkeypatch):
+    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+
+    call_state = {"count": 0}
+
+    def fake_socket_getaddrinfo(*args, **kwargs):
+        call_state["count"] += 1
+        if call_state["count"] == 1:
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+        return [
+            (
+                socket.AF_INET6,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("::ffff:127.0.0.1", 0, 0, 0),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_socket_getaddrinfo)
+
+    loop = asyncio.get_running_loop()
+
+    async def fake_loop_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET6,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("::ffff:127.0.0.1", 0, 0, 0),
+            )
+        ]
+
+    monkeypatch.setattr(loop, "getaddrinfo", fake_loop_getaddrinfo)
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+    result = await query_gpt_async("hi")
+    assert result == "ok"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_bad_content_type(monkeypatch, func, client_cls):
     monkeypatch.setenv("GPT_OSS_API", "https://example.com")
