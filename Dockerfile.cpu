@@ -117,6 +117,7 @@ apt-get upgrade -y
 apt-get install -y --no-install-recommends \
     libssl3t64 \
     python3.12-minimal \
+    python3-minimal \
     # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
     libgomp1 \
     curl \
@@ -128,7 +129,15 @@ apt-get install -y --no-install-recommends \
 # не требуются.
 apt-get clean
 rm -rf /var/lib/apt/lists/*
-python3 --version
+if command -v python3 >/dev/null 2>&1; then
+    python3 --version
+elif command -v python3.12 >/dev/null 2>&1; then
+    ln -sfn /usr/bin/python3.12 /usr/local/bin/python3
+    /usr/bin/python3.12 --version
+else
+    echo 'python3 binary missing after installation' >&2
+    exit 1
+fi
 EOSHELL
 
 WORKDIR /app
