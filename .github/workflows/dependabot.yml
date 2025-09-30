@@ -52,14 +52,14 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto approve
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
         # v4.0.0
         uses: hmarr/auto-approve-action@8f929096a962e83ccdfa8afcf855f39f12d4dac7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ (github.event.pull_request && github.event.pull_request.number) || '' }}
       - name: Checkout code
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ steps.metadata.outputs.package-ecosystem == 'pip' }}
         # v5.0.0
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -72,7 +72,7 @@ jobs:
       # heavier setup used in the main CI workflow which was causing
       # Dependabot update checks to fail.
       - name: Setup Python
-        if: ${{ steps.metadata.outputs['package-ecosystem'] == 'pip' }}
+        if: ${{ steps.metadata.outputs.package-ecosystem == 'pip' }}
         # v6.0.0
         uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
@@ -80,7 +80,7 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         if: >-
-          steps.metadata.outputs['package-ecosystem'] == 'pip' &&
+          steps.metadata.outputs.package-ecosystem == 'pip' &&
           github.event.pull_request.head.repo.full_name == github.repository
         run: |
           python -m pip install --upgrade pip
@@ -96,7 +96,7 @@ jobs:
       # while still validating the new packages.
       - name: Install Dependabot updates
         if: >-
-          steps.metadata.outputs['package-ecosystem'] == 'pip' &&
+          steps.metadata.outputs.package-ecosystem == 'pip' &&
           github.event.pull_request.head.repo.full_name == github.repository
         env:
           DEPENDENCIES_JSON: ${{ steps.metadata.outputs['updated-dependencies-json'] }}
@@ -147,7 +147,7 @@ jobs:
       # error and prevent automatic merging of the pull request.
       - name: Run unit tests
         if: >-
-          steps.metadata.outputs['package-ecosystem'] == 'pip' &&
+          steps.metadata.outputs.package-ecosystem == 'pip' &&
           github.event.pull_request.head.repo.full_name == github.repository
         run: pytest -m "not integration" -q
 
@@ -174,7 +174,7 @@ jobs:
 
       - name: Enable auto-merge for Dependabot PRs
         id: enable_automerge
-        if: ${{ steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: ${{ steps.auto_merge.outputs.allowed == 'true' && steps.metadata.outputs.update-type != 'version-update:semver-major' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
