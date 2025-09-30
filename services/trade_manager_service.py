@@ -78,8 +78,26 @@ def init_exchange() -> None:
     exchange = runtime.init()
 
 
-# Expected API token for simple authentication
+# Expected API token for simple authentication.
+#
+# The value is captured at import time for backwards compatibility with older
+# callers that monkeypatch ``API_TOKEN`` directly.  At runtime the middleware
+# still re-reads ``TRADE_MANAGER_TOKEN`` so that hot reconfiguration inside the
+# same process (e.g. in tests) immediately takes effect.
 API_TOKEN = (server_common.get_api_token() or '').strip()
+
+
+def _resolve_expected_token() -> str:
+    """Return the effective API token expected from incoming requests."""
+
+    # ``server_common.get_api_token`` reloads the value from the environment on
+    # every call which allows the token to be rotated without restarting the
+    # service.  When it is missing we fall back to the module level constant so
+    # that existing monkeypatches or overrides continue to work.
+    refreshed = server_common.get_api_token()
+    if refreshed:
+        return refreshed
+    return API_TOKEN
 
 
 def _authentication_optional() -> bool:
@@ -114,7 +132,7 @@ def _require_api_token() -> ResponseReturnValue | None:
     if request.method != 'POST' and request.path != '/positions':
         return None
 
-    expected = API_TOKEN
+    expected = _resolve_expected_token()
     if not expected:
         if _authentication_optional():
             return None
