@@ -28,6 +28,13 @@ if str(REPOSITORY_ROOT) not in sys.path:
 
 from urllib.parse import quote, urlparse
 
+if __package__ in {None, ""}:
+    # Allow absolute ``scripts`` imports when the module is executed as a
+    # script (``python scripts/submit_dependency_snapshot.py``).  Without this
+    # adjustment only the ``scripts`` directory is on ``sys.path`` which makes
+    # ``import scripts`` fail.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.github_paths import resolve_github_path
 
 _REQUESTS_IMPORT_ERROR: ImportError | None = None
