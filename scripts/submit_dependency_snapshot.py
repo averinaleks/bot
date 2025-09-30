@@ -2,11 +2,15 @@
 """Generate and submit a dependency snapshot to GitHub."""
 from __future__ import annotations
 
+import contextlib
 import fnmatch
+import http.client
 import json
 import os
 import re
 import shutil
+import socket
+import ssl
 import subprocess  # nosec: B404 - используется только для контролируемых вызовов git
 import sys
 import time
@@ -36,35 +40,6 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.github_paths import resolve_github_path
-
-_REQUESTS_IMPORT_ERROR: ImportError | None = None
-
-try:
-    import requests  # type: ignore[import-untyped]
-    from requests import exceptions as requests_exceptions  # type: ignore[import-untyped]
-except ImportError as exc:  # pragma: no cover - exercised via import hook in tests
-    _REQUESTS_IMPORT_ERROR = exc
-    requests = None  # type: ignore[assignment]
-
-    class _RequestsExceptionsModule:
-        """Compatibility shim when the ``requests`` package is unavailable."""
-
-        Timeout = TimeoutError
-        RequestException = Exception
-
-        def __getattr__(self, _name: str) -> type[Exception]:
-            """Return :class:`Exception` for any unrecognised attribute.
-
-            The real ``requests.exceptions`` module exposes a wide variety of
-            exception types.  When the dependency is missing we only emulate the
-            small subset actually used by the script, but returning
-            :class:`Exception` for any other attribute keeps the fallback
-            resilient if the implementation changes in the future.
-            """
-
-            return Exception
-
-    requests_exceptions = _RequestsExceptionsModule()  # type: ignore[assignment]
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
@@ -113,10 +88,6 @@ _PAYLOAD_REF_KEYS = (
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
-_REQUESTS_REQUIRED_MESSAGE = (
-    "Dependency snapshot submission requires the 'requests' package. "
-    "Install it with 'pip install requests'."
-)
 
 
 def _extract_payload_value(payload: Mapping[str, object], *keys: str) -> str:
@@ -226,15 +197,6 @@ def _load_event_payload() -> dict[str, Any] | None:
         return data
     return None
 
-
-def _report_missing_requests() -> None:
-    """Inform the caller that submitting a snapshot is not possible."""
-
-    print(f"{_REQUESTS_REQUIRED_MESSAGE} Skipping submission.", file=sys.stderr)
-    if _REQUESTS_IMPORT_ERROR is not None:
-        detail = str(_REQUESTS_IMPORT_ERROR).strip()
-        if detail:
-            print(detail, file=sys.stderr)
 
 def _should_skip_manifest(name: str, available: set[str]) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
@@ -635,62 +597,55 @@ def _normalise_run_attempt(raw_value: str | None) -> int:
 
 def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None:
     host, port, path = _https_components(url)
-    if port == 443:
-        request_url = f"https://{host}{path}"
-    else:
-        request_url = f"https://{host}:{port}{path}"
-
     last_error: Exception | None = None
-    if requests is None:
-        raise DependencySubmissionError(
-            None,
-            _REQUESTS_REQUIRED_MESSAGE,
-            cause=_REQUESTS_IMPORT_ERROR,
-        )
-    with requests.Session() as session:
-        for attempt in range(1, 4):
-            try:
-                response = session.post(
-                    request_url,
-                    data=body,
-                    headers=headers,
-                    timeout=30,
-                    allow_redirects=False,
-                )
-            except requests_exceptions.Timeout as exc:
-                message = str(exc) or "timed out"
-                if attempt < 3:
-                    wait_time = 2 ** (attempt - 1)
-                    print(
-                        f"Network timeout '{message}'. Retrying in {wait_time} s...",
-                        file=sys.stderr,
-                    )
-                    time.sleep(wait_time)
-                    last_error = exc
-                    continue
-                last_error = exc
-                break
-            except requests_exceptions.RequestException as exc:
-                message = str(exc).strip() or exc.__class__.__name__
-                if attempt < 3:
-                    wait_time = 2 ** (attempt - 1)
-                    print(
-                        f"Network error '{message}'. Retrying in {wait_time} s...",
-                        file=sys.stderr,
-                    )
-                    time.sleep(wait_time)
-                    last_error = exc
-                    continue
-                last_error = exc
-                break
 
-            status_code = int(response.status_code)
+    for attempt in range(1, 4):
+        connection: http.client.HTTPSConnection | None = None
+        try:
+            context = ssl.create_default_context()
+            connection = http.client.HTTPSConnection(
+                host,
+                port,
+                timeout=30,
+                context=context,
+            )
+            connection.request("POST", path, body=body, headers=headers)
+            response = connection.getresponse()
+        except (socket.timeout, TimeoutError) as exc:
+            message = str(exc) or "timed out"
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Network timeout '{message}'. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            last_error = exc
+            break
+        except (http.client.HTTPException, OSError, socket.error) as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            if attempt < 3:
+                wait_time = 2 ** (attempt - 1)
+                print(
+                    f"Network error '{message}'. Retrying in {wait_time} s...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait_time)
+                last_error = exc
+                continue
+            last_error = exc
+            break
+        else:
+            status_code = int(response.status)
             reason = response.reason or ""
-            payload = response.content
-            redirect_location = response.headers.get("Location", "")
+            payload = response.read()
+            headers_map = {key: value for key, value in response.getheaders()}
+            redirect_location = headers_map.get("Location", "")
             response.close()
 
-            if 300 <= status_code < 400:
+            if status_code >= 300 and status_code < 400:
                 target = redirect_location or reason or "redirect"
                 print(
                     "Failed to submit dependency snapshot: "
@@ -710,7 +665,8 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 )
                 time.sleep(wait_time)
                 last_error = DependencySubmissionError(
-                    status_code, f"Retryable HTTP {status_code}: {reason}"
+                    status_code,
+                    f"Retryable HTTP {status_code}: {reason}",
                 )
                 continue
 
@@ -727,6 +683,10 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
             print(f"Dependency snapshot submitted: HTTP {status_code}")
             return
+        finally:
+            if connection is not None:
+                with contextlib.suppress(Exception):
+                    connection.close()
 
     if last_error is not None:
         message = str(last_error).strip() or last_error.__class__.__name__
@@ -793,9 +753,6 @@ def _report_dependency_submission_error(error: DependencySubmissionError) -> Non
 
 def submit_dependency_snapshot() -> None:
     submit_func = _submit_with_headers
-    if requests is None and submit_func is _ORIGINAL_SUBMIT_WITH_HEADERS:
-        _report_missing_requests()
-        return
 
     payload = _load_event_payload()
     client_payload: Mapping[str, object] | None = None
