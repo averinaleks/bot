@@ -94,5 +94,5 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
     assert "repository_dispatch" in workflow
-    assert "dependency_graph/auto_submission" in workflow
+    assert "dependency-graph-auto-submission" in workflow
     assert "github.event_name == 'repository_dispatch'" in workflow

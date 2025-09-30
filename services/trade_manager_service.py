@@ -12,7 +12,6 @@ import os
 import stat
 import tempfile
 import threading
-import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, cast
