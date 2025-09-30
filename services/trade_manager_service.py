@@ -78,8 +78,22 @@ def init_exchange() -> None:
     exchange = runtime.init()
 
 
-# Expected API token for simple authentication
+# Expected API token for simple authentication.  Historically this value was
+# cached during module import which meant that tests (and long running
+# processes) could not update the token via environment variables at runtime.
+# ``test_positions_endpoint_triggers_sync`` relies on being able to override
+# the token after import, therefore we keep the cached value only as a
+# fallback and resolve the current token on each request.
 API_TOKEN = (server_common.get_api_token() or '').strip()
+
+
+def _resolve_expected_token() -> str:
+    """Return the API token expected for the incoming request."""
+
+    fresh = server_common.get_api_token()
+    if fresh:
+        return fresh.strip()
+    return API_TOKEN
 
 
 def _authentication_optional() -> bool:
@@ -114,7 +128,7 @@ def _require_api_token() -> ResponseReturnValue | None:
     if request.method != 'POST' and request.path != '/positions':
         return None
 
-    expected = API_TOKEN
+    expected = _resolve_expected_token()
     if not expected:
         if _authentication_optional():
             return None
