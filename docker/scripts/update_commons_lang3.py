@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
-from urllib.request import urlopen
+from urllib.parse import urlsplit
+
+import requests
 
 
 COMMONS_LANG3_URL = (
@@ -12,6 +14,7 @@ COMMONS_LANG3_URL = (
     "commons-lang3-3.18.0.jar"
 )
 COMMONS_LANG3_SHA256 = "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
+COMMONS_LANG3_ALLOWED_HOST = "repo1.maven.org"
 
 
 def update_commons_lang3() -> None:
@@ -32,10 +35,30 @@ def update_commons_lang3() -> None:
     destination = jars_dir / "commons-lang3-3.18.0.jar"
     hasher = hashlib.sha256()
 
-    with urlopen(COMMONS_LANG3_URL) as response, destination.open("wb") as fh:
-        for chunk in iter(lambda: response.read(8192), b""):
-            fh.write(chunk)
-            hasher.update(chunk)
+    parsed_url = urlsplit(COMMONS_LANG3_URL)
+    if parsed_url.scheme != "https":
+        raise RuntimeError(
+            "Ожидалась схема https при скачивании commons-lang3, "
+            f"получено: {parsed_url.scheme}"
+        )
+    if parsed_url.netloc != COMMONS_LANG3_ALLOWED_HOST:
+        raise RuntimeError(
+            "Получен неожиданный хост при скачивании commons-lang3: "
+            f"{parsed_url.netloc}"
+        )
+
+    with requests.Session() as session:
+        adapter = requests.adapters.HTTPAdapter()
+        session.mount("https://", adapter)
+
+        with session.get(COMMONS_LANG3_URL, stream=True, timeout=30) as response:
+            response.raise_for_status()
+            with destination.open("wb") as fh:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    hasher.update(chunk)
 
     digest = hasher.hexdigest()
     if digest != COMMONS_LANG3_SHA256:
