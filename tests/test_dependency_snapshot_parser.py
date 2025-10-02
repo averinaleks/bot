@@ -118,6 +118,16 @@ def test_build_manifests_supports_multiple_patterns(tmp_path: Path) -> None:
         assert manifest["file"]["source_location"] == name
 
 
+def test_build_manifests_detects_uppercase_names(tmp_path: Path) -> None:
+    (tmp_path / "Requirements.TXT").write_text("package==1.0.0")
+    (tmp_path / "SubDir").mkdir()
+    (tmp_path / "SubDir" / "REQUIREMENTS-DEV.IN").write_text("devpkg==2.0.0")
+
+    manifests = _build_manifests(tmp_path)
+
+    assert "Requirements.TXT" in manifests
+    assert "SubDir/REQUIREMENTS-DEV.IN" in manifests
+
 def test_build_manifests_discovers_nested_requirement_files(tmp_path: Path) -> None:
     nested_dir = tmp_path / "nested" / "configs"
     nested_dir.mkdir(parents=True)

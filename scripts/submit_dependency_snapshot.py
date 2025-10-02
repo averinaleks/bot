@@ -213,13 +213,16 @@ def _load_event_payload() -> dict[str, Any] | None:
     return None
 
 
-def _should_skip_manifest(name: str, available: set[str]) -> bool:
+def _should_skip_manifest(
+    name: str, available: set[str], available_lower: set[str]
+) -> bool:
     """Return ``True`` when the manifest is redundant and can be dropped."""
 
     path = Path(name)
-    if path.suffix in {".out", ".in"}:
+    if path.suffix.lower() in {".out", ".in"}:
         candidate = path.with_suffix(".txt").as_posix()
-        if candidate in available:
+        candidate_lower = candidate.lower()
+        if candidate in available or candidate_lower in available_lower:
             return True
     return False
 
@@ -257,8 +260,11 @@ def _iter_requirement_files(root: Path) -> Iterable[Path]:
             dirname for dirname in dirnames if _should_include_dir(dirname)
         )
         for filename in filenames:
+            filename_lower = filename.lower()
             if not any(
-                fnmatch.fnmatch(filename, pattern) for pattern in MANIFEST_PATTERNS
+                fnmatch.fnmatch(filename, pattern)
+                or fnmatch.fnmatch(filename_lower, pattern)
+                for pattern in MANIFEST_PATTERNS
             ):
                 continue
             path = Path(current_root, filename)
@@ -521,13 +527,14 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
 
     if manifests:
         available = set(manifests.keys())
+        available_lower = {name.lower() for name in available}
         manifests = OrderedDict(
             (
                 name,
                 manifest,
             )
             for name, manifest in manifests.items()
-            if not _should_skip_manifest(name, available)
+            if not _should_skip_manifest(name, available, available_lower)
         )
     return manifests
 

@@ -54,7 +54,8 @@ def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
 
     assert "from pathlib import Path" in workflow
     assert "Path(file).name" in workflow
-    assert "fnmatch(filename, pattern)" in workflow
+    assert "file_lower = file.lower()" in workflow
+    assert "fnmatch(filename_lower, pattern)" in workflow
 
 
 def test_dependency_graph_detect_step_normalises_null_strings() -> None:
@@ -93,6 +94,8 @@ def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
     assert "Prepare requirements" in workflow
+    assert "os.walk(root)" in workflow
+    assert "name_lower = filename.lower()" in workflow
     assert 'stripped_lower = stripped.lower()' in workflow
     assert 'if stripped_lower.startswith("ccxtpro")' in workflow
     assert 'if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower' in workflow
