@@ -14,7 +14,8 @@ import os
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
+import types
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class MissingEnvError(Exception):
         super().__init__(message)
 
 
-def _load_env_file() -> Dict[str, str]:
+def _load_env_file() -> dict[str, str]:
     """Загрузить значения из ``.env`` при наличии python-dotenv.
 
     Библиотека ``python-dotenv`` не является обязательной зависимостью для
@@ -56,7 +57,7 @@ def _load_env_file() -> Dict[str, str]:
     return {}
 
 
-_env: Dict[str, str] = _load_env_file()
+_env: dict[str, str] = _load_env_file()
 
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
@@ -180,7 +181,7 @@ def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
 _ENV_CONFIG_PATH = None if os.getenv("TEST_MODE") == "1" else os.getenv("CONFIG_PATH")
 CONFIG_PATH = str(_resolve_config_path(_ENV_CONFIG_PATH))
 # Cached defaults; populated on first load
-DEFAULTS: Optional[Dict[str, Any]] = None
+DEFAULTS: dict[str, Any] | None = None
 DEFAULTS_LOCK = threading.Lock()
 
 
@@ -188,7 +189,7 @@ class ConfigLoadError(Exception):
     """Raised when the default configuration cannot be loaded."""
 
 
-def load_defaults() -> Dict[str, Any]:
+def load_defaults() -> dict[str, Any]:
     """Load default configuration from CONFIG_PATH on first access."""
     global DEFAULTS
     with DEFAULTS_LOCK:
@@ -214,7 +215,7 @@ class BotConfig:
     timeframe: str = _get_default("timeframe", "1m")
     secondary_timeframe: str = _get_default("secondary_timeframe", "2h")
     ws_url: str = _get_default("ws_url", "wss://stream.bybit.com/v5/public/linear")
-    backup_ws_urls: List[str] = field(
+    backup_ws_urls: list[str] = field(
         default_factory=lambda: _get_default(
             "backup_ws_urls", ["wss://stream.bybit.com/v5/public/linear"]
         )
@@ -226,7 +227,7 @@ class BotConfig:
     max_subscriptions_per_connection: int = _get_default(
         "max_subscriptions_per_connection", 15
     )
-    ws_subscription_batch_size: Optional[int] = _get_default(
+    ws_subscription_batch_size: int | None = _get_default(
         "ws_subscription_batch_size", None
     )
     ws_rate_limit: int = _get_default("ws_rate_limit", 20)
@@ -329,11 +330,11 @@ class BotConfig:
     ema_weight: float = _get_default("ema_weight", 0.2)
     gpt_weight: float = _get_default("gpt_weight", 0.3)
     early_stopping_patience: int = _get_default("early_stopping_patience", 3)
-    balance_key: Optional[str] = _get_default("balance_key", None)
+    balance_key: str | None = _get_default("balance_key", None)
     enable_notifications: bool = _get_default("enable_notifications", True)
     save_unsent_telegram: bool = _get_default("save_unsent_telegram", False)
     unsent_telegram_path: str = _get_default("unsent_telegram_path", "unsent_telegram.log")
-    service_factories: Dict[str, str] = field(
+    service_factories: dict[str, str] = field(
         default_factory=lambda: dict(_get_default("service_factories", {}))
     )
 
@@ -346,12 +347,15 @@ class BotConfig:
 
     @staticmethod
     def _isinstance(value: Any, typ: Any) -> bool:
+        if isinstance(typ, types.UnionType):
+            return any(BotConfig._isinstance(value, t) for t in get_args(typ))
+
         origin = get_origin(typ)
         if typ is float:
             return isinstance(value, (int, float))
         if origin is None:
             return isinstance(value, typ)
-        if origin is Union:
+        if origin in {Union, types.UnionType}:
             return any(BotConfig._isinstance(value, t) for t in get_args(typ))
         if origin is list:
             if not isinstance(value, list):
@@ -377,11 +381,11 @@ class BotConfig:
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
 
-    def update(self, other: Dict[str, Any]) -> None:
+    def update(self, other: dict[str, Any]) -> None:
         for k, v in other.items():
             setattr(self, k, v)
 
-    def asdict(self) -> Dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -436,7 +440,7 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
 
 def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
-    cfg: Dict[str, Any] = {}
+    cfg: dict[str, Any] = {}
     candidate = Path(path)
     if not candidate.is_absolute():
         candidate = (_CONFIG_DIR / candidate).resolve()
