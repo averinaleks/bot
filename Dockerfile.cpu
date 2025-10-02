@@ -1,49 +1,21 @@
 # syntax=docker/dockerfile:1.6
 
-FROM ubuntu:24.04 AS builder
+FROM python:3.11-slim AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236
-# Дополнительно подключаем PPA deadsnakes для установки Python 3.11, поскольку
-# часть зависимостей проекта ещё не поддерживает Python 3.12. Без этого pip
-# пытается собирать тяжёлые пакеты из исходников и шаг сборки в CI завершается
-# с ошибкой.
+# Обновляем базовый образ до актуальных патчей безопасности и устанавливаем
+# минимальный набор инструментов, необходимый для сборки виртуального
+# окружения. Использование официального python:3.11-slim позволяет избежать
+# ненадёжного ручного управления PPA и делает сборку устойчивой к ошибкам
+# "Release file not found" в GitHub Actions.
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get upgrade -y
+apt-get dist-upgrade -y
 apt-get install -y --no-install-recommends \
-    gnupg \
+    build-essential \
     ca-certificates \
-    linux-libc-dev \
-    libssl3t64 \
-    build-essential patch \
-    curl \
-    zlib1g-dev
-# Регистрируем PPA deadsnakes вручную, без утилиты add-apt-repository,
-# чтобы не зависеть от системного python3 в базовом образе.
-keyring_path=/usr/share/keyrings/deadsnakes-ppa.gpg
-codename="$(. /etc/os-release && printf '%s' "$VERSION_CODENAME")"
-tmp_key="$(mktemp -p /tmp deadsnakes-keyring.XXXXXX)"
-curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBA6932366A755776" -o "$tmp_key"
-gpg --batch --yes --dearmor -o "$keyring_path" "$tmp_key"
-rm -f "$tmp_key"
-chmod 644 "$keyring_path"
-printf 'deb [signed-by=%s] http://ppa.launchpad.net/deadsnakes/ppa/ubuntu %s main\n' \
-  "$keyring_path" "$codename" > /etc/apt/sources.list.d/deadsnakes-ppa.list
-apt-get update
-apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-dev \
-    python3.11-venv \
-    python3.11-distutils
-python3.11 -m ensurepip --upgrade
-python3.11 -m pip install --no-cache-dir --break-system-packages \
-    'pip>=24.0' \
-    'setuptools>=78.1.1,<81' \
-    wheel
-apt-get purge -y --auto-remove gnupg || true
-apt-get clean
+    curl
 rm -rf /var/lib/apt/lists/*
 EOSHELL
 
@@ -51,10 +23,11 @@ WORKDIR /app
 
 COPY requirements-core.txt .
 
-ENV VIRTUAL_ENV=/app/venv
-# pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает актуальные уязвимости
-# и подходит для сборки gymnasium.
-RUN python3.11 -m venv "$VIRTUAL_ENV"
+ENV VIRTUAL_ENV=/opt/venv
+
+# pip>=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает известные
+# уязвимости и совместимы с зависимостями проекта.
+RUN python -m venv "$VIRTUAL_ENV"
 
 RUN "$VIRTUAL_ENV"/bin/python -m ensurepip --upgrade
 
@@ -129,41 +102,25 @@ RUN /bin/bash -euo pipefail -c "\
   find \"$VIRTUAL_ENV\" -type f -name '*.pyc' -delete\
 "
 
-FROM ubuntu:24.04
+FROM python:3.11-slim
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Переносим ключ и список репозитория deadsnakes из builder-образа, чтобы
-# избежать повторного импорта ключа через gnupg в рантайме.
-COPY --from=builder /usr/share/keyrings/deadsnakes-ppa.gpg /usr/share/keyrings/deadsnakes-ppa.gpg
-COPY --from=builder /etc/apt/sources.list.d/deadsnakes-ppa.list /etc/apt/sources.list.d/deadsnakes-ppa.list
-
-# Обновляем систему перед установкой зависимостей выполнения и добавляем Python 3.11
-# из PPA deadsnakes, чтобы среда рантайма совпадала с окружением сборки.
+# Обновляем систему и добавляем только необходимые зависимости выполнения.
+# libgomp1 требуется бинарям NumPy/Scikit-learn, а libssl3 необходим для
+# криптографических библиотек.
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get upgrade -y
-# Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
-# Исключаем tar, чтобы избежать CVE-2025-45582.
+apt-get dist-upgrade -y
 apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3t64 \
     libgomp1 \
-    curl \
-    python3.11 \
-    python3.11-minimal \
-    python3.11-distutils
-apt-get clean
+    libssl3
 rm -rf /var/lib/apt/lists/*
-if [ ! -e /usr/local/bin/python3 ]; then
-    ln -s /usr/bin/python3.11 /usr/local/bin/python3
-fi
-/usr/bin/python3.11 --version
 EOSHELL
 
 WORKDIR /app
 
-COPY --from=builder /app/venv /app/venv
+COPY --from=builder /opt/venv /app/venv
 COPY . .
 
 ENV VIRTUAL_ENV=/app/venv
