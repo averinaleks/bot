@@ -12,3 +12,27 @@ def test_gptoss_workflow_uses_python3() -> None:
     assert 'python scripts/gptoss_mock_server.py' not in workflow_text
     assert 'python scripts/prepare_gptoss_diff.py' not in workflow_text
     assert 'python scripts/run_gptoss_review.py' not in workflow_text
+
+
+def test_pr_status_step_has_missing_script_guard() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert 'if [ ! -f scripts/check_pr_status.py ]; then' in workflow_text
+    assert '::notice::Скрипт scripts/check_pr_status.py не найден' in workflow_text
+
+
+def test_pr_status_step_sets_outputs_on_failure() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    marker = 'if ! python3 scripts/check_pr_status.py'
+    next_step = '      - name: Checkout PR head'
+
+    assert marker in workflow_text, 'missing PR status failure handler'
+    start = workflow_text.index(marker)
+    end = workflow_text.index(next_step, start)
+    failure_block = workflow_text[start:end]
+
+    assert '::warning::Проверка статуса PR завершилась с ошибкой' in failure_block
+    assert 'echo "skip=true"' in failure_block
+    assert 'echo "head_sha="' in failure_block
+    assert failure_block.count('exit 0') >= 1

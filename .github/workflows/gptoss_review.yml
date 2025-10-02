@@ -186,6 +186,13 @@ jobs:
             --pr-number "${PR_NUMBER:-}" \
             --token "${GITHUB_TOKEN}"; then
             echo "::warning::Проверка статуса PR завершилась с ошибкой – пропускаю обзор"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              {
+                echo "skip=true"
+                echo "head_sha="
+              } >>"$GITHUB_OUTPUT"
+            fi
+            exit 0
           fi
 
       - name: Checkout PR head
