@@ -6,6 +6,7 @@ load configuration values from ``config.json`` and environment variables.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import json
@@ -15,6 +16,8 @@ import stat
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
+from types import UnionType
+from typing import Any, TextIO, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -184,42 +187,21 @@ DEFAULTS: dict[str, Any] | None = None
 DEFAULTS_LOCK = threading.Lock()
 
 
-def _fd_resolved_path(fd: int, original: Path) -> Path | None:
-    """Best-effort resolution of *fd* to an absolute path."""
-
-    fd_path = f"/proc/self/fd/{fd}"
-    try:
-        target = Path(os.readlink(fd_path))
-    except OSError:
-        try:
-            return original.resolve(strict=True)
-        except OSError:
-            return None
-    return target.resolve(strict=False)
-
-
 def open_config_file(path: Path) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if nofollow:
-        flags |= nofollow
+    info = os.lstat(path)
 
-    fd = os.open(path, flags)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            raise RuntimeError(f"Configuration file {path} is not a regular file")
+    if stat.S_ISLNK(info.st_mode):
+        raise RuntimeError(f"Configuration file {path} must not be a symlink")
+    if not stat.S_ISREG(info.st_mode):
+        raise RuntimeError(f"Configuration file {path} is not a regular file")
 
-        actual = _fd_resolved_path(fd, path)
-        if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
-            raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
+    resolved = path.resolve(strict=False)
+    if not _is_within_directory(resolved, _CONFIG_DIR):
+        raise RuntimeError(f"Configuration file {resolved} escapes {_CONFIG_DIR}")
 
-        return os.fdopen(fd, "r", encoding="utf-8")
-    except Exception:
-        os.close(fd)
-        raise
+    return builtins.open(resolved, "r", encoding="utf-8")
 
 
 class ConfigLoadError(Exception):
