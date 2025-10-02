@@ -222,6 +222,10 @@ def open_config_file(path: Path) -> TextIO:
     except Exception:
         handle.close()
         raise
+    else:
+        os.close(fd)
+
+    return builtins.open(path, "r", encoding="utf-8")
 
     return handle
 
