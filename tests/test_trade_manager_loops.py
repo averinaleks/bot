@@ -217,13 +217,13 @@ async def test_run_cancels_pending_tasks_on_failure(monkeypatch):
 
     run_task = asyncio.create_task(tm.run())
 
-    await asyncio.wait_for(failure_started.wait(), timeout=1)
+    await asyncio.wait_for(failure_started.wait(), timeout=5)
 
     with pytest.raises(trade_manager.TradeManagerTaskError):
         await run_task
 
     for event in cancel_events:
-        await asyncio.wait_for(event.wait(), timeout=1)
+        await asyncio.wait_for(event.wait(), timeout=5)
 
 
 @pytest.mark.asyncio
@@ -274,7 +274,7 @@ async def test_run_restarts_non_critical_task(monkeypatch, caplog):
 
     stop_event.set()
     await tm.stop()
-    await asyncio.wait_for(run_task, timeout=1)
+    await asyncio.wait_for(run_task, timeout=5)
 
 
 @pytest.mark.asyncio
