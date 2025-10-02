@@ -21,6 +21,7 @@ import numpy as np
 from flask import Flask, jsonify, request
 from bot.dotenv_utils import load_dotenv
 from bot.utils_loader import require_utils
+from config import open_config_file
 from model_builder.validation import (
     FeatureValidationError,
     MAX_FEATURES_PER_SAMPLE,
@@ -179,9 +180,12 @@ def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
 
 CONFIG_PATH = _resolve_config_path(os.getenv("CONFIG_PATH"))
 try:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        _CFG: Dict[str, Any] = json.load(f)
-except Exception:
+    with open_config_file(CONFIG_PATH) as handle:
+        _CFG: Dict[str, Any] = json.load(handle)
+except FileNotFoundError:
+    _CFG = {}
+except (OSError, json.JSONDecodeError) as exc:
+    LOGGER.warning("Failed to load model builder config %s: %s", CONFIG_PATH, exc)
     _CFG = {}
 
 NN_FRAMEWORK = os.getenv("NN_FRAMEWORK", _CFG.get("nn_framework", "sklearn")).lower()

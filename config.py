@@ -11,11 +11,10 @@ import importlib.util
 import json
 import logging
 import os
+import stat
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
-from types import UnionType
-from typing import Any, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +184,44 @@ DEFAULTS: dict[str, Any] | None = None
 DEFAULTS_LOCK = threading.Lock()
 
 
+def _fd_resolved_path(fd: int, original: Path) -> Path | None:
+    """Best-effort resolution of *fd* to an absolute path."""
+
+    fd_path = f"/proc/self/fd/{fd}"
+    try:
+        target = Path(os.readlink(fd_path))
+    except OSError:
+        try:
+            return original.resolve(strict=True)
+        except OSError:
+            return None
+    return target.resolve(strict=False)
+
+
+def open_config_file(path: Path) -> TextIO:
+    """Open *path* for reading while preventing symlink and directory escape attacks."""
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags |= nofollow
+
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError(f"Configuration file {path} is not a regular file")
+
+        actual = _fd_resolved_path(fd, path)
+        if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
+            raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
+
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+
 class ConfigLoadError(Exception):
     """Raised when the default configuration cannot be loaded."""
 
@@ -194,10 +231,10 @@ def load_defaults() -> dict[str, Any]:
     global DEFAULTS
     with DEFAULTS_LOCK:
         if DEFAULTS is None:
+            path = _resolve_config_path(CONFIG_PATH)
             try:
-                path = _resolve_config_path(CONFIG_PATH)
-                with open(path, "r", encoding="utf-8") as f:
-                    DEFAULTS = json.load(f)
+                with open_config_file(path) as handle:
+                    DEFAULTS = json.load(handle)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.error("Failed to load %s: %s", path, exc)
                 raise ConfigLoadError from exc
@@ -446,14 +483,14 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     allowed_dir = Path(CONFIG_PATH).resolve().parent
     if not candidate.is_relative_to(allowed_dir):
         raise ValueError(f"Path {candidate} is outside of {allowed_dir}")
-    if candidate.exists():
-        with open(candidate, "r", encoding="utf-8") as f:
+    try:
+        with open_config_file(candidate) as handle:
             try:
-                cfg.update(json.load(f))
+                cfg.update(json.load(handle))
             except json.JSONDecodeError as exc:
                 logger.warning("Failed to decode %s: %s", candidate, exc)
-                f.seek(0)
-                content = f.read()
+                handle.seek(0)
+                content = handle.read()
                 end = content.rfind("}")
                 if end != -1:
                     try:
@@ -464,6 +501,8 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                             candidate,
                             fallback_exc,
                         )
+    except FileNotFoundError:
+        pass
     type_hints = get_type_hints(BotConfig)
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())
