@@ -2,6 +2,8 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Iterable, Iterator, Mapping
 
+import socket
+
 import pytest
 
 import scripts.health_check as hc
@@ -23,6 +25,23 @@ def _call_check(base_url: str, endpoints: Iterable[str]) -> int:
     return hc.check_endpoints(base_url, list(endpoints))
 
 
+def test_load_allowed_hosts_filters_public(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setenv("HEALTH_CHECK_ALLOWED_HOSTS", "example.com")
+
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        assert host == "example.com"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(hc.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with caplog.at_level("WARNING"):
+        allowed = hc._load_allowed_hosts()
+
+    assert "example.com" not in allowed
+    assert "localhost" in allowed
+    assert "non-private" in caplog.text
+
+
 def test_normalise_base_url_allows_loopback() -> None:
     allowed = hc._load_allowed_hosts()
     assert (
@@ -38,19 +57,19 @@ def test_normalise_base_url_rejects_http_non_local() -> None:
 
 
 def test_normalise_base_url_respects_allowed_hosts_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HEALTH_CHECK_ALLOWED_HOSTS", "example.com")
+    monkeypatch.setenv("HEALTH_CHECK_ALLOWED_HOSTS", "10.0.0.5")
     allowed = hc._load_allowed_hosts()
     assert (
-        hc._normalise_base_url("https://example.com:8443/base", allowed)
-        == "https://example.com:8443/base"
+        hc._normalise_base_url("https://10.0.0.5:8443/base", allowed)
+        == "https://10.0.0.5:8443/base"
     )
 
 
 def test_normalise_base_url_rejects_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HEALTH_CHECK_ALLOWED_HOSTS", "example.com")
+    monkeypatch.setenv("HEALTH_CHECK_ALLOWED_HOSTS", "10.0.0.5")
     allowed = hc._load_allowed_hosts()
     with pytest.raises(ValueError):
-        hc._normalise_base_url("https://example.com/path?bad=1", allowed)
+        hc._normalise_base_url("https://10.0.0.5/path?bad=1", allowed)
 
 
 def test_check_endpoints_sanitises_logs(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

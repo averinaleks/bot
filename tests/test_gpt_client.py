@@ -61,10 +61,30 @@ QUERIES = [
 def allow_test_hosts(monkeypatch):
     monkeypatch.setenv(
         "GPT_OSS_ALLOWED_HOSTS",
-        "example.com,foo.local,localhost,127.0.0.1,::1",
+        "localhost,127.0.0.1,::1",
     )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     yield
+
+
+def test_load_allowed_hosts_filters_public(monkeypatch, caplog):
+    monkeypatch.setenv("GPT_OSS_ALLOWED_HOSTS", "malicious.example,8.8.8.8")
+
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        if host == "malicious.example":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+        if host == "8.8.8.8":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+        raise AssertionError(host)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    with caplog.at_level(logging.WARNING):
+        hosts = _load_allowed_hosts()
+
+    assert "malicious.example" not in hosts
+    assert "8.8.8.8" not in hosts
+    assert "localhost" in hosts
+    assert "non-private IPs" in caplog.text
 
 
 async def run_query(func, prompt):
@@ -115,7 +135,7 @@ def test_parse_gpt_response_missing_field():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_network_error(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         raise httpx.HTTPError("boom")
@@ -140,7 +160,7 @@ async def test_network_error(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_non_json(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         return DummyStream(content=b"not json")
@@ -152,7 +172,7 @@ async def test_non_json(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 async def test_ipv4_mapped_ipv6_resolution(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     call_state = {"count": 0}
 
@@ -200,7 +220,7 @@ async def test_ipv4_mapped_ipv6_resolution(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_bad_content_type(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": "ok"}]}).encode()
@@ -214,7 +234,7 @@ async def test_bad_content_type(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_missing_fields(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         return DummyStream(content=json.dumps({"foo": "bar"}).encode())
@@ -227,7 +247,7 @@ async def test_missing_fields(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_insecure_url(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "http://127.0.0.1")
     with pytest.raises(GPTClientError):
         await run_query(func, "hi")
 
@@ -235,7 +255,7 @@ async def test_insecure_url(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_allow_insecure_url(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "http://127.0.0.1")
     monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
 
     def fake_stream(self, *args, **kwargs):
@@ -258,7 +278,7 @@ async def test_allow_insecure_url(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_insecure_url_dns_failure(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "http://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "http://127.0.0.1")
     monkeypatch.setenv("TEST_MODE", "1")
 
     def fail_resolution(*args, **kwargs):
@@ -372,7 +392,7 @@ async def test_no_env(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_retry_success(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     calls = {"count": 0}
 
     def fake_stream(self, *args, **kwargs):
@@ -398,7 +418,7 @@ async def test_retry_success(monkeypatch, func, client_cls):
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_retry_success_dns_fallback(monkeypatch, func, client_cls):
     monkeypatch.setenv("TEST_MODE", "1")
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     stream_calls = {"count": 0}
 
     def fake_stream(self, *args, **kwargs):
@@ -431,7 +451,7 @@ async def test_retry_success_dns_fallback(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_retry_failure(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     calls = {"count": 0}
 
     def fake_stream(self, *args, **kwargs):
@@ -454,7 +474,7 @@ async def test_retry_failure(monkeypatch, func, client_cls):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, _", QUERIES)
 async def test_prompt_too_long(monkeypatch, func, _, caplog):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     sent = {}
 
     def fake_stream(self, *args, **kwargs):
@@ -474,7 +494,7 @@ async def test_prompt_too_long(monkeypatch, func, _, caplog):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_response_too_long(monkeypatch, func, client_cls):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         return DummyStream(content=b"x" * (MAX_RESPONSE_BYTES + 1))
@@ -494,13 +514,13 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     with pytest.raises(GPTClientError):
-        _validate_api_url("http://foo.local", _load_allowed_hosts())
+        _validate_api_url("http://foo.local", {"foo.local"})
 
 
 def test_validate_api_url_rejects_userinfo():
     with pytest.raises(GPTClientError) as excinfo:
         _validate_api_url(
-            "https://user:pass@example.com", _load_allowed_hosts()
+            "https://user:pass@127.0.0.1", _load_allowed_hosts()
         )
     assert "must not contain embedded credentials" in str(excinfo.value)
 
@@ -514,7 +534,7 @@ def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
     monkeypatch.setenv("ALLOW_INSECURE_GPT_URL", "1")
     monkeypatch.setattr("bot.gpt_client.ALLOW_INSECURE_GPT_URL", True)
     with caplog.at_level(logging.WARNING):
-        host, ips = _validate_api_url("http://foo.local", _load_allowed_hosts())
+        host, ips = _validate_api_url("http://foo.local", {"foo.local"})
 
     assert host == "foo.local"
     assert ips == {"8.8.8.8"}
@@ -523,6 +543,7 @@ def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
 
 def test_query_gpt_private_fqdn_allowed(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "http://foo.local")
+    monkeypatch.setenv("GPT_OSS_ALLOWED_HOSTS", "foo.local")
     called = {"value": False}
 
     def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
@@ -555,7 +576,7 @@ def test_query_gpt_dns_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_async_context(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": "ok"}]}).encode()
@@ -566,7 +587,7 @@ async def test_query_gpt_async_context(monkeypatch):
 
 
 def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     monkeypatch.setenv("GPT_OSS_TIMEOUT", "0")
     with caplog.at_level(logging.WARNING):
         _, timeout, _, _ = _get_api_url_timeout()
@@ -575,7 +596,7 @@ def test_get_api_url_timeout_non_positive(monkeypatch, caplog):
 
 
 def test_get_api_url_timeout_invalid(monkeypatch, caplog):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     monkeypatch.setenv("GPT_OSS_TIMEOUT", "abc")
     with caplog.at_level(logging.WARNING):
         _, timeout, _, _ = _get_api_url_timeout()
@@ -597,7 +618,7 @@ def test_get_api_url_timeout_respects_base_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_json_async(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": '{"signal": "buy", "tp_mult": 1, "sl_mult": 1}'}]}).encode()
@@ -610,7 +631,7 @@ async def test_query_gpt_json_async(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_query_gpt_json_async_missing_fields(monkeypatch, caplog):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": '{"signal": "buy"}'}]}).encode()
@@ -625,7 +646,7 @@ async def test_query_gpt_json_async_missing_fields(monkeypatch, caplog):
 
 @pytest.mark.asyncio
 async def test_query_gpt_json_async_invalid_payload(monkeypatch, caplog):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
 
     def fake_stream(self, *args, **kwargs):
         content = json.dumps({"choices": [{"text": "not json"}]}).encode()
@@ -708,7 +729,7 @@ def test_query_gpt_openai_invalid_max_tokens(monkeypatch, caplog):
 
 @pytest.mark.asyncio
 async def test_query_gpt_no_env_leak(monkeypatch):
-    monkeypatch.setenv("GPT_OSS_API", "https://example.com")
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
     captured: dict[str, bool | None] = {}
 
     class DummyClient:

@@ -1,3 +1,7 @@
+import socket
+
+import pytest
+
 import model_builder_client
 
 
@@ -42,10 +46,16 @@ def test_prepare_endpoint_allows_default_service_hosts(monkeypatch):
 
 def test_prepare_endpoint_respects_allowlist_env(monkeypatch):
     monkeypatch.setenv("MODEL_BUILDER_ALLOWED_HOSTS", "trusted.local")
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        if host == "trusted.local":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.8", 0))]
+        raise AssertionError(host)
+
+    monkeypatch.setattr(model_builder_client.socket, "getaddrinfo", fake_getaddrinfo)
     monkeypatch.setattr(
         model_builder_client,
         "_resolve_hostname",
-        _fake_resolve("trusted.local", {"198.51.100.5"}),
+        _fake_resolve("trusted.local", {"10.0.0.8"}),
     )
 
     endpoint = model_builder_client._prepare_endpoint(  # type: ignore[attr-defined]
@@ -55,6 +65,23 @@ def test_prepare_endpoint_respects_allowlist_env(monkeypatch):
 
     assert endpoint is not None
     assert endpoint.hostname == "trusted.local"
+
+
+def test_load_allowed_hosts_filters_public(monkeypatch, caplog):
+    monkeypatch.setenv("MODEL_BUILDER_ALLOWED_HOSTS", "trusted.local")
+
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        if host == "trusted.local":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+        raise AssertionError(host)
+
+    monkeypatch.setattr(model_builder_client.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with caplog.at_level("WARNING"):
+        hosts = model_builder_client._load_allowed_hosts()
+
+    assert "trusted.local" not in hosts
+    assert "Пропускаем" in caplog.text
 
 
 def test_prepare_endpoint_rejects_unlisted_host(monkeypatch):

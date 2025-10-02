@@ -124,8 +124,68 @@ def _load_allowed_hosts() -> set[str]:
     hosts: set[str] = set()
     for part in raw.split(","):
         normalised = _normalise_host(part)
-        if normalised:
+        if not normalised:
+            continue
+
+        if normalised in hosts:
+            continue
+
+        if normalised == "localhost":
             hosts.add(normalised)
+            continue
+
+        try:
+            infos = socket.getaddrinfo(normalised, None, family=socket.AF_UNSPEC)
+        except socket.gaierror as exc:
+            logger.warning(
+                "Пропускаем запись %r из %s: не удалось разрешить хост (%s)",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+                exc,
+            )
+            continue
+
+        ips: set[str] = set()
+        for info in infos:
+            sockaddr = info[4]
+            if not sockaddr:
+                continue
+            host = sockaddr[0]
+            if isinstance(host, bytes):
+                try:
+                    host = host.decode()
+                except UnicodeDecodeError:
+                    continue
+            ips.add(str(host))
+
+        if not ips:
+            logger.warning(
+                "Пропускаем запись %r из %s: имя хоста не разрешилось ни в один IP",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+            )
+            continue
+
+        unsafe = []
+        for ip_text in ips:
+            try:
+                parsed = ipaddress.ip_address(ip_text)
+            except ValueError:
+                unsafe.append(ip_text)
+                continue
+            if not (parsed.is_loopback or parsed.is_private):
+                unsafe.append(ip_text)
+
+        if unsafe:
+            logger.warning(
+                "Пропускаем запись %r из %s: resolve в публичные IP %s",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+                ", ".join(sorted(unsafe)),
+            )
+            continue
+
+        hosts.add(normalised)
     return hosts
 
 
