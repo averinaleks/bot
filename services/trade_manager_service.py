@@ -294,8 +294,8 @@ def _write_positions_locked() -> None:
         logging.warning('Failed to save positions cache: %s', exc)
         try:
             tmp_path.unlink()
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            logging.debug('Failed to remove temporary positions cache %s: %s', tmp_path, cleanup_exc)
         raise
 
 

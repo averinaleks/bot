@@ -203,6 +203,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"::warning::{exc}", file=sys.stderr)
         _write_github_output(skip=True, head_sha="")
         return 0
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::warning::Критическое исключение в check_pr_status: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(skip=True, head_sha="")
+        return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Неожиданная ошибка при проверке PR: {exc}",
@@ -242,7 +249,14 @@ def cli(argv: list[str] | None = None) -> int:
             )
             _write_github_output(skip=True, head_sha="")
         return 0
-    except BaseException as exc:  # pragma: no cover - defensive guard
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::warning::Критическое исключение в check_pr_status: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(skip=True, head_sha="")
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Критическое исключение в check_pr_status: {exc}",
             file=sys.stderr,

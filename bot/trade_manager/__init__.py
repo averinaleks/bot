@@ -8,7 +8,7 @@
 
 from typing import TYPE_CHECKING, Any, cast
 
-from bot.config import OFFLINE_MODE
+from bot import config as bot_config
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .core import TradeManager as TradeManagerType
@@ -17,7 +17,7 @@ else:
     TradeManagerType = Any
     TelegramLoggerType = Any
 
-if OFFLINE_MODE:
+if bot_config.OFFLINE_MODE:
     from services.offline import OfflineBybit, OfflineTelegram
 
     TradeManager = cast(type[TradeManagerType], OfflineBybit)

@@ -20,7 +20,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
-from bot.config import OFFLINE_MODE
+from bot import config as bot_config
 from bot.pydantic_compat import BaseModel, Field, ValidationError
 from bot.utils import retry
 
@@ -35,7 +35,7 @@ if _openai_spec is not None:
     OpenAI: OpenAIType | None = getattr(_openai_module, "OpenAI", None)
 else:
     OpenAI = None
-if OFFLINE_MODE:
+if bot_config.OFFLINE_MODE:
     from services.offline import OfflineGPT
 
 logger = logging.getLogger("TradingBot")
@@ -114,7 +114,7 @@ def _should_use_openai(api_url: str | None) -> bool:
 
     if OpenAI is None:
         return False
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         return False
     if not api_url:
         return bool(os.getenv("OPENAI_API_KEY"))
@@ -606,7 +606,7 @@ def query_gpt(prompt: str) -> str:
     before giving up. Prompts longer than :data:`MAX_PROMPT_BYTES` are truncated
     with a warning.
     """
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         return OfflineGPT.query(prompt)
 
     prompt = _truncate_prompt(prompt)
@@ -686,7 +686,7 @@ async def query_gpt_async(prompt: str) -> str:
     :func:`query_gpt` including error handling and environment configuration.
     Prompts longer than :data:`MAX_PROMPT_BYTES` are truncated with a warning.
     """
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         return await OfflineGPT.query_async(prompt)
 
     prompt = _truncate_prompt(prompt)
@@ -727,7 +727,7 @@ async def query_gpt_async(prompt: str) -> str:
 async def query_gpt_json_async(prompt: str) -> dict:
     """Return JSON parsed from :func:`query_gpt_async` text output."""
 
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         return await OfflineGPT.query_json_async(prompt)
 
     text = await query_gpt_async(prompt)

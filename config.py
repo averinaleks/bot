@@ -457,8 +457,12 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                 if end != -1:
                     try:
                         cfg.update(json.loads(content[: end + 1]))
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as fallback_exc:
+                        logger.warning(
+                            "Failed to recover configuration from %s: %s",
+                            candidate,
+                            fallback_exc,
+                        )
     type_hints = get_type_hints(BotConfig)
     for fdef in fields(BotConfig):
         env_val = os.getenv(fdef.name.upper())

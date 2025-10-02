@@ -43,13 +43,13 @@ def allowed_github_directories() -> list[Path]:
 
     try:
         allowed.append(Path.cwd().resolve(strict=True))
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"::warning::Unable to resolve current working directory: {exc}", file=sys.stderr)
 
     try:
         allowed.append(Path(tempfile.gettempdir()).resolve(strict=False))
-    except (FileNotFoundError, RuntimeError):
-        pass
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(f"::warning::Unable to resolve temporary directory: {exc}", file=sys.stderr)
 
     return _deduplicate(allowed)
 

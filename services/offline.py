@@ -9,7 +9,7 @@ import secrets
 import time
 from collections.abc import Callable, Mapping
 
-from bot.config import OFFLINE_MODE
+from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger("TradingBot")
@@ -68,7 +68,7 @@ def ensure_offline_env(
         when nothing was changed or :data:`OFFLINE_MODE` is disabled.
     """
 
-    if not OFFLINE_MODE:
+    if not bot_config.OFFLINE_MODE:
         return []
 
     applied: list[str] = []
@@ -94,7 +94,7 @@ def ensure_offline_env(
     return applied
 
 
-if OFFLINE_MODE:
+if bot_config.OFFLINE_MODE:
     ensure_offline_env()
 
 
