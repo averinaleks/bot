@@ -61,6 +61,15 @@ jobs:
           # loop above ran), delete them so the extractor never attempts to
           # parse the plaintext Git data as Python modules.
           find "$PWD" -path '*/.git/logs/*' -type f -name '*.py' -delete
+          # Finally, prune any other Python-looking artifacts that may lurk in
+          # the Git metadata directory. Some hosted runners have surprised us
+          # by creating temporary worktrees or fetch mirrors whose refnames end
+          # with .py. Those references do not correspond to source files the
+          # analyzer needs, and leaving them behind risks resurfacing the
+          # original parse errors. A blanket sweep across the remaining Git
+          # metadata is inexpensive and guarantees CodeQL never inspects those
+          # plaintext blobs as if they were Python modules.
+          find "$PWD" -path '*/.git/*' -type f -name '*.py' -delete
 
       - name: Set up Python
         uses: actions/setup-python@v6
