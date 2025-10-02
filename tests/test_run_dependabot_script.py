@@ -1,7 +1,8 @@
 import os
 import secrets
 import shutil
-import subprocess  # nosec B404: задействован контролируемый вызов git
+# Bandit note: subprocess используется для контролируемого вызова git.
+import subprocess  # nosec B404
 from pathlib import Path
 from textwrap import dedent
 
@@ -12,7 +13,8 @@ BASH_EXECUTABLE = shutil.which("bash") or "/bin/bash"
 def _run_dependabot(script: Path, env: dict[str, str]):
     """Выполнить скрипт dependabot через абсолютный путь до bash."""
 
-    return subprocess.run(  # nosec B603: фиксированная команда git с доверенными аргументами
+    # Bandit note: команда git фиксирована и использует доверенные аргументы.
+    return subprocess.run(  # nosec B603
         [BASH_EXECUTABLE, str(script)],
         capture_output=True,
         text=True,
