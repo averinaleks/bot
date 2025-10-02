@@ -3,6 +3,11 @@
 FROM python:3.11-slim AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Поведение Python по умолчанию с буферизацией stdout усложняет отладку
+# журналов в GitHub Actions. Выключаем буферизацию сразу в базовом образе,
+# чтобы любые ``print``-сообщения появлялись мгновенно.
+ENV PYTHONUNBUFFERED=1
+
 # Обновляем базовый образ до актуальных патчей безопасности и устанавливаем
 # минимальный набор инструментов, необходимый для сборки виртуального
 # окружения. Использование официального python:3.11-slim позволяет избежать
@@ -24,6 +29,19 @@ WORKDIR /app
 COPY requirements-core.txt .
 
 ENV VIRTUAL_ENV=/opt/venv
+
+# Строго убеждаемся, что в сборочном образе доступен Python 3.11. Именно
+# отсутствие бинарника python3.11 в прошлых сборках вызывало падения "exit
+# code 127" на шаге docker-publish. Такой ранний контроль делает причину
+# проблемы очевидной и предотвращает регресс при смене базового образа.
+RUN python - <<'PY'
+import sys
+major, minor = sys.version_info[:2]
+if (major, minor) != (3, 11):
+    raise SystemExit(
+        f"Builder Python version mismatch: expected 3.11, got {major}.{minor}"
+    )
+PY
 
 # pip>=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает известные
 # уязвимости и совместимы с зависимостями проекта.
@@ -105,6 +123,8 @@ RUN /bin/bash -euo pipefail -c "\
 FROM python:3.11-slim
 ARG DEBIAN_FRONTEND=noninteractive
 
+ENV PYTHONUNBUFFERED=1
+
 # Обновляем систему и добавляем только необходимые зависимости выполнения.
 # libgomp1 требуется бинарям NumPy/Scikit-learn, а libssl3 необходим для
 # криптографических библиотек.
@@ -117,6 +137,18 @@ apt-get install -y --no-install-recommends \
     libssl3
 rm -rf /var/lib/apt/lists/*
 EOSHELL
+
+# Проверяем, что рантайм тоже использует Python 3.11. Это гарантирует,
+# что окружение исполнения совпадает со сборочным и мы не столкнёмся с
+# несовместимостью зависимостей.
+RUN python - <<'PY'
+import sys
+major, minor = sys.version_info[:2]
+if (major, minor) != (3, 11):
+    raise SystemExit(
+        f"Runtime Python version mismatch: expected 3.11, got {major}.{minor}"
+    )
+PY
 
 WORKDIR /app
 
