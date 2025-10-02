@@ -1,6 +1,6 @@
 numpy>=2.2.6  # core numeric library
 pandas>=2.2.2
-ccxt==4.5.6
+ccxt==4.5.7
 # ccxtpro is distributed under a commercial license and cannot be installed
 # automatically in CI. Install it manually in production environments if
 # real-time WebSocket support is required.
