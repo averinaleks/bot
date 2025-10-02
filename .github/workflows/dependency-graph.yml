@@ -134,9 +134,13 @@ jobs:
                           filename = Path(file).name
                       except Exception:
                           filename = file
+                      file_lower = file.lower()
+                      filename_lower = filename.lower()
                       if any(
                           fnmatch.fnmatch(file, pattern)
                           or fnmatch.fnmatch(filename, pattern)
+                          or fnmatch.fnmatch(file_lower, pattern)
+                          or fnmatch.fnmatch(filename_lower, pattern)
                           for pattern in patterns
                       ):
                           changed.append(file)
@@ -190,7 +194,12 @@ jobs:
           github.event_name == 'repository_dispatch'
         run: |
           python <<'PY'
+          from __future__ import annotations
+
+          import fnmatch
+          import os
           from pathlib import Path
+          from typing import Iterable
 
           patterns = ("requirements*.txt", "requirements*.in", "requirements*.out")
           excluded = {
@@ -209,31 +218,49 @@ jobs:
           def is_excluded(target: Path) -> bool:
               return any(part in excluded for part in target.parts)
 
-          for pattern in patterns:
-              for path in Path(".").rglob(pattern):
-                  if is_excluded(path.parent):
+          def iter_requirement_files(root: Path) -> Iterable[Path]:
+              for current_root, dirnames, filenames in os.walk(root):
+                  current_path = Path(current_root)
+                  if is_excluded(current_path):
+                      dirnames[:] = []
                       continue
-                  try:
-                      original = path.read_text(encoding="utf-8")
-                  except UnicodeDecodeError as exc:
-                      print(
-                          f"Skipping {path} due to encoding error: {exc}",
-                          flush=True,
-                      )
+                  dirnames[:] = sorted(
+                      dirname
+                      for dirname in dirnames
+                      if not is_excluded(current_path / dirname)
+                  )
+                  for filename in filenames:
+                      name_lower = filename.lower()
+                      if not any(
+                          fnmatch.fnmatch(filename, pattern)
+                          or fnmatch.fnmatch(name_lower, pattern)
+                          for pattern in patterns
+                      ):
+                          continue
+                      yield current_path / filename
+
+          for path in iter_requirement_files(Path(".")):
+              try:
+                  original = path.read_text(encoding="utf-8")
+              except UnicodeDecodeError as exc:
+                  print(
+                      f"Skipping {path} due to encoding error: {exc}",
+                      flush=True,
+                  )
+                  continue
+              lines = original.splitlines(keepends=True)
+              filtered: list[str] = []
+              for line in lines:
+                  stripped = line.lstrip()
+                  stripped_lower = stripped.lower()
+                  if stripped_lower.startswith("ccxtpro"):
                       continue
-                  lines = original.splitlines(keepends=True)
-                  filtered: list[str] = []
-                  for line in lines:
-                      stripped = line.lstrip()
-                      stripped_lower = stripped.lower()
-                      if stripped_lower.startswith("ccxtpro"):
-                          continue
-                      if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower:
-                          continue
-                      filtered.append(line)
-                  if filtered != lines:
-                      updated = "".join(filtered)
-                      path.write_text(updated, encoding="utf-8")
+                  if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower:
+                      continue
+                  filtered.append(line)
+              if filtered != lines:
+                  updated = "".join(filtered)
+                  path.write_text(updated, encoding="utf-8")
           PY
       - name: Submit dependency snapshot
         if: >-
