@@ -519,6 +519,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"::warning::{exc}", file=sys.stderr)
         _write_github_output(has_diff=False)
         return 0
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Критическое исключение в prepare_gptoss_diff: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(has_diff=False)
+        return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::error::Неожиданная ошибка при подготовке diff: {exc}",
@@ -532,8 +539,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             if output_path.exists():
                 output_path.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            print(
+                f"::warning::Не удалось удалить существующий файл diff {output_path}: {exc}",
+                file=sys.stderr,
+            )
         _write_github_output(has_diff=False)
         return 0
 
@@ -562,7 +572,14 @@ def cli(argv: Sequence[str] | None = None) -> int:
             )
             _write_github_output(has_diff=False)
         return 0
-    except BaseException as exc:  # pragma: no cover - defensive guard
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Критическое исключение в prepare_gptoss_diff: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(has_diff=False)
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::error::Критическое исключение в prepare_gptoss_diff: {exc}",
             file=sys.stderr,

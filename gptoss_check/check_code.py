@@ -207,11 +207,8 @@ if _http_client_error is not None:
         def get_httpx_client(timeout: float = 10.0, **kwargs):
             """Provide a minimal HTTP client backed by the standard library."""
 
-            client = _SimpleClient(timeout=timeout)
-            try:
+            with _SimpleClient(timeout=timeout) as client:
                 yield client
-            finally:
-                client.close()
 
         httpx = SimpleNamespace(HTTPError=HTTPError)
         _fallback_reason = _http_client_error
@@ -343,8 +340,8 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                 finally:
                     response.close()
             return
-        except HTTPError:
-            pass
+        except HTTPError as exc:
+            logger.debug("GPT-OSS health check failed: %s", exc)
 
         payload = {"prompt": "ping"}
         model = os.getenv("GPT_OSS_MODEL")
@@ -361,7 +358,8 @@ def wait_for_api(api_url: str, timeout: int | None = None) -> None:
                     response.raise_for_status()
                 finally:
                     response.close()
-        except HTTPError:
+        except HTTPError as exc:
+            logger.debug("GPT-OSS completion probe failed: %s", exc)
             time.sleep(1)
 
     raise RuntimeError(f"Сервер GPT-OSS по адресу {api_url} не отвечает")

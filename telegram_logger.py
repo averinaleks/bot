@@ -38,9 +38,9 @@ else:  # pragma: no cover - executed when httpx installed
 import hashlib
 # Use absolute import to ensure the local configuration module is loaded even
 # when a similarly named module exists on ``PYTHONPATH``.
-from bot.config import OFFLINE_MODE
+from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
-if OFFLINE_MODE:
+if bot_config.OFFLINE_MODE:
     from services.offline import OfflineTelegram
 try:  # pragma: no cover - optional dependency
     from telegram.error import BadRequest, Forbidden, RetryAfter
@@ -48,9 +48,22 @@ except Exception as exc:  # pragma: no cover - missing telegram
     logging.getLogger("TradingBot").error("Telegram package not available: %s", exc)
 
     class _TelegramError(Exception):
+        """Base class mirroring telegram.error.TelegramError."""
+
+    class _BadRequest(_TelegramError):
         pass
 
-    BadRequest = Forbidden = RetryAfter = _TelegramError  # type: ignore
+    class _Forbidden(_TelegramError):
+        pass
+
+    class _RetryAfter(_TelegramError):
+        def __init__(self, *args: Any, retry_after: float | None = None, **kwargs: Any) -> None:
+            super().__init__(*args)
+            self.retry_after = retry_after
+
+    BadRequest = _BadRequest  # type: ignore
+    Forbidden = _Forbidden  # type: ignore
+    RetryAfter = _RetryAfter  # type: ignore
 
 
 logger = logging.getLogger("TradingBot")
@@ -371,7 +384,7 @@ class TelegramLogger(logging.Handler):
             await inst._shutdown()
 
 
-if OFFLINE_MODE:
+if bot_config.OFFLINE_MODE:
     TelegramLogger = OfflineTelegram  # type: ignore
 
 

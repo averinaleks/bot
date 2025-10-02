@@ -69,7 +69,9 @@ except ImportError:  # pragma: no cover - заглушка
     def configure_logging() -> None:  # type: ignore
         """Stubbed logging configurator."""
         pass
-from bot.config import BotConfig, OFFLINE_MODE  # noqa: E402
+from bot import config as bot_config  # noqa: E402
+
+BotConfig = bot_config.BotConfig
 from services.logging_utils import sanitize_log_value  # noqa: E402
 from telegram_logger import resolve_unsent_path  # noqa: E402
 import contextlib  # noqa: E402
@@ -252,7 +254,7 @@ class TradeManager:
         # when python-dotenv isn't installed, so calling it is safe in tests.
         load_dotenv()
 
-        if OFFLINE_MODE:
+        if bot_config.OFFLINE_MODE:
             ensure_offline_env(
                 {
                     "TELEGRAM_BOT_TOKEN": lambda: generate_placeholder_credential(
@@ -2128,7 +2130,7 @@ class TradeManager:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                logger.debug("Cancelled task %s during shutdown", getattr(task, "get_name", lambda: repr(task))())
         self.tasks.clear()
 
         await TelegramLogger.shutdown()

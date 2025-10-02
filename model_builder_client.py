@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from bot.config import OFFLINE_MODE
+from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
 
 
@@ -304,7 +304,7 @@ async def _fetch_training_data(
 ) -> Tuple[List[List[float]], List[int]]:
     """Backward compatible wrapper returning training data for *data_url*."""
 
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         logger.info("Offline mode: skipping training data fetch for %s", symbol)
         return [], []
 
@@ -317,7 +317,7 @@ async def _fetch_training_data(
 async def train(url: str, features: List[List[float]], labels: List[int]) -> bool:
     """Send training data to the model_builder service."""
 
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         logger.info("Offline mode: skipping model training request")
         return True
 
@@ -333,7 +333,7 @@ async def retrain(
     """Retrain the model using data from ``data_url`` with strict URL validation."""
 
     global _MODEL_VERSION
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         logger.info("Offline mode: retrain skipped")
         return _MODEL_VERSION
 
@@ -359,7 +359,7 @@ async def retrain(
 async def _retrain_loop(
     model_url: str, data_url: str, interval: float, symbol: str
 ) -> None:
-    if OFFLINE_MODE:
+    if bot_config.OFFLINE_MODE:
         logger.info("Offline mode: retrain loop disabled")
         return
     while True:

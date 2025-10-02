@@ -11,3 +11,7 @@ paths-ignore:
   - .git/**
   - '**/.git/**'
   - '**/.git/logs/**'
+queries:
+  # Limit analysis to the security query suite so we focus on actionable
+  # vulnerabilities while avoiding purely stylistic "quality" alerts.
+  - uses: security-extended

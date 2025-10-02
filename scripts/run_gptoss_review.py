@@ -425,6 +425,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"::warning::{exc}", file=sys.stderr)
         _write_github_output(False)
         return 0
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Критическое исключение при генерации обзора: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(False)
+        return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::error::Неожиданная ошибка при генерации обзора: {exc}",
@@ -458,7 +465,14 @@ def cli(argv: list[str] | None = None) -> int:
             )
             _write_github_output(False)
         return 0
-    except BaseException as exc:  # pragma: no cover - defensive guard
+    except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
+        print(
+            f"::error::Критическое исключение в CLI: {exc}",
+            file=sys.stderr,
+        )
+        _write_github_output(False)
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::error::Критическое исключение в CLI: {exc}",
             file=sys.stderr,
