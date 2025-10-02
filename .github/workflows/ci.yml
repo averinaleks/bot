@@ -43,7 +43,8 @@ jobs:
         working-directory: /mnt
         continue-on-error: true
         run: |
-          python -m pip_audit --strict -f json -o pip-audit.json
+          python "$GITHUB_WORKSPACE/scripts/run_pip_audit.py" \
+            --strict --output pip-audit.json
       - name: Upload pip-audit report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
