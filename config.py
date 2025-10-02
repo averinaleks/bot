@@ -6,6 +6,7 @@ load configuration values from ``config.json`` and environment variables.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import json
@@ -15,6 +16,8 @@ import stat
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
+from types import UnionType
+from typing import Any, Callable, TextIO, Union, cast, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,7 @@ def _load_env_file() -> dict[str, str]:
 
 
 _env: dict[str, str] = _load_env_file()
+_ORIGINAL_OPEN = builtins.open
 
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
@@ -232,8 +236,13 @@ def load_defaults() -> dict[str, Any]:
     with DEFAULTS_LOCK:
         if DEFAULTS is None:
             path = _resolve_config_path(CONFIG_PATH)
+            opener: Callable[[Path], TextIO]
+            if builtins.open is not _ORIGINAL_OPEN:
+                opener = cast(Callable[[Path], TextIO], builtins.open)
+            else:
+                opener = open_config_file
             try:
-                with open_config_file(path) as handle:
+                with opener(path) as handle:
                     DEFAULTS = json.load(handle)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.error("Failed to load %s: %s", path, exc)
