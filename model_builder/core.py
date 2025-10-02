@@ -22,13 +22,23 @@ from bot.config import BotConfig
 from bot.ray_compat import IS_RAY_STUB, ray
 from bot.utils_loader import require_utils
 from models.architectures import KERAS_FRAMEWORKS, create_model
-from model_builder.validation import (
-    FeatureValidationError,
-    MAX_FEATURES_PER_SAMPLE,
-    MAX_SAMPLES,
-    coerce_feature_matrix,
-    coerce_label_vector,
-)
+try:  # Prefer relative import so test isolates can load the package under an alias.
+    from .validation import (
+        FeatureValidationError,
+        MAX_FEATURES_PER_SAMPLE,
+        MAX_SAMPLES,
+        coerce_feature_matrix,
+        coerce_label_vector,
+    )
+except ImportError:  # pragma: no cover - fallback when executed as a script
+    from model_builder.validation import (  # type: ignore[no-redef]
+        FeatureValidationError,
+        MAX_FEATURES_PER_SAMPLE,
+        MAX_SAMPLES,
+        coerce_feature_matrix,
+        coerce_label_vector,
+    )
+
 from security import (
     ArtifactDeserializationError,
     harden_mlflow,
@@ -40,15 +50,6 @@ from security import (
 )
 from services.logging_utils import sanitize_log_value
 from .storage import JOBLIB_AVAILABLE, joblib
-from .validation import (
-    FeatureValidationError,
-    MAX_FEATURES_PER_SAMPLE,
-    MAX_SAMPLES,
-    coerce_feature_matrix,
-    coerce_label_vector,
-)
-
-
 _utils = require_utils(
     "check_dataframe_empty",
     "ensure_writable_directory",
