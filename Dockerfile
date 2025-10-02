@@ -16,6 +16,8 @@ COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
 COPY docker/scripts/update_commons_lang3.py /tmp/security/update_commons_lang3.py
+COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
+COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 WORKDIR /tmp/build
 
