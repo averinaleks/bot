@@ -132,6 +132,11 @@ RUN /bin/bash -euo pipefail -c "\
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Переносим ключ и список репозитория deadsnakes из builder-образа, чтобы
+# избежать повторного импорта ключа через gnupg в рантайме.
+COPY --from=builder /usr/share/keyrings/deadsnakes-ppa.gpg /usr/share/keyrings/deadsnakes-ppa.gpg
+COPY --from=builder /etc/apt/sources.list.d/deadsnakes-ppa.list /etc/apt/sources.list.d/deadsnakes-ppa.list
+
 # Обновляем систему перед установкой зависимостей выполнения и добавляем Python 3.11
 # из PPA deadsnakes, чтобы среда рантайма совпадала с окружением сборки.
 RUN <<'EOSHELL'
@@ -139,42 +144,22 @@ set -eux
 apt-get update
 apt-get upgrade -y
 apt-get install -y --no-install-recommends \
-    gnupg \
     ca-certificates \
     libssl3t64 \
     # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
     libgomp1 \
     curl \
     # Исключаем tar, чтобы избежать CVE-2025-45582
-    coreutils libgcrypt20 login passwd
-# Регистрируем PPA deadsnakes вручную, без утилиты add-apt-repository,
-# чтобы не зависеть от системного python3 в базовом образе.
-keyring_path=/usr/share/keyrings/deadsnakes-ppa.gpg
-codename="$(. /etc/os-release && printf '%s' "$VERSION_CODENAME")"
-tmp_key="$(mktemp)"
-curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBA6932366A755776" -o "$tmp_key"
-gpg --batch --yes --dearmor -o "$keyring_path" "$tmp_key"
-rm -f "$tmp_key"
-chmod 644 "$keyring_path"
-printf 'deb [signed-by=%s] http://ppa.launchpad.net/deadsnakes/ppa/ubuntu %s main\n' \
-  "$keyring_path" "$codename" > /etc/apt/sources.list.d/deadsnakes-ppa.list
-apt-get update
-apt-get install -y --no-install-recommends \
+    coreutils libgcrypt20 login passwd \
     python3.11 \
     python3.11-minimal \
     python3.11-distutils
-apt-get purge -y --auto-remove gnupg || true
 apt-get clean
 rm -rf /var/lib/apt/lists/*
-if command -v python3.11 >/dev/null 2>&1; then
-    if [ ! -e /usr/local/bin/python3 ]; then
-        ln -s /usr/bin/python3.11 /usr/local/bin/python3
-    fi
-    /usr/bin/python3.11 --version
-else
-    echo 'python3.11 binary missing after installation' >&2
-    exit 1
+if [ ! -e /usr/local/bin/python3 ]; then
+    ln -s /usr/bin/python3.11 /usr/local/bin/python3
 fi
+/usr/bin/python3.11 --version
 EOSHELL
 
 WORKDIR /app
