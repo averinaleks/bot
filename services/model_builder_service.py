@@ -19,8 +19,6 @@ from typing import TYPE_CHECKING, Any, Dict
 
 import numpy as np
 from flask import Flask, jsonify, request
-from numpy.typing import NDArray
-
 from bot.dotenv_utils import load_dotenv
 from bot.utils_loader import require_utils
 from model_builder.validation import (
