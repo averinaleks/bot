@@ -16,6 +16,11 @@ logger = logging.getLogger("TradingBot")
 
 _PlaceholderValue = str | Callable[[], str]
 
+# Mirror the configuration flag so tests can monkeypatch the offline mode state
+# without having to reload the ``config`` module. The value is intentionally
+# coerced to ``bool`` to avoid surprising truthiness of custom objects.
+OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
+
 
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
     """Return a high-entropy placeholder credential for offline usage.
@@ -68,7 +73,7 @@ def ensure_offline_env(
         when nothing was changed or :data:`OFFLINE_MODE` is disabled.
     """
 
-    if not bot_config.OFFLINE_MODE:
+    if not OFFLINE_MODE:
         return []
 
     applied: list[str] = []
@@ -94,7 +99,7 @@ def ensure_offline_env(
     return applied
 
 
-if bot_config.OFFLINE_MODE:
+if OFFLINE_MODE:
     ensure_offline_env()
 
 

@@ -361,7 +361,15 @@ class BotConfig:
         return isinstance(value, origin)
 
     def _validate_types(self) -> None:
-        type_hints = get_type_hints(BotConfig)
+        try:
+            type_hints = get_type_hints(BotConfig)
+        except NameError:
+            fallback_globals = dict(globals())
+            fallback_globals.setdefault("List", list)
+            fallback_globals.setdefault("Dict", dict)
+            fallback_globals.setdefault("Optional", Optional)
+            fallback_globals.setdefault("Union", Union)
+            type_hints = get_type_hints(BotConfig, globalns=fallback_globals)
         for fdef in fields(self):
             val = getattr(self, fdef.name)
             expected = type_hints.get(fdef.name, fdef.type)
