@@ -41,6 +41,13 @@ def allowed_github_directories() -> list[Path]:
             if grandparent != parent:
                 allowed.append(grandparent)
 
+    runner_temp = os.getenv("RUNNER_TEMP")
+    if runner_temp:
+        try:
+            allowed.append(Path(runner_temp).resolve(strict=True))
+        except OSError:
+            pass
+
     try:
         allowed.append(Path.cwd().resolve(strict=True))
     except OSError:
