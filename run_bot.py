@@ -392,7 +392,9 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
 
             if new_exc is None:
                 new_exc = matched_cls(enriched_args[0]) if matched_cls else RuntimeError(enriched_args[0])
-            assert new_exc is not None
+
+            if new_exc is None:  # pragma: no cover - defensive fallback
+                raise RuntimeError(enriched_args[0])
             try:
                 new_exc.args = enriched_args
             except Exception as assignment_error:  # pragma: no cover - defensive
