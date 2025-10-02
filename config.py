@@ -6,6 +6,7 @@ load configuration values from ``config.json`` and environment variables.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import io
