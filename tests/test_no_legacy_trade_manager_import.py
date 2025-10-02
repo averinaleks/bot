@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import shutil
-import subprocess  # nosec B404: используется только для чтения списка файлов через git
+# Bandit note: subprocess используется только для чтения списка файлов через git.
+import subprocess  # nosec B404
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,8 @@ if GIT_EXECUTABLE is None:  # pragma: no cover - защитный сценари
 
 def _tracked_python_files(root: Path) -> list[Path]:
     command = [GIT_EXECUTABLE, "ls-files", "--", "*.py"]
-    result = subprocess.run(  # nosec B603: команда git формируется из фиксированных аргументов
+    # Bandit note: команда git формируется из фиксированных аргументов.
+    result = subprocess.run(  # nosec B603
         command,
         check=True,
         cwd=root,

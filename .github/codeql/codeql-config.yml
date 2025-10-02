@@ -11,6 +11,19 @@ paths-ignore:
   - .git/**
   - '**/.git/**'
   - '**/.git/logs/**'
+  # The test-suite exercises hundreds of fixtures and mocks that explode the
+  # control-flow graph that CodeQL has to explore.  The security query suite
+  # regularly times out on those synthetic paths, which shows up as "execution
+  # errors" even though the production modules finish quickly.  Excluding the
+  # tests keeps the database small enough for the packaged queries to run to
+  # completion.
+  - tests/**
+  # Patched tarballs and diff payloads that we vendor for our Docker images are
+  # not Python source files, but their ``.patch`` suffix is still eligible for
+  # extraction.  Skipping them avoids wasting analysis time on non-code assets
+  # and prevents the extractor from emitting malformed modules that used to
+  # trip CodeQL's evaluator.
+  - docker/patches/**
 queries:
   # Limit analysis to the security query suite so we focus on actionable
   # vulnerabilities while avoiding purely stylistic "quality" alerts.

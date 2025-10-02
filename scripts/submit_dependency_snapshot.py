@@ -7,7 +7,8 @@ import json
 import os
 import re
 import shutil
-import subprocess  # nosec B404: используется только для контролируемых вызовов git
+# Bandit note: subprocess используется только для заранее определённых вызовов git.
+import subprocess  # nosec B404
 import sys
 import time
 from collections import OrderedDict
@@ -144,7 +145,8 @@ def _run_git_command(*args: str) -> str | None:
     command = (git_binary,) + args
 
     try:
-        completed = subprocess.run(  # nosec B603: аргументы заданы жёстко и не берутся из пользовательского ввода
+        # Bandit note: команда формируется из жёстко заданных аргументов.
+        completed = subprocess.run(  # nosec B603
             command,
             check=True,
             stdout=subprocess.PIPE,

@@ -14,7 +14,15 @@ from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger("TradingBot")
 
+# ``OFFLINE_MODE`` mirrors :data:`bot.config.OFFLINE_MODE` so that tests can
+# monkeypatch the flag directly on this module without poking at the config
+# package.  The constant must therefore be defined at import time.
+OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
+
 _PlaceholderValue = str | Callable[[], str]
+
+# Mirror the configuration flag so tests can override it via monkeypatch.
+OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
 
 
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
@@ -68,7 +76,7 @@ def ensure_offline_env(
         when nothing was changed or :data:`OFFLINE_MODE` is disabled.
     """
 
-    if not bot_config.OFFLINE_MODE:
+    if not OFFLINE_MODE:
         return []
 
     applied: list[str] = []
@@ -94,7 +102,7 @@ def ensure_offline_env(
     return applied
 
 
-if bot_config.OFFLINE_MODE:
+if OFFLINE_MODE:
     ensure_offline_env()
 
 
