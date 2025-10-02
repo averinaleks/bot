@@ -72,6 +72,7 @@ _DEFAULT_API_VERSION = "2022-11-28"
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
+_NULL_STRINGS = {"null", "none", "undefined", '""', "''"}
 _PAYLOAD_SHA_KEYS = (
     "after",
     "sha",
@@ -93,11 +94,22 @@ _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 _SKIPPED_PACKAGES = {"ccxtpro"}
 
 
+def _normalise_optional_string(value: str | None) -> str:
+    if not value:
+        return ""
+    candidate = value.strip()
+    if candidate.lower() in _NULL_STRINGS:
+        return ""
+    return candidate
+
+
 def _extract_payload_value(payload: Mapping[str, object], *keys: str) -> str:
     for key in keys:
         candidate = payload.get(key)
-        if isinstance(candidate, str) and candidate:
-            return candidate
+        if isinstance(candidate, str):
+            normalised = _normalise_optional_string(candidate)
+            if normalised:
+                return normalised
     return ""
 
 
@@ -521,14 +533,14 @@ def _build_manifests(root: Path) -> Dict[str, Manifest]:
 
 
 def _env(name: str) -> str:
-    value = os.getenv(name)
+    value = _normalise_optional_string(os.getenv(name))
     if not value:
         raise MissingEnvironmentVariableError(name)
     return value
 
 
 def _api_base_url() -> str:
-    api_url = os.getenv("GITHUB_API_URL") or "https://api.github.com"
+    api_url = _normalise_optional_string(os.getenv("GITHUB_API_URL")) or "https://api.github.com"
     return api_url.rstrip("/")
 
 
@@ -550,14 +562,17 @@ def _https_components(url: str) -> tuple[str, int, str]:
 
 def _job_metadata(repository: str, run_id: str, correlator: str) -> dict[str, str]:
     job: dict[str, str] = {"id": run_id, "correlator": correlator}
-    server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    server_url = (
+        _normalise_optional_string(os.getenv("GITHUB_SERVER_URL"))
+        or "https://github.com"
+    ).rstrip("/")
     if run_id.isdigit():
         job["html_url"] = f"{server_url}/{repository}/actions/runs/{run_id}"
     return job
 
 
 def _auth_schemes(token: str) -> list[str]:
-    override = os.getenv("DEPENDENCY_SNAPSHOT_AUTH_SCHEME")
+    override = _normalise_optional_string(os.getenv("DEPENDENCY_SNAPSHOT_AUTH_SCHEME"))
     if override:
         return [override]
     if token.startswith(_TOKEN_PREFIXES):
@@ -579,6 +594,7 @@ def _log_unexpected_error(exc: Exception) -> None:
 def _normalise_run_attempt(raw_value: str | None) -> int:
     """Return a validated run attempt number suitable for submission."""
 
+    raw_value = _normalise_optional_string(raw_value)
     if not raw_value:
         return 1
     try:
@@ -779,9 +795,9 @@ def submit_dependency_snapshot() -> None:
         )
         return
 
-    token_env = os.getenv("GITHUB_TOKEN") or ""
-    sha = os.getenv("GITHUB_SHA") or ""
-    ref = os.getenv("GITHUB_REF") or ""
+    token_env = _normalise_optional_string(os.getenv("GITHUB_TOKEN"))
+    sha = _normalise_optional_string(os.getenv("GITHUB_SHA"))
+    ref = _normalise_optional_string(os.getenv("GITHUB_REF"))
     payload_used = False
 
     token_override = _extract_payload_token(client_payload)
@@ -832,6 +848,9 @@ def submit_dependency_snapshot() -> None:
     if not ref:
         ref = _discover_git_ref() or ""
 
+    sha = _normalise_optional_string(sha)  # Ensure fallbacks did not produce sentinels
+    ref = _normalise_optional_string(ref)
+
     try:
         if not sha:
             raise MissingEnvironmentVariableError("GITHUB_SHA")
@@ -860,17 +879,27 @@ def submit_dependency_snapshot() -> None:
         print("No dependency manifests found.")
         return
 
-    workflow = os.getenv("GITHUB_WORKFLOW", "dependency-graph")
-    job_name = os.getenv("GITHUB_JOB", "submit")
-    run_id = os.getenv("GITHUB_RUN_ID", str(int(datetime.now(timezone.utc).timestamp())))
+    workflow = (
+        _normalise_optional_string(os.getenv("GITHUB_WORKFLOW"))
+        or "dependency-graph"
+    )
+    job_name = _normalise_optional_string(os.getenv("GITHUB_JOB")) or "submit"
+    run_id = _normalise_optional_string(os.getenv("GITHUB_RUN_ID")) or str(
+        int(datetime.now(timezone.utc).timestamp())
+    )
     run_attempt = _normalise_run_attempt(os.getenv("GITHUB_RUN_ATTEMPT"))
     correlator = f"{workflow}:{job_name}"
 
     job_metadata = _job_metadata(repository, run_id, correlator)
     job_metadata["correlator"] = f"{correlator}:attempt-{run_attempt}"
 
-    metadata_workflow = os.getenv("DEPENDENCY_SNAPSHOT_WORKFLOW") or "dependency-graph"
-    metadata_job = os.getenv("DEPENDENCY_SNAPSHOT_JOB") or "submit"
+    metadata_workflow = (
+        _normalise_optional_string(os.getenv("DEPENDENCY_SNAPSHOT_WORKFLOW"))
+        or "dependency-graph"
+    )
+    metadata_job = (
+        _normalise_optional_string(os.getenv("DEPENDENCY_SNAPSHOT_JOB")) or "submit"
+    )
 
     metadata = {
         "run_attempt": str(run_attempt),

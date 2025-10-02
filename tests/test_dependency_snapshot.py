@@ -413,6 +413,21 @@ def test_submit_dependency_snapshot_prefers_payload_token(
     assert payload["ref"] == "refs/heads/auto"
 
 
+def test_extract_payload_value_skips_null_like_strings() -> None:
+    payload: dict[str, object] = {"sha": "null", "after": " cafebabe ", "ref": "None"}
+
+    result = snapshot._extract_payload_value(payload, "sha", "after", "ref")
+
+    assert result == "cafebabe"
+
+
+def test_env_treats_null_strings_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", " null ")
+
+    with pytest.raises(snapshot.MissingEnvironmentVariableError):
+        snapshot._env("GITHUB_TOKEN")
+
+
 def test_submit_dependency_snapshot_uses_root_payload_values(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
