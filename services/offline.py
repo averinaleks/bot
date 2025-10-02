@@ -21,6 +21,9 @@ OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
 
 _PlaceholderValue = str | Callable[[], str]
 
+# Mirror the configuration flag so tests can override it via monkeypatch.
+OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
+
 
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
     """Return a high-entropy placeholder credential for offline usage.

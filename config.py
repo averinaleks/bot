@@ -362,7 +362,7 @@ class BotConfig:
         return isinstance(value, origin)
 
     def _validate_types(self) -> None:
-        type_hints = get_type_hints(BotConfig)
+        type_hints = get_type_hints(BotConfig, globalns=globals(), localns=locals())
         for fdef in fields(self):
             val = getattr(self, fdef.name)
             expected = type_hints.get(fdef.name, fdef.type)
