@@ -22,6 +22,13 @@ from bot.config import BotConfig
 from bot.ray_compat import IS_RAY_STUB, ray
 from bot.utils_loader import require_utils
 from models.architectures import KERAS_FRAMEWORKS, create_model
+from model_builder.validation import (
+    FeatureValidationError,
+    MAX_FEATURES_PER_SAMPLE,
+    MAX_SAMPLES,
+    coerce_feature_matrix,
+    coerce_label_vector,
+)
 from security import (
     ArtifactDeserializationError,
     harden_mlflow,
