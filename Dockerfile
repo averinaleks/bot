@@ -1,5 +1,5 @@
 # Этап сборки
-FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04 AS builder
 ARG ZLIB_VERSION=1.3.1
 ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ENV OMP_NUM_THREADS=1
@@ -100,7 +100,7 @@ RUN find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     find /app/venv -name "*.so" -exec strip --strip-unneeded {} +
 
 # Этап выполнения (минимальный образ)
-FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
 ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
 ARG PYTHON_META=3.12.3-0ubuntu2
 ENV OMP_NUM_THREADS=1
