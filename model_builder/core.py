@@ -33,6 +33,13 @@ from security import (
 )
 from services.logging_utils import sanitize_log_value
 from .storage import JOBLIB_AVAILABLE, joblib
+from .validation import (
+    FeatureValidationError,
+    MAX_FEATURES_PER_SAMPLE,
+    MAX_SAMPLES,
+    coerce_feature_matrix,
+    coerce_label_vector,
+)
 
 
 _utils = require_utils(
