@@ -24,7 +24,7 @@ apt-get install -y --no-install-recommends \
 # чтобы не зависеть от системного python3 в базовом образе.
 keyring_path=/usr/share/keyrings/deadsnakes-ppa.gpg
 codename="$(. /etc/os-release && printf '%s' "$VERSION_CODENAME")"
-tmp_key="$(mktemp)"
+tmp_key="$(mktemp -p /tmp deadsnakes-keyring.XXXXXX)"
 curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBA6932366A755776" -o "$tmp_key"
 gpg --batch --yes --dearmor -o "$keyring_path" "$tmp_key"
 rm -f "$tmp_key"
@@ -150,7 +150,6 @@ apt-get install -y --no-install-recommends \
     libgomp1 \
     curl \
     # Исключаем tar, чтобы избежать CVE-2025-45582
-    coreutils libgcrypt20 login passwd \
     python3.11 \
     python3.11-minimal \
     python3.11-distutils
