@@ -327,6 +327,10 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
         )
     if not parsed.hostname:
         raise GPTClientError("GPT_OSS_API URL must include a hostname")
+    if parsed.username or parsed.password:
+        raise GPTClientError(
+            "GPT_OSS_API URL must not contain embedded credentials"
+        )
 
     scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"}:

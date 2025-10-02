@@ -497,6 +497,14 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
         _validate_api_url("http://foo.local", _load_allowed_hosts())
 
 
+def test_validate_api_url_rejects_userinfo():
+    with pytest.raises(GPTClientError) as excinfo:
+        _validate_api_url(
+            "https://user:pass@example.com", _load_allowed_hosts()
+        )
+    assert "must not contain embedded credentials" in str(excinfo.value)
+
+
 def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
     def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         assert host == "foo.local"
