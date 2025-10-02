@@ -23,7 +23,7 @@ WORKDIR /tmp/build
 
 RUN set -eux; \
     apt-get update; \
-    apt-get dist-upgrade -y; \
+    apt-get upgrade -y; \
     apt-get install -y --no-install-recommends \
         tzdata \
         linux-libc-dev \
@@ -117,7 +117,7 @@ COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
 COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
     coreutils \

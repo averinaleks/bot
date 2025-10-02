@@ -11,7 +11,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get dist-upgrade -y
+apt-get upgrade -y
 apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -111,7 +111,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get dist-upgrade -y
+apt-get upgrade -y
 apt-get install -y --no-install-recommends \
     libgomp1 \
     libssl3
