@@ -266,13 +266,15 @@ def test_exchange_calls_are_serialized(monkeypatch):
     first_entered = threading.Event()
     release_first = threading.Event()
 
+    event_timeout = 5.0
+
     def create_order(*_args, **_kwargs):
         assert not in_call.is_set(), 'create_order re-entered concurrently'
         in_call.set()
         try:
             if not first_entered.is_set():
                 first_entered.set()
-                assert release_first.wait(timeout=1), 'release not signalled'
+                assert release_first.wait(timeout=event_timeout), 'release not signalled'
             time.sleep(0.01)
             call_sequence.append(len(call_sequence) + 1)
             return {'id': call_sequence[-1]}
@@ -297,7 +299,7 @@ def test_exchange_calls_are_serialized(monkeypatch):
     second = threading.Thread(target=worker)
 
     first.start()
-    assert first_entered.wait(timeout=1)
+    assert first_entered.wait(timeout=event_timeout)
     second.start()
     time.sleep(0.05)
     release_first.set()

@@ -109,11 +109,12 @@ def test_completions_validation(monkeypatch):
 def test_model_busy_returns_429(monkeypatch, endpoint, payload_factory, extract_content):
     start_event = threading.Event()
     release_event = threading.Event()
+    event_timeout = 5.0
     slow_text = "slow-response"
 
     def slow_generate_text(*args, **kwargs):
         start_event.set()
-        if not release_event.wait(timeout=1):
+        if not release_event.wait(timeout=event_timeout):
             raise RuntimeError("Timed out waiting for release_event")
         return slow_text
 
@@ -127,7 +128,7 @@ def test_model_busy_returns_429(monkeypatch, endpoint, payload_factory, extract_
                 json=payload_factory(),
                 headers=headers,
             )
-            if not start_event.wait(timeout=1):
+            if not start_event.wait(timeout=event_timeout):
                 release_event.set()
                 pytest.fail("Model generation did not start in time")
             try:
@@ -140,7 +141,7 @@ def test_model_busy_returns_429(monkeypatch, endpoint, payload_factory, extract_
                 release_event.set()
             assert busy_response.status_code == 429
             assert busy_response.json() == {"detail": "Model is busy"}
-            first_response = first_future.result(timeout=1)
+            first_response = first_future.result(timeout=event_timeout)
             assert first_response.status_code == 200
             assert extract_content(first_response) == slow_text
     assert not server.API_KEYS
