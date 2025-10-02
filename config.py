@@ -6,6 +6,7 @@ load configuration values from ``config.json`` and environment variables.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import json
@@ -15,6 +16,12 @@ import stat
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
+from typing import Any, TextIO, Union, get_args, get_origin, get_type_hints
+
+try:  # pragma: no cover - Python < 3.10 compatibility guard
+    from types import UnionType
+except ImportError:  # pragma: no cover
+    UnionType = type(Union[int, str])
 
 logger = logging.getLogger(__name__)
 
@@ -201,25 +208,32 @@ def _fd_resolved_path(fd: int, original: Path) -> Path | None:
 def open_config_file(path: Path) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if nofollow:
-        flags |= nofollow
+    def _secure_opener(raw_path: str, flags: int) -> int:
+        combined_flags = flags | getattr(os, "O_CLOEXEC", 0)
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        if nofollow:
+            combined_flags |= nofollow
 
-    fd = os.open(path, flags)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            raise RuntimeError(f"Configuration file {path} is not a regular file")
+        fd = os.open(raw_path, combined_flags)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
+                raise RuntimeError(
+                    f"Configuration file {raw_path!r} is not a regular file"
+                )
 
-        actual = _fd_resolved_path(fd, path)
-        if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
-            raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
+            actual = _fd_resolved_path(fd, Path(raw_path))
+            if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
+                raise RuntimeError(
+                    f"Configuration file {actual} escapes {_CONFIG_DIR}"
+                )
+        except Exception:
+            os.close(fd)
+            raise
 
-        return os.fdopen(fd, "r", encoding="utf-8")
-    except Exception:
-        os.close(fd)
-        raise
+        return fd
+
+    return builtins.open(path, "r", encoding="utf-8", opener=_secure_opener)
 
 
 class ConfigLoadError(Exception):
