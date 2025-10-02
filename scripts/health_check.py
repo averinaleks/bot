@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import socket
 import sys
 import time
 from pathlib import Path
@@ -58,7 +59,64 @@ def _load_allowed_hosts() -> Set[str]:
             continue
         if candidate.startswith("[") and candidate.endswith("]"):
             candidate = candidate[1:-1]
-        hosts.add(candidate.lower())
+        lowered = candidate.lower()
+        if lowered in hosts:
+            continue
+
+        if _is_local_host(lowered):
+            hosts.add(lowered)
+            continue
+
+        try:
+            infos = socket.getaddrinfo(lowered, None, family=socket.AF_UNSPEC)
+        except socket.gaierror as exc:
+            logger.warning(
+                "Skipping %r from %s: resolution failed (%s)",
+                lowered,
+                _ALLOWED_HOSTS_ENV,
+                exc,
+            )
+            continue
+
+        resolved: Set[str] = set()
+        for info in infos:
+            sockaddr = info[4]
+            if not sockaddr:
+                continue
+            host = sockaddr[0]
+            if isinstance(host, bytes):
+                try:
+                    host = host.decode()
+                except UnicodeDecodeError:
+                    continue
+            resolved.add(str(host))
+
+        if not resolved:
+            logger.warning(
+                "Skipping %r from %s: no IP addresses resolved", lowered, _ALLOWED_HOSTS_ENV
+            )
+            continue
+
+        unsafe = []
+        for ip_text in resolved:
+            try:
+                parsed = ip_address(ip_text)
+            except ValueError:
+                unsafe.append(ip_text)
+                continue
+            if not (parsed.is_loopback or parsed.is_private):
+                unsafe.append(ip_text)
+
+        if unsafe:
+            logger.warning(
+                "Skipping %r from %s: resolves to non-private IPs %s",
+                lowered,
+                _ALLOWED_HOSTS_ENV,
+                ", ".join(sorted(unsafe)),
+            )
+            continue
+
+        hosts.add(lowered)
     return hosts
 
 

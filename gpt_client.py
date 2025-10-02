@@ -312,10 +312,70 @@ def _load_allowed_hosts() -> set[str]:
     hosts = set(_DEFAULT_ALLOWED_HOSTS)
     if not raw:
         return hosts
+
     for part in raw.split(","):
         normalised = _normalise_allowed_host(part)
-        if normalised:
+        if not normalised:
+            continue
+
+        if _is_local_hostname(normalised):
             hosts.add(normalised)
+            continue
+
+        try:
+            addr_info = socket.getaddrinfo(
+                normalised,
+                None,
+                family=socket.AF_UNSPEC,
+            )
+        except socket.gaierror as exc:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_HOSTS entry %r: resolution failed (%s)",
+                normalised,
+                exc,
+            )
+            continue
+
+        resolved_ips: set[str] = set()
+        for info in addr_info:
+            sockaddr = info[4]
+            if not sockaddr:
+                continue
+            candidate = sockaddr[0]
+            if isinstance(candidate, bytes):
+                try:
+                    candidate = candidate.decode()
+                except UnicodeDecodeError:
+                    continue
+            resolved_ips.add(_normalise_ip(str(candidate)))
+
+        if not resolved_ips:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_HOSTS entry %r: no IP addresses resolved",
+                normalised,
+            )
+            continue
+
+        unsafe_ips = []
+        for ip_text in resolved_ips:
+            try:
+                parsed_ip = ip_address(ip_text)
+            except ValueError:
+                unsafe_ips.append(ip_text)
+                continue
+            if not (parsed_ip.is_loopback or parsed_ip.is_private):
+                unsafe_ips.append(ip_text)
+
+        if unsafe_ips:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_HOSTS entry %r: resolves to non-private IPs %s",
+                normalised,
+                sorted(unsafe_ips),
+            )
+            continue
+
+        hosts.add(normalised)
+
     return hosts
 
 

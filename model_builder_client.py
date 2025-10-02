@@ -55,8 +55,54 @@ def _load_allowed_hosts() -> set[str]:
         return hosts
     for part in raw.split(","):
         normalised = _normalise_allowed_host(part)
-        if normalised:
-            hosts.add(normalised)
+        if not normalised:
+            continue
+
+        if normalised in hosts:
+            continue
+
+        try:
+            infos = cast(
+                Sequence[AddrInfo],
+                socket.getaddrinfo(normalised, None, family=socket.AF_UNSPEC),
+            )
+        except socket.gaierror as exc:
+            logger.warning(
+                "Пропускаем %r из %s: не удалось разрешить хост (%s)",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+                exc,
+            )
+            continue
+
+        resolved_ips = _collect_ip_strings(infos)
+        if not resolved_ips:
+            logger.warning(
+                "Пропускаем %r из %s: имя хоста не разрешилось ни в один IP",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+            )
+            continue
+
+        unsafe_ips: list[str] = []
+        for ip in resolved_ips:
+            try:
+                parsed = ip_address(ip)
+            except ValueError:
+                unsafe_ips.append(ip)
+                continue
+            if not (parsed.is_loopback or parsed.is_private):
+                unsafe_ips.append(ip)
+        if unsafe_ips:
+            logger.warning(
+                "Пропускаем %r из %s: resolve в непригодные IP %s",
+                normalised,
+                _ALLOWED_HOSTS_ENV,
+                ", ".join(sorted(unsafe_ips)),
+            )
+            continue
+
+        hosts.add(normalised)
     return hosts
 
 

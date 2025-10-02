@@ -1,4 +1,6 @@
+import logging
 import http.client
+import socket
 import threading
 import time
 from contextlib import closing
@@ -210,15 +212,32 @@ def test_perform_http_request_respects_https_allowlist(monkeypatch):
     assert "GPT_OSS_ALLOWED_HOSTS" in str(exc.value)
 
 
-def test_load_allowed_hosts_strips_port(monkeypatch):
+def test_load_allowed_hosts_strips_port(monkeypatch, caplog):
     monkeypatch.setenv(
         "GPT_OSS_ALLOWED_HOSTS",
-        "Example.com:8443, [2001:db8::1]:443,just-host, :443",
+        "Example.com:8443, [2001:4860::1]:443,just-host, :443,10.0.0.5",
     )
 
-    hosts = run_gptoss_review._load_allowed_hosts()
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        if host == "example.com":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+        if host == "2001:4860::1":
+            return [
+                (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:4860::1", 0, 0, 0))
+            ]
+        if host == "just-host":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.7", 0))]
+        if host == "10.0.0.5":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0))]
+        raise socket.gaierror("boom")
 
-    assert hosts == {"example.com", "2001:db8::1", "just-host"}
+    monkeypatch.setattr(run_gptoss_review.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with caplog.at_level(logging.WARNING):
+        hosts = run_gptoss_review._load_allowed_hosts()
+
+    assert hosts == {"just-host", "10.0.0.5"}
+    assert "публичные" in caplog.text
 
 
 def test_perform_http_request_allows_https_allowlisted_host(monkeypatch):
