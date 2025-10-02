@@ -143,13 +143,13 @@ RUN <<'EOSHELL'
 set -eux
 apt-get update
 apt-get upgrade -y
+# Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
+# Исключаем tar, чтобы избежать CVE-2025-45582.
 apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3t64 \
-    # Библиотека OpenMP требуется бинарям scikit-learn и NumPy.
     libgomp1 \
     curl \
-    # Исключаем tar, чтобы избежать CVE-2025-45582
     python3.11 \
     python3.11-minimal \
     python3.11-distutils
