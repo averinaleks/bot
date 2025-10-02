@@ -1,4 +1,5 @@
-import subprocess  # nosec B404: используется контролируемый запуск тестового сервера
+# Bandit note: subprocess используется для контролируемого запуска тестового сервера.
+import subprocess  # nosec B404
 import sys
 import threading
 import time
@@ -130,7 +131,8 @@ def test_main_writes_port_file_and_serves_requests(tmp_path: Path):
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "gptoss_mock_server.py"
 
     # Bandit note - the server process is spawned from a trusted local script in tests.
-    process = subprocess.Popen(  # nosec B603: команда фиксирована и не содержит пользовательского ввода
+    # Bandit note: команда фиксирована и не содержит пользовательского ввода.
+    process = subprocess.Popen(  # nosec B603
         [
             sys.executable,
             str(script_path),
