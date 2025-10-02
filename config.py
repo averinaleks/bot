@@ -6,6 +6,7 @@ load configuration values from ``config.json`` and environment variables.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import json
@@ -15,6 +16,8 @@ import stat
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
+from types import UnionType
+from typing import Any, TextIO, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -215,11 +218,13 @@ def open_config_file(path: Path) -> TextIO:
         actual = _fd_resolved_path(fd, path)
         if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
             raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
-
-        return os.fdopen(fd, "r", encoding="utf-8")
     except Exception:
         os.close(fd)
         raise
+    else:
+        os.close(fd)
+
+    return builtins.open(path, "r", encoding="utf-8")
 
 
 class ConfigLoadError(Exception):
