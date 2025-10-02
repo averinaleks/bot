@@ -16,6 +16,19 @@ logger = logging.getLogger("TradingBot")
 
 _PlaceholderValue = str | Callable[[], str]
 
+# ``OFFLINE_MODE`` mirrors :data:`bot.config.OFFLINE_MODE`, but exposing it as a
+# module attribute allows tests to override the flag with ``monkeypatch``
+# without touching the global configuration module.  The helper
+# :func:`_is_offline` ensures the runtime continues to honour the canonical
+# configuration while still respecting local overrides performed by tests.
+OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
+
+
+def _is_offline() -> bool:
+    """Return ``True`` when offline stubs should be activated."""
+
+    return OFFLINE_MODE or bool(bot_config.OFFLINE_MODE)
+
 
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
     """Return a high-entropy placeholder credential for offline usage.
@@ -68,7 +81,7 @@ def ensure_offline_env(
         when nothing was changed or :data:`OFFLINE_MODE` is disabled.
     """
 
-    if not bot_config.OFFLINE_MODE:
+    if not _is_offline():
         return []
 
     applied: list[str] = []
@@ -94,7 +107,7 @@ def ensure_offline_env(
     return applied
 
 
-if bot_config.OFFLINE_MODE:
+if _is_offline():
     ensure_offline_env()
 
 

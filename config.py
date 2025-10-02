@@ -11,9 +11,11 @@ import importlib.util
 import json
 import logging
 import os
+import sys
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
+import typing as _typing
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
@@ -214,7 +216,7 @@ class BotConfig:
     timeframe: str = _get_default("timeframe", "1m")
     secondary_timeframe: str = _get_default("secondary_timeframe", "2h")
     ws_url: str = _get_default("ws_url", "wss://stream.bybit.com/v5/public/linear")
-    backup_ws_urls: List[str] = field(
+    backup_ws_urls: list[str] = field(
         default_factory=lambda: _get_default(
             "backup_ws_urls", ["wss://stream.bybit.com/v5/public/linear"]
         )
@@ -361,7 +363,11 @@ class BotConfig:
         return isinstance(value, origin)
 
     def _validate_types(self) -> None:
-        type_hints = get_type_hints(BotConfig)
+        module = sys.modules.get(BotConfig.__module__)
+        globalns = dict(vars(_typing))
+        if module is not None:
+            globalns.update(module.__dict__)
+        type_hints = get_type_hints(BotConfig, globalns=globalns)
         for fdef in fields(self):
             val = getattr(self, fdef.name)
             expected = type_hints.get(fdef.name, fdef.type)
