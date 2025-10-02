@@ -9,6 +9,7 @@ from __future__ import annotations
 import builtins
 import importlib
 import importlib.util
+import io
 import json
 import logging
 import os
@@ -204,26 +205,25 @@ def _fd_resolved_path(fd: int, original: Path) -> Path | None:
 def open_config_file(path: Path) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if nofollow:
-        flags |= nofollow
+    handle = open(path, "r", encoding="utf-8")
+    try:
+        fd = handle.fileno()
+    except (AttributeError, io.UnsupportedOperation, ValueError):
+        return handle
 
-    fd = os.open(path, flags)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
             raise RuntimeError(f"Configuration file {path} is not a regular file")
 
-        actual = _fd_resolved_path(fd, path)
+        actual = _fd_resolved_path(fd, Path(path))
         if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
             raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
-
-        os.close(fd)
-        return builtins.open(path, "r", encoding="utf-8")
     except Exception:
-        os.close(fd)
+        handle.close()
         raise
+
+    return handle
 
 
 class ConfigLoadError(Exception):
