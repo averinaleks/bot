@@ -69,13 +69,23 @@ jobs:
           from pathlib import Path
           from typing import Sequence
 
+          _NULL_STRINGS = {"null", "none", "undefined"}
+
+          def _normalise_value(raw: str | None) -> str:
+              if not raw:
+                  return ""
+              candidate = raw.strip()
+              if candidate.lower() in _NULL_STRINGS:
+                  return ""
+              return candidate
+
           patterns: Sequence[str] = (
               "requirements*.txt",
               "requirements*.in",
               "requirements*.out",
           )
-          before = os.environ.get("BEFORE") or ""
-          after = os.environ.get("AFTER") or ""
+          before = _normalise_value(os.environ.get("BEFORE"))
+          after = _normalise_value(os.environ.get("AFTER"))
 
           diff_failed = False
           changed: list[str]
