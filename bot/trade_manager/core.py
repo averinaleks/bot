@@ -15,7 +15,17 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, TYPE_CHECKING, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Optional,
+    Tuple,
+    TypeAlias,
+    cast,
+)
 import shutil
 try:  # pragma: no cover - optional dependency
     import aiohttp  # type: ignore
@@ -71,7 +81,7 @@ except ImportError:  # pragma: no cover - заглушка
         pass
 from bot import config as bot_config  # noqa: E402
 
-BotConfig = bot_config.BotConfig
+BotConfig: TypeAlias = bot_config.BotConfig
 from services.logging_utils import sanitize_log_value  # noqa: E402
 from telegram_logger import resolve_unsent_path  # noqa: E402
 import contextlib  # noqa: E402

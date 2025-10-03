@@ -1,7 +1,5 @@
 import socket
 
-import pytest
-
 import model_builder_client
 
 
