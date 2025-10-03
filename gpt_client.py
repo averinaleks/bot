@@ -23,6 +23,7 @@ import httpx
 from bot import config as bot_config
 from bot.pydantic_compat import BaseModel, Field, ValidationError
 from bot.utils import retry
+from services.logging_utils import sanitize_log_value
 
 if TYPE_CHECKING:  # pragma: no cover - import for typing only
     from openai import OpenAI as OpenAIType  # noqa: F401
@@ -402,6 +403,9 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
     if hostname.startswith("[") and hostname.endswith("]"):
         hostname = hostname[1:-1]
 
+    safe_api_url = sanitize_log_value(api_url)
+    safe_hostname_for_log = sanitize_log_value(parsed.hostname or hostname)
+
     try:
         host_ip = ip_address(hostname)
     except ValueError:
@@ -427,7 +431,9 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             }
         else:
             logger.error(
-                "Failed to resolve GPT_OSS_API host %s: %s", parsed.hostname, exc
+                "Failed to resolve GPT_OSS_API host %s: %s",
+                safe_hostname_for_log,
+                exc,
             )
             raise GPTClientError(
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
@@ -446,15 +452,24 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             )
             if not all_private:
                 if _insecure_allowed():
-                    logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
+                    logger.warning(
+                        "Using insecure GPT_OSS_API URL %s",
+                        safe_api_url,
+                    )
                 else:
                     raise GPTClientError(
                         "GPT_OSS_API URL must use HTTPS or resolve to a private address"
                     )
             elif _insecure_allowed():
-                logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
+                logger.warning(
+                    "Using insecure GPT_OSS_API URL %s",
+                    safe_api_url,
+                )
         elif _insecure_allowed():
-            logger.warning("Using insecure GPT_OSS_API URL %s", api_url)
+            logger.warning(
+                "Using insecure GPT_OSS_API URL %s",
+                safe_api_url,
+            )
 
     if host_ip is not None and not (host_ip.is_loopback or host_ip.is_private):
         raise GPTClientError(
@@ -475,6 +490,7 @@ async def _fetch_response(
     skip_ip_verification = False
     allowed_ips = {_normalise_ip(ip) for ip in allowed_ips}
     allowed_for_check = allowed_ips
+    safe_hostname_for_log = sanitize_log_value(hostname)
     if (
         os.getenv("TEST_MODE") == "1"
         and _TEST_MODE_DNS_FALLBACK in allowed_ips
@@ -498,7 +514,7 @@ async def _fetch_response(
         else:
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s before request: %s",
-                hostname,
+                safe_hostname_for_log,
                 exc,
             )
             raise GPTClientNetworkError("Failed to resolve GPT_OSS_API host") from exc
@@ -506,11 +522,13 @@ async def _fetch_response(
     if not current_ips & allowed_for_check:
         if skip_ip_verification:
             return await _stream_response(client, prompt, url)
+        safe_current_ips = sanitize_log_value(sorted(current_ips))
+        safe_allowed_ips = sanitize_log_value(sorted(allowed_ips))
         logger.error(
             "GPT_OSS_API host IP mismatch: %s resolved to %s, expected %s",
-            hostname,
-            current_ips,
-            allowed_ips,
+            safe_hostname_for_log,
+            safe_current_ips,
+            safe_allowed_ips,
         )
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
 
