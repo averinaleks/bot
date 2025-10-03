@@ -164,8 +164,11 @@ jobs:
           file: ${{ matrix.file }}
           push: ${{ env.PUBLISH_IMAGES == 'true' }}
           tags: ${{ steps.tags.outputs.list }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          # Используем отдельный scope с OCI media types, чтобы BuildKit
+          # не пытался читать устаревший кэш с generic "application/octet-stream"
+          # и не падал с "unexpected media type ... not found".
+          cache-from: type=gha,scope=${{ matrix.image }}-oci
+          cache-to: type=gha,scope=${{ matrix.image }}-oci,mode=max,oci-mediatypes=true
 
       - name: Cleanup before Trivy scan
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
