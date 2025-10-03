@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import socket
 
 import pytest
 
@@ -128,6 +129,19 @@ def test_main_handles_http_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest
     captured = capsys.readouterr()
     assert result == 0
     assert "::warning::boom" in captured.err
+
+
+def test_fetch_pull_request_handles_socket_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DummyOpener:
+        def open(self, _request, timeout: float):  # type: ignore[no-untyped-def]
+            raise socket.timeout(f"socket timed out after {timeout}s")
+
+    monkeypatch.setattr(check_pr_status, "build_opener", lambda *_args, **_kwargs: _DummyOpener())
+
+    with pytest.raises(RuntimeError) as exc:
+        check_pr_status._fetch_pull_request("https://api.github.com/repos/owner/repo/pulls/1", "", 3.5)
+
+    assert "timed out" in str(exc.value)
 
 
 def test_cli_swallows_system_exit(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

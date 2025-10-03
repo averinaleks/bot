@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import ssl
 import sys
 from dataclasses import dataclass
@@ -101,6 +102,12 @@ def _fetch_pull_request(url: str, token: str, timeout: float) -> Any:
     except URLError as exc:
         message = getattr(exc.reason, "strerror", None) or getattr(exc.reason, "args", [None])[0]
         message = message or exc.reason or exc
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
+    except (TimeoutError, socket.timeout) as exc:
+        message = str(exc) or "timed out"
+        raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
+    except OSError as exc:
+        message = getattr(exc, "strerror", None) or str(exc)
         raise RuntimeError(f"HTTP запрос {url} завершился ошибкой: {message}") from exc
 
     try:
