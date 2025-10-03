@@ -18,6 +18,7 @@ import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
 from types import UnionType
+from typing import Any, Callable, TextIO, Union, cast, get_args, get_origin, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -223,11 +224,9 @@ def open_config_file(path: Path) -> TextIO:
         handle.close()
         raise
     else:
-        os.close(fd)
+        handle.close()
 
     return builtins.open(path, "r", encoding="utf-8")
-
-    return handle
 
 
 class ConfigLoadError(Exception):
