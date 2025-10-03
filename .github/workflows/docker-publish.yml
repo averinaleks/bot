@@ -22,11 +22,18 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      PUBLISH_IMAGES: ${{ github.repository == 'averinaleks/bot' }}
+      PUBLISH_IMAGES: >-
+        ${{ github.repository == 'averinaleks/bot'
+           && github.event_name != 'pull_request'
+           && github.event_name != 'pull_request_target' }}
       PUBLISH_DOCKERHUB: >-
         ${{ github.repository == 'averinaleks/bot'
+           && github.event_name != 'pull_request'
+           && github.event_name != 'pull_request_target'
            && secrets.DOCKERHUB_USERNAME != ''
-           && secrets.DOCKERHUB_TOKEN != '' }}
+           && secrets.DOCKERHUB_USERNAME != null
+           && secrets.DOCKERHUB_TOKEN != ''
+           && secrets.DOCKERHUB_TOKEN != null }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
