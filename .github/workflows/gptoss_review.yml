@@ -72,6 +72,13 @@ jobs:
                 run_review=true
               fi
               ;;
+            pull_request_target)
+              pr_number="${PR_NUMBER:-}"
+              skip_reason="Workflow triggered for pull_request_target – обзор не выполняется"
+              if [ -z "$pr_number" ]; then
+                skip_reason="PR не найден"
+              fi
+              ;;
             issue_comment)
               pr_number="${ISSUE_NUMBER:-}"
               comment_author="${COMMENT_AUTHOR:-}"
@@ -127,6 +134,7 @@ jobs:
     needs: evaluate
     if: >-
       ${{ needs.evaluate.outputs.run_review == 'true'
+          && github.event_name != 'pull_request_target'
           && (github.event_name != 'pull_request'
               || github.event.pull_request.head.repo.full_name == github.repository)
           && (github.event_name != 'issue_comment'
