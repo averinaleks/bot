@@ -107,3 +107,12 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
     assert "repository_dispatch" in workflow
     assert "dependency-graph-auto-submission" in workflow
     assert "github.event_name == 'repository_dispatch'" in workflow
+
+
+def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+    assert "github.event.client_payload.head_sha" in workflow
+    assert "github.event.client_payload.commit_sha" in workflow
+    assert "github.event.client_payload.ref_name" in workflow
+    assert "github.event.client_payload.branch" in workflow
