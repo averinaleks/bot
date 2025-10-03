@@ -51,7 +51,11 @@ RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recomme
     openssl \
     libpam0g \
     ca-certificates \
-    && apt-get purge -y git \
+    && if dpkg-query --show --showformat='${Status}' git 2>/dev/null | grep -q '^install ok installed$'; then \
+        apt-get purge -y git && apt-get autoremove -y; \
+    else \
+        echo 'git is not installed in the runtime stage, skipping purge'; \
+    fi \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
