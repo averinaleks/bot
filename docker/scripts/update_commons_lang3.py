@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
-from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 import requests
@@ -48,9 +48,9 @@ def update_commons_lang3() -> None:
             f"{parsed_url.netloc}"
         )
 
-    temp_path: Path | None = None
+    with TemporaryDirectory(dir=jars_dir) as tmp_dir:
+        temp_path = Path(tmp_dir) / destination.name
 
-    try:
         with requests.Session() as session:
             adapter = requests.adapters.HTTPAdapter()
             session.mount("https://", adapter)
@@ -69,37 +69,26 @@ def update_commons_lang3() -> None:
                         + (f" to {location}" if location else "")
                     )
                 response.raise_for_status()
-                with NamedTemporaryFile(
-                    "wb", delete=False, dir=jars_dir
-                ) as temp_file:
-                    temp_path = Path(temp_file.name)
+                with temp_path.open("wb") as temp_file:
                     for chunk in response.iter_content(chunk_size=8192):
                         if not chunk:
                             continue
                         temp_file.write(chunk)
                         hasher.update(chunk)
-    except Exception:
-        if temp_path is not None:
+
+        digest = hasher.hexdigest()
+        if digest != COMMONS_LANG3_SHA256:
+            destination.unlink(missing_ok=True)
+            raise RuntimeError(
+                "SHA256 mismatch while downloading commons-lang3: expected "
+                f"{COMMONS_LANG3_SHA256}, got {digest}"
+            )
+
+        try:
+            temp_path.replace(destination)
+        except Exception:
             temp_path.unlink(missing_ok=True)
-        raise
-
-    if temp_path is None:
-        raise RuntimeError("Failed to create temporary commons-lang3 download")
-
-    digest = hasher.hexdigest()
-    if digest != COMMONS_LANG3_SHA256:
-        destination.unlink(missing_ok=True)
-        temp_path.unlink(missing_ok=True)
-        raise RuntimeError(
-            "SHA256 mismatch while downloading commons-lang3: expected "
-            f"{COMMONS_LANG3_SHA256}, got {digest}"
-        )
-
-    try:
-        temp_path.replace(destination)
-    except Exception:
-        temp_path.unlink(missing_ok=True)
-        raise
+            raise
 
 def main() -> int:
     update_commons_lang3()
