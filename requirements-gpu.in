@@ -3,4 +3,4 @@ torch==2.8.0
 tensorflow==2.20.0
 keras>=3.11.3,<3.12
 jsonschema==4.25.1
-setuptools>=78.1.1,<81
+setuptools>=80.9.0,<81

@@ -43,7 +43,7 @@ if (major, minor) != (3, 11):
     )
 PY
 
-# pip>=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает известные
+# pip>=24.0 устраняет CVE-2023-32681, setuptools>=80.9.0 закрывает известные
 # уязвимости и совместимы с зависимостями проекта.
 RUN python -m venv "$VIRTUAL_ENV"
 
@@ -51,7 +51,7 @@ RUN "$VIRTUAL_ENV"/bin/python -m ensurepip --upgrade
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         'pip>=24.0' \
-        'setuptools>=78.1.1,<81' \
+        'setuptools>=80.9.0,<81' \
         wheel
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
