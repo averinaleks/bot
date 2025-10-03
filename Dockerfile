@@ -45,12 +45,12 @@ RUN set -eux; \
     /bin/bash /tmp/security/harden_gnutar.sh; \
     python3 -m pip install --no-compile --no-cache-dir --break-system-packages \
         'pip>=24.0' \
-        'setuptools>=78.1.1,<81' \
+        'setuptools>=80.9.0,<81' \
         wheel; \
     if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
         python3.11 -m pip install --no-compile --no-cache-dir --break-system-packages \
-            'setuptools>=78.1.1,<81'; \
+            'setuptools>=80.9.0,<81'; \
     fi; \
     curl --netrc-file /dev/null -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -o zlib.tar.gz; \
     echo "${ZLIB_SHA256}  zlib.tar.gz" | sha256sum -c -
@@ -89,8 +89,8 @@ ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Устанавливаем зависимости (pip >=24.0 устраняет CVE-2023-32681, setuptools>=78.1.1 закрывает свежие уязвимости)
-RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=78.1.1,<81' wheel && \
+# Устанавливаем зависимости (pip >=24.0 устраняет CVE-2023-32681, setuptools>=80.9.0 закрывает свежие уязвимости)
+RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=80.9.0,<81' wheel && \
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     $VIRTUAL_ENV/bin/python /tmp/security/update_commons_lang3.py
 
@@ -128,12 +128,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     openssl \
     ca-certificates \
     && python3 -m ensurepip --upgrade \
-    && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81' \
+    && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=80.9.0,<81' \
     && dpkg -i /tmp/pam-fixed/*.deb \
     && /bin/bash /tmp/security/harden_gnutar.sh \
     && if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
-        python3.11 -m pip install --no-cache-dir --break-system-packages 'setuptools>=78.1.1,<81'; \
+        python3.11 -m pip install --no-cache-dir --break-system-packages 'setuptools>=80.9.0,<81'; \
     fi \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed \
     && ldconfig \
