@@ -18,9 +18,9 @@ else:
     TelegramLoggerType = Any
 
 if bot_config.OFFLINE_MODE:
-    from services.offline import OfflineBybit, OfflineTelegram
+    from services.offline import OfflineTradeManager, OfflineTelegram
 
-    TradeManager = cast(type[TradeManagerType], OfflineBybit)
+    TradeManager = cast(type[TradeManagerType], OfflineTradeManager)
     TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
 
     __all__ = ["TradeManager", "TelegramLogger"]

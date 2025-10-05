@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import logging
 import math
@@ -229,6 +231,143 @@ class OfflineTelegram(logging.Handler):
     @staticmethod
     async def shutdown() -> None:
         return None
+
+
+class OfflineTradeManager:
+    """Lightweight stand-in for :class:`bot.trade_manager.core.TradeManager`."""
+
+    def __init__(
+        self,
+        config,
+        data_handler,
+        model_builder,
+        telegram_bot,
+        chat_id,
+        rl_agent=None,
+        *,
+        telegram_logger_factory=None,
+        gpt_client_factory=None,
+    ) -> None:
+        ensure_offline_env()
+
+        self.config = config
+        self.data_handler = data_handler
+        self.model_builder = model_builder
+        self.telegram_bot = telegram_bot
+        self.chat_id = chat_id
+        self.rl_agent = rl_agent
+        self.telegram_logger_factory = telegram_logger_factory
+        self.gpt_client_factory = gpt_client_factory
+        self.exchange = getattr(data_handler, "exchange", None)
+
+        self._stop_event = asyncio.Event()
+        self._finished = asyncio.Event()
+
+        self.telegram_logger = self._build_telegram_logger(
+            telegram_logger_factory,
+            telegram_bot,
+            chat_id,
+        )
+
+        self._max_iterations = self._resolve_iterations(config)
+        self._iteration_delay = self._resolve_delay(config)
+
+    @staticmethod
+    def _resolve_iterations(config) -> int:
+        raw = getattr(config, "offline_iterations", None)
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return 1
+        return max(1, value)
+
+    @staticmethod
+    def _resolve_delay(config) -> float:
+        raw = getattr(config, "offline_iteration_delay", None)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, value)
+
+    def _build_telegram_logger(self, factory, telegram_bot, chat_id):
+        if factory is None:
+            return None
+
+        constructors = (
+            lambda: factory(self.config),
+            lambda: factory(config=self.config),
+            lambda: factory(telegram_bot, chat_id),
+            lambda: factory(),
+        )
+
+        for creator in constructors:
+            try:
+                return creator()
+            except TypeError:
+                continue
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug("Failed to instantiate offline telegram logger: %s", exc)
+                break
+        return None
+
+    async def run(self) -> None:
+        """Execute a short, deterministic offline trading cycle."""
+
+        logger.info("Starting offline trading cycle")
+        try:
+            for iteration in range(self._max_iterations):
+                if self._stop_event.is_set():
+                    break
+
+                await self._maybe_refresh_data()
+                await self._maybe_update_model()
+
+                await asyncio.sleep(self._iteration_delay)
+                logger.debug("Offline iteration %d completed", iteration + 1)
+        finally:
+            self._finished.set()
+            logger.info("Offline trading cycle finished")
+
+    async def stop(self) -> None:
+        """Signal the offline loop to stop and release resources."""
+
+        self._stop_event.set()
+        if not self._finished.is_set():
+            await self._finished.wait()
+
+        logger.info("Offline TradeManager stopped")
+
+        logger_instance = getattr(self.telegram_logger, "shutdown", None)
+        if callable(logger_instance):
+            with contextlib.suppress(Exception):
+                result = logger_instance()
+                if asyncio.iscoroutine(result):
+                    await result
+
+    async def _maybe_refresh_data(self) -> None:
+        refresh = getattr(self.data_handler, "refresh", None)
+        if not callable(refresh):
+            return
+
+        try:
+            result = refresh()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.debug("Offline data refresh failed: %s", exc)
+
+    async def _maybe_update_model(self) -> None:
+        builder = getattr(self.model_builder, "update_models", None)
+        if not callable(builder):
+            return
+
+        try:
+            result = builder()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.debug("Offline model update failed: %s", exc)
 
 
 class OfflineGPT:
