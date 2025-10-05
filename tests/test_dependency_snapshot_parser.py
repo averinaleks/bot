@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.submit_dependency_snapshot import (
     _auth_schemes,
     _build_manifests,
     _derive_scope,
+    _iter_requirement_files,
     _job_metadata,
     _normalise_run_attempt,
     _parse_requirements,
@@ -17,6 +20,57 @@ def _write_requirements(tmp_path: Path, contents: str) -> Path:
     path = tmp_path / "requirements.txt"
     path.write_text(contents)
     return path
+
+
+def test_iter_requirement_files_ignores_symlinks(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    real_manifest = repo_root / "requirements.txt"
+    real_manifest.write_text("package==1.0.0\n")
+
+    nested_dir = repo_root / "nested"
+    nested_dir.mkdir()
+    nested_manifest = nested_dir / "requirements-dev.txt"
+    nested_manifest.write_text("devpkg==2.0.0\n")
+
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_manifest = outside_dir / "requirements-other.txt"
+    outside_manifest.write_text("badpkg==9.9.9\n")
+
+    file_link = repo_root / "link.txt"
+    try:
+        file_link.symlink_to(outside_manifest)
+    except OSError as exc:  # pragma: no cover - symlinks unavailable
+        pytest.skip(f"Symlinks are not supported on this platform: {exc}")
+
+    external_dir = outside_dir / "shared"
+    external_dir.mkdir()
+    (external_dir / "requirements-ext.txt").write_text("ext==0.0.1\n")
+
+    dir_link = repo_root / "linkdir"
+    try:
+        dir_link.symlink_to(external_dir, target_is_directory=True)
+    except (OSError, NotImplementedError, TypeError) as exc:  # pragma: no cover - Windows fallback
+        try:
+            dir_link.symlink_to(external_dir)
+        except OSError as inner_exc:  # pragma: no cover - symlinks unavailable
+            pytest.skip(f"Directory symlinks are not supported: {inner_exc}")
+        else:
+            if exc not in (NotImplementedError, TypeError):
+                raise
+
+    discovered = list(_iter_requirement_files(repo_root))
+    repo_root_resolved = repo_root.resolve()
+
+    assert real_manifest in discovered
+    assert nested_manifest in discovered
+    assert file_link not in discovered
+    assert all(
+        candidate.resolve(strict=False).is_relative_to(repo_root_resolved)
+        for candidate in discovered
+    )
 
 
 def test_parse_requirements_strips_inline_comments(tmp_path: Path) -> None:
