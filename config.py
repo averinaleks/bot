@@ -253,7 +253,11 @@ def load_defaults() -> dict[str, Any]:
                 with opener(path) as handle:
                     DEFAULTS = json.load(handle)
             except FileNotFoundError as exc:
-                if OFFLINE_MODE or os.getenv("TEST_MODE") == "1":
+                allow_empty_defaults = (
+                    (OFFLINE_MODE or os.getenv("TEST_MODE") == "1")
+                    and path == _DEFAULT_CONFIG_PATH
+                )
+                if allow_empty_defaults:
                     logger.warning(
                         "Failed to load %s: %s; using empty defaults in offline/test mode",
                         path,
@@ -264,7 +268,11 @@ def load_defaults() -> dict[str, Any]:
                     logger.error("Failed to load %s: %s", path, exc)
                     raise ConfigLoadError from exc
             except (OSError, json.JSONDecodeError) as exc:
-                if OFFLINE_MODE or os.getenv("TEST_MODE") == "1":
+                allow_empty_defaults = (
+                    (OFFLINE_MODE or os.getenv("TEST_MODE") == "1")
+                    and path == _DEFAULT_CONFIG_PATH
+                )
+                if allow_empty_defaults:
                     logger.warning(
                         "Failed to load %s: %s; using empty defaults in offline/test mode",
                         path,
