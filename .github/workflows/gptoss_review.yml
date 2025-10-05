@@ -149,6 +149,7 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.evaluate.outputs.pr_number }}
       MODEL_NAME: ${{ vars.LLM_MODEL || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}
+      HELPERS_DIR: gptoss_helpers
     steps:
       - name: Проверка события
         id: validate_event
@@ -168,6 +169,7 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
+          path: ${{ env.HELPERS_DIR }}
 
       - name: Проверка статуса PR
         if: ${{ steps.validate_event.outputs.skip != 'true' }}
@@ -178,8 +180,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ ! -f scripts/check_pr_status.py ]; then
-            echo "::notice::Скрипт scripts/check_pr_status.py не найден, пропускаю проверку PR"
+          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+
+          if [ ! -f "${helpers_dir}/scripts/check_pr_status.py" ]; then
+            echo "::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден, пропускаю проверку PR"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
               {
                 echo "skip=true"
@@ -189,7 +193,7 @@ jobs:
             exit 0
           fi
 
-          if ! python3 scripts/check_pr_status.py \
+          if ! python3 "${helpers_dir}/scripts/check_pr_status.py" \
             --repo "${REPOSITORY}" \
             --pr-number "${PR_NUMBER:-}" \
             --token "${GITHUB_TOKEN}"; then
@@ -247,12 +251,14 @@ jobs:
             trap cleanup_output EXIT
           fi
 
-          if [ ! -f scripts/gptoss_mock_server.py ]; then
-            echo "::notice::Скрипт scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
+          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+
+          if [ ! -f "${helpers_dir}/scripts/gptoss_mock_server.py" ]; then
+            echo "::notice::Скрипт ${helpers_dir}/scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
             exit 0
           fi
 
-          python3 scripts/gptoss_mock_server.py \
+          python3 "${helpers_dir}/scripts/gptoss_mock_server.py" \
             --host 127.0.0.1 \
             --port 0 \
             --port-file mock_server.port \
@@ -366,12 +372,14 @@ jobs:
             trap cleanup_output EXIT
           fi
 
-          if [ ! -f scripts/prepare_gptoss_diff.py ]; then
-            echo "::notice::Скрипт scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
+          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+
+          if [ ! -f "${helpers_dir}/scripts/prepare_gptoss_diff.py" ]; then
+            echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
             exit 0
           fi
 
-          if ! python3 scripts/prepare_gptoss_diff.py \
+          if ! python3 "${helpers_dir}/scripts/prepare_gptoss_diff.py" \
             --repo "${{ github.repository }}" \
             --pr-number "${PR_NUMBER}" \
             --token "${GITHUB_TOKEN}" \
@@ -411,12 +419,14 @@ jobs:
             trap cleanup_output EXIT
           fi
 
-          if [ ! -f scripts/run_gptoss_review.py ]; then
-            echo "::notice::Скрипт scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
+          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+
+          if [ ! -f "${helpers_dir}/scripts/run_gptoss_review.py" ]; then
+            echo "::notice::Скрипт ${helpers_dir}/scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
             exit 0
           fi
 
-          if ! python3 scripts/run_gptoss_review.py \
+          if ! python3 "${helpers_dir}/scripts/run_gptoss_review.py" \
             --diff diff.patch \
             --output review.md \
             --model "${MODEL_NAME}" \
