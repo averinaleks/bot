@@ -38,3 +38,13 @@ def test_pr_status_step_sets_outputs_on_failure() -> None:
     assert 'echo "skip=true"' in failure_block
     assert 'echo "head_sha="' in failure_block
     assert failure_block.count('exit 0') >= 1
+
+
+def test_pr_status_step_skips_pull_request_target() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    guard_snippet = 'GITHUB_EVENT_NAME:-}" = "pull_request_target"'
+    notice_message = 'Workflow triggered for pull_request_target – пропускаю проверку PR'
+
+    assert guard_snippet in workflow_text
+    assert notice_message in workflow_text
