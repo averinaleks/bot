@@ -26,10 +26,6 @@ ccxt==4.5.7
 # Newer scikit-learn releases pull in SciPy builds incompatible with our
 # pinned numpy; keep everything aligned with the Docker images.
 scikit-learn==1.7.2; python_version<'3.12'
-# SciPy wheels >=1.15 pull in libstdc++ versions newer than what the
-# ubuntu-22.04 GitHub runners provide. Pin to the last release that still
-# works on those runners to avoid ImportErrors during CI.
-scipy==1.14.1
 joblib==1.5.2
 setuptools>=80.9.0
 types-requests

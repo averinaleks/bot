@@ -826,6 +826,56 @@ def sanitize_timeframe(timeframe: str) -> str:
     return value
 
 
+_ZSCORE_FN = None
+
+
+def _import_scipy_stats():
+    from importlib import import_module
+
+    return import_module("scipy.stats")
+
+
+def _resolve_zscore_function(np_module):
+    """Return a callable that computes z-scores.
+
+    If SciPy is unavailable (or fails to load due to missing native
+    dependencies on the runner) the fallback uses NumPy directly, keeping the
+    behaviour identical for the supported use cases in the bot.
+    """
+
+    global _ZSCORE_FN
+
+    if _ZSCORE_FN is not None:
+        return _ZSCORE_FN
+
+    try:
+        scipy_stats = _import_scipy_stats()
+    except ImportError:
+        def _numpy_zscore(values):
+            arr = np_module.asarray(values, dtype=float)
+            mean = float(arr.mean())
+            std = float(arr.std(ddof=0))
+            if not np_module.isfinite(std) or std == 0.0:
+                return np_module.zeros_like(arr, dtype=float)
+            return (arr - mean) / std
+
+        _ZSCORE_FN = _numpy_zscore
+    else:
+        def _scipy_zscore(values):
+            result = scipy_stats.zscore(values, ddof=0)
+            return np_module.asarray(result, dtype=float)
+
+        _ZSCORE_FN = _scipy_zscore
+
+    return _ZSCORE_FN
+
+
+def _reset_zscore_cache_for_tests():  # pragma: no cover - testing utility
+    global _ZSCORE_FN
+
+    _ZSCORE_FN = None
+
+
 def filter_outliers_zscore(df, column="close", threshold=3.0):
     try:
         try:
@@ -835,16 +885,10 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
                 "Для фильтрации аномалий требуется пакет 'pandas'"
             ) from exc
         try:
-            import numpy as np
+            import numpy as np  # noqa: F811 - reused for type narrowing
         except ImportError as exc:
             raise ImportError(
                 "Для фильтрации аномалий требуется пакет 'numpy'"
-            ) from exc
-        try:
-            from scipy.stats import zscore
-        except ImportError as exc:
-            raise ImportError(
-                "Для фильтрации аномалий требуется пакет 'scipy'"
             ) from exc
 
         series = df[column]
@@ -856,7 +900,8 @@ def filter_outliers_zscore(df, column="close", threshold=3.0):
             return df
 
         filled = series.ffill().bfill().fillna(series.mean())
-        z_scores = pd.Series(zscore(filled.to_numpy()), index=df.index)
+        zscore_fn = _resolve_zscore_function(np)
+        z_scores = pd.Series(zscore_fn(filled.to_numpy()), index=df.index)
 
         mask = (np.abs(z_scores) <= threshold) | series.isna()
         df_filtered = df.copy()
