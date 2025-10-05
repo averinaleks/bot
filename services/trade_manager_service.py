@@ -128,7 +128,7 @@ def _bind_exchange() -> None:
 def _require_api_token() -> ResponseReturnValue | None:
     """Simple token-based authentication middleware."""
 
-    if request.method in {'GET', 'HEAD', 'OPTIONS'}:
+    if request.method != 'POST' and request.path != '/positions':
         return None
 
     expected = _resolve_expected_token()
