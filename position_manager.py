@@ -7,6 +7,8 @@ import contextlib
 import inspect
 from typing import Optional
 
+import httpx
+
 from bot.utils import check_dataframe_empty_async as _check_df_async, logger
 
 
@@ -50,7 +52,7 @@ class PositionManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError, KeyError) as exc:
+            except (ValueError, RuntimeError, KeyError, httpx.HTTPError) as exc:
                 logger.exception("PositionManager failed (%s): %s", type(exc).__name__, exc)
                 await asyncio.sleep(self.check_interval)
 

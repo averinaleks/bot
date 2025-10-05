@@ -373,4 +373,66 @@ async def test_ranked_signal_loop_http_error_retry(monkeypatch):
     assert call["n"] >= 2
     assert sleep_calls and sleep_calls[0] == 1
 
+
+@pytest.mark.asyncio
+async def test_position_manager_http_error_retry(monkeypatch):
+    import position_manager
+
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    idx = pd.MultiIndex.from_tuples(
+        [("BTCUSDT", pd.Timestamp("2020-01-01"))], names=["symbol", "timestamp"]
+    )
+    tm.positions = pd.DataFrame(
+        {
+            "side": ["buy"],
+            "position": [1],
+            "size": [1],
+            "entry_price": [100],
+            "tp_multiplier": [2],
+            "sl_multiplier": [1],
+            "stop_loss_price": [99],
+            "highest_price": [100],
+            "lowest_price": [0],
+            "breakeven_triggered": [False],
+        },
+        index=idx,
+    )
+
+    pm = position_manager.PositionManager(tm, dh, check_interval=0.05)
+
+    call = {"n": 0}
+    retry_event = asyncio.Event()
+
+    async def fake_trailing(symbol, price):
+        call["n"] += 1
+        if call["n"] == 1:
+            raise httpx.HTTPError("boom")
+        retry_event.set()
+
+    monkeypatch.setattr(tm, "check_trailing_stop", fake_trailing)
+    monkeypatch.setattr(tm, "check_stop_loss_take_profit", lambda *a, **k: None)
+    monkeypatch.setattr(tm, "check_exit_signal", lambda *a, **k: None)
+
+    orig_sleep = asyncio.sleep
+    sleep_calls: list[float] = []
+
+    async def fast_sleep(delay):
+        sleep_calls.append(delay)
+        await orig_sleep(0)
+
+    monkeypatch.setattr(position_manager.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(pm._run())
+
+    await asyncio.wait_for(retry_event.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call["n"] >= 2
+    assert sleep_calls and sleep_calls[0] == pm.check_interval
+
 sys.modules.pop('utils', None)
