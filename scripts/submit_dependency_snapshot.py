@@ -921,6 +921,9 @@ def submit_dependency_snapshot() -> None:
     workflow_run_payload = (
         _extract_workflow_run(payload) if allow_event_payload else None
     )
+    client_workflow_run_payload = (
+        _extract_workflow_run(client_payload) if client_payload is not None else None
+    )
 
     repository = _normalise_optional_string(os.getenv("GITHUB_REPOSITORY"))
     payload_used = False
@@ -928,6 +931,7 @@ def submit_dependency_snapshot() -> None:
     if not repository and allow_event_payload:
         for candidate_payload in (
             client_payload,
+            client_workflow_run_payload,
             workflow_run_payload,
             payload if isinstance(payload, Mapping) else None,
         ):
@@ -990,10 +994,20 @@ def submit_dependency_snapshot() -> None:
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
+        if allow_event_payload and not sha and client_workflow_run_payload is not None:
+            sha_candidate = _extract_workflow_run_sha(client_workflow_run_payload)
+            if sha_candidate:
+                sha = sha_candidate
+                payload_used_local = True
         if allow_event_payload and not ref and isinstance(payload, Mapping):
             ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
             if ref_candidate:
                 ref = _normalise_ref_value(ref_candidate)
+                payload_used_local = True
+        if allow_event_payload and not ref and client_workflow_run_payload is not None:
+            ref_candidate = _extract_workflow_run_ref(client_workflow_run_payload)
+            if ref_candidate:
+                ref = ref_candidate
                 payload_used_local = True
         if allow_event_payload and not sha and workflow_run_payload is not None:
             sha_candidate = _extract_workflow_run_sha(workflow_run_payload)
