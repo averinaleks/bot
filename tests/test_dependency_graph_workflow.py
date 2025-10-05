@@ -80,6 +80,12 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
     assert "github.event.client_payload.commit_oid" in workflow
     assert "github.event.client_payload.commit_sha" in workflow
     assert "github.event.client_payload.sha" in workflow
+    assert "github.event.workflow_run.head_sha" in workflow
+    assert "github.event.workflow_run.head_commit.id" in workflow
+    assert "github.event.workflow_run.head_commit.sha" in workflow
+    assert "github.event.workflow_run.before" in workflow
+    assert "github.event.workflow_run.previous_sha" in workflow
+    assert "github.event.workflow_run.head_commit.before" in workflow
 
 
 def test_dependency_graph_installs_requests_before_submission() -> None:
@@ -117,3 +123,8 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.client_payload.ref_name" in workflow
     assert "github.event.client_payload.head_ref" in workflow
     assert "github.event.client_payload.branch" in workflow
+    assert "github.event.workflow_run.head_sha" in workflow
+    assert "github.event.workflow_run.head_commit.id" in workflow
+    assert "github.event.workflow_run.head_commit.sha" in workflow
+    assert "github.event.workflow_run.head_ref" in workflow
+    assert "github.event.workflow_run.head_branch" in workflow
