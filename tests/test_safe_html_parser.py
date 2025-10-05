@@ -65,6 +65,15 @@ def test_lone_surrogate_is_counted_without_error():
     assert parser.fed_bytes == len(surrogate.encode("utf-8", "surrogatepass"))
 
 
+def test_rejected_input_does_not_change_counter():
+    parser = SafeHTMLParser(max_feed_size=5)
+    parser.feed("abc")
+    before = parser.fed_bytes
+    with pytest.raises(ValueError):
+        parser.feed("defgh")
+    assert parser.fed_bytes == before
+
+
 def test_close_resets_counter():
     parser = SafeHTMLParser(max_feed_size=5)
     parser.feed("12345")
