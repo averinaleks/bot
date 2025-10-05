@@ -27,4 +27,10 @@ paths-ignore:
 queries:
   # Limit analysis to the security query suite so we focus on actionable
   # vulnerabilities while avoiding purely stylistic "quality" alerts.
-  - uses: security-extended
+  #
+  # CodeQL 2.18 tightened validation for query pack references and no longer
+  # accepts the short-hand "security-extended" alias that older releases
+  # resolved implicitly.  Point at the fully qualified pack and suite so that
+  # both the GitHub Action and local ``codeql database analyze`` invocations
+  # resolve the bundle consistently across versions.
+  - uses: codeql/python-queries:codeql-suites/python-security-extended.qls
