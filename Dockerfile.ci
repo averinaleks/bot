@@ -1,36 +1,42 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.7-labs
 
-# -------- Builder stage --------
-# Используем публичный LTS-образ Ubuntu для сборки зависимостей
-FROM --platform=linux/amd64 ubuntu:24.04@sha256:78281ac7684a7caf02348780a1b5de85844548a3cc0505df924de98380a0eeea AS builder
+# Используем официальный python:3.12-slim и отказываемся от сложной
+# двухстадийной сборки на базе Ubuntu. Это устраняет периодические падения
+# docker buildx на шаге docker-publish, связанные с ``apt upgrade`` и
+# зависимостями Ubuntu, и минимизирует число внешних точек отказа. Теперь мы
+# работаем с минимальной средой, поставляемой самим образом Python.
+FROM --platform=linux/amd64 python:3.12-slim AS base
+
+ENV PYTHONUNBUFFERED=1
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Обновление linux-libc-dev устраняет CVE-2025-21976, а libgcrypt20 — CVE-2024-2236.
-# Дополнительно выполняем upgrade, чтобы подтянуть свежие патчи безопасности из Ubuntu.
-# После создания виртуального окружения обновляем pip и setuptools до версий,
-# закрывающих CVE-2024-6345 и CVE-2025-47273, иначе Trivy обнаруживает
-# уязвимые копии setuptools внутри образа.
-RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recommends -y \
-    python3 python3-venv build-essential linux-libc-dev libgcrypt20 git patch \
+RUN <<'EOSHELL'
+set -euxo pipefail
+apt-get update
+apt-get install -y --no-install-recommends \
     ca-certificates \
-    && apt-get install -y --no-install-recommends gnupg dirmngr \
-    && python3 -m venv /venv \
-    && /venv/bin/python -m ensurepip --upgrade \
-    && /venv/bin/pip install --no-cache-dir \
-        'pip>=24.0' \
-        'setuptools>=80.9.0,<81' \
-        wheel \
-    && /venv/bin/pip cache purge \
-    && rm -rf /root/.cache/pip \
-    && apt-get purge -y --auto-remove build-essential \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && ldconfig \
-    && gpg --version \
-    && dirmngr --version
+    curl \
+    git \
+    patch
+rm -rf /var/lib/apt/lists/*
+EOSHELL
 
 WORKDIR /app
 
+# Устанавливаем изолированное виртуальное окружение, заранее подтягивая
+# обновлённые версии pip/setuptools, необходимые для прохождения Trivy.
+RUN <<'EOSHELL'
+set -euxo pipefail
+python -m venv /venv
+/venv/bin/python -m ensurepip --upgrade
+/venv/bin/pip install --no-cache-dir \
+    'pip>=24.0' \
+    'setuptools>=80.9.0,<81' \
+    wheel
+/venv/bin/pip cache purge
+rm -rf /root/.cache/pip
+EOSHELL
 
 # Copy files required for static analysis
 COPY .pre-commit-config.yaml .flake8 .pylintrc requirements-core.txt requirements-gpu.txt ./
@@ -39,35 +45,11 @@ COPY scripts scripts
 COPY services services
 COPY tests tests
 
-# -------- Runtime stage --------
-FROM --platform=linux/amd64 ubuntu:24.04@sha256:78281ac7684a7caf02348780a1b5de85844548a3cc0505df924de98380a0eeea AS runtime
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-# Устанавливаем только необходимые пакеты выполнения и сразу обновляем базовую систему
-RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recommends -y \
-    libssl3t64 \
-    python3.12-minimal \
-    openssl \
-    libpam0g \
-    ca-certificates \
-    && if dpkg-query --show --showformat='${Status}' git 2>/dev/null | grep -q '^install ok installed$'; then \
-        apt-get purge -y git && apt-get autoremove -y; \
-    else \
-        echo 'git is not installed in the runtime stage, skipping purge'; \
-    fi \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Копируем только нужные артефакты из builder
-COPY --from=builder /venv /venv
-COPY --from=builder /app /app
-
 ENV PATH="/venv/bin:$PATH"
 
-# Run as a dedicated non-root user inside the CI container
-RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
+# Выделенный системный пользователь внутри контейнера
+RUN groupadd --system bot \
+    && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
     && mkdir -p /home/bot \
     && chown -R bot:bot /app /home/bot /venv
 
