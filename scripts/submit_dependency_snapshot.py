@@ -14,7 +14,7 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, TypedDict
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, TypedDict
 from urllib.parse import quote, urlparse
 
 try:  # pragma: no cover - import guard exercised in tests
@@ -90,6 +90,7 @@ _PAYLOAD_REF_KEYS = (
     "branch",
     "head_ref",
 )
+_WORKFLOW_RUN_REPOSITORY_KEYS = ("head_repository", "repository")
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
@@ -118,6 +119,60 @@ def _extract_payload_token(payload: Mapping[str, object] | None) -> str:
     if not isinstance(payload, Mapping):
         return ""
     return _extract_payload_value(payload, *_TOKEN_PAYLOAD_KEYS)
+
+
+def _as_mapping(value: object) -> Mapping[str, object] | None:
+    if isinstance(value, MutableMapping):
+        return value
+    if isinstance(value, Mapping):
+        return value
+    return None
+
+
+def _extract_workflow_run(payload: Mapping[str, object] | None) -> Mapping[str, object] | None:
+    if not isinstance(payload, Mapping):
+        return None
+    candidate = payload.get("workflow_run")
+    return _as_mapping(candidate)
+
+
+def _extract_workflow_run_repository(payload: Mapping[str, object]) -> str:
+    for key in _WORKFLOW_RUN_REPOSITORY_KEYS:
+        repository = payload.get(key)
+        if isinstance(repository, str):
+            normalised = _normalise_optional_string(repository)
+            if normalised:
+                return normalised
+        mapping = _as_mapping(repository)
+        if mapping:
+            value = mapping.get("full_name")
+            if isinstance(value, str):
+                normalised = _normalise_optional_string(value)
+                if normalised:
+                    return normalised
+    return ""
+
+
+def _extract_workflow_run_sha(payload: Mapping[str, object]) -> str:
+    sha = _extract_payload_value(payload, "head_sha")
+    if sha:
+        return sha
+    head_commit = _as_mapping(payload.get("head_commit"))
+    if head_commit:
+        sha = _extract_payload_value(head_commit, "id", "sha")
+        if sha:
+            return sha
+    return ""
+
+
+def _extract_workflow_run_ref(payload: Mapping[str, object]) -> str:
+    branch = _extract_payload_value(payload, "head_branch")
+    if branch:
+        return _normalise_ref_value(branch)
+    head_ref = _extract_payload_value(payload, "head_ref")
+    if head_ref:
+        return _normalise_ref_value(head_ref)
+    return ""
 
 
 _ALLOWED_GIT_SUBCOMMANDS = {"rev-parse", "symbolic-ref", "for-each-ref"}
@@ -794,10 +849,28 @@ def submit_dependency_snapshot() -> None:
         if isinstance(raw_client, Mapping):
             client_payload = raw_client
 
-    try:
-        repository = _env("GITHUB_REPOSITORY")
-    except MissingEnvironmentVariableError as exc:
-        print(str(exc), file=sys.stderr)
+    workflow_run_payload = _extract_workflow_run(payload)
+
+    repository = _normalise_optional_string(os.getenv("GITHUB_REPOSITORY"))
+    payload_used = False
+
+    if not repository:
+        for candidate_payload in (
+            client_payload,
+            workflow_run_payload,
+            payload if isinstance(payload, Mapping) else None,
+        ):
+            if not isinstance(candidate_payload, Mapping):
+                continue
+            repository_candidate = _extract_workflow_run_repository(candidate_payload)
+            if repository_candidate:
+                repository = repository_candidate
+                payload_used = True
+                break
+
+    if not repository:
+        message = "Missing required environment variable: GITHUB_REPOSITORY"
+        print(message, file=sys.stderr)
         print(
             "Dependency snapshot submission skipped из-за отсутствия переменных окружения.",
             file=sys.stderr,
@@ -807,7 +880,7 @@ def submit_dependency_snapshot() -> None:
     token_env = _normalise_optional_string(os.getenv("GITHUB_TOKEN"))
     sha = _normalise_optional_string(os.getenv("GITHUB_SHA"))
     ref = _normalise_optional_string(os.getenv("GITHUB_REF"))
-    payload_used = False
+    payload_used_local = payload_used
 
     token_override = _extract_payload_token(client_payload)
     if not token_override:
@@ -833,24 +906,34 @@ def submit_dependency_snapshot() -> None:
                 )
                 if sha_candidate:
                     sha = sha_candidate
-                    payload_used = True
+                    payload_used_local = True
             if not ref:
                 ref_candidate = _extract_payload_value(
                     client_payload, *_PAYLOAD_REF_KEYS
                 )
                 if ref_candidate:
                     ref = _normalise_ref_value(ref_candidate)
-                    payload_used = True
+                    payload_used_local = True
         if not sha and isinstance(payload, Mapping):
             sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
             if sha_candidate:
                 sha = sha_candidate
-                payload_used = True
+                payload_used_local = True
         if not ref and isinstance(payload, Mapping):
             ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
             if ref_candidate:
                 ref = _normalise_ref_value(ref_candidate)
-                payload_used = True
+                payload_used_local = True
+        if not sha and workflow_run_payload is not None:
+            sha_candidate = _extract_workflow_run_sha(workflow_run_payload)
+            if sha_candidate:
+                sha = sha_candidate
+                payload_used_local = True
+        if not ref and workflow_run_payload is not None:
+            ref_candidate = _extract_workflow_run_ref(workflow_run_payload)
+            if ref_candidate:
+                ref = ref_candidate
+                payload_used_local = True
 
     if not sha:
         sha = _discover_git_sha() or ""
@@ -873,11 +956,8 @@ def submit_dependency_snapshot() -> None:
         )
         return
 
-    if payload_used:
-        print(
-            "Using repository_dispatch payload to populate snapshot metadata.",
-            flush=True,
-        )
+    if payload_used_local:
+        print("Using event payload to populate snapshot metadata.", flush=True)
 
     try:
         manifests = _build_manifests(Path("."))
