@@ -20,6 +20,8 @@ from pathlib import Path
 from types import UnionType
 from typing import Any, Callable, TextIO, Union, cast, get_args, get_origin, get_type_hints
 
+from services.logging_utils import sanitize_log_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,7 +116,7 @@ except MissingEnvError as exc:
     if OFFLINE_MODE:
         logger.warning(
             "OFFLINE_MODE=1: запуск офлайн-режима из-за отсутствующих переменных: %s",
-            missing,
+            sanitize_log_value(missing),
         )
     else:
         logger.critical(
@@ -162,20 +164,23 @@ def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
         except OSError as exc:
             logger.warning(
                 "Failed to resolve CONFIG_PATH %s: %s; using default",
-                candidate,
-                exc,
+                sanitize_log_value(str(candidate)),
+                sanitize_log_value(str(exc)),
             )
             return _DEFAULT_CONFIG_PATH
 
     if candidate.is_symlink():
-        logger.warning("CONFIG_PATH %s is a symlink; using default", candidate)
+        logger.warning(
+            "CONFIG_PATH %s is a symlink; using default",
+            sanitize_log_value(str(candidate)),
+        )
         return _DEFAULT_CONFIG_PATH
 
     if not _is_within_directory(candidate, _CONFIG_DIR):
         logger.warning(
             "CONFIG_PATH %s escapes %s; using default",
-            candidate,
-            _CONFIG_DIR,
+            sanitize_log_value(str(candidate)),
+            sanitize_log_value(str(_CONFIG_DIR)),
         )
         return _DEFAULT_CONFIG_PATH
 
@@ -500,7 +505,11 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
             try:
                 cfg.update(json.load(handle))
             except json.JSONDecodeError as exc:
-                logger.warning("Failed to decode %s: %s", candidate, exc)
+                logger.warning(
+                    "Failed to decode %s: %s",
+                    sanitize_log_value(str(candidate)),
+                    sanitize_log_value(str(exc)),
+                )
                 handle.seek(0)
                 content = handle.read()
                 end = content.rfind("}")
@@ -510,8 +519,8 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                     except json.JSONDecodeError as fallback_exc:
                         logger.warning(
                             "Failed to recover configuration from %s: %s",
-                            candidate,
-                            fallback_exc,
+                            sanitize_log_value(str(candidate)),
+                            sanitize_log_value(str(fallback_exc)),
                         )
     except FileNotFoundError:
         pass
