@@ -72,3 +72,31 @@ def test_positions_endpoint_triggers_sync(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json['positions'] == []
     assert exchange.calls == 1
+
+
+def test_positions_endpoint_respects_rotated_token(monkeypatch, tmp_path):
+    class DummyExchange:
+        def __init__(self):
+            self.calls = 0
+
+        def fetch_positions(self):
+            self.calls += 1
+            return []
+
+    exchange = DummyExchange()
+    service = _reload_service(monkeypatch, tmp_path, exchange)
+    client = service.app.test_client()
+
+    first = client.get('/positions', headers={'Authorization': 'Bearer token'})
+    assert first.status_code == 200
+    assert exchange.calls == 1
+
+    rotated = secrets.token_hex(8)
+    monkeypatch.setenv('TRADE_MANAGER_TOKEN', rotated)
+
+    second = client.get('/positions', headers={'Authorization': f'Bearer {rotated}'})
+    assert second.status_code == 200
+    assert exchange.calls == 2
+
+    rejected = client.get('/positions', headers={'Authorization': 'Bearer token'})
+    assert rejected.status_code == 401
