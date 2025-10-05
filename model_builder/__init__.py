@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 import types
 
 from . import core as _core_module
@@ -37,7 +38,58 @@ from .core import (
     validate_host,
 )
 
-from . import api as _api
+_API_AVAILABLE = True
+_API_IMPORT_ERROR: ImportError | None = None
+_API_IMPORT_TRACEBACK = ""
+
+try:
+    from . import api as _api
+except ImportError as exc:
+    _API_AVAILABLE = False
+    _API_IMPORT_ERROR = exc
+    _API_IMPORT_TRACEBACK = traceback.format_exc()
+
+    def _api_stub(name: str):
+        """Return a callable stub emitting a helpful error for missing Flask."""
+
+        def _stub(*args, **kwargs):  # type: ignore[no-untyped-def]
+            logger.warning(
+                "model_builder.api недоступен (Flask не установлен); вызов %s пропущен",
+                name,
+            )
+            raise RuntimeError(
+                "model_builder.api недоступен (Flask не установлен). "
+                "См. исходный ImportError и трассировку ниже:\n"
+                f"{_API_IMPORT_TRACEBACK.strip()}"
+            ) from _API_IMPORT_ERROR
+
+        return _stub
+
+    class _ApiAppStub:
+        """Мнимое приложение Flask, предотвращающее использование REST API."""
+
+        def __getattr__(self, item):  # type: ignore[override]
+            return _api_stub(f"api_app.{item}")
+
+        def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _api_stub("api_app")(*args, **kwargs)
+
+    def _load_model_stub() -> None:
+        logger.warning(
+            "model_builder.api недоступен (Flask не установлен); загрузка модели пропущена. "
+            "См. исходный ImportError:\n%s",
+            _API_IMPORT_TRACEBACK.strip(),
+        )
+
+    _api = types.SimpleNamespace()
+    _api._model = None
+    _api._load_model = _load_model_stub
+    _api.api_app = _ApiAppStub()
+    _api.configure_logging = _api_stub("configure_logging")
+    _api.main = _api_stub("main")
+    _api.ping = _api_stub("ping")
+    _api.predict_route = _api_stub("predict_route")
+    _api.train_route = _api_stub("train_route")
 from .storage import (
     JOBLIB_AVAILABLE,
     MODEL_DIR,
@@ -59,6 +111,14 @@ train_route = _api.train_route
 
 def _load_model() -> None:
     """Reload the cached scikit-learn model via :mod:`model_builder.api`."""
+
+    if not _API_AVAILABLE:
+        logger.warning(
+            "model_builder.api недоступен, загрузка модели пропущена. "
+            "См. исходный ImportError:\n%s",
+            _API_IMPORT_TRACEBACK.strip(),
+        )
+        return
 
     _api._load_model()
 
