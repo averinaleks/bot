@@ -274,21 +274,41 @@ def _write_positions_locked() -> None:
     if not _positions_file_is_safe(POSITIONS_FILE):
         return
 
-    try:
-        fd, tmp_name = tempfile.mkstemp(
-            dir=str(directory), prefix='.positions.', suffix='.tmp'
-        )
-    except OSError as exc:  # pragma: no cover - tmp creation failures
-        logging.warning('Failed to create temporary positions cache: %s', exc)
-        return
-
-    tmp_path = Path(tmp_name)
+    tmp_path: Path | None = None
     snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            dir=str(directory),
+            prefix='.positions.',
+            suffix='.tmp',
+            delete=False,
+        ) as fh:
+            tmp_path = Path(fh.name)
             json.dump(snapshot, fh)
             fh.flush()
             os.fsync(fh.fileno())
+    except OSError as exc:  # pragma: no cover - tmp creation failures
+        if tmp_path is None:
+            logging.warning('Failed to create temporary positions cache: %s', exc)
+            return
+        logging.warning('Failed to write temporary positions cache: %s', exc)
+        try:
+            tmp_path.unlink()
+        except OSError as cleanup_exc:
+            logging.debug(
+                'Failed to remove temporary positions cache %s: %s',
+                tmp_path,
+                cleanup_exc,
+            )
+        raise
+
+    if tmp_path is None:
+        logging.warning('Failed to determine temporary positions cache path')
+        return
+
+    try:
         os.replace(tmp_path, POSITIONS_FILE)
     except OSError as exc:  # pragma: no cover - disk errors
         logging.warning('Failed to save positions cache: %s', exc)
