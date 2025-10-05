@@ -164,7 +164,9 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Checkout workflow helpers
-        if: ${{ steps.validate_event.outputs.skip != 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && github.event_name != 'pull_request_target' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 1
@@ -179,6 +181,17 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME:-}" = "pull_request_target" ]; then
+            echo "::notice::Workflow triggered for pull_request_target – пропускаю проверку PR"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              {
+                echo "skip=true"
+                echo "head_sha="
+              } >>"$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
 
           helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
 
