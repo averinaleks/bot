@@ -660,8 +660,7 @@ def predict() -> ResponseReturnValue:
         model = _model_builder.predictive_models.get(symbol)
         if model is None:
             price = float(features[0, 0]) if features.size else 0.0
-            signal = "buy" if price > 0 else None
-            prob = 1.0 if signal else 0.0
+            prob = 1.0 if price > 0 else 0.0
         else:
             try:
                 scaler = _model_builder.scalers.get(symbol)
@@ -716,13 +715,11 @@ def predict() -> ResponseReturnValue:
         features = scaler.transform(features)
     if model is None:
         price = float(features[0, 0]) if features.size else 0.0
-        signal = "buy" if price > 0 else None
-        prob = 1.0 if signal else 0.0
+        prob = 1.0 if price > 0 else 0.0
     else:
         prob = float(model.predict_proba(features)[0, 1])
     threshold = 0.5
-    if model is not None:
-        signal = "buy" if prob >= threshold else "sell"
+    signal = "buy" if prob >= threshold else "sell"
     return jsonify({"signal": signal, "prob": prob, "threshold": threshold})
 
 
