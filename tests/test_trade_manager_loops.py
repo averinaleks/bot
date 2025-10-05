@@ -328,4 +328,49 @@ async def test_ranked_signal_loop_recovery(monkeypatch):
 
     assert call['n'] >= 2
 
+
+@pytest.mark.asyncio
+async def test_ranked_signal_loop_http_error_retry(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
+
+    async def fake_gather():
+        return [{"symbol": "BTCUSDT", "signal": "buy", "price": 100.0, "score": 1.0}]
+
+    async def fake_optimize(symbol):
+        return {}
+
+    call = {"n": 0}
+    retry_event = asyncio.Event()
+
+    async def fake_open(symbol, signal, price, params):
+        call["n"] += 1
+        if call["n"] == 1:
+            raise httpx.HTTPError("boom")
+        retry_event.set()
+
+    monkeypatch.setattr(tm, "gather_pending_signals", fake_gather)
+    monkeypatch.setattr(tm.data_handler.parameter_optimizer, "optimize", fake_optimize)
+    monkeypatch.setattr(tm, "open_position", fake_open)
+
+    orig_sleep = asyncio.sleep
+    sleep_calls: list[float] = []
+
+    async def fast_sleep(delay):
+        sleep_calls.append(delay)
+        await orig_sleep(0)
+
+    monkeypatch.setattr(trade_manager.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(tm.ranked_signal_loop())
+
+    await asyncio.wait_for(retry_event.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert call["n"] >= 2
+    assert sleep_calls and sleep_calls[0] == 1
+
 sys.modules.pop('utils', None)

@@ -1986,7 +1986,7 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError) as e:
+            except (ValueError, RuntimeError, httpx.HTTPError) as e:
                 logger.exception(
                     "Error processing ranked signals (%s): %s",
                     type(e).__name__,
