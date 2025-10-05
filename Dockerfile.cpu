@@ -64,10 +64,14 @@ import textwrap
 exec(textwrap.dedent("""
     import hashlib
     import pathlib
+    import sys
     from tempfile import NamedTemporaryFile
     from urllib.parse import urlsplit
 
     import requests
+    from requests.adapters import HTTPAdapter
+    from requests.exceptions import RequestException
+    from urllib3.util.retry import Retry
 
     COMMONS_LANG3_URL = (
         "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/"
@@ -78,17 +82,17 @@ exec(textwrap.dedent("""
     )
     COMMONS_LANG3_ALLOWED_HOST = "repo1.maven.org"
 
-    try:
-        import ray  # type: ignore
-    except Exception:
-        print("Ray отсутствует, пропускаем обновление commons-lang3")
-    else:
+    def update_commons_lang3() -> None:
+        try:
+            import ray  # type: ignore
+        except Exception:
+            print("Ray отсутствует, пропускаем обновление commons-lang3")
+            return
+
         jars_dir = pathlib.Path(ray.__file__).resolve().parent / "jars"
         jars_dir.mkdir(parents=True, exist_ok=True)
-        for jar in jars_dir.glob("commons-lang3-*.jar"):
-            jar.unlink()
         destination = jars_dir / "commons-lang3-3.18.0.jar"
-        hasher = hashlib.sha256()
+        existing_jars = list(jars_dir.glob("commons-lang3-*.jar"))
 
         parsed_url = urlsplit(COMMONS_LANG3_URL)
         if parsed_url.scheme != "https":
@@ -102,11 +106,18 @@ exec(textwrap.dedent("""
                 f"{parsed_url.netloc}"
             )
 
+        hasher = hashlib.sha256()
+        retries = Retry(
+            total=5,
+            backoff_factor=1.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("HEAD", "GET"),
+        )
+
         temp_path = None
         try:
             with requests.Session() as session:
-                adapter = requests.adapters.HTTPAdapter()
-                session.mount("https://", adapter)
+                session.mount("https://", HTTPAdapter(max_retries=retries))
                 session.trust_env = False
                 with session.get(
                     COMMONS_LANG3_URL,
@@ -130,6 +141,15 @@ exec(textwrap.dedent("""
                                 continue
                             temp_file.write(chunk)
                             hasher.update(chunk)
+        except RequestException as exc:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            print(
+                "Не удалось скачать commons-lang3:"
+                f" {exc!r}. Используем версию из поставки Ray.",
+                file=sys.stderr,
+            )
+            return
         except Exception:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)
@@ -140,18 +160,22 @@ exec(textwrap.dedent("""
 
         digest = hasher.hexdigest()
         if digest != COMMONS_LANG3_SHA256:
-            destination.unlink(missing_ok=True)
             temp_path.unlink(missing_ok=True)
             raise RuntimeError(
                 "SHA256 mismatch while downloading commons-lang3: expected "
                 f"{COMMONS_LANG3_SHA256}, got {digest}"
             )
 
+        for jar in existing_jars:
+            jar.unlink(missing_ok=True)
+
         try:
             temp_path.replace(destination)
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise
+
+    update_commons_lang3()
 """))
 PY
 
