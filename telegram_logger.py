@@ -40,8 +40,7 @@ import hashlib
 # when a similarly named module exists on ``PYTHONPATH``.
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
-if bot_config.OFFLINE_MODE:
-    from services.offline import OfflineTelegram
+from services.offline import OfflineTelegram
 try:  # pragma: no cover - optional dependency
     from telegram.error import BadRequest, Forbidden, RetryAfter
 except Exception as exc:  # pragma: no cover - missing telegram
@@ -91,6 +90,14 @@ class TelegramLogger(logging.Handler):
     """Handler для пересылки логов и сообщений в Telegram."""
 
     _instances: set["TelegramLogger"] = set()
+
+    def __new__(cls, *args, **kwargs):
+        if _should_use_offline_logger():
+            logger.warning(
+                "Telegram credentials missing; using OfflineTelegram stub"
+            )
+            return OfflineTelegram(*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -383,12 +390,23 @@ class TelegramLogger(logging.Handler):
 
     @classmethod
     async def shutdown(cls) -> None:
+        if _should_use_offline_logger():
+            await OfflineTelegram.shutdown()
+            return
         for inst in list(cls._instances):
             await inst._shutdown()
 
 
-if bot_config.OFFLINE_MODE:
-    TelegramLogger = OfflineTelegram  # type: ignore
+def _should_use_offline_logger() -> bool:
+    if bot_config.OFFLINE_MODE:
+        return True
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return False
+    if os.getenv("TEST_MODE") == "1":
+        return False
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    return not (token and chat_id)
 
 
 def _shutdown_all() -> None:

@@ -1425,16 +1425,41 @@ async def main_async() -> None:
                 await gpt_task
 
 
-def main() -> None:
-    from data_handler import get_settings  # local import to avoid circular dependency
+def _should_use_live_data_handler() -> bool:
+    if bot_config.OFFLINE_MODE:
+        return False
+    if os.getenv("TEST_MODE") == "1":
+        return True
+    return True
 
+
+def main() -> None:
     load_dotenv()
+    suppress_tf_logs()
+
+    if not _should_use_live_data_handler():
+        logger.info("OFFLINE_MODE=1: skipping data handler initialisation")
+        asyncio.run(run_once_async())
+        return
+
+    try:
+        from data_handler import get_settings  # local import to avoid circular dependency
+    except ImportError as exc:
+        if bot_config.OFFLINE_MODE:
+            logger.warning(
+                "OFFLINE_MODE=1: data_handler unavailable (%s); running single offline cycle",
+                sanitize_log_value(str(exc)),
+            )
+            asyncio.run(run_once_async())
+            return
+        logger.error("Failed to import data_handler: %s", exc)
+        raise SystemExit(1) from exc
+
     try:
         cfg = get_settings()
     except ValidationError as exc:  # pragma: no cover - config errors
         logger.error("Invalid environment configuration: %s", exc)
         raise SystemExit(1)
-    suppress_tf_logs()
     global SYMBOLS
     SYMBOLS = cfg.symbols
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
