@@ -96,6 +96,13 @@ _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 _SKIPPED_PACKAGES = {"ccxtpro"}
 
 
+def _safe_path_fragment(path: Path) -> str:
+    """Return a sanitised POSIX representation for log messages."""
+
+    text = path.as_posix()
+    return text.replace("\n", " ").replace("\r", " ")
+
+
 def _normalise_optional_string(value: str | None) -> str:
     if not value:
         return ""
@@ -310,12 +317,61 @@ def _should_include_dir(dirname: str) -> bool:
     return True
 
 
+def _is_safe_child_path(base: Path, candidate: Path, *, entry_type: str) -> bool:
+    """Return ``True`` when *candidate* is a safe descendant of *base*."""
+
+    safe_candidate = _safe_path_fragment(candidate)
+    try:
+        if candidate.is_symlink():
+            print(
+                f"::warning::Skipping {entry_type} {safe_candidate}: symbolic links are not processed",
+                file=sys.stderr,
+            )
+            return False
+    except OSError as exc:
+        print(
+            f"::warning::Skipping {entry_type} {safe_candidate}: unable to inspect entry ({exc})",
+            file=sys.stderr,
+        )
+        return False
+
+    try:
+        resolved = candidate.resolve(strict=False)
+    except OSError as exc:
+        print(
+            f"::warning::Skipping {entry_type} {safe_candidate}: unable to resolve path ({exc})",
+            file=sys.stderr,
+        )
+        return False
+
+    try:
+        resolved.relative_to(base)
+    except ValueError:
+        print(
+            f"::warning::Skipping {entry_type} {safe_candidate}: resolved path escapes repository root",
+            file=sys.stderr,
+        )
+        return False
+
+    return True
+
+
 def _iter_requirement_files(root: Path) -> Iterable[Path]:
     matches: list[Path] = []
+    resolved_root = root.resolve(strict=False)
     for current_root, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(
-            dirname for dirname in dirnames if _should_include_dir(dirname)
-        )
+        current_path = Path(current_root)
+        filtered_dirnames: list[str] = []
+        for dirname in sorted(dirnames):
+            if not _should_include_dir(dirname):
+                continue
+            candidate_dir = current_path / dirname
+            if not _is_safe_child_path(
+                resolved_root, candidate_dir, entry_type="directory"
+            ):
+                continue
+            filtered_dirnames.append(dirname)
+        dirnames[:] = filtered_dirnames
         for filename in filenames:
             filename_lower = filename.lower()
             if not any(
@@ -324,7 +380,9 @@ def _iter_requirement_files(root: Path) -> Iterable[Path]:
                 for pattern in MANIFEST_PATTERNS
             ):
                 continue
-            path = Path(current_root, filename)
+            path = current_path / filename
+            if not _is_safe_child_path(resolved_root, path, entry_type="file"):
+                continue
             if not path.is_file():
                 continue
             matches.append(path)
