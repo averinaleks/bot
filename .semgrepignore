@@ -1,2 +1,16 @@
 # Allow requested static demo credentials in sample environment configuration
 .env
+
+# Ignore additional environment fixtures containing intentionally fake secrets.
+*.env
+**/.env
+
+# Exclude test fixtures that embed dummy API tokens or request/response captures.
+tests/fixtures/**
+tests/testdata/**
+services/tests/fixtures/**
+
+# Skip generated caches and build outputs that can trigger heuristics.
+cache/**
+.cache/**
+__pycache__/**
