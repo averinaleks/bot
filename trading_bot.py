@@ -63,7 +63,7 @@ if CFG.save_unsent_telegram:
         logger.warning(
             "Ignoring unsafe unsent_telegram_path %s: %s",
             sanitize_log_value(CFG.unsent_telegram_path),
-            exc,
+            sanitize_log_value(str(exc)),
         )
         _UNSENT_FALLBACK_PATH = None
 else:
@@ -259,7 +259,10 @@ async def shutdown_async_tasks(timeout: float = 5.0) -> None:
 
     done, pending = await asyncio.wait(tasks, timeout=timeout)
     if pending:
-        logger.warning("Cancelling pending tasks: %s", [repr(t) for t in pending])
+        logger.warning(
+            "Cancelling pending tasks: %s",
+            sanitize_log_value([repr(t) for t in pending]),
+        )
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
@@ -522,7 +525,10 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
             data = resp.json() if resp.status_code == 200 else {}
             candles = data.get("history", [])
         except Exception as exc:  # pragma: no cover - network errors
-            logger.warning("Failed to fetch initial history: %s", exc)
+            logger.warning(
+                "Failed to fetch initial history: %s",
+                sanitize_log_value(str(exc)),
+            )
             candles = []
     async with PRICE_HISTORY_LOCK:
         hist = _PRICE_HISTORY[symbol]
@@ -989,7 +995,11 @@ def _parse_trade_params(
         try:
             return float(value) if value is not None else None
         except (TypeError, ValueError) as exc:
-            logger.warning("Invalid trade parameter %r: %s", value, exc)
+            logger.warning(
+                "Invalid trade parameter %r: %s",
+                value,
+                sanitize_log_value(str(exc)),
+            )
             return None
 
     return _parse(tp), _parse(sl), _parse(trailing_stop)
@@ -1184,7 +1194,10 @@ async def refresh_gpt_advice() -> None:
         try:
             advice = GPTAdviceModel.model_validate(gpt_result)
         except ValidationError as exc:
-            logger.warning("Invalid GPT advice: %s", exc)
+            logger.warning(
+                "Invalid GPT advice: %s",
+                sanitize_log_value(str(exc)),
+            )
             advice = GPTAdviceModel(signal="hold")
         GPT_ADVICE = advice
         _GPT_ADVICE_ERROR_COUNT = 0
@@ -1205,7 +1218,10 @@ async def _gpt_advice_loop() -> None:
         try:
             await refresh_gpt_advice()
         except Exception as exc:  # noqa: BLE001 - keep loop running
-            logger.warning("GPT advice loop error: %s", exc)
+            logger.warning(
+                "GPT advice loop error: %s",
+                sanitize_log_value(str(exc)),
+            )
             await send_telegram_alert(f"GPT advice loop error: {exc}")
         await asyncio.sleep(3600)
 
@@ -1231,7 +1247,11 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
                 logger.error("Invalid JSON from price service")
                 return
             if price is None or price <= 0:
-                logger.warning("Invalid price for %s: %s", symbol, price)
+                logger.warning(
+                    "Invalid price for %s: %s",
+                    sanitize_log_value(symbol),
+                    sanitize_log_value(price),
+                )
                 return
             features = await build_feature_vector(symbol, price)
             pred = await client.post(
@@ -1280,7 +1300,10 @@ async def run_once_async(symbol: str | None = None) -> None:
         return
 
     if not await capital_under_limit(env):
-        logger.warning("Capital limit reached, skipping %s", symbol)
+        logger.warning(
+            "Capital limit reached, skipping %s",
+            sanitize_log_value(symbol),
+        )
         await send_telegram_alert(f"Capital limit reached for {symbol}")
         return
 

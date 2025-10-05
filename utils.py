@@ -59,8 +59,8 @@ def _wrap_tempfile_mkdtemp() -> None:
             except OSError as exc:
                 logger.error(
                     "Не удалось подготовить каталог временных файлов %s: %s",
-                    target_dir,
-                    exc,
+                    sanitize_log_value(str(target_dir)),
+                    sanitize_log_value(str(exc)),
                 )
                 raise RuntimeError(
                     "Не удалось подготовить каталог временных файлов"
@@ -302,7 +302,10 @@ except ImportError:
 try:  # pragma: no cover - prefer package import to avoid shadowing
     from bot.telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
 except Exception as exc:  # pragma: no cover - fallback when package import fails
-    logger.warning("Failed to import TelegramLogger via package: %s", exc)
+    logger.warning(
+        "Failed to import TelegramLogger via package: %s",
+        sanitize_log_value(str(exc)),
+    )
     try:
         from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
     except Exception:
@@ -322,7 +325,10 @@ except Exception as exc:  # pragma: no cover - fallback when package import fail
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
 except ImportError as exc:  # pragma: no cover - allow missing telegram package
-    logging.getLogger("TradingBot").error("Telegram package not available: %s", exc)
+    logging.getLogger("TradingBot").error(
+        "Telegram package not available: %s",
+        sanitize_log_value(str(exc)),
+    )
 
     class _TelegramError(Exception):
         pass

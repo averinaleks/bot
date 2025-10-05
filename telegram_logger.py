@@ -221,7 +221,7 @@ class TelegramLogger(logging.Handler):
                     except httpx.HTTPError as e:
                         logger.warning(
                             "HTTP ошибка Telegram: %s. Попытка %s/5",
-                            e,
+                            sanitize_log_value(str(e)),
                             attempt + 1,
                         )
                         if attempt < 4:
@@ -230,14 +230,17 @@ class TelegramLogger(logging.Handler):
                         else:
                             raise
                     except (BadRequest, Forbidden) as e:
-                        logger.error("Ошибка Telegram: %s", e)
+                        logger.error(
+                            "Ошибка Telegram: %s",
+                            sanitize_log_value(str(e)),
+                        )
                         raise
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
                         logger.exception(
                             "Ошибка отправки сообщения Telegram: %s",
-                            e,
+                            sanitize_log_value(str(e)),
                         )
                         raise
     def _save_unsent(self, chat_id: int | str, text: str) -> None:
