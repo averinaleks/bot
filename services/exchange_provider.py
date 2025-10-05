@@ -52,6 +52,17 @@ class ExchangeProvider(Generic[T]):
 
         return self._instance
 
+    def create(self) -> T:
+        """Create a brand-new exchange instance without caching it."""
+
+        return self._factory()
+
+    def close_instance(self, instance: T) -> None:
+        """Close a specific instance produced by the factory."""
+
+        if self._close_cb is not None:
+            self._close_cb(instance)
+
     def close(self) -> None:
         """Dispose of the cached instance if present."""
 
@@ -60,8 +71,8 @@ class ExchangeProvider(Generic[T]):
             instance = self._instance
             self._instance = None
 
-        if instance is not None and self._close_cb is not None:
-            self._close_cb(instance)
+        if instance is not None:
+            self.close_instance(instance)
 
     @contextmanager
     def lifespan(self) -> Generator[T, None, None]:

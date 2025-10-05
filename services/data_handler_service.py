@@ -296,10 +296,9 @@ def _current_exchange() -> Any | None:
     provider = exchange_provider
     if provider is None:
         return None
-    cached = provider.peek()
-    if cached is not None:
-        _exchange_ctx.set(cached)
-    return cached
+    exchange = provider.create()
+    _exchange_ctx.set(exchange)
+    return exchange
 
 
 def init_exchange() -> None:
@@ -309,36 +308,40 @@ def init_exchange() -> None:
     if provider is None:
         raise RuntimeError("Exchange provider is not configured")
     try:
-        exchange = provider.get()
+        exchange = provider.create()
     except Exception as exc:  # pragma: no cover - config errors
         logging.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
     else:
         _exchange_ctx.set(exchange)
+        close_exchange(None)
 
 
 if hasattr(app, "before_first_request"):
     app.before_first_request(init_exchange)
 
 
-@app.before_request
-def _bind_exchange() -> None:
-    provider = exchange_provider
-    if provider is None:
-        raise RuntimeError("Exchange provider is not configured")
-    exchange = provider.get()
-    _exchange_ctx.set(exchange)
-
-
 def close_exchange(_: BaseException | None = None) -> None:
     """Закрыть соединение с биржей при завершении контекста приложения."""
     provider = exchange_provider
-    if provider is None:
+    exchange = _exchange_ctx.get()
+    if exchange is None:
+        _exchange_ctx.set(None)
         return
-    provider.close()
+    _exchange_ctx.set(None)
+    if provider is None:
+        _close_exchange_instance(exchange)
+        return
+    try:
+        provider.close_instance(exchange)
+    except Exception:  # pragma: no cover - defensive logging
+        logging.getLogger(__name__).exception("Failed to close exchange instance")
 
 if hasattr(app, "teardown_appcontext"):
     app.teardown_appcontext(close_exchange)
+
+if hasattr(app, "teardown_request"):
+    app.teardown_request(close_exchange)
 
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
