@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import shutil
 # Bandit note: subprocess используется с заранее определённой командой git.
 import subprocess  # nosec B404
@@ -127,12 +128,14 @@ def test_api_request_uses_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(prepare_gptoss_diff, "_perform_https_request", _fake_request)
 
+    token = secrets.token_hex(16)
+
     prepare_gptoss_diff._api_request(
         "https://api.github.com/repos/test/repo",
-        token="secret-token",
+        token=token,
     )
 
-    assert captured["Authorization"] == "Bearer secret-token"
+    assert captured["Authorization"] == f"Bearer {token}"
 
 
 def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, tmp_path: Path) -> None:
