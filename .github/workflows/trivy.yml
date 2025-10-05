@@ -48,7 +48,7 @@ jobs:
         # v4.3.0
         with:
           path: ${{ steps.trivy_cache.outputs.dir }}
-          key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'Dockerfile*') }}
+          key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'requirements*.in', 'Dockerfile*') }}
           restore-keys: |
             ${{ runner.os }}-trivy-db-
 
@@ -65,6 +65,8 @@ jobs:
               --scanners vuln \
               --severity HIGH,CRITICAL \
               --ignore-unfixed \
+              --file-patterns 'pip:requirements*.txt' \
+              --file-patterns 'pip:requirements*.in' \
               --format sarif \
               --output trivy-results.sarif \
               --cache-dir "${TRIVY_CACHE_DIR}" \
