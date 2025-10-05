@@ -167,9 +167,9 @@ jobs:
           # Используем отдельный scope с OCI media types, чтобы BuildKit
           # не пытался читать устаревший кэш с generic "application/octet-stream"
           # и не падал с "unexpected media type ... not found". Новый суффикс
-          # ``-oci-v2`` гарантирует создание отдельного пула слоёв.
-          cache-from: type=gha,scope=${{ matrix.image }}-oci-v2,ignore-error=true
-          cache-to: type=gha,scope=${{ matrix.image }}-oci-v2,mode=max,oci-mediatypes=true
+          # ``-oci-v3`` гарантирует создание отдельного пула слоёв.
+          cache-from: type=gha,scope=${{ matrix.image }}-oci-v3,ignore-error=true
+          cache-to: type=gha,scope=${{ matrix.image }}-oci-v3,mode=max,oci-mediatypes=true
 
       - name: Cleanup before Trivy scan
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
