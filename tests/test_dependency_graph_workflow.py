@@ -115,4 +115,5 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.client_payload.head_sha" in workflow
     assert "github.event.client_payload.commit_sha" in workflow
     assert "github.event.client_payload.ref_name" in workflow
+    assert "github.event.client_payload.head_ref" in workflow
     assert "github.event.client_payload.branch" in workflow
