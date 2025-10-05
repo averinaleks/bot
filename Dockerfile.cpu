@@ -8,15 +8,16 @@ ARG DEBIAN_FRONTEND=noninteractive
 # чтобы любые ``print``-сообщения появлялись мгновенно.
 ENV PYTHONUNBUFFERED=1
 
-# Обновляем базовый образ до актуальных патчей безопасности и устанавливаем
-# минимальный набор инструментов, необходимый для сборки виртуального
-# окружения. Использование официального python:3.11-slim позволяет избежать
-# ненадёжного ручного управления PPA и делает сборку устойчивой к ошибкам
-# "Release file not found" в GitHub Actions.
+# Обновляем индекс пакетов и устанавливаем минимальный набор инструментов,
+# необходимый для сборки виртуального окружения. Semgrep (правило
+# ``dockerfile.security.apt-get-upgrade``) запрещает использование
+# ``apt-get upgrade``, поэтому поддержка безопасности возлагается на
+# своевременное обновление базового образа. Использование официального
+# python:3.11-slim по-прежнему избавляет от ручных PPA и «Release file not
+# found» в GitHub Actions.
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get upgrade -y
 apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -178,13 +179,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ENV PYTHONUNBUFFERED=1
 
-# Обновляем систему и добавляем только необходимые зависимости выполнения.
-# libgomp1 требуется бинарям NumPy/Scikit-learn, а libssl3 необходим для
-# криптографических библиотек.
+# Обновляем индекс пакетов и добавляем только необходимые зависимости
+# выполнения. libgomp1 требуется бинарям NumPy/Scikit-learn, а libssl3 — для
+# криптографических библиотек. ``apt-get upgrade`` не используется во
+# исполнение требования Semgrep ``dockerfile.security.apt-get-upgrade``.
 RUN <<'EOSHELL'
 set -eux
 apt-get update
-apt-get upgrade -y
 apt-get install -y --no-install-recommends \
     libgomp1 \
     libssl3
