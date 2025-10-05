@@ -14,6 +14,7 @@ import os
 import sys
 from pathlib import Path
 import re
+import threading
 import unicodedata
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -236,6 +237,7 @@ def _get_model_file_path() -> Path | None:
         )
         return None
 
+_state_lock = threading.RLock()
 _models: Dict[str, Any] = {}
 _scalers: Dict[str, Any] = {}
 _scaler: Any = None  # backwards compatibility for tests
@@ -266,7 +268,8 @@ def _load_model() -> None:
                 sanitize_log_value(model_file),
             )
             return
-        _models["default"] = safe_joblib_load(model_file)
+        with _state_lock:
+            _models["default"] = safe_joblib_load(model_file)
     except Exception:
         app.logger.exception("Failed to load model from %s", model_file)
 
@@ -409,115 +412,117 @@ else:  # scikit-learn fallback used by tests
         return resolved
 
     def _load_state(symbol: str) -> None:
-        # Only allow models that actually exist in the MODEL_DIR.
-        allowed_symbols = {p.stem for p in MODEL_DIR.glob("*.pkl")}
-        if symbol not in allowed_symbols:
-            app.logger.warning(
-                "Refused to load model: %s is not whitelisted",
-                sanitize_log_value(symbol),
-            )
-            return
-        if not JOBLIB_AVAILABLE:
-            app.logger.warning(
-                "joblib недоступен, загрузка состояния модели %s пропущена",
-                sanitize_log_value(symbol),
-            )
-            return
-        try:
-            path = _model_path(symbol)
-        except ValueError as exc:
-            app.logger.warning(
-                "Refused to load model %s: %s",
-                sanitize_log_value(symbol),
-                exc,
-            )
-            return
-        if not path.exists():
-            return
-        if path.is_symlink():
-            app.logger.warning(
-                "Refused to load model %s: path is a symlink",
-                sanitize_log_value(path),
-            )
-            return
-        if not path.is_file():
-            app.logger.warning(
-                "Refused to load model %s: not a regular file",
-                sanitize_log_value(path),
-            )
-            return
-        if not _is_within_directory(path, MODEL_DIR):
-            app.logger.warning(
-                "Refused to load model %s: path escapes MODEL_DIR",
-                sanitize_log_value(path),
-            )
-            return
-        if not verify_model_state_signature(path):
-            app.logger.warning(
-                "Refused to load model %s: signature mismatch",
-                sanitize_log_value(path),
-            )
-            return
-        try:
-            data = safe_joblib_load(path)
-        except ArtifactDeserializationError:
-            app.logger.warning(
-                "Refused to load model %s: содержит недоверенные объекты", path
-            )
-            return
-        except Exception:
-            app.logger.exception("Failed to load model artefact from %s", path)
-            return
-        _models[symbol] = data.get("model")
-        _scalers[symbol] = data.get("scaler")
+        with _state_lock:
+            # Only allow models that actually exist in the MODEL_DIR.
+            allowed_symbols = {p.stem for p in MODEL_DIR.glob("*.pkl")}
+            if symbol not in allowed_symbols:
+                app.logger.warning(
+                    "Refused to load model: %s is not whitelisted",
+                    sanitize_log_value(symbol),
+                )
+                return
+            if not JOBLIB_AVAILABLE:
+                app.logger.warning(
+                    "joblib недоступен, загрузка состояния модели %s пропущена",
+                    sanitize_log_value(symbol),
+                )
+                return
+            try:
+                path = _model_path(symbol)
+            except ValueError as exc:
+                app.logger.warning(
+                    "Refused to load model %s: %s",
+                    sanitize_log_value(symbol),
+                    exc,
+                )
+                return
+            if not path.exists():
+                return
+            if path.is_symlink():
+                app.logger.warning(
+                    "Refused to load model %s: path is a symlink",
+                    sanitize_log_value(path),
+                )
+                return
+            if not path.is_file():
+                app.logger.warning(
+                    "Refused to load model %s: not a regular file",
+                    sanitize_log_value(path),
+                )
+                return
+            if not _is_within_directory(path, MODEL_DIR):
+                app.logger.warning(
+                    "Refused to load model %s: path escapes MODEL_DIR",
+                    sanitize_log_value(path),
+                )
+                return
+            if not verify_model_state_signature(path):
+                app.logger.warning(
+                    "Refused to load model %s: signature mismatch",
+                    sanitize_log_value(path),
+                )
+                return
+            try:
+                data = safe_joblib_load(path)
+            except ArtifactDeserializationError:
+                app.logger.warning(
+                    "Refused to load model %s: содержит недоверенные объекты", path
+                )
+                return
+            except Exception:
+                app.logger.exception("Failed to load model artefact from %s", path)
+                return
+            _models[symbol] = data.get("model")
+            _scalers[symbol] = data.get("scaler")
 
     def _save_state(symbol: str) -> None:
-        model = _models.get(symbol)
-        if model is None:
-            return
-        if not JOBLIB_AVAILABLE:
-            app.logger.warning(
-                "joblib недоступен, состояние модели %s не сохранено",
-                sanitize_log_value(symbol),
-            )
-            return
-        data = {"model": model, "scaler": _scalers.get(symbol)}
-        try:
-            path = _model_path(symbol)
-        except ValueError as exc:
-            app.logger.warning(
-                "Refused to save model %s: %s",
-                sanitize_log_value(symbol),
-                exc,
-            )
-            return
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            app.logger.exception(
-                "Failed to prepare directory for %s: %s",
-                sanitize_log_value(path),
-                exc,
-            )
-            return
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        try:
-            joblib.dump(data, tmp_path)
-            os.replace(tmp_path, path)
-            try:
-                write_model_state_signature(path)
-            except OSError as exc:
+        with _state_lock:
+            model = _models.get(symbol)
+            if model is None:
+                return
+            if not JOBLIB_AVAILABLE:
                 app.logger.warning(
-                    "Failed to persist signature for %s: %s",
+                    "joblib недоступен, состояние модели %s не сохранено",
+                    sanitize_log_value(symbol),
+                )
+                return
+            data = {"model": model, "scaler": _scalers.get(symbol)}
+            try:
+                path = _model_path(symbol)
+            except ValueError as exc:
+                app.logger.warning(
+                    "Refused to save model %s: %s",
+                    sanitize_log_value(symbol),
+                    exc,
+                )
+                return
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                app.logger.exception(
+                    "Failed to prepare directory for %s: %s",
                     sanitize_log_value(path),
                     exc,
                 )
-        except Exception as exc:  # pragma: no cover - dump failures are rare
-            app.logger.exception(
-                "Failed to persist model %s: %s",
-                sanitize_log_value(symbol),
-                exc,
-            )
+                return
+            tmp_path = path.with_name(f"{path.name}.tmp")
+            try:
+                joblib.dump(data, tmp_path)
+                os.replace(tmp_path, path)
+                try:
+                    write_model_state_signature(path)
+                except OSError as exc:
+                    app.logger.warning(
+                        "Failed to persist signature for %s: %s",
+                        sanitize_log_value(path),
+                        exc,
+                    )
+            except Exception as exc:  # pragma: no cover - dump failures are rare
+                app.logger.exception(
+                    "Failed to persist model %s: %s",
+                    sanitize_log_value(symbol),
+                    exc,
+                )
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
@@ -615,13 +620,14 @@ def train() -> ResponseReturnValue:
     # с будущими релизами библиотеки.
     model = LogisticRegression()
     model.fit(features, labels)
-    _models[symbol] = model
-    _scalers[symbol] = scaler
-    if symbol == "default":  # maintain legacy globals
-        global _scaler
-        _scaler = scaler
     try:
-        _save_state(symbol)
+        with _state_lock:
+            _models[symbol] = model
+            _scalers[symbol] = scaler
+            if symbol == "default":  # maintain legacy globals
+                global _scaler
+                _scaler = scaler
+            _save_state(symbol)
     except Exception:
         app.logger.exception(
             "Failed to save model state for %s",
@@ -706,12 +712,14 @@ def predict() -> ResponseReturnValue:
         )
         return jsonify({"error": "invalid features"}), 400
 
-    model = _models.get(symbol)
-    scaler = _scalers.get(symbol)
-    if model is None:
-        _load_state(symbol)
+    with _state_lock:
         model = _models.get(symbol)
         scaler = _scalers.get(symbol)
+    if model is None:
+        _load_state(symbol)
+        with _state_lock:
+            model = _models.get(symbol)
+            scaler = _scalers.get(symbol)
     if scaler is not None:
         features = scaler.transform(features)
     if model is None:
