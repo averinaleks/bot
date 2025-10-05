@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
@@ -20,6 +21,10 @@ logger = logging.getLogger("TradingBot")
 OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
 
 _PlaceholderValue = str | Callable[[], str]
+
+# Personalisation string for deterministic price derivation in ``OfflineBybit``.
+# The value must be at most 16 bytes as required by ``hashlib.blake2s``.
+_OFFLINE_PRICE_PERSONALISATION = b"offline-price"
 
 # Mirror the configuration flag so tests can override it via monkeypatch.
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
@@ -121,9 +126,19 @@ class OfflineBybit:
         cached = self._prices.get(symbol.upper())
         if cached and cached > 0:
             return cached
-        # Deterministic pseudo price derived from the symbol name to keep tests
-        # stable without requiring randomness.
-        base = abs(hash(symbol.upper())) % 10_000
+        # Derive a deterministic pseudo price from the symbol name using a
+        # collision-resistant hash.  ``hash`` is intentionally avoided because
+        # its salted randomisation would yield non-reproducible values across
+        # interpreter restarts, which Semgrep rightfully flags as
+        # ``python.lang.correctness.use-hash``.  Using ``blake2s`` keeps the
+        # offline fixtures stable without relying on insecure randomness.
+        normalised = symbol.upper().encode("utf-8", "surrogatepass")
+        digest = hashlib.blake2s(
+            normalised,
+            digest_size=16,
+            person=_OFFLINE_PRICE_PERSONALISATION,
+        ).digest()
+        base = int.from_bytes(digest, "big") % 10_000
         price = 10_000 + base
         resolved = float(price)
         self._prices[symbol.upper()] = resolved
