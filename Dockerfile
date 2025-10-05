@@ -11,6 +11,10 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 # Установка необходимых пакетов для сборки и обновление критических библиотек
 # Обновление linux-libc-dev устраняет CVE-2024-50217 и CVE-2025-21976, а libgcrypt20 — CVE-2024-2236.
 # Дополнительно собираем пропатченные пакеты PAM, чтобы закрыть CVE-2024-10963 и CVE-2024-10041.
+# ``apt-get upgrade`` намеренно не вызывается: Semgrep (правило
+# ``dockerfile.security.apt-get-upgrade``) требует воспроизводимых сборок, а
+# обновления безопасности подтягиваются при регулярном обновлении базового
+# образа.
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
@@ -23,7 +27,6 @@ WORKDIR /tmp/build
 
 RUN set -eux; \
     apt-get update; \
-    apt-get upgrade -y; \
     apt-get install -y --no-install-recommends \
         tzdata \
         linux-libc-dev \
@@ -117,7 +120,9 @@ COPY --from=builder /tmp/pam-fixed /tmp/pam-fixed
 COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
 # Установка минимальных пакетов выполнения
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+# ``apt-get upgrade`` исключён ради выполнения правила
+# ``dockerfile.security.apt-get-upgrade`` Semgrep и воспроизводимости сборки.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
     coreutils \
