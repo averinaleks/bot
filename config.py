@@ -263,7 +263,10 @@ def load_defaults() -> dict[str, Any]:
                 else:
                     logger.error("Failed to load %s: %s", path, exc)
                     raise ConfigLoadError from exc
-            except (OSError, json.JSONDecodeError) as exc:
+            except json.JSONDecodeError as exc:
+                logger.error("Failed to load %s: %s", path, exc)
+                raise ConfigLoadError from exc
+            except OSError as exc:
                 if OFFLINE_MODE or os.getenv("TEST_MODE") == "1":
                     logger.warning(
                         "Failed to load %s: %s; using empty defaults in offline/test mode",
