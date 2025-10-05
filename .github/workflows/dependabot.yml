@@ -87,6 +87,32 @@ jobs:
           python -m pip install -e .
           python -m pip install -r requirements-ci.txt
 
+      - name: Install manifest requirements
+        if: >-
+          steps.metadata.outputs.package-ecosystem == 'pip' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          steps.metadata.outputs.manifest-path != ''
+        env:
+          MANIFEST_PATH: ${{ steps.metadata.outputs.manifest-path }}
+          MANIFEST_NAME: ${{ steps.metadata.outputs.manifest-name }}
+        run: |
+          set -euo pipefail
+
+          manifest_path="${MANIFEST_PATH}"
+          if [[ ! -f "${manifest_path}" ]]; then
+            echo "Manifest ${manifest_path} not found; skipping install."
+            exit 0
+          fi
+
+          case "${MANIFEST_NAME}" in
+            requirements*.txt|requirements*.in|*.txt|*.in)
+              python -m pip install --upgrade -r "${manifest_path}"
+              ;;
+            *)
+              echo "Manifest ${manifest_path} is not a requirements file; skipping install."
+              ;;
+          esac
+
       # Ensure the tests exercise the exact versions proposed by Dependabot
       # even when the manifest being updated is not part of the lean
       # requirements set we install above (for example, updates targeting
