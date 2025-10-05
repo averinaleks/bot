@@ -200,6 +200,35 @@ def test_validate_host_accepts_loopback(monkeypatch):
     assert utils.validate_host() == '127.0.0.1'
 
 
+def test_filter_outliers_zscore_fallback_without_scipy(monkeypatch):
+    import pandas as pd
+
+    utils._reset_zscore_cache_for_tests()
+
+    def missing_scipy():
+        raise ImportError("scipy unavailable")
+
+    monkeypatch.setattr(utils, "_import_scipy_stats", lambda: missing_scipy())
+
+    df = pd.DataFrame({"close": [1.0, 2.0, 100.0, 2.0, 1.0]})
+    result = utils.filter_outliers_zscore(df, "close", threshold=1.5)
+
+    assert result["close"].isna().sum() == 1
+    assert result["close"].isna().idxmax() == 2
+
+
+def test_filter_outliers_zscore_handles_zero_variance(monkeypatch):
+    import pandas as pd
+
+    utils._reset_zscore_cache_for_tests()
+    monkeypatch.setattr(utils, "_import_scipy_stats", lambda: (_ for _ in ()).throw(ImportError("missing")))
+
+    df = pd.DataFrame({"close": [5.0, 5.0, 5.0, 5.0]})
+    result = utils.filter_outliers_zscore(df, "close", threshold=1.0)
+
+    assert result["close"].tolist() == [5.0, 5.0, 5.0, 5.0]
+
+
 def test_validate_host_accepts_localhost(monkeypatch, caplog):
     monkeypatch.setenv('HOST', 'localhost')
     with caplog.at_level('INFO'):

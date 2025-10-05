@@ -62,7 +62,8 @@ def test_filter_outliers_zscore_handles_nans(monkeypatch):
         a = np.asarray(a, dtype=float)
         return (a - a.mean()) / a.std()
 
-    utils.filter_outliers_zscore.__globals__["zscore"] = simple_z
+    utils._reset_zscore_cache_for_tests()
+    monkeypatch.setattr(utils, "_ZSCORE_FN", simple_z, raising=False)
 
     # Ensure scipy does not fail when a torch stub without Tensor exists
     if "torch" in sys.modules and not hasattr(sys.modules["torch"], "Tensor"):
@@ -78,7 +79,8 @@ def test_filter_outliers_zscore_mask_length(monkeypatch):
         a = np.asarray(a, dtype=float)
         return (a - a.mean()) / a.std()
 
-    utils.filter_outliers_zscore.__globals__["zscore"] = simple_z
+    utils._reset_zscore_cache_for_tests()
+    monkeypatch.setattr(utils, "_ZSCORE_FN", simple_z, raising=False)
 
     df = pd.DataFrame({"close": [np.nan, 1.0, 2.0, 3.0, np.nan]})
     result = utils.filter_outliers_zscore(df, "close", threshold=2.0)
