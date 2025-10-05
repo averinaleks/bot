@@ -12,7 +12,7 @@ import tempfile
 import time
 from collections import deque
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -306,6 +306,11 @@ except ImportError as e:  # pragma: no cover - optional dependency
     PPO = DQN = DummyVecEnv = None  # type: ignore
     SB3_AVAILABLE = False
     logger.warning("Не удалось импортировать stable_baselines3: %s", e)
+
+if TYPE_CHECKING:
+    from stable_baselines3.common.base_class import BaseAlgorithm as SB3BaseAlgorithm
+else:  # pragma: no cover - typing helper when SB3 is optional
+    SB3BaseAlgorithm = Any
 
 
 _torch_modules = None
@@ -2034,10 +2039,11 @@ class RLAgent:
                 )
                 return
             env = DummyVecEnv([lambda: TradingEnv(features_df, self.config)])
+            model: SB3BaseAlgorithm
             if algo == "DQN":
-                model = DQN("MlpPolicy", env, verbose=0)
+                model = cast(SB3BaseAlgorithm, DQN("MlpPolicy", env, verbose=0))
             else:
-                model = PPO("MlpPolicy", env, verbose=0)
+                model = cast(SB3BaseAlgorithm, PPO("MlpPolicy", env, verbose=0))
             model.learn(total_timesteps=timesteps)
             self.models[symbol] = model
         logger.info("RL-модель обучена для %s", symbol)
