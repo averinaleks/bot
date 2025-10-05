@@ -6,12 +6,14 @@ Trivy so that the codebase remains safe without dropping optional features.
 from __future__ import annotations
 
 import contextlib
+import errno
 import functools
 import hmac
 import hashlib
 import ipaddress
 import logging
 import os
+import stat
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -337,6 +339,35 @@ def _calculate_hmac(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def _write_atomic_signature(target: Path, data: str) -> None:
+    """Write *data* to *target* using restrictive file permissions."""
+
+    encoded = data.encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags |= nofollow
+
+    fd = os.open(target, flags, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError(errno.EPERM, "signature file must be a regular file")
+
+        total = 0
+        length = len(encoded)
+        while total < length:
+            written = os.write(fd, encoded[total:])
+            if written == 0:
+                raise OSError(errno.EIO, "failed to write signature contents")
+            total += written
+        with contextlib.suppress(OSError):
+            os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def write_model_state_signature(path: Path) -> None:
     """Persist a keyed digest for *path* if signing is configured."""
 
@@ -362,8 +393,13 @@ def write_model_state_signature(path: Path) -> None:
     except OSError as exc:  # pragma: no cover - крайне редкие ошибки ФС
         logger.warning("Не удалось подготовить файл подписи %s: %s", sig_path, exc)
         return
-    tmp_path.write_text(signature, encoding="utf-8")
-    os.replace(tmp_path, sig_path)
+
+    try:
+        _write_atomic_signature(tmp_path, signature)
+        os.replace(tmp_path, sig_path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp_path.unlink()
 
 
 def verify_model_state_signature(path: Path) -> bool:

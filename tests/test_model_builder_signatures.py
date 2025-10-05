@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -67,6 +69,10 @@ def test_load_model_validates_signatures(
     assert module._model is None, "Model must not load without a signature"
 
     security.write_model_state_signature(model_path)
+    if os.name != "nt":
+        assert sig_path.exists()
+        sig_mode = stat.S_IMODE(sig_path.stat().st_mode)
+        assert sig_mode == 0o600
     module._model = None
     module._load_model()
     assert isinstance(module._model, DummyModel)
