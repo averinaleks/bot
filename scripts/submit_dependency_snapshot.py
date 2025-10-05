@@ -7,8 +7,6 @@ import json
 import os
 import re
 import shutil
-# Bandit note: subprocess используется только для заранее определённых вызовов git.
-import subprocess  # nosec B404
 import sys
 import time
 from collections import OrderedDict
@@ -182,83 +180,157 @@ def _extract_workflow_run_ref(payload: Mapping[str, object]) -> str:
     return ""
 
 
-_ALLOWED_GIT_SUBCOMMANDS = {"rev-parse", "symbolic-ref", "for-each-ref"}
 _EVENT_PAYLOAD_EVENTS = {
     "repository_dispatch",
     "workflow_run",
     "workflow_call",
     "dynamic",
 }
-_GIT_EXECUTABLE = shutil.which("git")
+_SHA_PATTERN = re.compile(r"^[0-9a-f]{40,64}$", re.IGNORECASE)
 
 
-def _run_git_command(*args: str) -> str | None:
-    """Return the trimmed stdout from ``git`` or ``None`` on failure."""
+def _resolve_git_directory(root: Path = REPOSITORY_ROOT) -> Path | None:
+    """Return the resolved ``.git`` directory for *root* or ``None`` if missing."""
 
-    git_binary = _GIT_EXECUTABLE or shutil.which("git")
-    if git_binary is None:
-        print("Git недоступен в PATH; пропускаем команды git", file=sys.stderr)
-        return None
+    git_entry = root / ".git"
+    if git_entry.is_dir():
+        return git_entry
+    if git_entry.is_file():
+        try:
+            content = git_entry.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if content.startswith("gitdir:"):
+            target = content.split(":", 1)[1].strip()
+            candidate = (git_entry.parent / target).resolve()
+            if candidate.exists():
+                return candidate
+    return None
 
-    if not args:
-        raise ValueError("Ожидается минимум один аргумент git")
 
-    subcommand = args[0]
-    if subcommand not in _ALLOWED_GIT_SUBCOMMANDS:
-        raise ValueError(f"Недопустимая git-команда: {subcommand}")
+def _read_git_ref(git_dir: Path, ref: str) -> str | None:
+    """Return the commit hash for *ref* from loose or packed references."""
 
-    if any("\x00" in arg or "\n" in arg or "\r" in arg for arg in args):
-        raise ValueError("Аргументы git не должны содержать управляющих символов")
-
-    command = (git_binary,) + args
-
+    ref_path = git_dir / ref
     try:
-        # Bandit note: команда формируется из жёстко заданных аргументов.
-        completed = subprocess.run(  # nosec B603
-            command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
+        data = ref_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        data = ""
+    if data and _SHA_PATTERN.match(data):
+        return data
+
+    packed_refs = git_dir / "packed-refs"
+    try:
+        packed_content = packed_refs.read_text(encoding="utf-8")
+    except OSError:
         return None
 
-    output = completed.stdout.strip()
-    return output or None
+    for line in packed_content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("^"):
+            continue
+        if " " not in line:
+            continue
+        sha, name = line.split(" ", 1)
+        sha = sha.strip()
+        name = name.strip()
+        if name == ref and _SHA_PATTERN.match(sha):
+            return sha
+    return None
+
+
+def _read_head(git_dir: Path) -> tuple[str | None, str | None]:
+    """Return ``(sha, ref)`` for ``HEAD`` where ``ref`` may be ``None``."""
+
+    head_path = git_dir / "HEAD"
+    try:
+        raw = head_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return (None, None)
+
+    if raw.startswith("ref:"):
+        ref = raw.split(":", 1)[1].strip()
+        sha = _read_git_ref(git_dir, ref)
+        return (sha, ref)
+    if _SHA_PATTERN.match(raw):
+        return (raw, None)
+    return (None, None)
+
+
+def _iter_remote_refs(git_dir: Path) -> Iterable[tuple[str, str]]:
+    """Yield remote reference names and hashes from loose and packed refs."""
+
+    refs: dict[str, str] = {}
+    refs_root = git_dir / "refs"
+    if refs_root.exists():
+        for path in refs_root.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                sha = path.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if not _SHA_PATTERN.match(sha):
+                continue
+            ref_name = "refs/" + path.relative_to(refs_root).as_posix()
+            refs.setdefault(ref_name, sha)
+
+    packed_refs = git_dir / "packed-refs"
+    try:
+        packed_content = packed_refs.read_text(encoding="utf-8")
+    except OSError:
+        packed_content = ""
+    for line in packed_content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("^"):
+            continue
+        if " " not in line:
+            continue
+        sha, name = line.split(" ", 1)
+        sha = sha.strip()
+        name = name.strip()
+        if _SHA_PATTERN.match(sha):
+            refs.setdefault(name, sha)
+
+    for name, sha in refs.items():
+        if name.startswith("refs/remotes/"):
+            yield name, sha
 
 
 def _discover_git_sha() -> str | None:
     """Return the current commit hash from the local repository."""
 
-    return _run_git_command("rev-parse", "HEAD")
+    git_dir = _resolve_git_directory()
+    if git_dir is None:
+        return None
+    sha, ref = _read_head(git_dir)
+    if sha:
+        return sha
+    if ref:
+        return _read_git_ref(git_dir, ref)
+    return None
 
 
 def _discover_git_ref() -> str | None:
     """Return a ref name for the current ``HEAD`` commit."""
 
-    ref = _run_git_command("symbolic-ref", "--quiet", "HEAD")
+    git_dir = _resolve_git_directory()
+    if git_dir is None:
+        return None
+    sha, ref = _read_head(git_dir)
     if ref:
         return ref
-
-    remote_refs = _run_git_command(
-        "for-each-ref",
-        "--format=%(refname)",
-        "--contains",
-        "HEAD",
-        "refs/remotes/origin",
-    )
-    if not remote_refs:
+    if not sha:
         return None
 
-    for line in remote_refs.splitlines():
-        candidate = line.strip()
-        if not candidate.startswith("refs/remotes/origin/"):
+    origin_prefix = "refs/remotes/origin/"
+    for name, value in _iter_remote_refs(git_dir):
+        if not name.startswith(origin_prefix):
             continue
-        branch_name = candidate.removeprefix("refs/remotes/origin/")
-        if branch_name:
-            return f"refs/heads/{branch_name}"
-
+        if value == sha:
+            branch = name.removeprefix(origin_prefix)
+            if branch:
+                return f"refs/heads/{branch}"
     return None
 
 
