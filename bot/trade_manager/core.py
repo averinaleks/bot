@@ -1600,7 +1600,7 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError, KeyError) as e:
+            except (ValueError, RuntimeError, KeyError, httpx.HTTPError) as e:
                 logger.exception(
                     "Error managing positions (%s): %s",
                     type(e).__name__,

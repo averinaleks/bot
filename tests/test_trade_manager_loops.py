@@ -6,6 +6,7 @@ import types
 import pandas as pd
 import pytest
 import tempfile
+import httpx
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -168,7 +169,7 @@ async def test_manage_positions_recovery(monkeypatch):
     async def fake_check(symbol, price):
         call['n'] += 1
         if call['n'] == 1:
-            raise RuntimeError('boom')
+            raise httpx.HTTPError('boom')
     monkeypatch.setattr(tm, 'check_trailing_stop', fake_check)
     monkeypatch.setattr(tm, 'check_stop_loss_take_profit', lambda *a, **k: None)
     monkeypatch.setattr(tm, 'check_exit_signal', lambda *a, **k: None)
