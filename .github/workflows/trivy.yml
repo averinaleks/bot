@@ -34,6 +34,12 @@ jobs:
         run: |
           mkdir -p "$TRIVY_CACHE_DIR"
 
+      - name: Install Trivy CLI
+        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        with:
+          cache: 'true'
+          version: v0.67.0
+
       - name: Restore Trivy vulnerability database
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -44,24 +50,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-trivy-db-
 
-      - id: trivy
+      - id: trivy_scan
         name: Run Trivy scan
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        # v0.33.1
         continue-on-error: true
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: '1'
-          cache-dir: ${{ steps.trivy_cache.outputs.dir }}
+        env:
+          TRIVY_CACHE_DIR: ${{ steps.trivy_cache.outputs.dir }}
+        run: |
+          set -o pipefail
+          mkdir -p "${TRIVY_CACHE_DIR}"
+          exit_code=0
+          if ! trivy fs \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --format sarif \
+              --output trivy-results.sarif \
+              --cache-dir "${TRIVY_CACHE_DIR}" \
+              .; then
+            exit_code=$?
+          fi
+          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
+          if [ "${exit_code}" -ne 0 ]; then
+            exit "${exit_code}"
+          fi
 
       - name: Ensure jq is available
-        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
         run: |
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update
@@ -70,7 +84,7 @@ jobs:
 
       - name: Parse Trivy results
         id: parse_trivy
-        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
         run: |
           set -euo pipefail
           if [ ! -f trivy-results.sarif ]; then
@@ -91,7 +105,7 @@ jobs:
           echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
 
       - name: Summarize Trivy scan
-        if: ${{ always() && steps.trivy.conclusion != 'skipped' }}
+        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
         run: |
           if [ "${{ steps.parse_trivy.outputs.sarif_exists }}" != 'true' ]; then
             printf '### Trivy scan summary\n\n* No SARIF report was generated.\n' >> "$GITHUB_STEP_SUMMARY"
@@ -152,7 +166,7 @@ jobs:
           printf '%s\n' "$summary_line" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if Trivy scan failed unexpectedly
-        if: ${{ steps.trivy.conclusion == 'failure' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
+        if: ${{ steps.trivy_scan.outputs.exit_code != '0' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
         run: |
           echo "::error::Trivy scan failed before producing a SARIF report."
           exit 1
