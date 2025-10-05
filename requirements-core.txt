@@ -35,7 +35,7 @@ bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
     # via flask
-ccxt==4.5.6
+ccxt==4.5.7
     # via -r requirements-core.in
 certifi==2025.8.3
     # via
