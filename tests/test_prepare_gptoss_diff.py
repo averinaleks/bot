@@ -117,6 +117,24 @@ def test_api_request_adds_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     assert recorded_headers.get("User-Agent")
 
 
+def test_api_request_uses_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    def _fake_request(url: str, headers: dict[str, str], timeout: float) -> tuple[int, str, bytes]:
+        _ = (url, timeout)
+        captured.update(headers)
+        return 200, "OK", b"{}"
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_perform_https_request", _fake_request)
+
+    prepare_gptoss_diff._api_request(
+        "https://api.github.com/repos/test/repo",
+        token="secret-token",
+    )
+
+    assert captured["Authorization"] == "Bearer secret-token"
+
+
 def test_main_writes_outputs(monkeypatch: pytest.MonkeyPatch, temp_repo: Path, tmp_path: Path) -> None:
     monkeypatch.chdir(temp_repo)
     base_sha = _run_git(

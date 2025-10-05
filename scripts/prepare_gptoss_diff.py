@@ -237,7 +237,7 @@ def _api_request(url: str, token: str | None, timeout: float = 10.0) -> dict:
         "User-Agent": "gptoss-review-workflow/1.0 (+https://github.com/averinaleks/bot)",
     }
     if token:
-        headers["Authorization"] = f"token {token}"
+        headers["Authorization"] = f"Bearer {token}"
 
     status, reason, payload = _perform_https_request(url, headers, timeout)
     if status >= 400:
