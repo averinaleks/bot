@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, TypedDict
 from urllib.parse import quote, urlparse
 
+_REQUESTS_IMPORT_ERROR: ImportError | None
 try:  # pragma: no cover - import guard exercised in tests
     import requests  # type: ignore
 except ImportError as import_error:  # pragma: no cover - requests may be absent in CI
