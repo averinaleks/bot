@@ -275,24 +275,22 @@ try:
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
-    logging.getLogger("TradingBot").error("Numba import failed: %s", exc)
-    _numba_exc = exc
+    logger.warning("Numba import failed: %s", exc)
+    logger.warning(
+        "Running without Numba JIT acceleration; performance may be degraded."
+    )
 
-    def _numba_missing(*args, **kwargs):
-        raise ImportError("numba is required for JIT-accelerated functions") from _numba_exc
+    def jit(*jit_args, **jit_kwargs):
+        if jit_args and callable(jit_args[0]) and len(jit_args) == 1 and not jit_kwargs:
+            return jit_args[0]
 
-    def jit(*a, **k):
-        def wrapper(_f):
-            @wraps(_f)
-            def inner(*args, **kwargs):
-                return _numba_missing(*args, **kwargs)
+        def decorator(func):
+            return func
 
-            return inner
+        return decorator
 
-        return wrapper
-
-    def prange(*args):  # type: ignore
-        raise ImportError("numba is required for prange") from _numba_exc
+    def prange(*args, **kwargs):  # type: ignore
+        return range(*args, **kwargs)
 
 try:
     import numpy as np
