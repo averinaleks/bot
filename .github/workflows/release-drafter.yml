@@ -24,7 +24,15 @@ permissions:
   issues: write
 
 concurrency:
-  group: release-drafter-${{ github.head_ref || github.ref }}
+  group: >-
+    ${{
+      (
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request != null
+        && github.event.pull_request.number != null
+        && format('release-drafter-pr-{0}', github.event.pull_request.number)
+      ) || format('release-drafter-ref-{0}', github.ref)
+    }}
   cancel-in-progress: false
 
 jobs:
@@ -40,13 +48,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   autolabel_pull_request:
-    if: github.event_name == 'pull_request_target'
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request != null &&
+      github.event.pull_request.head.repo != null &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Update pull request metadata
-        if: >-
-          github.event.pull_request != null &&
-          github.event.pull_request.head.repo != null
         uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
         with:
           config-name: release-drafter.yml
