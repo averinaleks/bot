@@ -37,6 +37,7 @@ jobs:
               github.event.client_payload.after ||
               github.event.client_payload.ref ||
               github.event.client_payload.ref_name ||
+              github.event.client_payload.head_ref ||
               github.event.client_payload.branch ||
               github.ref
             }}
