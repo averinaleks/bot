@@ -38,7 +38,9 @@ jobs:
         uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
         with:
           cache: 'true'
-          version: v0.67.0
+          # v0.55.2 is the latest stable release as of 2025-03 and avoids
+          # 404 download errors from non-existent future tags like v0.67.0.
+          version: v0.55.2
 
       - name: Restore Trivy vulnerability database
         if: ${{ github.event_name != 'pull_request' }}
