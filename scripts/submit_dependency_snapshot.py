@@ -183,6 +183,12 @@ def _extract_workflow_run_ref(payload: Mapping[str, object]) -> str:
 
 
 _ALLOWED_GIT_SUBCOMMANDS = {"rev-parse", "symbolic-ref", "for-each-ref"}
+_EVENT_PAYLOAD_EVENTS = {
+    "repository_dispatch",
+    "workflow_run",
+    "workflow_call",
+    "dynamic",
+}
 _GIT_EXECUTABLE = shutil.which("git")
 
 
@@ -901,18 +907,25 @@ def submit_dependency_snapshot() -> None:
         return
 
     payload = _load_event_payload()
+    event_name = (
+        _normalise_optional_string(os.getenv("GITHUB_EVENT_NAME")) or ""
+    ).lower()
+    allow_event_payload = event_name in _EVENT_PAYLOAD_EVENTS
+
     client_payload: Mapping[str, object] | None = None
-    if isinstance(payload, dict):
+    if allow_event_payload and isinstance(payload, dict):
         raw_client = payload.get("client_payload")
         if isinstance(raw_client, Mapping):
             client_payload = raw_client
 
-    workflow_run_payload = _extract_workflow_run(payload)
+    workflow_run_payload = (
+        _extract_workflow_run(payload) if allow_event_payload else None
+    )
 
     repository = _normalise_optional_string(os.getenv("GITHUB_REPOSITORY"))
     payload_used = False
 
-    if not repository:
+    if not repository and allow_event_payload:
         for candidate_payload in (
             client_payload,
             workflow_run_payload,
@@ -941,7 +954,7 @@ def submit_dependency_snapshot() -> None:
     payload_used_local = payload_used
 
     token_override = _extract_payload_token(client_payload)
-    if not token_override:
+    if not token_override and allow_event_payload:
         token_override = _extract_payload_token(payload)
     token = token_override or token_env
 
@@ -957,7 +970,7 @@ def submit_dependency_snapshot() -> None:
         return
 
     if not sha or not ref:
-        if client_payload is not None:
+        if allow_event_payload and client_payload is not None:
             if not sha:
                 sha_candidate = _extract_payload_value(
                     client_payload, *_PAYLOAD_SHA_KEYS
@@ -966,28 +979,28 @@ def submit_dependency_snapshot() -> None:
                     sha = sha_candidate
                     payload_used_local = True
             if not ref:
-                ref_candidate = _extract_payload_value(
-                    client_payload, *_PAYLOAD_REF_KEYS
-                )
-                if ref_candidate:
-                    ref = _normalise_ref_value(ref_candidate)
-                    payload_used_local = True
-        if not sha and isinstance(payload, Mapping):
+                    ref_candidate = _extract_payload_value(
+                        client_payload, *_PAYLOAD_REF_KEYS
+                    )
+                    if ref_candidate:
+                        ref = _normalise_ref_value(ref_candidate)
+                        payload_used_local = True
+        if allow_event_payload and not sha and isinstance(payload, Mapping):
             sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
-        if not ref and isinstance(payload, Mapping):
+        if allow_event_payload and not ref and isinstance(payload, Mapping):
             ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
             if ref_candidate:
                 ref = _normalise_ref_value(ref_candidate)
                 payload_used_local = True
-        if not sha and workflow_run_payload is not None:
+        if allow_event_payload and not sha and workflow_run_payload is not None:
             sha_candidate = _extract_workflow_run_sha(workflow_run_payload)
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
-        if not ref and workflow_run_payload is not None:
+        if allow_event_payload and not ref and workflow_run_payload is not None:
             ref_candidate = _extract_workflow_run_ref(workflow_run_payload)
             if ref_candidate:
                 ref = ref_candidate
