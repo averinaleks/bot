@@ -55,16 +55,39 @@ jobs:
         with:
           persist-credentials: false
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # main
-        timeout-minutes: 10
-        continue-on-error: true
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          swap-storage: true
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          # Отключаем и удаляем swap, чтобы избежать переполнения buildx при
+          # выделении временных LVM-томов в maximize-build-space.
+          if sudo swapon --summary | grep -q .; then
+            sudo swapoff -a || true
+          fi
+          sudo rm -f /swapfile || true
+
+          # Чистим предустановленные SDK и кэши, которые занимают десятки
+          # гигабайт и не используются при сборке Docker-образов.
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/share/dotnet \
+            /usr/lib/google-cloud-sdk \
+            /opt/ghc \
+            /opt/hostedtoolcache || true
+
+          if [[ -n "${AGENT_TOOLSDIRECTORY:-}" && -d "${AGENT_TOOLSDIRECTORY}" ]]; then
+            sudo rm -rf "${AGENT_TOOLSDIRECTORY}" || true
+          fi
+
+          # Убираем остатки кэшей APT и докера. Эти команды не являются
+          # критичными, поэтому выполняем их в best-effort режиме.
+          sudo apt-get clean || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          sudo docker system prune -af || true
+
+          # Показываем итоговое свободное место для быстрой диагностики.
+          df -h /
       - name: Prepare build mount dir
         run: |
           set -euo pipefail
