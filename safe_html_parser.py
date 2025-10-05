@@ -60,9 +60,15 @@ class SafeHTMLParser(HTMLParser):
         # code points are counted towards the byte budget instead of bubbling up
         # an exception.
         byte_length = len(data.encode("utf-8", "surrogatepass"))
-        self._fed += byte_length
-        if self._fed > self._max_feed_size:
+        new_total = self._fed + byte_length
+        if new_total > self._max_feed_size:
+            # Do not count rejected data towards the running total.  Callers
+            # should be able to recover from a ``ValueError`` and either close
+            # or reuse the parser without having to construct a brand new
+            # instance.
             raise ValueError("HTML input exceeds maximum allowed size")
+
+        self._fed = new_total
         super().feed(data)
 
     def close(self) -> None:  # type: ignore[override]
