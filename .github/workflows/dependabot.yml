@@ -160,11 +160,41 @@ jobs:
                   continue
 
               spec = f"{name}=={version}"
-              print(f"Installing updated dependency {spec}")
+              print(
+                  "Installing updated dependency "
+                  f"{spec} with eager dependency upgrades"
+              )
               subprocess.run(
-                  [sys.executable, "-m", "pip", "install", spec],
+                  [
+                      sys.executable,
+                      "-m",
+                      "pip",
+                      "install",
+                      "--upgrade",
+                      "--upgrade-strategy",
+                      "eager",
+                      spec,
+                  ],
                   check=True,
               )
+
+          check_proc = subprocess.run(
+              [sys.executable, "-m", "pip", "check"],
+              capture_output=True,
+              text=True,
+          )
+          if check_proc.returncode != 0:
+              print("pip check detected dependency conflicts after installing updates.")
+              if check_proc.stdout:
+                  print(check_proc.stdout)
+              if check_proc.stderr:
+                  print(check_proc.stderr, file=sys.stderr)
+              raise SystemExit(check_proc.returncode)
+          else:
+              if check_proc.stdout:
+                  print(check_proc.stdout)
+              if check_proc.stderr:
+                  print(check_proc.stderr, file=sys.stderr)
           PY
 
       # Run the unit tests against the Dependabot update.  Integration
