@@ -51,8 +51,15 @@ def _should_ignore_vulnerability(
 ) -> bool:
     if spec.name.lower() != "pip":
         return False
+
     identifiers = {vulnerability.id.lower(), *(alias.lower() for alias in vulnerability.aliases)}
-    return "ghsa-4xh5-x5gv-qwph" in identifiers or "cve-2025-8869" in identifiers
+    ignored_ids = {
+        "ghsa-4xh5-x5gv-qwph",
+        "cve-2025-8869",
+        "pysec-2025-8869",
+        "bit-pip-2025-8869",
+    }
+    return bool(identifiers & ignored_ids)
 
 
 def _run_audit(strict: bool) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
