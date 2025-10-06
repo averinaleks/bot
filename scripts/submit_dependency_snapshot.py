@@ -6,7 +6,6 @@ import fnmatch
 import json
 import os
 import re
-import shutil
 import sys
 import time
 from collections import OrderedDict
