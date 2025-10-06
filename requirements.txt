@@ -222,8 +222,10 @@ pillow==11.3.0
     # via matplotlib
 pluggy==1.6.0
     # via pytest
-polars==1.33.1
+polars==1.34.0
     # via -r requirements-core.in
+polars-runtime-32==1.34.0
+    # via polars
 propcache==0.3.2
     # via
     #   aiohttp
