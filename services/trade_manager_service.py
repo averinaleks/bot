@@ -102,7 +102,12 @@ logger = logging.getLogger(__name__)
 _exchange_runtime: server_common.ExchangeRuntime | None = None
 
 # Initialise default state on import so dependent modules can access it immediately.
+# Ensure the legacy module-level ``POSITIONS`` attribute remains available for
+# callers that relied on the original global list.  ``TradeManagerState`` keeps
+# mutating the list in-place so exposing the internal container preserves
+# backwards compatibility while new code uses the thread-safe helpers.
 _get_state()
+POSITIONS: list[dict] = _get_state()._positions
 
 
 def _current_exchange(state: TradeManagerState | None = None) -> Any | None:
@@ -610,10 +615,17 @@ def _load_open_position_request() -> tuple[OpenPositionRequest | None, ResponseR
         model = OpenPositionRequest.model_validate_json(payload)
     except ValidationError as exc:
         errors = json.loads(exc.json())
+        serialized_errors = json.dumps(errors, ensure_ascii=False, default=str)
         app.logger.warning(
             'open_position_validation_failed: %s',
-            sanitize_log_value(json.dumps(errors, ensure_ascii=False, default=str)),
+            sanitize_log_value(serialized_errors),
         )
+        if any(error.get('type') == 'json_invalid' for error in errors):
+            return None, _open_position_error(
+                OpenPositionErrorCode.INVALID_JSON,
+                'invalid json',
+                400,
+            )
         return None, (jsonify({'error': 'validation_error', 'details': errors}), 422)
     except ValueError:
         return None, _open_position_error(
