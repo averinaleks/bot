@@ -4,6 +4,7 @@ import hmac
 import logging
 import os
 import tempfile
+from collections import deque
 from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import Any
@@ -122,6 +123,13 @@ if hasattr(app, "run"):
     app.run = _run_with_auto_allow  # type: ignore[assignment]
 
 _exchange_ctx: ContextVar[Any | None] = ContextVar("data_handler_exchange", default=None)
+# ``_recently_closed`` хранит последние закрытые экземпляры биржи. Это предотвращает
+# их немедленное уничтожение сборщиком мусора, из-за чего Python мог бы переиспользовать
+# идентификаторы объектов (``id``) для только что созданных экземпляров. В тестах
+# конкаррентности это выглядело как повторное использование клиента между запросами.
+# Мы ограничиваем deque небольшим числом элементов, чтобы избежать утечек памяти,
+# сохраняя при этом достаточно буфер для типичных нагрузок тестов и сервера.
+_recently_closed: deque[Any] = deque(maxlen=128)
 exchange_provider: ExchangeProvider[Any] | None = None
 
 
@@ -331,11 +339,14 @@ def close_exchange(_: BaseException | None = None) -> None:
     _exchange_ctx.set(None)
     if provider is None:
         _close_exchange_instance(exchange)
+        _recently_closed.append(exchange)
         return
     try:
         provider.close_instance(exchange)
     except Exception:  # pragma: no cover - defensive logging
         logging.getLogger(__name__).exception("Failed to close exchange instance")
+    finally:
+        _recently_closed.append(exchange)
 
 if hasattr(app, "teardown_appcontext"):
     app.teardown_appcontext(close_exchange)
