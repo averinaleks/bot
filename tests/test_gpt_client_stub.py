@@ -1,5 +1,9 @@
+import asyncio
+import importlib
 import json
 import logging
+import sys
+
 import pytest
 
 from bot.gpt_client import Signal, SignalAction, parse_signal
@@ -37,3 +41,18 @@ def test_parse_signal_boundary_values():
     result = parse_signal(payload)
     assert result.tp_mult == 0
     assert result.sl_mult == 10
+
+
+def test_gpt_client_imports_offline_stub(monkeypatch):
+    from bot import config as bot_config
+
+    monkeypatch.setenv("OFFLINE_MODE", "1")
+    monkeypatch.setattr(bot_config, "OFFLINE_MODE", True)
+    monkeypatch.delitem(sys.modules, "bot.gpt_client", raising=False)
+    monkeypatch.delitem(sys.modules, "httpx", raising=False)
+
+    gpt_client = importlib.import_module("bot.gpt_client")
+
+    assert getattr(gpt_client, "__offline_stub__", False) is True
+    result = asyncio.run(gpt_client.query_gpt_json_async("prompt"))
+    assert result == {"signal": "hold"}

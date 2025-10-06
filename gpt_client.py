@@ -18,12 +18,25 @@ from ipaddress import ip_address
 from typing import TYPE_CHECKING, Any, Coroutine, Mapping
 from urllib.parse import urljoin, urlparse
 
-import httpx
-
 from bot import config as bot_config
 from bot.pydantic_compat import BaseModel, Field, ValidationError
 from bot.utils import retry
 from services.logging_utils import sanitize_log_value
+from services.stubs import create_httpx_stub, is_offline_env
+
+
+_OFFLINE_ENV = bool(bot_config.OFFLINE_MODE) or is_offline_env()
+
+try:  # pragma: no cover - exercised in offline/import-error scenarios
+    if _OFFLINE_ENV:
+        raise ImportError("offline mode uses httpx stub")
+    import httpx as _httpx  # type: ignore
+except Exception:  # noqa: BLE001 - ensure stubs are available without httpx
+    httpx = create_httpx_stub()
+    __offline_stub__ = True
+else:
+    httpx = _httpx
+    __offline_stub__ = False
 
 if TYPE_CHECKING:  # pragma: no cover - import for typing only
     from openai import OpenAI as OpenAIType  # noqa: F401
