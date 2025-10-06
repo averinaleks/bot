@@ -132,15 +132,7 @@ jobs:
 
   review:
     needs: evaluate
-    if: >-
-      ${{ needs.evaluate.outputs.skip_reason == ''
-          && github.event_name != 'pull_request_target'
-          && (github.event_name != 'pull_request'
-              || github.event.pull_request.head.repo.full_name == github.repository)
-          && (github.event_name != 'issue_comment'
-              || github.event.comment.author_association == 'OWNER'
-              || github.event.comment.author_association == 'MEMBER'
-              || github.event.comment.author_association == 'COLLABORATOR') }}
+    if: ${{ needs.evaluate.outputs.run_review == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
