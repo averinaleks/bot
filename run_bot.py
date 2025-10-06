@@ -14,8 +14,6 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable
 
-import pandas as pd
-
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from bot.config import BotConfig
 
@@ -114,6 +112,24 @@ def ensure_directories(cfg: "BotConfig") -> None:
 
 def prepare_data_handler(handler, cfg: "BotConfig", symbols: list[str] | None) -> None:
     """Populate missing attributes required by downstream services."""
+
+    try:
+        import pandas as pd  # type: ignore[import-not-found]
+    except ImportError:
+        class _OfflineDataFrame:
+            """Minimal stub replicating pandas.DataFrame attributes used by the bot."""
+
+            columns: tuple = ()
+            empty: bool = True
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401 - simple stub
+                self.columns = ()
+                self.empty = True
+
+        logger.warning(
+            "Pandas недоступен; используется офлайн-заглушка DataFrame для индикаторов"
+        )
+        pd = SimpleNamespace(DataFrame=lambda *args, **kwargs: _OfflineDataFrame())
 
     pairs = symbols or getattr(handler, "usdt_pairs", None)
     if not pairs:
@@ -420,6 +436,13 @@ async def run_simulation_cycle(args: argparse.Namespace, data_handler, trade_man
     """Run the historical simulator with the provided arguments."""
 
     from bot.simulation import HistoricalSimulator, SimulationDataError
+
+    try:
+        import pandas as pd  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - simulation requires pandas
+        raise RuntimeError(
+            "Режим симуляции требует установленный pandas для разбора дат"
+        ) from exc
 
     start_ts = pd.to_datetime(args.start, utc=True)
     end_ts = pd.to_datetime(args.end, utc=True)

@@ -1,3 +1,4 @@
+import builtins
 import logging
 import sys
 import traceback
@@ -13,7 +14,7 @@ if "pandas" not in sys.modules:
     sys.modules["pandas"] = pandas_stub
 
 
-from run_bot import _maybe_load_initial, run_trading_cycle
+from run_bot import _maybe_load_initial, prepare_data_handler, run_trading_cycle
 
 
 class DummyDomainError(Exception):
@@ -95,3 +96,49 @@ async def test_maybe_load_initial_propagates_unexpected_errors():
 
     with pytest.raises(ValueError, match="invalid state"):
         await _maybe_load_initial(handler)
+
+
+def test_prepare_data_handler_without_pandas(monkeypatch, caplog):
+    """Ensure pandas fallback stub is used when the library is unavailable."""
+
+    monkeypatch.delitem(sys.modules, "pandas", raising=False)
+
+    original_import = builtins.__import__
+
+    def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "pandas":
+            raise ImportError("No module named 'pandas'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+
+    handler = SimpleNamespace()
+
+    class _Cfg:
+        def asdict(self):
+            return {"atr_period_default": 14}
+
+        def get(self, key, default=None):
+            return default
+
+    cfg = _Cfg()
+
+    with caplog.at_level(logging.WARNING):
+        prepare_data_handler(handler, cfg, symbols=None)
+
+    assert handler.usdt_pairs == ["BTCUSDT"]
+    assert "pandas" not in sys.modules
+
+    indicator_df = handler.indicators["BTCUSDT"].df
+    indicator_df_2h = handler.indicators_2h["BTCUSDT"].df
+    assert getattr(indicator_df, "empty", None) is True
+    assert getattr(indicator_df, "columns", None) == ()
+    assert indicator_df is handler.ohlcv
+    assert indicator_df_2h is handler.ohlcv_2h
+
+    assert handler.funding_rates == {"BTCUSDT": 0.0}
+    assert handler.open_interest == {"BTCUSDT": 0.0}
+
+    assert any(
+        "офлайн-заглушка DataFrame" in record.message for record in caplog.records
+    )
