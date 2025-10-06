@@ -138,11 +138,33 @@ jobs:
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3
         with:
           driver: docker-container
+          # Принудительно используем свежий BuildKit, который умеет работать
+          # с OCI media types и не воспроизводит "unexpected media type" при
+          # чтении кэша, созданного с ``oci-mediatypes=true``. Образ
+          # ``moby/buildkit:v0.16.2`` поддерживает эту функциональность.
+          driver-opts: image=moby/buildkit:v0.16.2
 
       - name: Verify /mnt mount
         run: |
           mount | grep '/mnt' || true
           df -h /mnt
+
+      - name: Purge stale BuildKit cache
+        if: ${{ env.PUBLISH_IMAGES == 'true' }}
+        env:
+          CACHE_SCOPE: ${{ matrix.image }}-oci-v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          api_url="https://api.github.com/repos/${{ github.repository }}/actions/caches?key=${CACHE_SCOPE}"
+          response=$(curl -sS -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "${api_url}")
+          total=$(echo "${response}" | jq -r '.total_count // 0')
+          if [ "${total}" -gt 0 ]; then
+            echo "Found ${total} stale cache entr(ies) for scope ${CACHE_SCOPE}, deleting"
+            curl -fsS -X DELETE -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "${api_url}" >/dev/null
+          else
+            echo "No cache entries found for scope ${CACHE_SCOPE}"
+          fi
 
       - name: Login to Docker Hub
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
