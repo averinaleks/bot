@@ -5,9 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
+import types
 from typing import Optional
 
 import httpx
+
+try:  # pragma: no cover - optional dependency in minimal environments
+    import aiohttp  # type: ignore
+except Exception:  # pragma: no cover - fallback when aiohttp unavailable
+    aiohttp = types.SimpleNamespace(ClientError=Exception)  # type: ignore[assignment]
 
 from bot.utils import check_dataframe_empty_async as _check_df_async, logger
 
@@ -52,7 +58,13 @@ class PositionManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError, KeyError, httpx.HTTPError) as exc:
+            except (
+                ValueError,
+                RuntimeError,
+                KeyError,
+                httpx.HTTPError,
+                aiohttp.ClientError,
+            ) as exc:
                 logger.exception("PositionManager failed (%s): %s", type(exc).__name__, exc)
                 await asyncio.sleep(self.check_interval)
 
