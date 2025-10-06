@@ -9,7 +9,16 @@ from ipaddress import ip_address
 from typing import Any, Iterable, List, Optional, Sequence, Tuple, cast
 from urllib.parse import urlparse
 
-import httpx
+try:
+    import httpx
+except ImportError:  # pragma: no cover - exercised in dedicated test
+    from services.stubs import create_httpx_stub, is_offline_env
+
+    httpx = create_httpx_stub()
+    if not is_offline_env():
+        logging.getLogger("TradingBot").warning(
+            "Модуль httpx не найден: используется оффлайн-стаб"
+        )
 
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
