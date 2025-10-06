@@ -306,8 +306,9 @@ INTERVAL = safe_float("INTERVAL", 5.0)
 TRAIN_INTERVAL = safe_float("TRAIN_INTERVAL", 24 * 60 * 60)
 
 # Default retry values for service availability checks
-DEFAULT_SERVICE_CHECK_RETRIES = 30
+DEFAULT_SERVICE_CHECK_RETRIES = 5
 DEFAULT_SERVICE_CHECK_DELAY = 2.0
+DEFAULT_SERVICE_CHECK_TIMEOUT = 30.0
 
 # Global flag toggled via Telegram commands to enable/disable trading
 _TRADING_ENABLED: bool = True
@@ -428,6 +429,9 @@ async def check_services() -> None:
     env = _load_env()
     retries = safe_int("SERVICE_CHECK_RETRIES", DEFAULT_SERVICE_CHECK_RETRIES)
     delay = safe_float("SERVICE_CHECK_DELAY", DEFAULT_SERVICE_CHECK_DELAY)
+    overall_timeout = safe_float(
+        "SERVICE_CHECK_TIMEOUT", DEFAULT_SERVICE_CHECK_TIMEOUT
+    )
     services = {
         "data_handler": (env["data_handler_url"], "ping"),
         "model_builder": (env["model_builder_url"], "ping"),
@@ -436,25 +440,52 @@ async def check_services() -> None:
     if env.get("gptoss_api"):
         services["gptoss"] = (env["gptoss_api"], "health")
     timeout = _http_client_timeout()
+    deadline = time.monotonic() + overall_timeout
+    timed_out = False
+
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         async def _probe(name: str, url: str, endpoint: str) -> str | None:
-            for attempt in range(retries):
+            nonlocal timed_out
+            for attempt in range(1, retries + 1):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                request_timeout = min(timeout, remaining)
                 try:
-                    resp = await client.get(f"{url}/{endpoint}", timeout=timeout)
+                    resp = await client.get(
+                        f"{url}/{endpoint}", timeout=request_timeout
+                    )
                     if resp.status_code == 200:
                         return None
                     if resp.status_code != 200:
                         logger.warning(
                             "Ping failed for %s (%s): HTTP %s",
                             name,
-                            attempt + 1,
+                            attempt,
                             resp.status_code,
                         )
                 except httpx.HTTPError as exc:
                     logger.warning(
-                        "Ping failed for %s (%s): %s", name, attempt + 1, exc
+                        "Ping failed for %s (%s): %s", name, attempt, exc
                     )
-                await asyncio.sleep(delay)
+                if attempt == retries:
+                    break
+                remaining_sleep = deadline - time.monotonic()
+                if remaining_sleep <= 0:
+                    timed_out = True
+                    break
+                await asyncio.sleep(min(delay, remaining_sleep))
+            if timed_out:
+                logger.error(
+                    "Service checks timed out after %.1f seconds while probing %s",
+                    overall_timeout,
+                    name,
+                )
+                return (
+                    "Service availability checks exceeded the timeout and the bot "
+                    "is aborting startup. Set OFFLINE_MODE=1 to bypass checks."
+                )
             logger.error("Service %s unreachable at %s", name, url)
             return f"{name} service is not available"
 
