@@ -14,7 +14,7 @@ import tempfile
 import threading
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Mapping, cast
+from typing import Any, Callable, Mapping, TextIO, cast
 
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import BadRequest
@@ -275,25 +275,37 @@ def _write_positions_locked() -> None:
         return
 
     tmp_path: Path | None = None
+    tmp_fd: int | None = None
+    tmp_file: TextIO | None = None
     snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
     try:
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            encoding='utf-8',
+        tmp_fd, tmp_name = tempfile.mkstemp(
             dir=str(directory),
             prefix='.positions.',
             suffix='.tmp',
-            delete=False,
-        ) as fh:
-            tmp_path = Path(fh.name)
-            json.dump(snapshot, fh)
-            fh.flush()
-            os.fsync(fh.fileno())
+        )
     except OSError as exc:  # pragma: no cover - tmp creation failures
-        if tmp_path is None:
-            logging.warning('Failed to create temporary positions cache: %s', exc)
-            return
-        logging.warning('Failed to write temporary positions cache: %s', exc)
+        logging.warning('Failed to create temporary positions cache: %s', exc)
+        return
+
+    tmp_path = Path(tmp_name)
+    try:
+        if hasattr(os, 'fchmod'):
+            try:
+                os.fchmod(tmp_fd, 0o600)
+            except OSError as exc:
+                logging.debug(
+                    'Failed to enforce permissions on temporary positions cache %s: %s',
+                    tmp_path,
+                    exc,
+                )
+        tmp_file = os.fdopen(tmp_fd, 'w', encoding='utf-8')
+    except Exception as exc:  # pragma: no cover - descriptor preparation failures
+        if tmp_fd is not None:
+            try:
+                os.close(tmp_fd)
+            except OSError:
+                pass
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
@@ -302,7 +314,33 @@ def _write_positions_locked() -> None:
                 tmp_path,
                 cleanup_exc,
             )
+        if isinstance(exc, OSError):
+            logging.warning('Failed to prepare temporary positions cache: %s', exc)
         raise
+
+    try:
+        json.dump(snapshot, tmp_file)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+    except Exception as exc:  # pragma: no cover - write/fsync failures
+        if tmp_file is not None:
+            try:
+                tmp_file.close()
+            except OSError:
+                pass
+        try:
+            tmp_path.unlink()
+        except OSError as cleanup_exc:
+            logging.debug(
+                'Failed to remove temporary positions cache %s: %s',
+                tmp_path,
+                cleanup_exc,
+            )
+        if isinstance(exc, OSError):
+            logging.warning('Failed to write temporary positions cache: %s', exc)
+        raise
+    else:
+        tmp_file.close()
 
     if tmp_path is None:
         logging.warning('Failed to determine temporary positions cache path')
