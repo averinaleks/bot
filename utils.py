@@ -38,6 +38,16 @@ validate_host = _validate_host
 logger = logging.getLogger("TradingBot")
 
 
+if "_NUMBA_IMPORT_WARNED" not in globals():
+    _NUMBA_IMPORT_WARNED = False
+
+if "_TELEGRAMLOGGER_IMPORT_WARNED" not in globals():
+    _TELEGRAMLOGGER_IMPORT_WARNED = False
+
+if "_TELEGRAMLOGGER_STUB_INIT_WARNED" not in globals():
+    _TELEGRAMLOGGER_STUB_INIT_WARNED = False
+
+
 T = TypeVar("T")
 
 
@@ -275,10 +285,12 @@ try:
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
-    logger.warning("Numba import failed: %s", exc)
-    logger.warning(
-        "Running without Numba JIT acceleration; performance may be degraded."
-    )
+    if not _NUMBA_IMPORT_WARNED:
+        logger.warning("Numba import failed: %s", exc)
+        logger.warning(
+            "Running without Numba JIT acceleration; performance may be degraded."
+        )
+        _NUMBA_IMPORT_WARNED = True
 
     def jit(*jit_args, **jit_kwargs):
         if jit_args and callable(jit_args[0]) and len(jit_args) == 1 and not jit_kwargs:
@@ -300,10 +312,12 @@ except ImportError:
 try:  # pragma: no cover - prefer package import to avoid shadowing
     from bot.telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
 except Exception as exc:  # pragma: no cover - fallback when package import fails
-    logger.warning(
-        "Failed to import TelegramLogger via package: %s",
-        sanitize_log_value(str(exc)),
-    )
+    if not _TELEGRAMLOGGER_IMPORT_WARNED:
+        logger.warning(
+            "Failed to import TelegramLogger via package: %s",
+            sanitize_log_value(str(exc)),
+        )
+        _TELEGRAMLOGGER_IMPORT_WARNED = True
     try:
         from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
     except Exception:
@@ -311,7 +325,10 @@ except Exception as exc:  # pragma: no cover - fallback when package import fail
             """Lightweight fallback used when Telegram logger is unavailable."""
 
             def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - simple stub
-                logger.warning("TelegramLogger is unavailable; notifications disabled")
+                global _TELEGRAMLOGGER_STUB_INIT_WARNED
+                if not _TELEGRAMLOGGER_STUB_INIT_WARNED:
+                    logger.warning("TelegramLogger is unavailable; notifications disabled")
+                    _TELEGRAMLOGGER_STUB_INIT_WARNED = True
 
             async def send_telegram_message(self, *args: Any, **kwargs: Any) -> None:
                 logger.debug("TelegramLogger stub dropping message")

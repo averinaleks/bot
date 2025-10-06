@@ -1,4 +1,9 @@
 import asyncio
+import builtins
+import importlib
+import logging
+import sys
+
 import pytest
 
 from bot import utils
@@ -295,3 +300,72 @@ def test_validate_host_missing_port_value(monkeypatch, host):
     monkeypatch.setenv('HOST', host)
     with pytest.raises(ValueError):
         utils.validate_host()
+def _reload_utils_with_blocked(monkeypatch, blocked_names):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name in blocked_names:
+            raise ImportError(f"blocked import: {name}")
+        return original_import(name, globals, locals, fromlist, level)
+
+    with monkeypatch.context() as context:
+        for mod_name in blocked_names:
+            context.delitem(sys.modules, mod_name, raising=False)
+        context.setattr(builtins, "__import__", fake_import)
+        return importlib.reload(sys.modules["bot.utils"])
+
+
+def test_numba_warning_emitted_once(monkeypatch, caplog):
+    utils._NUMBA_IMPORT_WARNED = False
+    caplog.set_level(logging.WARNING, logger="TradingBot")
+
+    _reload_utils_with_blocked(monkeypatch, {"numba"})
+    numba_messages = [
+        record.message for record in caplog.records if "Numba" in record.message
+    ]
+    assert any("Numba import failed" in message for message in numba_messages)
+
+    caplog.clear()
+
+    _reload_utils_with_blocked(monkeypatch, {"numba"})
+    assert not any("Numba import failed" in record.message for record in caplog.records)
+
+    importlib.reload(sys.modules["bot.utils"])  # restore actual imports
+
+
+def test_telegram_logger_warnings_emitted_once(monkeypatch, caplog):
+    utils._TELEGRAMLOGGER_IMPORT_WARNED = False
+    utils._TELEGRAMLOGGER_STUB_INIT_WARNED = False
+    caplog.set_level(logging.WARNING, logger="TradingBot")
+
+    blocked = {"bot.telegram_logger", "telegram_logger"}
+    _reload_utils_with_blocked(monkeypatch, blocked)
+
+    assert sum(
+        1
+        for record in caplog.records
+        if "Failed to import TelegramLogger via package" in record.message
+    ) == 1
+
+    caplog.clear()
+
+    _reload_utils_with_blocked(monkeypatch, blocked)
+    assert not any(
+        "Failed to import TelegramLogger via package" in record.message
+        for record in caplog.records
+    )
+
+    caplog.clear()
+
+    utils.TelegramLogger()
+    assert "TelegramLogger is unavailable; notifications disabled" in caplog.text
+
+    caplog.clear()
+
+    utils.TelegramLogger()
+    assert "TelegramLogger is unavailable; notifications disabled" not in caplog.text
+
+    importlib.import_module("bot.telegram_logger")
+    importlib.reload(sys.modules["bot.telegram_logger"])
+    importlib.reload(sys.modules["bot.utils"])  # restore actual imports
+
