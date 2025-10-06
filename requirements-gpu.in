@@ -4,3 +4,5 @@ tensorflow==2.20.0
 keras>=3.11.3,<3.12
 jsonschema==4.25.1
 setuptools>=80.9.0,<81
+grpcio>=1.75.1
+protobuf>=6.32.1

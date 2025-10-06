@@ -60,19 +60,31 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "${TRIVY_CACHE_DIR}"
+          max_attempts=3
+          attempt=1
           exit_code=0
-          if ! trivy fs \
-              --scanners vuln \
-              --severity HIGH,CRITICAL \
-              --ignore-unfixed \
-              --file-patterns 'pip:requirements*.txt' \
-              --file-patterns 'pip:requirements*.in' \
-              --format sarif \
-              --output trivy-results.sarif \
-              --cache-dir "${TRIVY_CACHE_DIR}" \
-              .; then
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "Running Trivy scan (attempt ${attempt}/${max_attempts})"
+            if trivy fs \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --file-patterns 'pip:requirements*.txt' \
+                --file-patterns 'pip:requirements*.in' \
+                --format sarif \
+                --output trivy-results.sarif \
+                --cache-dir "${TRIVY_CACHE_DIR}" \
+                .; then
+              exit_code=0
+              break
+            fi
             exit_code=$?
-          fi
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              echo "Trivy failed with exit code ${exit_code}. Retrying in 10 seconds..."
+              sleep 10
+            fi
+            attempt=$((attempt + 1))
+          done
           echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
           if [ "${exit_code}" -ne 0 ]; then
             exit "${exit_code}"
