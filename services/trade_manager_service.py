@@ -41,6 +41,33 @@ if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
 
+# ``POSITIONS`` used to be a module level list mutated directly by tests and
+# helper scripts.  The current implementation stores positions inside
+# :class:`TradeManagerState`, but we keep a shared list for backwards
+# compatibility so existing monkeypatches continue to work.  The helper
+# functions below make sure that both representations stay in sync.
+POSITIONS: list[dict] = []
+
+
+def _align_state_with_module(state: "TradeManagerState") -> None:
+    """Ensure ``state`` reflects an externally replaced ``POSITIONS`` list."""
+
+    global POSITIONS
+    if POSITIONS is state._positions:
+        return
+    state._positions[:] = POSITIONS
+    POSITIONS = state._positions
+
+
+def _sync_module_positions(state: "TradeManagerState") -> None:
+    """Update the public ``POSITIONS`` reference to match ``state``."""
+
+    global POSITIONS
+    if POSITIONS is state._positions:
+        return
+    POSITIONS = state._positions
+
+
 @dataclass
 class TradeManagerState:
     """Thread-safe container for exchange and open positions."""
@@ -68,18 +95,25 @@ class TradeManagerState:
     @contextmanager
     def positions_guard(self) -> Iterator[list[dict]]:
         with self.positions_lock:
+            _align_state_with_module(self)
             yield self._positions
+            _sync_module_positions(self)
 
     def replace_positions(self, new_positions: list[dict]) -> None:
         with self.positions_lock:
+            _align_state_with_module(self)
             self._positions[:] = new_positions
+            _sync_module_positions(self)
 
     def clear_positions(self) -> None:
         with self.positions_lock:
+            _align_state_with_module(self)
             self._positions.clear()
+            _sync_module_positions(self)
 
     def snapshot_positions(self) -> list[dict]:
         with self.positions_lock:
+            _align_state_with_module(self)
             return [
                 dict(entry) if isinstance(entry, dict) else entry
                 for entry in self._positions
@@ -94,6 +128,9 @@ def _get_state() -> TradeManagerState:
     if state is None:
         state = TradeManagerState()
         app.config[STATE_KEY] = state
+        _sync_module_positions(state)
+    else:
+        _align_state_with_module(state)
     return state
 
 
@@ -614,6 +651,15 @@ def _load_open_position_request() -> tuple[OpenPositionRequest | None, ResponseR
             'open_position_validation_failed: %s',
             sanitize_log_value(json.dumps(errors, ensure_ascii=False, default=str)),
         )
+        if errors and all(
+            isinstance(item, dict) and item.get('type') == 'json_invalid'
+            for item in errors
+        ):
+            return None, _open_position_error(
+                OpenPositionErrorCode.INVALID_JSON,
+                'invalid json',
+                400,
+            )
         return None, (jsonify({'error': 'validation_error', 'details': errors}), 422)
     except ValueError:
         return None, _open_position_error(
