@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, TextIO, cast
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import BadRequest
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
