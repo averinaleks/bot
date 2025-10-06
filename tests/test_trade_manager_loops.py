@@ -3,10 +3,12 @@ import contextlib
 import logging
 import sys
 import types
+
+import aiohttp
+import httpx
 import pandas as pd
 import pytest
 import tempfile
-import httpx
 from bot.config import BotConfig
 
 # Stub heavy dependencies before importing the trade manager
@@ -146,7 +148,8 @@ async def test_monitor_performance_recovery(monkeypatch):
     assert call['n'] >= 2
 
 @pytest.mark.asyncio
-async def test_manage_positions_recovery(monkeypatch):
+@pytest.mark.parametrize("exc_type", [httpx.HTTPError, aiohttp.ClientError])
+async def test_manage_positions_recovery(monkeypatch, exc_type):
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
     idx = pd.MultiIndex.from_tuples([
@@ -169,7 +172,7 @@ async def test_manage_positions_recovery(monkeypatch):
     async def fake_check(symbol, price):
         call['n'] += 1
         if call['n'] == 1:
-            raise httpx.HTTPError('boom')
+            raise exc_type('boom')
     monkeypatch.setattr(tm, 'check_trailing_stop', fake_check)
     monkeypatch.setattr(tm, 'check_stop_loss_take_profit', lambda *a, **k: None)
     monkeypatch.setattr(tm, 'check_exit_signal', lambda *a, **k: None)
@@ -375,7 +378,8 @@ async def test_ranked_signal_loop_http_error_retry(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_position_manager_http_error_retry(monkeypatch):
+@pytest.mark.parametrize("exc_type", [httpx.HTTPError, aiohttp.ClientError])
+async def test_position_manager_http_error_retry(monkeypatch, exc_type):
     import position_manager
 
     dh = DummyDataHandler()
@@ -408,7 +412,7 @@ async def test_position_manager_http_error_retry(monkeypatch):
     async def fake_trailing(symbol, price):
         call["n"] += 1
         if call["n"] == 1:
-            raise httpx.HTTPError("boom")
+            raise exc_type("boom")
         retry_event.set()
 
     monkeypatch.setattr(tm, "check_trailing_stop", fake_trailing)
