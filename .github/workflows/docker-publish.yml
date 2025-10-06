@@ -190,9 +190,15 @@ jobs:
           # Используем отдельный scope с OCI media types, чтобы BuildKit
           # не пытался читать устаревший кэш с generic "application/octet-stream"
           # и не падал с "unexpected media type ... not found". Новый суффикс
-          # ``-oci-v3`` гарантирует создание отдельного пула слоёв.
-          cache-from: type=gha,scope=${{ matrix.image }}-oci-v3,ignore-error=true
-          cache-to: type=gha,scope=${{ matrix.image }}-oci-v3,mode=max,oci-mediatypes=true
+          # ``-oci-v4`` гарантирует создание отдельного пула слоёв. ``v3`` уже
+          # использовался в прошлых сборках, и BuildKit продолжал пытаться
+          # читать устаревшие слои с generic ``application/octet-stream``,
+          # падая с "unexpected media type ... not found". Новый суффикс
+          # сбрасывает кеш, сохраняя предыдущий сценарий восстановления при
+          # регрессиях и оставляя включённый ``ignore-error`` как сетку
+          # безопасности.
+          cache-from: type=gha,scope=${{ matrix.image }}-oci-v4,ignore-error=true
+          cache-to: type=gha,scope=${{ matrix.image }}-oci-v4,mode=max,oci-mediatypes=true
 
       - name: Cleanup before Trivy scan
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
