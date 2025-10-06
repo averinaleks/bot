@@ -204,14 +204,17 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
 # Обновляем индекс пакетов и добавляем только необходимые зависимости
-# выполнения. libgomp1 требуется бинарям NumPy/Scikit-learn, а libssl3 — для
-# криптографических библиотек. ``apt-get upgrade`` не используется во
+# выполнения. ``libstdc++6`` и ``libgcc-s1`` требуются бинарям PyTorch/
+# TorchMetrics, ``libgomp1`` — NumPy/Scikit-learn, а ``libssl3`` —
+# криптографическим библиотекам. ``apt-get upgrade`` не используется во
 # исполнение требования Semgrep ``dockerfile.security.apt-get-upgrade``.
 RUN <<'EOSHELL'
 set -eux
 apt-get update
 apt-get install -y --no-install-recommends \
+    libgcc-s1 \
     libgomp1 \
+    libstdc++6 \
     libssl3
 rm -rf /var/lib/apt/lists/*
 EOSHELL
