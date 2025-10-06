@@ -52,7 +52,6 @@ safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
 
 test_stubs.apply()
-IS_TEST_MODE = test_stubs.IS_TEST_MODE
 
 aiohttp: Any
 try:  # pragma: no cover - optional dependency
