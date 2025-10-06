@@ -37,6 +37,16 @@ from .core import (
     spaces,
     validate_host,
 )
+from .storage import (
+    JOBLIB_AVAILABLE,
+    MODEL_DIR,
+    MODEL_FILE,
+    joblib,
+    save_artifacts,
+    _is_within_directory,
+    _resolve_model_artifact,
+    _safe_model_file_path,
+)
 
 from .storage import (
     JOBLIB_AVAILABLE,
