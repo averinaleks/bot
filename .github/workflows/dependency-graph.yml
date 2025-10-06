@@ -10,7 +10,7 @@ on:
       # Custom type used by auto-submission hooks. GitHub restricts repository
       # dispatch event names to alphanumeric characters plus '-' and '_', so we
       # cannot include a '/' separator here.
-      - dependency-graph-auto-submission
+      - "dependency-graph-auto-submission"
 
 permissions:
   contents: write
