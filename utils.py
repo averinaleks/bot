@@ -310,7 +310,7 @@ except ImportError:
     np = None
 
 try:  # pragma: no cover - prefer package import to avoid shadowing
-    from bot.telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
+    from bot.telegram_logger import TelegramLogger as _TelegramLoggerImpl  # type: ignore  # noqa: F401
 except Exception as exc:  # pragma: no cover - fallback when package import fails
     if not _TELEGRAMLOGGER_IMPORT_WARNED:
         logger.warning(
@@ -319,7 +319,7 @@ except Exception as exc:  # pragma: no cover - fallback when package import fail
         )
         _TELEGRAMLOGGER_IMPORT_WARNED = True
     try:
-        from telegram_logger import TelegramLogger  # type: ignore  # noqa: F401
+        from telegram_logger import TelegramLogger as _TelegramLoggerImpl  # type: ignore  # noqa: F401
     except Exception:
         class TelegramLogger:  # type: ignore[override]
             """Lightweight fallback used when Telegram logger is unavailable."""
@@ -336,6 +336,60 @@ except Exception as exc:  # pragma: no cover - fallback when package import fail
             @classmethod
             async def shutdown(cls) -> None:
                 logger.debug("TelegramLogger stub shutdown invoked")
+    else:
+        class TelegramLogger(_TelegramLoggerImpl):  # type: ignore[misc,override]
+            """Wrapper that gracefully degrades when instantiated without parameters."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                global _TELEGRAMLOGGER_STUB_INIT_WARNED
+                if not args and not kwargs:
+                    if not _TELEGRAMLOGGER_STUB_INIT_WARNED:
+                        logger.warning(
+                            "TelegramLogger is unavailable; notifications disabled"
+                        )
+                        _TELEGRAMLOGGER_STUB_INIT_WARNED = True
+                    self._telegramlogger_stub = True
+                    logging.Handler.__init__(self)
+                else:
+                    self._telegramlogger_stub = False
+                    super().__init__(*args, **kwargs)
+
+            async def send_telegram_message(self, *args: Any, **kwargs: Any) -> None:
+                if getattr(self, "_telegramlogger_stub", False):
+                    logger.debug("TelegramLogger stub dropping message")
+                    return
+                await super().send_telegram_message(*args, **kwargs)
+
+            @classmethod
+            async def shutdown(cls) -> None:
+                if hasattr(_TelegramLoggerImpl, "shutdown"):
+                    await _TelegramLoggerImpl.shutdown()
+else:
+    class TelegramLogger(_TelegramLoggerImpl):  # type: ignore[misc,override]
+        """Primary Telegram logger wrapper with optional stub mode."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            global _TELEGRAMLOGGER_STUB_INIT_WARNED
+            if not args and not kwargs:
+                if not _TELEGRAMLOGGER_STUB_INIT_WARNED:
+                    logger.warning("TelegramLogger is unavailable; notifications disabled")
+                    _TELEGRAMLOGGER_STUB_INIT_WARNED = True
+                self._telegramlogger_stub = True
+                logging.Handler.__init__(self)
+            else:
+                self._telegramlogger_stub = False
+                super().__init__(*args, **kwargs)
+
+        async def send_telegram_message(self, *args: Any, **kwargs: Any) -> None:
+            if getattr(self, "_telegramlogger_stub", False):
+                logger.debug("TelegramLogger stub dropping message")
+                return
+            await super().send_telegram_message(*args, **kwargs)
+
+        @classmethod
+        async def shutdown(cls) -> None:
+            if hasattr(_TelegramLoggerImpl, "shutdown"):
+                await _TelegramLoggerImpl.shutdown()
 
 try:
     from telegram.error import RetryAfter, BadRequest, Forbidden
