@@ -16,192 +16,64 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: write  # required for uploading artifacts such as SARIF reports
+      actions: write
+    env:
+      TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
     steps:
-      - name: Configure Trivy cache directory
-        id: trivy_cache
-        run: |
-          echo "TRIVY_CACHE_DIR=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_ENV"
-          echo "dir=${RUNNER_TEMP}/trivy-cache" >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        # v4
-        with:
-          persist-credentials: false
+        uses: actions/checkout@2d1e4ee8c7c0e8a6c5a0f1f3af3c1b19aa9c9329
+        # v4.2.2
 
-      - name: Prepare Trivy cache directory
-        run: |
-          mkdir -p "$TRIVY_CACHE_DIR"
-
-      - name: Install Trivy CLI
-        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
-        with:
-          cache: 'true'
-          # v0.55.2 is the latest stable release as of 2025-03 and avoids
-          # 404 download errors from non-existent future tags like v0.67.0.
-          version: v0.55.2
-
-      - name: Restore Trivy vulnerability database
-        if: ${{ github.event_name != 'pull_request' }}
+      - name: Cache Trivy vulnerability database
+        id: cache-trivy
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         # v4.3.0
         with:
-          path: ${{ steps.trivy_cache.outputs.dir }}
+          path: ${{ env.TRIVY_CACHE_DIR }}
           key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'requirements*.in', 'Dockerfile*') }}
           restore-keys: |
             ${{ runner.os }}-trivy-db-
 
-      - id: trivy_scan
-        name: Run Trivy scan
-        continue-on-error: true
-        env:
-          TRIVY_CACHE_DIR: ${{ steps.trivy_cache.outputs.dir }}
-        run: |
-          set -o pipefail
-          mkdir -p "${TRIVY_CACHE_DIR}"
-          # Remove any stale results from previous attempts so that retries
-          # never parse outdated SARIF files when a failed run leaves behind
-          # partial output.
-          rm -f trivy-results.sarif
-          max_attempts=3
-          attempt=1
-          exit_code=0
-          while [ "$attempt" -le "$max_attempts" ]; do
-            echo "Running Trivy scan (attempt ${attempt}/${max_attempts})"
-            if trivy fs \
-                --scanners vuln \
-                --severity HIGH,CRITICAL \
-                --ignore-unfixed \
-                --file-patterns 'pip:requirements*.txt' \
-                --file-patterns 'pip:requirements*.in' \
-                --format sarif \
-                --output trivy-results.sarif \
-                --cache-dir "${TRIVY_CACHE_DIR}" \
-                .; then
-              exit_code=0
-              break
-            fi
-            exit_code=$?
-            # Ensure failed attempts never leave a stale SARIF file that would
-            # later be mistaken for a fresh scan result.
-            rm -f trivy-results.sarif
-            if [ "$attempt" -lt "$max_attempts" ]; then
-              echo "Trivy failed with exit code ${exit_code}. Retrying in 10 seconds..."
-              sleep 10
-            fi
-            attempt=$((attempt + 1))
-          done
-          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
-          if [ "${exit_code}" -ne 0 ]; then
-            exit "${exit_code}"
-          fi
+      - name: Run Trivy scan
+        id: trivy
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-results.sarif
+          cache-dir: ${{ env.TRIVY_CACHE_DIR }}
+          limit-severities-for-sarif: true
 
-      - name: Ensure jq is available
-        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
+      - name: Summarize Trivy findings
+        if: always()
         run: |
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y jq
-          fi
-
-      - name: Parse Trivy results
-        id: parse_trivy
-        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
-        run: |
-          set -euo pipefail
           if [ ! -f trivy-results.sarif ]; then
-            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
-            echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
-            echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
+            printf '### Trivy scan summary\n\n* Отчёт Trivy не был создан.\n' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          if ! count=$(jq -r '[.runs[]?.results[]?] | length' trivy-results.sarif); then
-            echo "::error::Failed to parse trivy-results.sarif with jq." >&2
-            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
-            echo "vulnerability_count=0" >> "$GITHUB_OUTPUT"
-            echo "parsing_failed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "sarif_exists=true" >> "$GITHUB_OUTPUT"
-          echo "vulnerability_count=${count}" >> "$GITHUB_OUTPUT"
-          echo "parsing_failed=false" >> "$GITHUB_OUTPUT"
-
-      - name: Summarize Trivy scan
-        if: ${{ always() && steps.trivy_scan.conclusion != 'skipped' }}
-        run: |
-          if [ "${{ steps.parse_trivy.outputs.sarif_exists }}" != 'true' ]; then
-            printf '### Trivy scan summary\n\n* No SARIF report was generated.\n' >> "$GITHUB_STEP_SUMMARY"
+          if command -v jq >/dev/null 2>&1; then
+            count=$(jq -r '[.runs[]?.results[]?] | length' trivy-results.sarif)
           else
-            count="${{ steps.parse_trivy.outputs.vulnerability_count }}"
-            printf '### Trivy scan summary\n\n* High/Critical findings: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
+            sudo apt-get update >/dev/null 2>&1
+            sudo apt-get install -y jq >/dev/null 2>&1
+            count=$(jq -r '[.runs[]?.results[]?] | length' trivy-results.sarif)
           fi
+          printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Detect forked pull requests
-        id: pr_context
-        if: ${{ always() }}
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = 'pull_request' ] && [ "$IS_FORK_PR" = 'true' ]; then
-            echo "is_fork_pr=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_fork_pr=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        id: upload_trivy_sarif
-        if: ${{ always() && github.event_name != 'pull_request' && steps.parse_trivy.outputs.sarif_exists == 'true' }}
-        continue-on-error: true
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: ${{ github.event_name != 'pull_request' && always() && hashFiles('trivy-results.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@64d10c13136e1c5bce3e5fbde8d4906eeaafc885
         # v3.30.6
         with:
           category: trivy-fs
           sarif_file: trivy-results.sarif
 
-      - name: Warn when SARIF upload is unavailable
-        if: ${{ always() && steps.upload_trivy_sarif.outcome == 'failure' }}
-        run: |
-          echo "::warning::Не удалось загрузить отчёт Trivy в раздел безопасности GitHub."
-          echo "* SARIF upload failed due to missing permissions." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload Trivy report artifact
-        if: >-
-          ${{ always() &&
-              steps.parse_trivy.outputs.sarif_exists == 'true' &&
-              steps.pr_context.outputs.is_fork_pr == 'false' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        # v4
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        uses: actions/upload-artifact@604f733a2e36051e8c3ab8bb4ff7f266622f8dba
+        # v4.4.0
         with:
           name: trivy-results
           path: trivy-results.sarif
-
-      - name: Skip artifact upload for forked pull requests
-        if: >-
-          ${{ always() &&
-              steps.parse_trivy.outputs.sarif_exists == 'true' &&
-              github.event_name == 'pull_request' &&
-              steps.pr_context.outputs.is_fork_pr == 'true' }}
-        run: |
-          echo "::warning::Пропускаем загрузку артефакта Trivy для форк-пулреквеста из-за ограниченных прав."
-          summary_line='* Загрузка артефакта пропущена: требуется доступ actions:write, недоступный для форк-пулреквестов.'
-          printf '%s\n' "$summary_line" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Fail if Trivy scan failed unexpectedly
-        if: ${{ steps.trivy_scan.outputs.exit_code != '0' && steps.parse_trivy.outputs.sarif_exists != 'true' }}
-        run: |
-          echo "::error::Trivy scan failed before producing a SARIF report."
-          exit 1
-
-      - name: Fail if Trivy results parsing failed
-        if: ${{ steps.parse_trivy.outputs.parsing_failed == 'true' }}
-        run: |
-          echo "::error::Unable to parse Trivy SARIF output."
-          exit 1
-
-      - name: Fail if vulnerabilities found
-        if: ${{ steps.parse_trivy.outputs.sarif_exists == 'true' && steps.parse_trivy.outputs.vulnerability_count != '0' }}
-        run: |
-          echo "::error::Trivy detected ${{ steps.parse_trivy.outputs.vulnerability_count }} high or critical vulnerabilities."
-          exit 1
