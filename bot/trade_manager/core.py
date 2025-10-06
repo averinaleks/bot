@@ -90,6 +90,7 @@ except ImportError:  # pragma: no cover - заглушка
 from bot import config as bot_config  # noqa: E402
 
 BotConfig: TypeAlias = bot_config.BotConfig
+from services import stubs as service_stubs  # noqa: E402
 from services.logging_utils import sanitize_log_value  # noqa: E402
 from telegram_logger import resolve_unsent_path  # noqa: E402
 import contextlib  # noqa: E402
@@ -98,6 +99,26 @@ from services.offline import (  # noqa: E402
     ensure_offline_env,
     generate_placeholder_credential,
 )
+
+_httpx: Any
+_offline_intent = service_stubs.is_offline_env()
+try:  # pragma: no cover - bot_config may lack OFFLINE_MODE in unusual setups
+    _offline_intent = _offline_intent or bool(getattr(bot_config, "OFFLINE_MODE", False))
+except Exception:  # pragma: no cover - defensive guard
+    pass
+
+if _offline_intent:
+    _httpx = service_stubs.create_httpx_stub()
+else:
+    try:  # pragma: no cover - optional dependency
+        import httpx as _imported_httpx  # type: ignore  # noqa: E402
+    except Exception:  # pragma: no cover - fallback to stub on import issues
+        _httpx = service_stubs.create_httpx_stub()
+    else:
+        _httpx = cast(Any, _imported_httpx)
+
+httpx = cast(Any, _httpx)
+HTTPError = httpx.HTTPError
 
 torch: Any
 try:  # pragma: no cover - optional dependency
