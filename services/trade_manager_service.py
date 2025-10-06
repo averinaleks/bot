@@ -12,9 +12,11 @@ import os
 import stat
 import tempfile
 import threading
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Mapping, TextIO, cast
+from typing import Any, Callable, Iterator, Mapping, TextIO, cast
 
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import BadRequest
@@ -37,44 +39,102 @@ app = Flask(__name__)
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
+
+@dataclass
+class TradeManagerState:
+    """Thread-safe container for exchange and open positions."""
+
+    exchange_lock: threading.Lock = field(default_factory=threading.Lock)
+    positions_lock: threading.RLock = field(default_factory=threading.RLock)
+    _exchange: Any | None = None
+    _positions: list[dict] = field(default_factory=list)
+
+    def get_exchange(self) -> Any | None:
+        with self.exchange_lock:
+            return self._exchange
+
+    def set_exchange(self, value: Any | None) -> None:
+        with self.exchange_lock:
+            self._exchange = value
+
+    def call_exchange(self, method: str, *args, **kwargs) -> Any:
+        with self.exchange_lock:
+            if self._exchange is None:
+                raise RuntimeError("exchange is not initialized")
+            fn = getattr(self._exchange, method)
+            return fn(*args, **kwargs)
+
+    @contextmanager
+    def positions_guard(self) -> Iterator[list[dict]]:
+        with self.positions_lock:
+            yield self._positions
+
+    def replace_positions(self, new_positions: list[dict]) -> None:
+        with self.positions_lock:
+            self._positions[:] = new_positions
+
+    def clear_positions(self) -> None:
+        with self.positions_lock:
+            self._positions.clear()
+
+    def snapshot_positions(self) -> list[dict]:
+        with self.positions_lock:
+            return [
+                dict(entry) if isinstance(entry, dict) else entry
+                for entry in self._positions
+            ]
+
+
+STATE_KEY = "trade_manager_state"
+
+
+def _get_state() -> TradeManagerState:
+    state = cast(TradeManagerState | None, app.config.get(STATE_KEY))
+    if state is None:
+        state = TradeManagerState()
+        app.config[STATE_KEY] = state
+    return state
+
+
 logger = logging.getLogger(__name__)
-POSITIONS_LOCK = threading.RLock()
-EXCHANGE_LOCK = threading.Lock()
 
 _exchange_runtime: server_common.ExchangeRuntime | None = None
-exchange: Any | None = None
+
+# Initialise default state on import so dependent modules can access it immediately.
+_get_state()
 
 
-def _current_exchange() -> Any | None:
-    global exchange
+def _current_exchange(state: TradeManagerState | None = None) -> Any | None:
+    state = state or _get_state()
     runtime = _exchange_runtime
     if runtime is None:
-        return exchange
+        return state.get_exchange()
     current = runtime.current()
     if current is not None:
-        exchange = current
-    return exchange
+        state.set_exchange(current)
+        return current
+    return state.get_exchange()
 
 
 def _call_exchange_method(target: Any, method: str, *args, **kwargs) -> Any:
     """Invoke an exchange method under a global lock."""
 
+    state = _get_state()
     if target is None:
-        raise RuntimeError("exchange is not initialized")
-
-    fn = getattr(target, method)
-    with EXCHANGE_LOCK:
+        return state.call_exchange(method, *args, **kwargs)
+    with state.exchange_lock:
+        fn = getattr(target, method)
         return fn(*args, **kwargs)
 
 
 def init_exchange() -> None:
     """Ensure the exchange is initialized before serving requests."""
 
-    global exchange
+    state = _get_state()
     runtime = _exchange_runtime
     if runtime is None:
         raise RuntimeError("Exchange runtime is not configured")
-    exchange = runtime.init()
+    state.set_exchange(runtime.init())
 
 
 # Expected API token for simple authentication.
@@ -120,8 +180,8 @@ if hasattr(app, "before_first_request"):
 def _bind_exchange() -> None:
     runtime = _exchange_runtime
     if runtime is not None:
-        global exchange
-        exchange = runtime.bind()
+        state = _get_state()
+        state.set_exchange(runtime.bind())
 
 
 @app.before_request
@@ -157,7 +217,6 @@ def _require_api_token() -> ResponseReturnValue | None:
         return jsonify({'error': 'unauthorized'}), 401
     return None
 
-POSITIONS: list[dict] = []
 POSITIONS_FILE = Path('cache/positions.json')
 
 
@@ -230,13 +289,12 @@ def _positions_file_is_safe(path: Path) -> bool:
 
 def _load_positions() -> None:
     """Load positions list from on-disk cache."""
+    state = _get_state()
     if not _positions_directory_is_safe(POSITIONS_FILE):
-        with POSITIONS_LOCK:
-            POSITIONS.clear()
+        state.clear_positions()
         return
     if not _positions_file_is_safe(POSITIONS_FILE):
-        with POSITIONS_LOCK:
-            POSITIONS.clear()
+        state.clear_positions()
         return
     loaded: list[dict] = []
     try:
@@ -247,12 +305,12 @@ def _load_positions() -> None:
     except (OSError, json.JSONDecodeError):
         loaded = []
 
-    with POSITIONS_LOCK:
-        POSITIONS[:] = loaded
+    state.replace_positions(loaded)
 
 
 def _write_positions_locked() -> None:
     """Persist positions list to on-disk cache."""
+    state = _get_state()
     directory = POSITIONS_FILE.parent
     if not _positions_directory_is_safe(POSITIONS_FILE):
         return
@@ -277,7 +335,11 @@ def _write_positions_locked() -> None:
     tmp_path: Path | None = None
     tmp_fd: int | None = None
     tmp_file: TextIO | None = None
-    snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
+    with state.positions_guard() as positions:
+        snapshot = [
+            dict(entry) if isinstance(entry, dict) else entry
+            for entry in positions
+        ]
     try:
         tmp_fd, tmp_name = tempfile.mkstemp(
             dir=str(directory),
@@ -360,14 +422,16 @@ def _write_positions_locked() -> None:
 def _save_positions() -> None:
     """Public wrapper ensuring the positions lock is held while saving."""
 
-    with POSITIONS_LOCK:
+    state = _get_state()
+    with state.positions_guard():
         _write_positions_locked()
 
 
 
 def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
     """Fetch open positions from the exchange and drop closed ones locally."""
-    exchange = exchange or _current_exchange()
+    state = _get_state()
+    exchange = exchange or _current_exchange(state)
     if exchange is None or not hasattr(exchange, 'fetch_positions'):
         return
 
@@ -443,10 +507,10 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
         if symbol and side and (amount is None or amount > 0):
             active_pairs.add((symbol.upper(), side))
 
-    with POSITIONS_LOCK:
-        before_count = len(POSITIONS)
+    with state.positions_guard() as positions:
+        before_count = len(positions)
         filtered: list[dict] = []
-        for record in POSITIONS:
+        for record in positions:
             if record.get('action') != 'open':
                 filtered.append(record)
                 continue
@@ -480,9 +544,9 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
             )
 
         removed = before_count - len(filtered)
-        changed = filtered != POSITIONS
+        changed = filtered != positions
         if changed:
-            POSITIONS[:] = filtered
+            positions[:] = filtered
         if removed > 0 or changed:
             _write_positions_locked()
 
@@ -524,8 +588,9 @@ def _record(
         'sl': sl,
         'entry_price': entry_price,
     }
-    with POSITIONS_LOCK:
-        POSITIONS.append(record)
+    state = _get_state()
+    with state.positions_guard() as positions:
+        positions.append(record)
         _write_positions_locked()
 
 
@@ -884,11 +949,12 @@ def close_position() -> ResponseReturnValue:
     if not order_id or not side:
         return jsonify({'error': 'invalid order'}), 400
 
-    with POSITIONS_LOCK:
+    state = _get_state()
+    with state.positions_guard() as positions:
         rec = next(
             (
                 dict(rec)
-                for rec in POSITIONS
+                for rec in positions
                 if rec.get('id') == order_id and rec.get('action') == 'open'
             ),
             None,
@@ -916,20 +982,20 @@ def close_position() -> ResponseReturnValue:
             app.logger.error('failed to create close order')
             return jsonify({'error': 'order creation failed'}), 500
         cache_warning: dict[str, str] | None = None
-        with POSITIONS_LOCK:
+        with state.positions_guard() as positions:
             rec_index = next(
                 (
                     i
-                    for i, current in enumerate(POSITIONS)
+                    for i, current in enumerate(positions)
                     if current.get('id') == order_id and current.get('action') == 'open'
                 ),
                 None,
             )
             if rec_index is not None:
-                current = POSITIONS[rec_index]
+                current = positions[rec_index]
                 remaining = float(current.get('amount', 0) or 0) - amount
                 if remaining <= 0:
-                    POSITIONS.pop(rec_index)
+                    positions.pop(rec_index)
                 else:
                     current['amount'] = remaining
                 try:
@@ -964,8 +1030,7 @@ def close_position() -> ResponseReturnValue:
 @app.route('/positions')
 def positions() -> ResponseReturnValue:
     _sync_positions_with_exchange()
-    with POSITIONS_LOCK:
-        snapshot = [dict(entry) if isinstance(entry, dict) else entry for entry in POSITIONS]
+    snapshot = _get_state().snapshot_positions()
     return jsonify({'positions': snapshot})
 
 
