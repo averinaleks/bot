@@ -271,6 +271,12 @@ jobs:
                       flush=True,
                   )
                   continue
+              except OSError as exc:
+                  print(
+                      f"Skipping {path} due to filesystem error: {exc}",
+                      flush=True,
+                  )
+                  continue
               lines = original.splitlines(keepends=True)
               filtered: list[str] = []
               for line in lines:
@@ -283,7 +289,13 @@ jobs:
                   filtered.append(line)
               if filtered != lines:
                   updated = "".join(filtered)
-                  path.write_text(updated, encoding="utf-8")
+                  try:
+                      path.write_text(updated, encoding="utf-8")
+                  except OSError as exc:
+                      print(
+                          f"::warning::Unable to update {path}: {exc}",
+                          flush=True,
+                      )
           PY
       - name: Submit dependency snapshot
         if: >-
