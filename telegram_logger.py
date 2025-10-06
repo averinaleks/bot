@@ -18,6 +18,9 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+if "_TELEGRAM_IMPORT_LOGGED" not in globals():
+    _TELEGRAM_IMPORT_LOGGED = False
+
 try:  # pragma: no cover - optional dependency in lightweight environments
     import httpx
 except Exception as exc:  # pragma: no cover - fallback when httpx absent
@@ -41,10 +44,16 @@ import hashlib
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
 from services.offline import OfflineTelegram
+
 try:  # pragma: no cover - optional dependency
     from telegram.error import BadRequest, Forbidden, RetryAfter
 except Exception as exc:  # pragma: no cover - missing telegram
-    logging.getLogger("TradingBot").error("Telegram package not available: %s", exc)
+    logger_ref = logging.getLogger("TradingBot")
+    if not _TELEGRAM_IMPORT_LOGGED:
+        logger_ref.error("Telegram package not available: %s", exc)
+        _TELEGRAM_IMPORT_LOGGED = True
+    else:
+        logger_ref.debug("Telegram package not available: %s", exc)
 
     class _TelegramError(Exception):
         """Base class mirroring telegram.error.TelegramError."""
