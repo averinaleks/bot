@@ -60,6 +60,10 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "${TRIVY_CACHE_DIR}"
+          # Remove any stale results from previous attempts so that retries
+          # never parse outdated SARIF files when a failed run leaves behind
+          # partial output.
+          rm -f trivy-results.sarif
           max_attempts=3
           attempt=1
           exit_code=0
@@ -79,6 +83,9 @@ jobs:
               break
             fi
             exit_code=$?
+            # Ensure failed attempts never leave a stale SARIF file that would
+            # later be mistaken for a fresh scan result.
+            rm -f trivy-results.sarif
             if [ "$attempt" -lt "$max_attempts" ]; then
               echo "Trivy failed with exit code ${exit_code}. Retrying in 10 seconds..."
               sleep 10
