@@ -24,7 +24,13 @@ permissions:
   issues: write
 
 concurrency:
-  group: release-drafter-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    release-drafter-${{
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.number ||
+      github.ref ||
+      github.run_id
+    }}
   cancel-in-progress: false
 
 jobs:
