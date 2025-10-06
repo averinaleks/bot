@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO, cast
 
 from flask import Flask, jsonify, request
-from werkzeug.exceptions import BadRequest
 try:  # optional dependency
     from flask.typing import ResponseReturnValue
 except Exception:  # pragma: no cover - fallback when flask.typing missing
@@ -25,6 +24,8 @@ except Exception:  # pragma: no cover - fallback when flask.typing missing
 
 from bot.trade_manager import order_utils, server_common
 from bot.utils_loader import require_utils
+from bot.pydantic_compat import ValidationError
+from services.schemas import OpenPositionRequest
 from services.logging_utils import sanitize_log_value
 
 _utils = require_utils("validate_host", "safe_int")
@@ -529,49 +530,41 @@ def _record(
         _write_positions_locked()
 
 
-@app.route('/open_position', methods=['POST'])
-def open_position() -> ResponseReturnValue:
+def _load_open_position_request() -> tuple[OpenPositionRequest | None, ResponseReturnValue | None]:
+    payload = request.get_data(cache=False, as_text=False)
+    if not payload:
+        payload = b'{}'
     try:
-        data = request.get_json(force=True)
-    except BadRequest:
-        return _open_position_error(
+        model = OpenPositionRequest.model_validate_json(payload)
+    except ValidationError as exc:
+        errors = json.loads(exc.json())
+        app.logger.warning(
+            'open_position_validation_failed: %s',
+            sanitize_log_value(json.dumps(errors, ensure_ascii=False, default=str)),
+        )
+        return None, (jsonify({'error': 'validation_error', 'details': errors}), 422)
+    except ValueError:
+        return None, _open_position_error(
             OpenPositionErrorCode.INVALID_JSON,
             'invalid json',
             400,
         )
-    raw_symbol = data.get('symbol')
-    symbol = raw_symbol.strip() if isinstance(raw_symbol, str) else None
-    if not symbol:
-        return _open_position_error(
-            OpenPositionErrorCode.MISSING_SYMBOL,
-            'symbol is required',
-            400,
-        )
-    side = str(data.get('side', 'buy')).lower()
-    try:
-        price = float(data.get('price', 0) or 0)
-    except (TypeError, ValueError):
-        return _open_position_error(
-            OpenPositionErrorCode.INVALID_PRICE,
-            'invalid price',
-            400,
-            symbol=symbol,
-        )
-    try:
-        amount = float(data.get('amount', 0) or 0)
-    except (TypeError, ValueError):
-        return _open_position_error(
-            OpenPositionErrorCode.INVALID_AMOUNT,
-            'invalid amount',
-            400,
-            symbol=symbol,
-        )
-    tp = data.get('tp')
-    sl = data.get('sl')
-    trailing_stop = data.get('trailing_stop')
-    tp = float(tp) if tp is not None else None
-    sl = float(sl) if sl is not None else None
-    trailing_stop = float(trailing_stop) if trailing_stop is not None else None
+    return model, None
+
+
+@app.route('/open_position', methods=['POST'])
+def open_position() -> ResponseReturnValue:
+    model, error_response = _load_open_position_request()
+    if error_response is not None:
+        return error_response
+    assert model is not None
+    symbol = model.symbol
+    side = model.side
+    price = model.price if model.price is not None else 0.0
+    amount = model.amount if model.amount is not None else 0.0
+    tp = model.tp
+    sl = model.sl
+    trailing_stop = model.trailing_stop
     risk_usd = 0.0
     if amount <= 0:
         raw_risk = os.getenv('TRADE_RISK_USD', '0') or 0

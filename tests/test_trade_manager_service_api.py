@@ -29,7 +29,7 @@ def _post_open_position(client, payload):
     )
 
 
-def test_open_position_missing_symbol_returns_code(monkeypatch, caplog):
+def test_open_position_missing_symbol_returns_validation_error(monkeypatch, caplog):
     from services import trade_manager_service as tms
 
     class DummyExchange:
@@ -40,13 +40,15 @@ def test_open_position_missing_symbol_returns_code(monkeypatch, caplog):
     with tms.app.test_client() as client, caplog.at_level(logging.WARNING):
         response = _post_open_position(client, {'side': 'buy', 'price': 100})
 
-    assert response.status_code == 400
-    assert response.get_json() == {'error': 'symbol is required', 'code': 'missing_symbol'}
+    assert response.status_code == 422
+    payload = response.get_json()
+    assert payload['error'] == 'validation_error'
+    assert any(detail['loc'][-1] == 'symbol' for detail in payload['details'])
     messages = [record.getMessage() for record in caplog.records]
-    assert any('open_position_error[missing_symbol]' in message for message in messages)
+    assert any('open_position_validation_failed' in message for message in messages)
 
 
-def test_open_position_invalid_price_returns_code(monkeypatch, caplog):
+def test_open_position_invalid_price_returns_validation_error(monkeypatch, caplog):
     from services import trade_manager_service as tms
 
     class DummyExchange:
@@ -60,11 +62,12 @@ def test_open_position_invalid_price_returns_code(monkeypatch, caplog):
             {'symbol': 'BTCUSDT', 'side': 'buy', 'price': 'oops'},
         )
 
-    assert response.status_code == 400
-    assert response.get_json() == {'error': 'invalid price', 'code': 'invalid_price'}
+    assert response.status_code == 422
+    payload = response.get_json()
+    assert payload['error'] == 'validation_error'
+    assert any('price' in detail['loc'] for detail in payload['details'])
     messages = [record.getMessage() for record in caplog.records]
-    assert any('open_position_error[invalid_price]' in message for message in messages)
-    assert any('BTCUSDT' in message for message in messages)
+    assert any('open_position_validation_failed' in message for message in messages)
 
 
 def test_open_position_negative_risk_returns_code(monkeypatch, caplog):
@@ -346,11 +349,51 @@ def test_open_position_route_rejects_invalid_price(monkeypatch):
     client = tm.api_app.test_client()
     resp = client.post(
         "/open_position",
-        json={"symbol": "BTCUSDT", "side": "buy", "price": -1},
+        json={"symbol": "BTCUSDT", "side": "buy", "price": -1, "amount": 1},
     )
     assert resp.status_code == 400
     assert "price" in resp.json["error"]
     assert not loop.calls
+
+
+def test_open_position_validation_rejects_extra_fields(monkeypatch):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        pass
+
+    tms.exchange_provider.override(DummyExchange())
+
+    with tms.app.test_client() as client:
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'buy', 'price': 100, 'unknown': 1},
+        )
+
+    assert response.status_code == 422
+    payload = response.get_json()
+    assert payload['error'] == 'validation_error'
+    assert any(detail['type'] == 'extra_forbidden' for detail in payload['details'])
+
+
+def test_open_position_accepts_uppercase_side(monkeypatch):
+    from services import trade_manager_service as tms
+
+    class DummyExchange:
+        def create_order(self, *args, **kwargs):
+            return {'id': 'primary'}
+
+    tms.exchange_provider.override(DummyExchange())
+
+    with tms.app.test_client() as client:
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'BUY', 'price': 100, 'amount': 1},
+        )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['status'] == 'ok'
 
 
 def test_close_position_route_rejects_invalid_price(monkeypatch):
