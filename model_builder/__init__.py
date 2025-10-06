@@ -37,6 +37,16 @@ from .core import (
     spaces,
     validate_host,
 )
+from .storage import (
+    JOBLIB_AVAILABLE,
+    MODEL_DIR,
+    MODEL_FILE,
+    joblib,
+    save_artifacts,
+    _is_within_directory,
+    _resolve_model_artifact,
+    _safe_model_file_path,
+)
 
 _API_AVAILABLE = True
 _API_IMPORT_ERROR: ImportError | None = None
@@ -90,16 +100,6 @@ except ImportError as exc:
     _api.ping = _api_stub("ping")
     _api.predict_route = _api_stub("predict_route")
     _api.train_route = _api_stub("train_route")
-from .storage import (
-    JOBLIB_AVAILABLE,
-    MODEL_DIR,
-    MODEL_FILE,
-    joblib,
-    save_artifacts,
-    _is_within_directory,
-    _resolve_model_artifact,
-    _safe_model_file_path,
-)
 
 api_app = _api.api_app
 configure_logging = _api.configure_logging
