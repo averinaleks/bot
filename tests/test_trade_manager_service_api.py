@@ -13,10 +13,12 @@ def _reset_positions(tmp_path, monkeypatch):
     from services import trade_manager_service as tms
 
     cache_file = tmp_path / 'positions.json'
-    monkeypatch.setattr(tms, 'POSITIONS_FILE', cache_file)
-    monkeypatch.setattr(tms, 'POSITIONS', [])
+    monkeypatch.setattr(tms, 'POSITIONS_FILE', cache_file, raising=False)
     monkeypatch.setattr(tms, 'API_TOKEN', 'test-token')
     tms.exchange_provider.override(None)
+    state = tms._get_state()
+    state.clear_positions()
+    state.set_exchange(None)
     yield
     tms.exchange_provider.close()
 
@@ -151,7 +153,7 @@ def test_open_position_records_even_when_stop_loss_fails(monkeypatch):
 
     from services import trade_manager_service as tms_reload
 
-    assert len(tms_reload.POSITIONS) == 1
+    assert len(tms_reload._get_state().snapshot_positions()) == 1
 
 
 def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
@@ -162,6 +164,7 @@ def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
             return {'id': 'primary'}
 
     tms.exchange_provider.override(Exchange())
+    state = tms._get_state()
 
     def failing_replace(*_args, **_kwargs):
         raise OSError('disk full')
@@ -180,7 +183,7 @@ def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     warning = payload['warnings']['positions_cache_failed']
     assert warning['message'] == 'не удалось обновить кэш позиций'
     assert 'details' in warning
-    assert len(tms.POSITIONS) == 1
+    assert len(state.snapshot_positions()) == 1
     assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
 
 
@@ -224,7 +227,7 @@ def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):
 
     from services import trade_manager_service as tms_reload
 
-    assert len(tms_reload.POSITIONS) == 1
+    assert len(tms_reload._get_state().snapshot_positions()) == 1
 
 
 def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
@@ -235,9 +238,17 @@ def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
             return {'id': 'close'}
 
     tms.exchange_provider.override(Exchange())
-    tms.POSITIONS.append(
-        {'id': 'open-order', 'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'action': 'open'}
-    )
+    state = tms._get_state()
+    with state.positions_guard() as positions:
+        positions.append(
+            {
+                'id': 'open-order',
+                'symbol': 'BTCUSDT',
+                'side': 'buy',
+                'amount': 1,
+                'action': 'open',
+            }
+        )
 
     def failing_dump(*_args, **_kwargs):
         raise OSError('disk full')
@@ -257,7 +268,7 @@ def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     warning = payload['warnings']['positions_cache_failed']
     assert warning['message'] == 'не удалось обновить кэш позиций'
     assert 'details' in warning
-    assert not tms.POSITIONS
+    assert not state.snapshot_positions()
     assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
 
 
