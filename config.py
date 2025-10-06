@@ -7,8 +7,6 @@ load configuration values from ``config.json`` and environment variables.
 from __future__ import annotations
 
 import builtins
-import importlib
-import importlib.util
 import io
 import json
 import logging
@@ -20,6 +18,7 @@ from pathlib import Path
 from types import UnionType
 from typing import Any, Callable, TextIO, Union, cast, get_args, get_origin, get_type_hints
 
+from bot.dotenv_utils import dotenv_values
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
@@ -34,35 +33,11 @@ class MissingEnvError(Exception):
         super().__init__(message)
 
 
-def _load_env_file() -> dict[str, str]:
-    """Загрузить значения из ``.env`` при наличии python-dotenv.
-
-    Библиотека ``python-dotenv`` не является обязательной зависимостью для
-    тестов, поэтому модуль должен корректно работать и без неё. Вместо
-    перехвата ошибки импорта используется ``importlib.util.find_spec`` чтобы
-    избежать ``ModuleNotFoundError`` и соответствовать требованиям стиля.
-    """
-
-    spec = importlib.util.find_spec("dotenv")
-    if spec is None:
-        logger.warning(
-            "python-dotenv не установлен: значения из .env будут проигнорированы"
-        )
-        return {}
-
-    module = importlib.import_module("dotenv")
-    dotenv_values = getattr(module, "dotenv_values", None)
-    if callable(dotenv_values):
-        loaded = dotenv_values()
-        return dict(loaded) if loaded else {}
-
-    logger.warning(
-        "Модуль python-dotenv не содержит функцию dotenv_values; .env пропущен"
-    )
-    return {}
-
-
-_env: dict[str, str] = _load_env_file()
+_env: dict[str, str] = {
+    key: value
+    for key, value in dotenv_values().items()
+    if value is not None
+}
 _ORIGINAL_OPEN = builtins.open
 
 
