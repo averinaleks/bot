@@ -7,7 +7,6 @@ load configuration values from ``config.json`` and environment variables.
 from __future__ import annotations
 
 import builtins
-import io
 import json
 import logging
 import os
@@ -186,12 +185,8 @@ def _fd_resolved_path(fd: int, original: Path) -> Path | None:
 def open_config_file(path: Path) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
-    handle = open(path, "r", encoding="utf-8")
-    try:
-        fd = handle.fileno()
-    except (AttributeError, io.UnsupportedOperation, ValueError):
-        return handle
-
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0)
+    fd = os.open(path, flags)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
@@ -200,13 +195,11 @@ def open_config_file(path: Path) -> TextIO:
         actual = _fd_resolved_path(fd, Path(path))
         if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
             raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
-    except Exception:
-        handle.close()
-        raise
-    else:
-        handle.close()
 
-    return builtins.open(path, "r", encoding="utf-8")
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
 
 
 class ConfigLoadError(Exception):
