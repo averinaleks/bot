@@ -35,6 +35,7 @@ google-pasta==0.2.0
     # via tensorflow
 grpcio==1.75.1
     # via
+    #   -r requirements-gpu.in
     #   tensorboard
     #   tensorflow
 h5py==3.14.0
@@ -133,6 +134,7 @@ pillow==11.3.0
     # via tensorboard
 protobuf==6.32.1
     # via
+    #   -r requirements-gpu.in
     #   tensorboard
     #   tensorflow
 pygments==2.19.2
@@ -170,6 +172,7 @@ triton==3.4.0
     # via torch
 typing-extensions==4.14.1
     # via
+    #   grpcio
     #   optree
     #   referencing
     #   tensorflow
