@@ -134,6 +134,17 @@ jobs:
             sudo service docker start
           fi
 
+      - name: Wait for Docker daemon
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if docker info >/dev/null 2>&1 || sudo docker info >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker info
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3
         with:
