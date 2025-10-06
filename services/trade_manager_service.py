@@ -124,11 +124,18 @@ def _bind_exchange() -> None:
         exchange = runtime.bind()
 
 
+_UNAUTHENTICATED_PATHS: frozenset[str] = frozenset({'/ping', '/ready'})
+_UNAUTHENTICATED_METHODS: frozenset[str] = frozenset({'GET', 'HEAD'})
+
+
 @app.before_request
 def _require_api_token() -> ResponseReturnValue | None:
     """Simple token-based authentication middleware."""
 
-    if request.method != 'POST' and request.path != '/positions':
+    if (
+        request.path in _UNAUTHENTICATED_PATHS
+        and request.method.upper() in _UNAUTHENTICATED_METHODS
+    ):
         return None
 
     expected = _resolve_expected_token()
