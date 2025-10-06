@@ -225,7 +225,7 @@ def _query_openai(prompt: str, api_url: str | None) -> str:
             **completion_kwargs,
         )
     except Exception as exc:  # pragma: no cover - depends on runtime env
-        logger.exception("Error querying OpenAI API: %s", exc)
+        logger.exception("Error querying OpenAI API: %s", sanitize_log_value(exc))
         raise GPTClientNetworkError("Failed to query OpenAI API") from exc
 
     content = _serialise_openai_response(response)
@@ -333,7 +333,7 @@ def _load_allowed_hosts() -> set[str]:
             logger.warning(
                 "Ignoring GPT_OSS_ALLOWED_HOSTS entry %r: resolution failed (%s)",
                 normalised,
-                exc,
+                sanitize_log_value(exc),
             )
             continue
 
@@ -433,7 +433,7 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s: %s",
                 safe_hostname_for_log,
-                exc,
+                sanitize_log_value(exc),
             )
             raise GPTClientError(
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
@@ -515,7 +515,7 @@ async def _fetch_response(
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s before request: %s",
                 safe_hostname_for_log,
-                exc,
+                sanitize_log_value(exc),
             )
             raise GPTClientNetworkError("Failed to resolve GPT_OSS_API host") from exc
 
@@ -647,7 +647,10 @@ def _parse_gpt_response(content: bytes) -> str:
     try:
         data = json.loads(content)
     except ValueError as exc:
-        logger.exception("Invalid JSON response from GPT OSS API: %s", exc)
+        logger.exception(
+            "Invalid JSON response from GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientJSONError("Invalid JSON response from GPT OSS API") from exc
 
     try:
@@ -743,14 +746,20 @@ def query_gpt(prompt: str) -> str:
     try:
         content = _post()
     except httpx.TimeoutException as exc:  # pragma: no cover - request timeout
-        logger.exception("Timed out querying GPT OSS API: %s", exc)
+        logger.exception(
+            "Timed out querying GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientNetworkError(
             "GPT OSS API request timed out after maximum retries"
         ) from exc
     except GPTClientError:
         raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
-        logger.exception("Error querying GPT OSS API: %s", exc)
+        logger.exception(
+            "Error querying GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     return _parse_gpt_response(content)
 
@@ -791,17 +800,26 @@ async def query_gpt_async(prompt: str) -> str:
     try:
         content = await _post()
     except httpx.TimeoutException as exc:  # pragma: no cover - request timeout
-        logger.exception("Timed out querying GPT OSS API: %s", exc)
+        logger.exception(
+            "Timed out querying GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientNetworkError(
             "GPT OSS API request timed out after maximum retries"
         ) from exc
     except GPTClientError:
         raise
     except httpx.HTTPError as exc:  # pragma: no cover - other network errors
-        logger.exception("Error querying GPT OSS API: %s", exc)
+        logger.exception(
+            "Error querying GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientNetworkError("Failed to query GPT OSS API") from exc
     except Exception as exc:  # pragma: no cover - unexpected errors
-        logger.exception("Unexpected error querying GPT OSS API: %s", exc)
+        logger.exception(
+            "Unexpected error querying GPT OSS API: %s",
+            sanitize_log_value(exc),
+        )
         raise GPTClientError("Unexpected error querying GPT OSS API") from exc
     return _parse_gpt_response(content)
 
@@ -816,7 +834,7 @@ async def query_gpt_json_async(prompt: str) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        logger.error("Invalid JSON from GPT OSS API: %s", exc)
+        logger.error("Invalid JSON from GPT OSS API: %s", sanitize_log_value(exc))
         return {"signal": "hold"}
     if not isinstance(data, dict):
         raise GPTClientResponseError("Unexpected response structure from GPT OSS API")
@@ -839,5 +857,5 @@ def parse_signal(payload: str) -> Signal:
         data = json.loads(payload)
         return Signal.model_validate(data)
     except (ValueError, ValidationError, TypeError) as exc:  # pragma: no cover - invalid input
-        logger.warning("Failed to parse signal: %s", exc)
+        logger.warning("Failed to parse signal: %s", sanitize_log_value(exc))
         return Signal()

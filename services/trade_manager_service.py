@@ -290,17 +290,21 @@ def _write_positions_locked() -> None:
             fh.flush()
             os.fsync(fh.fileno())
     except OSError as exc:  # pragma: no cover - tmp creation failures
+        safe_exc = sanitize_log_value(exc)
         if tmp_path is None:
-            logging.warning('Failed to create temporary positions cache: %s', exc)
+            logging.warning(
+                'Failed to create temporary positions cache: %s',
+                safe_exc,
+            )
             return
-        logging.warning('Failed to write temporary positions cache: %s', exc)
+        logging.warning('Failed to write temporary positions cache: %s', safe_exc)
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
             logging.debug(
                 'Failed to remove temporary positions cache %s: %s',
                 tmp_path,
-                cleanup_exc,
+                sanitize_log_value(cleanup_exc),
             )
         raise
 
@@ -311,11 +315,18 @@ def _write_positions_locked() -> None:
     try:
         os.replace(tmp_path, POSITIONS_FILE)
     except OSError as exc:  # pragma: no cover - disk errors
-        logging.warning('Failed to save positions cache: %s', exc)
+        logging.warning(
+            'Failed to save positions cache: %s',
+            sanitize_log_value(exc),
+        )
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug('Failed to remove temporary positions cache %s: %s', tmp_path, cleanup_exc)
+            logging.debug(
+                'Failed to remove temporary positions cache %s: %s',
+                tmp_path,
+                sanitize_log_value(cleanup_exc),
+            )
         raise
 
 
@@ -336,7 +347,7 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
     try:
         remote_positions = exchange.fetch_positions()
     except Exception as exc:  # pragma: no cover - network/API issues
-        logging.warning('fetch_positions failed: %s', exc)
+        logging.warning('fetch_positions failed: %s', sanitize_log_value(exc))
         return
 
     remote_positions = remote_positions or []
@@ -637,7 +648,11 @@ def open_position() -> ResponseReturnValue:
 
             def _log_exception(prefix: str) -> Callable[[int, BaseException], None]:
                 def _inner(attempt: int, exc: BaseException) -> None:
-                    app.logger.debug('%s failed: %s', prefix, exc)
+                    app.logger.debug(
+                        '%s failed: %s',
+                        prefix,
+                        sanitize_log_value(exc),
+                    )
 
                 return _inner
 
@@ -774,7 +789,7 @@ def open_position() -> ResponseReturnValue:
                         'failed to cancel primary order %s for %s: %s',
                         order.get('id'),
                         safe_symbol,
-                        exc,
+                        sanitize_log_value(exc),
                     )
             if not cancel_success:
                 emergency_close_success = False
@@ -799,7 +814,7 @@ def open_position() -> ResponseReturnValue:
                     app.logger.exception(
                         'failed to place emergency close order for %s: %s',
                         safe_symbol,
-                        exc,
+                        sanitize_log_value(exc),
                     )
                 if not emergency_close_success:
                     mitigation_actions.append('emergency_close_failed')
@@ -814,13 +829,19 @@ def open_position() -> ResponseReturnValue:
             response['warnings'] = warnings_payload
         return jsonify(response)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        app.logger.exception('network error creating order: %s', exc)
+        app.logger.exception(
+            'network error creating order: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BAD_REQUEST as exc:
-        app.logger.warning('bad request when creating order: %s', exc)
+        app.logger.warning(
+            'bad request when creating order: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'invalid order parameters'}), 400
     except CCXT_BASE_ERROR as exc:
-        app.logger.exception('exchange error creating order: %s', exc)
+        app.logger.exception(
+            'exchange error creating order: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'exchange error creating order'}), 502
 
 
@@ -913,13 +934,19 @@ def close_position() -> ResponseReturnValue:
             response_payload['warnings'] = {'positions_cache_failed': cache_warning}
         return jsonify(response_payload)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        app.logger.exception('network error closing position: %s', exc)
+        app.logger.exception(
+            'network error closing position: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BAD_REQUEST as exc:
-        app.logger.warning('bad request when closing position: %s', exc)
+        app.logger.warning(
+            'bad request when closing position: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'invalid order parameters'}), 400
     except CCXT_BASE_ERROR as exc:
-        app.logger.exception('exchange error closing position: %s', exc)
+        app.logger.exception(
+            'exchange error closing position: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'exchange error closing position'}), 502
 
 
@@ -949,7 +976,9 @@ if hasattr(app, "errorhandler"):
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
         """Log unexpected errors and return a 500 response."""
-        app.logger.exception('unhandled error: %s', exc)
+        app.logger.exception(
+            'unhandled error: %s', sanitize_log_value(exc)
+        )
         return jsonify({'error': 'internal server error'}), 500
 else:
     def too_large(_) -> ResponseReturnValue:
@@ -957,7 +986,7 @@ else:
 
     def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
         """Log unexpected errors and return a 500 response."""
-        app.logger.exception('unhandled error: %s', exc)
+        app.logger.exception('unhandled error: %s', sanitize_log_value(exc))
         return jsonify({'error': 'internal server error'}), 500
 
 
