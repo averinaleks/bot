@@ -107,6 +107,14 @@ def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
     assert 'if stripped_lower.startswith("#") and "ccxtpro" in stripped_lower' in workflow
 
 
+def test_dependency_graph_prepare_step_handles_filesystem_errors() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+    assert "except OSError as exc" in workflow
+    assert "due to filesystem error" in workflow
+    assert "::warning::Unable to update" in workflow
+
+
 def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
