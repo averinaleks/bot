@@ -27,25 +27,9 @@ from typing import (
     cast,
 )
 import shutil
-try:  # pragma: no cover - optional dependency
-    import aiohttp  # type: ignore
-except Exception:  # pragma: no cover - minimal stub
-    aiohttp = types.SimpleNamespace(ClientError=Exception)  # type: ignore[assignment]
-
-from bot.dotenv_utils import load_dotenv
-
-try:  # pragma: no cover - optional dependency
-    import pandas as pd  # type: ignore
-except ImportError as exc:  # allow missing pandas
-    logging.getLogger(__name__).warning("pandas import failed: %s", exc)
-    pd = types.ModuleType("pandas")  # type: ignore[assignment]
-    pd.DataFrame = dict  # type: ignore[attr-defined]
-    pd.Series = list  # type: ignore[attr-defined]
-    pd.MultiIndex = types.SimpleNamespace(from_arrays=lambda *a, **k: [])  # type: ignore[attr-defined]
-
-import numpy as np  # type: ignore
+import numpy as np
 from bot import test_stubs
-test_stubs.apply()
+from bot.dotenv_utils import load_dotenv
 from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
@@ -67,6 +51,30 @@ _check_df_async = _utils.check_dataframe_empty_async
 safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
 
+test_stubs.apply()
+IS_TEST_MODE = test_stubs.IS_TEST_MODE
+
+aiohttp: Any
+try:  # pragma: no cover - optional dependency
+    import aiohttp as _aiohttp
+except Exception:  # pragma: no cover - minimal stub
+    aiohttp = types.SimpleNamespace(ClientError=Exception)
+else:
+    aiohttp = _aiohttp
+
+pd: Any
+try:  # pragma: no cover - optional dependency
+    import pandas as _pd
+except ImportError as exc:  # allow missing pandas
+    logging.getLogger(__name__).warning("pandas import failed: %s", exc)
+    pd = types.SimpleNamespace(
+        DataFrame=dict,
+        Series=list,
+        MultiIndex=types.SimpleNamespace(from_arrays=lambda *a, **k: []),
+    )
+else:
+    pd = _pd
+
 if TYPE_CHECKING:
     from telegram_logger import TelegramLogger as TelegramLoggerType
 else:  # pragma: no cover - type-checking aid
@@ -76,7 +84,7 @@ else:  # pragma: no cover - type-checking aid
 try:  # pragma: no cover - fallback для тестов
     from bot.utils import configure_logging  # noqa: E402
 except ImportError:  # pragma: no cover - заглушка
-    def configure_logging() -> None:  # type: ignore
+    def configure_logging() -> None:
         """Stubbed logging configurator."""
         pass
 from bot import config as bot_config  # noqa: E402
@@ -93,52 +101,24 @@ from services.offline import (  # noqa: E402
 
 torch: Any
 try:  # pragma: no cover - optional dependency
-    import torch as _torch  # type: ignore  # noqa: E402
-    torch = cast(Any, _torch)
+    import torch as _torch  # noqa: E402
 except ImportError as exc:  # optional dependency may not be installed
     logging.getLogger(__name__).warning("torch import failed: %s", exc)
-    torch = types.ModuleType("torch")  # type: ignore[assignment]
+
     def _tensor(*args: Any, **kwargs: Any) -> Any:
         return args[0]
-    torch.tensor = _tensor  # type: ignore[attr-defined,assignment]
-    torch.float32 = float  # type: ignore[attr-defined,assignment]
-    torch.no_grad = contextlib.nullcontext  # type: ignore[attr-defined,assignment,misc]
-    torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined,assignment,misc]
-    torch.amp = types.SimpleNamespace(
-        autocast=lambda *a, **k: contextlib.nullcontext()
-    )  # type: ignore[attr-defined,assignment,misc]
-try:  # pragma: no cover - optional dependency
-    from flask import Flask, request, jsonify  # type: ignore  # noqa: E402
-except Exception:  # pragma: no cover - minimal stubs
-    Flask = object  # type: ignore
 
-    def request(*args, **kwargs):  # type: ignore
-        return None
-
-    def jsonify(*args, **kwargs):  # type: ignore
-        return {}
-
-    class _StubApp:  # minimal API used in tests
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def before_request(self, func):
-            return func
-
-        def route(self, *args, **kwargs):  # pragma: no cover - simple passthrough
-            def decorator(func):
-                return func
-
-            return decorator
-
-        def run(self, *args, **kwargs):  # pragma: no cover - no-op
-            return None
-
-        @property
-        def asgi_app(self):  # pragma: no cover - simple property
-            return None
-
-    Flask = _StubApp  # type: ignore[assignment,misc]
+    torch = types.SimpleNamespace(
+        tensor=_tensor,
+        float32=float,
+        no_grad=contextlib.nullcontext,
+        cuda=types.SimpleNamespace(is_available=lambda: False),
+        amp=types.SimpleNamespace(
+            autocast=lambda *a, **k: contextlib.nullcontext()
+        ),
+    )
+else:
+    torch = cast(Any, _torch)
 import multiprocessing as mp  # noqa: E402
 
 
@@ -256,7 +236,7 @@ class TradeManager:
         chat_id,
         rl_agent=None,
         *,
-        telegram_logger_factory=None,
+        telegram_logger_factory: Callable[..., TelegramLoggerType] | None = None,
         gpt_client_factory=None,
     ):
         # Ensure environment variables from optional .env file are available
@@ -316,14 +296,18 @@ class TradeManager:
                     unsent_path = None
             logger_cls = telegram_logger_factory or TelegramLogger
             try:
-                self.telegram_logger = logger_cls(
-                    telegram_bot,
-                    chat_id,
-                    max_queue_size=config.get("telegram_queue_size"),
-                    unsent_path=unsent_path,
+                self.telegram_logger = cast(
+                    TelegramLoggerType,
+                    logger_cls(
+                        telegram_bot,
+                        chat_id,
+                        max_queue_size=config.get("telegram_queue_size"),
+                        unsent_path=unsent_path,
+                    ),
                 )
             except TypeError:  # pragma: no cover - stub without args
-                self.telegram_logger = logger_cls()  # type: ignore[call-arg]
+                stub_factory = cast(Callable[[], TelegramLoggerType], logger_cls)
+                self.telegram_logger = stub_factory()
             if not hasattr(self.telegram_logger, "send_telegram_message"):
                 async def _noop(*a, **k):
                     pass
@@ -1392,12 +1376,14 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            prediction = await _predict_async(model, X_tensor)
+            prediction = float(await _predict_async(model, X_tensor))
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
-                  prediction = await asyncio.to_thread(
-                      _calibrate_output, calibrator, float(prediction)  # type: ignore[arg-type]
-                  )
+                prediction = await asyncio.to_thread(
+                    _calibrate_output,
+                    calibrator,
+                    float(prediction),
+                )
             rl_signal = None
             if self.rl_agent and symbol in self.rl_agent.models:
                 rl_feat = np.append(
@@ -1821,11 +1807,13 @@ class TradeManager:
             X_tensor = torch.tensor(
                 X, dtype=torch.float32, device=self.model_builder.device
             )
-            prediction = await _predict_async(model, X_tensor)
+            prediction = float(await _predict_async(model, X_tensor))
             calibrator = self.model_builder.calibrators.get(symbol)
             if calibrator is not None:
                 prediction = await asyncio.to_thread(
-                    _calibrate_output, calibrator, float(prediction)  # type: ignore[arg-type]
+                    _calibrate_output,
+                    calibrator,
+                    float(prediction),
                 )
 
             if self.config.get("prediction_target", "direction") == "pnl":
@@ -2161,7 +2149,15 @@ class TradeManager:
                 # event loop already closed
                 pass
         try:
-            if IS_TEST_MODE or getattr(ray, "is_initialized", lambda: False)():
+            should_shutdown = False
+            if IS_TEST_MODE:
+                should_shutdown = True
+            else:
+                is_initialized = getattr(ray, "is_initialized", None)
+                if callable(is_initialized):
+                    should_shutdown = bool(is_initialized())
+
+            if should_shutdown and callable(getattr(ray, "shutdown", None)):
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
