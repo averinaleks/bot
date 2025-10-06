@@ -148,6 +148,33 @@ def _cleanup_telegram_logger(_import_trade_manager):
     yield
     asyncio.run(trade_manager.TelegramLogger.shutdown())
 
+
+def test_trade_manager_uses_httpx_stub_when_httpx_missing(monkeypatch):
+    original_httpx = sys.modules.pop("httpx", None)
+    original_tm = sys.modules.get("bot.trade_manager.core")
+    sys.modules.pop("bot.trade_manager.core", None)
+
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+    monkeypatch.setenv("OFFLINE_MODE", "1")
+
+    tm_mod = importlib.import_module("bot.trade_manager.core")
+
+    try:
+        assert getattr(tm_mod.httpx, "__offline_stub__", False)
+        assert hasattr(tm_mod.httpx, "HTTPError")
+    finally:
+        sys.modules.pop("bot.trade_manager.core", None)
+        if original_tm is not None:
+            sys.modules["bot.trade_manager.core"] = original_tm
+            globals()["trade_manager"] = original_tm
+
+        if original_httpx is not None:
+            sys.modules["httpx"] = original_httpx
+        else:
+            sys.modules.pop("httpx", None)
+
+        monkeypatch.delenv("OFFLINE_MODE", raising=False)
+
 def test_utils_injected_before_trade_manager_import():
     import importlib
     import sys
