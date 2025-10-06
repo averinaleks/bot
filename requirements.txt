@@ -26,11 +26,17 @@ anyio==4.10.0
     #   httpx
     #   openai
     #   starlette
+async-timeout==5.0.1
+    # via aiohttp
 attrs==25.3.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
+backports-asyncio-runner==1.2.0 ; python_version < "3.11"
+    # via
+    #   -r requirements-core.in
+    #   pytest-asyncio
 bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
@@ -66,6 +72,10 @@ cycler==0.12.1
     # via matplotlib
 distro==1.9.0
     # via openai
+exceptiongroup==1.3.0
+    # via
+    #   anyio
+    #   pytest
 farama-notifications==0.0.4
     # via gymnasium
 fastapi==0.118.0
@@ -212,8 +222,10 @@ pillow==11.3.0
     # via matplotlib
 pluggy==1.6.0
     # via pytest
-polars==1.33.1
+polars==1.34.0
     # via -r requirements-core.in
+polars-runtime-32==1.34.0
+    # via polars
 propcache==0.3.2
     # via
     #   aiohttp
@@ -325,6 +337,8 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.22.0
     # via transformers
+tomli==2.2.1
+    # via pytest
 torch==2.8.0+cpu
     # via
     #   pytorch-lightning
@@ -343,13 +357,17 @@ transformers==4.56.2
     # via -r requirements-core.in
 typing-extensions==4.14.1
     # via
+    #   a2wsgi
     #   aiosignal
     #   anyio
     #   ccxt
+    #   cryptography
+    #   exceptiongroup
     #   fastapi
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
+    #   multidict
     #   openai
     #   pydantic
     #   pydantic-core
