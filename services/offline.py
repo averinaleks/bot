@@ -11,6 +11,7 @@ import os
 import secrets
 import time
 from collections.abc import Callable, Mapping
+from typing import SupportsFloat, SupportsIndex, SupportsInt, cast
 
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
@@ -23,6 +24,8 @@ logger = logging.getLogger("TradingBot")
 OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
 
 _PlaceholderValue = str | Callable[[], str]
+_IntLike = SupportsInt | SupportsIndex | str | bytes | bytearray
+_FloatLike = SupportsFloat | SupportsIndex | str | bytes | bytearray
 
 # Personalisation string for deterministic price derivation in ``OfflineBybit``.
 # The value must be at most 16 bytes as required by ``hashlib.blake2s``.
@@ -275,8 +278,11 @@ class OfflineTradeManager:
     @staticmethod
     def _resolve_iterations(config) -> int:
         raw = getattr(config, "offline_iterations", None)
+        if raw is None:
+            return 1
+
         try:
-            value = int(raw)
+            value = int(cast(_IntLike, raw))
         except (TypeError, ValueError):
             return 1
         return max(1, value)
@@ -284,8 +290,10 @@ class OfflineTradeManager:
     @staticmethod
     def _resolve_delay(config) -> float:
         raw = getattr(config, "offline_iteration_delay", None)
+        if raw is None:
+            return 0.0
         try:
-            value = float(raw)
+            value = float(cast(_FloatLike, raw))
         except (TypeError, ValueError):
             return 0.0
         return max(0.0, value)
