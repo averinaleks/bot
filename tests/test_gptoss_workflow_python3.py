@@ -48,3 +48,23 @@ def test_pr_status_step_skips_pull_request_target() -> None:
 
     assert guard_snippet in workflow_text
     assert notice_message in workflow_text
+
+
+def test_review_job_skips_target_events() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    condition = (
+        "needs.evaluate.outputs.run_review == 'true' && github.event_name != 'pull_request_target'"
+    )
+
+    assert condition in workflow_text
+
+
+def test_skip_job_covers_target_events() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    condition = (
+        "needs.evaluate.outputs.skip_reason != '' || github.event_name == 'pull_request_target'"
+    )
+
+    assert condition in workflow_text
