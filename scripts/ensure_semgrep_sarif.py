@@ -1,11 +1,20 @@
-"""Ensure a valid ``semgrep.sarif`` file exists for GitHub code scanning uploads."""
+"""Semgrep SARIF helpers used by CI workflows.
+
+This module serves two purposes for the Semgrep GitHub Actions workflow:
+
+* ensure that a ``semgrep.sarif`` file always exists so that the upload step
+  does not fail when Semgrep produces no findings;
+* compute the number of findings inside the report and expose it via
+  ``GITHUB_OUTPUT`` so subsequent steps can decide whether the SARIF file
+  should be uploaded or if the workflow should fail due to real findings.
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 from typing import Any
-
-import json
 
 SARIF_PATH = Path("semgrep.sarif")
 
@@ -42,8 +51,62 @@ def ensure_semgrep_sarif(path: Path = SARIF_PATH) -> Path:
     return path
 
 
-def main() -> int:
-    ensure_semgrep_sarif()
+def sarif_result_count(path: Path = SARIF_PATH) -> int:
+    """Return the total number of findings contained in *path*."""
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return 0
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive branch
+        raise RuntimeError(f"Invalid SARIF report at {path}: {exc}") from exc
+
+    runs = data.get("runs", [])
+    return sum(len(run.get("results", [])) for run in runs)
+
+
+def write_github_output(path: Path, *, upload: bool, findings: int, sarif_path: Path) -> None:
+    """Append outputs consumed by subsequent workflow steps."""
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"upload={'true' if upload else 'false'}\n")
+        handle.write(f"result_count={findings}\n")
+        handle.write(f"sarif_path={sarif_path}\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--path",
+        type=Path,
+        default=SARIF_PATH,
+        help="Path to the Semgrep SARIF file (default: semgrep.sarif)",
+    )
+    parser.add_argument(
+        "--github-output",
+        type=Path,
+        default=None,
+        help="File path supplied by GitHub Actions to persist step outputs.",
+    )
+    args = parser.parse_args(argv)
+
+    sarif_path = ensure_semgrep_sarif(args.path)
+    findings = sarif_result_count(sarif_path)
+    has_findings = findings > 0
+
+    if args.github_output is not None:
+        write_github_output(
+            args.github_output,
+            upload=has_findings,
+            findings=findings,
+            sarif_path=sarif_path,
+        )
+
+    if has_findings:
+        print(f"Semgrep detected {findings} potential issue(s).")
+    else:
+        print(f"No Semgrep findings detected; ensured empty SARIF at {sarif_path}.")
+
     return 0
 
 
