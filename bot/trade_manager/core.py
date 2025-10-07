@@ -9,6 +9,7 @@ import asyncio
 import atexit
 import signal
 import os
+import sys
 import types
 import json
 import logging
@@ -30,12 +31,12 @@ import shutil
 import numpy as np
 from bot import test_stubs
 from bot.dotenv_utils import load_dotenv
-from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 import inspect  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
 from bot.trade_manager import order_utils  # noqa: E402
+from bot.trade_manager.errors import TradeManagerTaskError  # noqa: E402
 
 _utils = require_utils(
     "logger",
@@ -52,6 +53,29 @@ safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
 
 test_stubs.apply()
+
+
+def _is_test_mode() -> bool:
+    """Return whether the trade manager operates in the lightweight test mode."""
+
+    return os.getenv("TEST_MODE") == "1" or getattr(test_stubs, "IS_TEST_MODE", False)
+
+
+class _TestModeFlag:
+    """Boolean-like proxy exposing the current test mode state for legacy imports."""
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:  # pragma: no cover - trivial delegation
+        return _is_test_mode()
+
+    def __repr__(self) -> str:  # pragma: no cover - trivial delegation
+        return str(_is_test_mode())
+
+    __str__ = __repr__
+
+
+IS_TEST_MODE = _TestModeFlag()
 
 aiohttp: Any
 try:  # pragma: no cover - optional dependency
@@ -142,8 +166,6 @@ else:
 import multiprocessing as mp  # noqa: E402
 
 
-class TradeManagerTaskError(RuntimeError):
-    """Raised when one of the TradeManager background tasks fails."""
 
 
 @dataclass(frozen=True)
@@ -2136,11 +2158,7 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if (
-                self.loop
-                and self.loop.is_running()
-                and not (IS_TEST_MODE or os.getenv("TEST_MODE") == "1")
-            ):
+            if self.loop and self.loop.is_running() and not _is_test_mode():
                 self.loop.stop()
             raise
         finally:
@@ -2176,7 +2194,7 @@ class TradeManager:
                 pass
         try:
             should_shutdown = False
-            if IS_TEST_MODE:
+            if _is_test_mode():
                 should_shutdown = True
             else:
                 is_initialized = getattr(ray, "is_initialized", None)
@@ -2187,5 +2205,13 @@ class TradeManager:
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
+
+
+# Keep package-level re-exports in sync after reloads so that ``from bot.trade_manager``
+# consumers observe the updated classes when tests reload this module dynamically.
+_package = sys.modules.get("bot.trade_manager")
+if _package is not None:  # pragma: no cover - simple assignment
+    setattr(_package, "TradeManager", TradeManager)
+    setattr(_package, "TradeManagerTaskError", TradeManagerTaskError)
 
 
