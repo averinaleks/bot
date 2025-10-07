@@ -193,19 +193,26 @@ jobs:
           fi
 
           helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+          script_path="${helpers_dir}/scripts/check_pr_status.py"
+          fallback_path="scripts/check_pr_status.py"
 
-          if [ ! -f "${helpers_dir}/scripts/check_pr_status.py" ]; then
-            echo "::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден, пропускаю проверку PR"
-            if [ -n "${GITHUB_OUTPUT:-}" ]; then
-              {
-                echo "skip=true"
-                echo "head_sha="
-              } >>"$GITHUB_OUTPUT"
+          if [ ! -f "$script_path" ]; then
+            if [ -f "$fallback_path" ]; then
+              echo "::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден, использую $fallback_path"
+              script_path="$fallback_path"
+            else
+              echo "::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден, пропускаю проверку PR"
+              if [ -n "${GITHUB_OUTPUT:-}" ]; then
+                {
+                  echo "skip=true"
+                  echo "head_sha="
+                } >>"$GITHUB_OUTPUT"
+              fi
+              exit 0
             fi
-            exit 0
           fi
 
-          if ! python3 "${helpers_dir}/scripts/check_pr_status.py" \
+          if ! python3 "$script_path" \
             --repo "${REPOSITORY}" \
             --pr-number "${PR_NUMBER:-}" \
             --token "${GITHUB_TOKEN}"; then
@@ -264,13 +271,20 @@ jobs:
           fi
 
           helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+          script_path="${helpers_dir}/scripts/gptoss_mock_server.py"
+          fallback_path="scripts/gptoss_mock_server.py"
 
-          if [ ! -f "${helpers_dir}/scripts/gptoss_mock_server.py" ]; then
-            echo "::notice::Скрипт ${helpers_dir}/scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
-            exit 0
+          if [ ! -f "$script_path" ]; then
+            if [ -f "$fallback_path" ]; then
+              echo "::notice::Скрипт ${helpers_dir}/scripts/gptoss_mock_server.py не найден, использую $fallback_path"
+              script_path="$fallback_path"
+            else
+              echo "::notice::Скрипт ${helpers_dir}/scripts/gptoss_mock_server.py не найден, пропускаю запуск mock-сервера"
+              exit 0
+            fi
           fi
 
-          python3 "${helpers_dir}/scripts/gptoss_mock_server.py" \
+          python3 "$script_path" \
             --host 127.0.0.1 \
             --port 0 \
             --port-file mock_server.port \
@@ -385,13 +399,20 @@ jobs:
           fi
 
           helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+          script_path="${helpers_dir}/scripts/prepare_gptoss_diff.py"
+          fallback_path="scripts/prepare_gptoss_diff.py"
 
-          if [ ! -f "${helpers_dir}/scripts/prepare_gptoss_diff.py" ]; then
-            echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
-            exit 0
+          if [ ! -f "$script_path" ]; then
+            if [ -f "$fallback_path" ]; then
+              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, использую $fallback_path"
+              script_path="$fallback_path"
+            else
+              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
+              exit 0
+            fi
           fi
 
-          if ! python3 "${helpers_dir}/scripts/prepare_gptoss_diff.py" \
+          if ! python3 "$script_path" \
             --repo "${{ github.repository }}" \
             --pr-number "${PR_NUMBER}" \
             --token "${GITHUB_TOKEN}" \
@@ -432,13 +453,20 @@ jobs:
           fi
 
           helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+          script_path="${helpers_dir}/scripts/run_gptoss_review.py"
+          fallback_path="scripts/run_gptoss_review.py"
 
-          if [ ! -f "${helpers_dir}/scripts/run_gptoss_review.py" ]; then
-            echo "::notice::Скрипт ${helpers_dir}/scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
-            exit 0
+          if [ ! -f "$script_path" ]; then
+            if [ -f "$fallback_path" ]; then
+              echo "::notice::Скрипт ${helpers_dir}/scripts/run_gptoss_review.py не найден, использую $fallback_path"
+              script_path="$fallback_path"
+            else
+              echo "::notice::Скрипт ${helpers_dir}/scripts/run_gptoss_review.py не найден, пропускаю генерацию обзора"
+              exit 0
+            fi
           fi
 
-          if ! python3 "${helpers_dir}/scripts/run_gptoss_review.py" \
+          if ! python3 "$script_path" \
             --diff diff.patch \
             --output review.md \
             --model "${MODEL_NAME}" \

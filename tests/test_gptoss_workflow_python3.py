@@ -6,12 +6,23 @@ WORKFLOW_PATH = Path('.github/workflows/gptoss_review.yml')
 def test_gptoss_workflow_uses_python3() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    assert 'python3 "${helpers_dir}/scripts/gptoss_mock_server.py"' in workflow_text
-    assert 'python3 "${helpers_dir}/scripts/prepare_gptoss_diff.py"' in workflow_text
-    assert 'python3 "${helpers_dir}/scripts/run_gptoss_review.py"' in workflow_text
+    assert (
+        'python3 "${helpers_dir}/scripts/gptoss_mock_server.py"' in workflow_text
+        or 'script_path="${helpers_dir}/scripts/gptoss_mock_server.py"' in workflow_text
+    )
+    assert (
+        'python3 "${helpers_dir}/scripts/prepare_gptoss_diff.py"' in workflow_text
+        or 'script_path="${helpers_dir}/scripts/prepare_gptoss_diff.py"' in workflow_text
+    )
+    assert (
+        'python3 "${helpers_dir}/scripts/run_gptoss_review.py"' in workflow_text
+        or 'script_path="${helpers_dir}/scripts/run_gptoss_review.py"' in workflow_text
+    )
+    assert 'python3 "$script_path"' in workflow_text
     assert 'python "${helpers_dir}/scripts/gptoss_mock_server.py"' not in workflow_text
     assert 'python "${helpers_dir}/scripts/prepare_gptoss_diff.py"' not in workflow_text
     assert 'python "${helpers_dir}/scripts/run_gptoss_review.py"' not in workflow_text
+    assert 'python "$script_path"' not in workflow_text
     assert 'HELPERS_DIR: gptoss_helpers' in workflow_text
     assert 'path: ${{ env.HELPERS_DIR }}' in workflow_text
 
@@ -26,10 +37,14 @@ def test_pr_status_step_has_missing_script_guard() -> None:
 def test_pr_status_step_sets_outputs_on_failure() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    marker = 'if ! python3 "${helpers_dir}/scripts/check_pr_status.py"'
+    marker_options = [
+        'if ! python3 "${helpers_dir}/scripts/check_pr_status.py"',
+        'if ! python3 "$script_path"',
+    ]
+    marker = next((candidate for candidate in marker_options if candidate in workflow_text), None)
+    assert marker is not None, 'missing PR status failure handler'
     next_step = '      - name: Checkout PR head'
 
-    assert marker in workflow_text, 'missing PR status failure handler'
     start = workflow_text.index(marker)
     end = workflow_text.index(next_step, start)
     failure_block = workflow_text[start:end]
