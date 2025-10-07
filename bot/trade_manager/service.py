@@ -16,6 +16,8 @@ from typing import Any, Awaitable, Mapping, TypeVar, cast
 
 from services.stubs import create_httpx_stub
 
+httpx: Any
+
 try:  # pragma: no cover - exercised in environments without httpx
     import httpx as _httpx  # type: ignore
 except Exception:  # noqa: BLE001 - ensure service works without httpx installed
