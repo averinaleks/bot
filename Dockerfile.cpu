@@ -44,6 +44,17 @@ if (major, minor) != (3, 11):
     )
 PY
 
+# ``python:3.11-slim`` поставляется с устаревшим setuptools 65.5.1,
+# уязвимым к CVE-2024-6345 и CVE-2025-47273. Обновляем системные
+# packaging-инструменты до безопасных версий до того, как начнём собирать
+# виртуальное окружение, чтобы Trivy не находил high/critical уязвимости
+# прямо в базовом образе.
+RUN python -m pip install --no-cache-dir --upgrade \
+        'pip>=24.0' \
+        'setuptools>=80.9.0,<81' \
+        wheel \
+    && python -m pip cache purge
+
 # pip>=24.0 устраняет CVE-2023-32681, setuptools>=80.9.0 закрывает известные
 # уязвимости и совместимы с зависимостями проекта.
 RUN python -m venv "$VIRTUAL_ENV"
@@ -230,6 +241,14 @@ if (major, minor) != (3, 11):
         f"Runtime Python version mismatch: expected 3.11, got {major}.{minor}"
     )
 PY
+
+# Аналогично стадии сборки обновляем системный pip/setuptools, чтобы в
+# рантайме не оставалось уязвимых версий из базового образа.
+RUN python -m pip install --no-cache-dir --upgrade \
+        'pip>=24.0' \
+        'setuptools>=80.9.0,<81' \
+        wheel \
+    && python -m pip cache purge
 
 WORKDIR /app
 
