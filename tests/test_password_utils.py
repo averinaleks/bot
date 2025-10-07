@@ -1,3 +1,5 @@
+import hmac
+
 import pytest
 
 import password_utils
@@ -50,6 +52,54 @@ def test_hash_password_accepts_valid_password(valid_password: str):
     hashed = hash_password(valid_password)
     assert hashed != valid_password
     assert verify_password(valid_password, hashed)
+
+
+@pytest.mark.parametrize("length", [MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH])
+@pytest.mark.parametrize("mode", ["bcrypt", "pbkdf2"])
+def test_hash_password_accepts_boundary_lengths(
+    length: int, mode: str, monkeypatch: pytest.MonkeyPatch
+):
+    """Пароли минимальной и максимальной длины хэшируются в обоих режимах."""
+
+    def build_password(target_length: int) -> str:
+        base = "Aa1!"
+        if target_length <= len(base):
+            return base[:target_length]
+        return base + "b" * (target_length - len(base))
+
+    password = build_password(length)
+
+    if mode == "bcrypt":
+
+        class FakeBcrypt:
+            prefix = "$2b$12$"
+
+            @staticmethod
+            def gensalt(rounds: int) -> bytes:  # pragma: no cover - deterministic salt
+                assert rounds == password_utils.DEFAULT_BCRYPT_ROUNDS
+                return FakeBcrypt.prefix.encode()
+
+            @staticmethod
+            def hashpw(password_bytes: bytes, salt: bytes) -> bytes:
+                assert salt.decode() == FakeBcrypt.prefix
+                return (FakeBcrypt.prefix + password_bytes.decode()).encode()
+
+            @staticmethod
+            def checkpw(password_bytes: bytes, stored_bytes: bytes) -> bool:
+                expected = (FakeBcrypt.prefix + password_bytes.decode()).encode()
+                return hmac.compare_digest(expected, stored_bytes)
+
+        monkeypatch.setattr(password_utils, "bcrypt", FakeBcrypt)
+        monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", True)
+    else:
+        monkeypatch.setattr(password_utils, "bcrypt", None)
+        monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", False)
+
+    hashed = hash_password(password)
+    assert hashed.startswith("$2") if mode == "bcrypt" else hashed.startswith(
+        f"{PBKDF2_PREFIX}$"
+    )
+    assert verify_password(password, hashed)
 
 
 def test_verify_password_handles_incorrect_value(valid_password: str):
