@@ -30,12 +30,12 @@ import shutil
 import numpy as np
 from bot import test_stubs
 from bot.dotenv_utils import load_dotenv
-from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 import inspect  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
 from bot.trade_manager import order_utils  # noqa: E402
+from bot.trade_manager.errors import TradeManagerTaskError
 
 _utils = require_utils(
     "logger",
@@ -52,6 +52,17 @@ safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
 
 test_stubs.apply()
+
+
+def _is_test_mode() -> bool:
+    """Return ``True`` when the bot is running in test mode."""
+
+    if getattr(test_stubs, "IS_TEST_MODE", False):
+        return True
+    return os.getenv("TEST_MODE") == "1"
+
+
+IS_TEST_MODE = _is_test_mode()
 
 aiohttp: Any
 try:  # pragma: no cover - optional dependency
@@ -140,11 +151,6 @@ except ImportError as exc:  # optional dependency may not be installed
 else:
     torch = cast(Any, _torch)
 import multiprocessing as mp  # noqa: E402
-
-
-class TradeManagerTaskError(RuntimeError):
-    """Raised when one of the TradeManager background tasks fails."""
-
 
 @dataclass(frozen=True)
 class _TaskSpec:
@@ -2139,7 +2145,7 @@ class TradeManager:
             if (
                 self.loop
                 and self.loop.is_running()
-                and not (IS_TEST_MODE or os.getenv("TEST_MODE") == "1")
+                and not _is_test_mode()
             ):
                 self.loop.stop()
             raise
@@ -2176,7 +2182,7 @@ class TradeManager:
                 pass
         try:
             should_shutdown = False
-            if IS_TEST_MODE:
+            if _is_test_mode():
                 should_shutdown = True
             else:
                 is_initialized = getattr(ray, "is_initialized", None)
