@@ -185,7 +185,7 @@ numpy==2.2.6
     #   ta
     #   torchmetrics
     #   transformers
-openai==2.1.0
+openai==2.2.0
     # via -r requirements-core.in
 packaging==25.0
     # via
