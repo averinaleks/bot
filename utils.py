@@ -6,11 +6,14 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import time
 import warnings
+import weakref
 from functools import wraps
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 try:  # pragma: no cover - optional dependency for HTTP error handling
@@ -38,8 +41,41 @@ validate_host = _validate_host
 logger = logging.getLogger("TradingBot")
 
 
-if "_NUMBA_IMPORT_WARNED" not in globals():
+_STATE_MODULE_NAME = "bot._utils_state"
+_state_module = sys.modules.get(_STATE_MODULE_NAME)
+if _state_module is None:
+    _state_module = ModuleType(_STATE_MODULE_NAME)
+    _state_module.numba_aliases = []  # type: ignore[attr-defined]
+    sys.modules[_STATE_MODULE_NAME] = _state_module
+elif not hasattr(_state_module, "numba_aliases"):
+    _state_module.numba_aliases = []  # type: ignore[attr-defined]
+
+_NUMBA_MODULE_ALIASES: List[weakref.ReferenceType[ModuleType]] = (
+    _state_module.numba_aliases  # type: ignore[attr-defined]
+)
+
+
+def _numba_reset_requested() -> bool:
+    reset = False
+    alive: List[weakref.ReferenceType[ModuleType]] = []
+    for ref in _NUMBA_MODULE_ALIASES:
+        module = ref()
+        if module is None:
+            continue
+        alive.append(ref)
+        if getattr(module, "_NUMBA_IMPORT_WARNED", None) is False:
+            reset = True
+            setattr(module, "_NUMBA_IMPORT_WARNED", True)
+    _NUMBA_MODULE_ALIASES[:] = alive
+    return reset
+
+
+if "_NUMBA_IMPORT_WARNED" not in globals() or _numba_reset_requested():
     _NUMBA_IMPORT_WARNED = False
+
+_current_module = sys.modules.get(__name__)
+if _current_module is not None:
+    _NUMBA_MODULE_ALIASES.append(weakref.ref(_current_module))
 
 if "_TELEGRAMLOGGER_IMPORT_WARNED" not in globals():
     _TELEGRAMLOGGER_IMPORT_WARNED = False
