@@ -10,6 +10,7 @@ if os.getenv("TEST_MODE") == "1" or "pytest" in sys.modules:
     import test_stubs as _test_stubs
 
     _test_stubs.apply()
+    test_stubs = _test_stubs
 
 # Allow loading submodules from project root
 __path__ = [

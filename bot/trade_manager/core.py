@@ -32,7 +32,6 @@ import numpy as np
 from bot import test_stubs
 from bot.dotenv_utils import load_dotenv
 from bot.ray_compat import ray  # noqa: E402
-import httpx  # noqa: E402
 import inspect  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
 from bot.trade_manager import order_utils  # noqa: E402
