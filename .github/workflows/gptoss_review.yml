@@ -133,7 +133,8 @@ jobs:
   review:
     needs: evaluate
     if: >-
-      ${{ fromJSON(needs.evaluate.outputs.run_review || 'false')
+      ${{ github.event_name != 'pull_request_target'
+          && fromJSON(needs.evaluate.outputs.run_review || 'false')
           && (github.event_name == 'pull_request'
               || github.event_name == 'issue_comment') }}
     runs-on: ubuntu-latest
