@@ -57,7 +57,7 @@ jobs:
             exit 0
           fi
           echo "sarif=true" >>"$GITHUB_OUTPUT"
-          count=$(python - <<'PY'
+          count=$(python3 - <<'PY'
 import json
 from typing import Iterable
 
