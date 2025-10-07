@@ -33,7 +33,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Update release draft
-        uses: release-drafter/release-drafter@v5.25.0 # v6.1.0 currently hangs while updating releases
+        uses: release-drafter/release-drafter@v6.1.0
         with:
           config-name: release-drafter.yml
         env:
@@ -51,7 +51,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Update pull request metadata
-        uses: release-drafter/release-drafter@v5.25.0 # v6.1.0 currently hangs while updating releases
+        uses: release-drafter/release-drafter@v6.1.0
         with:
           config-name: release-drafter.yml
           disable-releases: true
