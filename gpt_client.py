@@ -424,10 +424,21 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
     except ValueError:
         host_ip = None
 
-    if host_ip is None and hostname not in allowed_hosts:
-        raise GPTClientError(
-            "GPT_OSS_API host must be explicitly allowed via GPT_OSS_ALLOWED_HOSTS"
-        )
+    normalised_allowed_hosts = {host.lower() for host in allowed_hosts}
+    allowed_ips: set[str] = set()
+
+    if host_ip is None:
+        if hostname not in normalised_allowed_hosts:
+            raise GPTClientError(
+                "GPT_OSS_API host must be explicitly allowed via GPT_OSS_ALLOWED_HOSTS"
+            )
+    else:
+        normalised_ip = _normalise_ip(hostname)
+        allowed_ips.add(normalised_ip)
+        if not (host_ip.is_private or host_ip.is_loopback):
+            raise GPTClientError(
+                "GPT_OSS_API IP address must resolve to a private or loopback network"
+            )
 
     resolution_failed = False
     try:
@@ -435,13 +446,16 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             parsed.hostname, None, family=socket.AF_UNSPEC
         )
         resolved_ips = {_normalise_ip(info[4][0]) for info in addr_info}
+        allowed_ips.update(resolved_ips)
     except socket.gaierror as exc:
         if os.getenv("TEST_MODE") == "1":
             resolution_failed = True
-            resolved_ips = {
+            fallback_ips = {
                 _normalise_ip("127.0.0.1"),
                 _TEST_MODE_DNS_FALLBACK,
             }
+            resolved_ips = fallback_ips
+            allowed_ips.update(fallback_ips)
         else:
             logger.error(
                 "Failed to resolve GPT_OSS_API host %s: %s",
@@ -489,7 +503,7 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             "GPT_OSS_API host IP must be loopback or private when not allowlisted"
         )
 
-    return hostname, resolved_ips
+    return hostname, allowed_ips
 
 
 async def _fetch_response(

@@ -525,6 +525,34 @@ def test_validate_api_url_rejects_userinfo():
     assert "must not contain embedded credentials" in str(excinfo.value)
 
 
+def test_validate_api_url_rejects_public_ip_literal(monkeypatch):
+    public_ip = "93.184.216.34"
+
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == public_ip
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (public_ip, 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(GPTClientError) as excinfo:
+        _validate_api_url(f"https://{public_ip}", _load_allowed_hosts())
+
+    assert "private" in str(excinfo.value)
+
+
+def test_validate_api_url_private_ip_literal_allowed(monkeypatch):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "192.168.1.5"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.5", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    host, ips = _validate_api_url("https://192.168.1.5", _load_allowed_hosts())
+
+    assert host == "192.168.1.5"
+    assert ips == {"192.168.1.5"}
+
+
 def test_validate_api_url_insecure_allowed_with_env(monkeypatch, caplog):
     def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         assert host == "foo.local"
