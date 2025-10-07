@@ -6,11 +6,13 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import time
 import warnings
 from functools import wraps
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 try:  # pragma: no cover - optional dependency for HTTP error handling
@@ -38,8 +40,42 @@ validate_host = _validate_host
 logger = logging.getLogger("TradingBot")
 
 
-if "_NUMBA_IMPORT_WARNED" not in globals():
-    _NUMBA_IMPORT_WARNED = False
+_STATE_MODULE_NAME = "bot._utils_state"
+_state_module = sys.modules.get(_STATE_MODULE_NAME)
+if _state_module is None:
+    _state_module = ModuleType(_STATE_MODULE_NAME)
+    _state_module.numba_warned = False
+    sys.modules[_STATE_MODULE_NAME] = _state_module
+
+
+class _UtilsModule(ModuleType):
+    def __setattr__(self, name: str, value: Any) -> None:  # pragma: no cover - trivial
+        super().__setattr__(name, value)
+        if name == "_NUMBA_IMPORT_WARNED":
+            _state_module.numba_warned = bool(value)
+
+
+_module = inspect.getmodule(inspect.currentframe())
+if _module is not None and not isinstance(_module, _UtilsModule):  # pragma: no branch - defensive
+    _module.__class__ = _UtilsModule
+
+
+def _get_numba_warned() -> bool:
+    return bool(getattr(_state_module, "numba_warned", False))
+
+
+def _set_numba_warned(value: bool) -> None:
+    globals()["_NUMBA_IMPORT_WARNED"] = bool(value)
+    _state_module.numba_warned = bool(value)
+
+
+_set_numba_warned(_get_numba_warned())
+
+
+def _emit_warning(message: str, *args: Any) -> None:
+    """Log ``message`` as a warning."""
+
+    logger.warning(message, *args)
 
 if "_TELEGRAMLOGGER_IMPORT_WARNED" not in globals():
     _TELEGRAMLOGGER_IMPORT_WARNED = False
@@ -285,12 +321,12 @@ try:
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
-    if not _NUMBA_IMPORT_WARNED:
-        logger.warning("Numba import failed: %s", exc)
-        logger.warning(
+    if not _get_numba_warned():
+        _emit_warning("Numba import failed: %s", exc)
+        _emit_warning(
             "Running without Numba JIT acceleration; performance may be degraded."
         )
-        _NUMBA_IMPORT_WARNED = True
+        _set_numba_warned(True)
 
     def jit(*jit_args, **jit_kwargs):
         if jit_args and callable(jit_args[0]) and len(jit_args) == 1 and not jit_kwargs:
