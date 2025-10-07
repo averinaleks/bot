@@ -61,7 +61,7 @@ def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
 def test_dependency_graph_detect_step_normalises_null_strings() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
-    assert '_NULL_STRINGS = {"null", "none", "undefined"}' in workflow
+    assert """_NULL_STRINGS = {"null", "none", "undefined", '""', "''"}""" in workflow
     assert "def _normalise_value" in workflow
     assert "candidate.lower() in _NULL_STRINGS" in workflow
 

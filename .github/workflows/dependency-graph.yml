@@ -90,7 +90,7 @@ jobs:
           from pathlib import Path
           from typing import Sequence
 
-          _NULL_STRINGS = {"null", "none", "undefined"}
+          _NULL_STRINGS = {"null", "none", "undefined", '""', "''"}
 
           def _normalise_value(raw: str | None) -> str:
               if not raw:
