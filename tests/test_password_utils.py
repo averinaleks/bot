@@ -85,11 +85,60 @@ def test_verify_password_rejects_unknown_hash_format(valid_password: str):
         verify_password(valid_password, "not-a-valid-bcrypt-hash")
 
 
-def test_verify_password_rejects_malformed_bcrypt_hash(valid_password: str):
-    """Повреждённый bcrypt-хэш распознаётся и сообщает об ошибке."""
-    malformed = "$2b$12$short"
-    with pytest.raises(ValueError, match="bcrypt"):
-        verify_password(valid_password, malformed)
+def test_verify_password_rejects_malformed_bcrypt_hash(
+    valid_password: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Повреждённый bcrypt-хэш распознаётся и сообщает подробную причину."""
+
+    class FakeBcrypt:
+        @staticmethod
+        def checkpw(password: bytes, stored: bytes) -> bool:
+            raise ValueError("invalid salt")
+
+    monkeypatch.setattr(password_utils, "bcrypt", FakeBcrypt)
+    monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", True)
+
+    bcrypt_hash = "$2b$12$" + "a" * 53
+
+    caplog.set_level("ERROR", logger=password_utils.__name__)
+
+    with pytest.raises(ValueError) as excinfo:
+        verify_password(valid_password, bcrypt_hash)
+
+    message = str(excinfo.value)
+    assert "bcrypt" in message
+    assert "invalid salt" in message
+    assert any("invalid salt" in record.getMessage() for record in caplog.records)
+
+
+def test_verify_password_preserves_type_error_context(
+    valid_password: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """TypeError от bcrypt сохраняет текст ошибки в исключении и логах."""
+
+    class FakeBcrypt:
+        @staticmethod
+        def checkpw(password: bytes, stored: bytes) -> bool:
+            raise TypeError("bytes-like object required")
+
+    monkeypatch.setattr(password_utils, "bcrypt", FakeBcrypt)
+    monkeypatch.setattr(password_utils, "BCRYPT_AVAILABLE", True)
+
+    bcrypt_hash = "$2b$12$" + "b" * 53
+
+    caplog.set_level("ERROR", logger=password_utils.__name__)
+
+    with pytest.raises(ValueError) as excinfo:
+        verify_password(valid_password, bcrypt_hash)
+
+    message = str(excinfo.value)
+    assert "bcrypt" in message
+    assert "bytes-like object required" in message
+    assert any("bytes-like object required" in record.getMessage() for record in caplog.records)
 
 
 def test_verify_password_treats_pyo3_runtime_error_as_corrupted(
