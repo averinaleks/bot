@@ -201,6 +201,7 @@ _EVENT_PAYLOAD_EVENTS = {
     "workflow_run",
     "workflow_call",
     "dynamic",
+    "dependency_graph",
 }
 _SHA_PATTERN = re.compile(r"^[0-9a-f]{40,64}$", re.IGNORECASE)
 
