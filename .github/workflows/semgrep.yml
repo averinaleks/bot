@@ -89,18 +89,9 @@ jobs:
             echo "Semgrep scan failed (attempt ${attempt}); retrying after backoff" >&2
             sleep $((attempt * 10))
           done
-      - name: Ensure SARIF report exists
-        run: python scripts/ensure_semgrep_sarif.py
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-      - name: Check for SARIF results
+      - name: Process SARIF results
         id: sarif_check
-        run: |
-          if [ -s semgrep.sarif ] && [ "$(jq '[.runs[].results | length] | add' semgrep.sarif)" -gt 0 ]; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: python scripts/ensure_semgrep_sarif.py --github-output "$GITHUB_OUTPUT"
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@64d10c13136e1c5bce3e5fbde8d4906eeaafc885 # v3.30.6
         if: steps.sarif_check.outputs.upload == 'true'
