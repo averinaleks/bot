@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import logging
 import sys
 import types
@@ -125,11 +124,13 @@ async def test_monitor_performance_recovery(monkeypatch):
     tm.returns_by_symbol['BTCUSDT'].append((pd.Timestamp.now(tz='UTC').timestamp(), 0.1))
 
     call = {'n': 0}
+    ready = asyncio.Event()
     orig_now = pd.Timestamp.now
     def fake_now(*a, **k):
         call['n'] += 1
         if call['n'] == 1:
             raise RuntimeError('boom')
+        ready.set()
         return orig_now(*a, **k)
     monkeypatch.setattr(pd.Timestamp, 'now', fake_now)
 
@@ -139,8 +140,7 @@ async def test_monitor_performance_recovery(monkeypatch):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.monitor_performance())
-    with contextlib.suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(task, 0.05)
+    await asyncio.wait_for(ready.wait(), 0.5)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -169,10 +169,12 @@ async def test_manage_positions_recovery(monkeypatch, exc_type):
     }, index=idx)
 
     call = {'n': 0}
+    ready = asyncio.Event()
     async def fake_check(symbol, price):
         call['n'] += 1
         if call['n'] == 1:
             raise exc_type('boom')
+        ready.set()
     monkeypatch.setattr(tm, 'check_trailing_stop', fake_check)
     monkeypatch.setattr(tm, 'check_stop_loss_take_profit', lambda *a, **k: None)
     monkeypatch.setattr(tm, 'check_exit_signal', lambda *a, **k: None)
@@ -183,8 +185,7 @@ async def test_manage_positions_recovery(monkeypatch, exc_type):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.manage_positions())
-    with contextlib.suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(task, 0.05)
+    await asyncio.wait_for(ready.wait(), 0.5)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -308,11 +309,13 @@ async def test_ranked_signal_loop_recovery(monkeypatch):
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)
 
     call = {'n': 0}
+    ready = asyncio.Event()
 
     async def fake_execute():
         call['n'] += 1
         if call['n'] == 1:
             raise RuntimeError('boom')
+        ready.set()
         raise asyncio.CancelledError()
 
     monkeypatch.setattr(tm, 'execute_top_signals_once', fake_execute)
@@ -325,7 +328,8 @@ async def test_ranked_signal_loop_recovery(monkeypatch):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.ranked_signal_loop())
-
+    await asyncio.wait_for(ready.wait(), 0.5)
+    task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
