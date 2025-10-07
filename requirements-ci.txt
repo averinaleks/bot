@@ -1,5 +1,5 @@
 # Minimal requirements for running tests in CI
-aiohttp==3.12.15
+aiohttp==3.13.0
 bcrypt==5.0.0
 flake8==7.3.0
 bandit==1.8.6
