@@ -100,6 +100,38 @@ def create_httpx_stub() -> SimpleNamespace:
                 return
             yield self._content
 
+        def iter_bytes(self):
+            if not self._content:
+                return
+            yield self._content
+
+    class _StreamContext:
+        def __init__(self, resp: Response) -> None:
+            self._response = resp
+
+        def __enter__(self) -> Response:
+            return self._response
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            close_sync = getattr(self._response, "close", None)
+            if callable(close_sync):
+                close_sync()
+            return None
+
+        async def __aenter__(self) -> Response:
+            return self._response
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            close_async = getattr(self._response, "aclose", None)
+            if callable(close_async):
+                result = close_async()
+                if inspect.isawaitable(result):
+                    await result
+            close_sync = getattr(self._response, "close", None)
+            if callable(close_sync):
+                close_sync()
+            return None
+
     def _build_response(method: str, url: str, **kwargs: Any) -> Response:
         json_payload = kwargs.get("json")
         data_payload = kwargs.get("data")
@@ -142,6 +174,10 @@ def create_httpx_stub() -> SimpleNamespace:
         def post(self, url: str, **kwargs: Any) -> Response:
             return self.request("POST", url, **kwargs)
 
+        def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
+            response = _build_response(method, url, **kwargs)
+            return _StreamContext(response)
+
         def close(self) -> None:
             self._closed = True
 
@@ -164,30 +200,8 @@ def create_httpx_stub() -> SimpleNamespace:
         async def post(self, url: str, **kwargs: Any) -> Response:
             return await self.request("POST", url, **kwargs)
 
-        def stream(self, method: str, url: str, **kwargs: Any):
+        def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
             response = _build_response(method, url, **kwargs)
-
-            class _StreamContext:
-                def __init__(self, resp: Response) -> None:
-                    self._response = resp
-
-                async def __aenter__(self) -> Response:
-                    return self._response
-
-                async def __aexit__(self, exc_type, exc, tb) -> None:
-                    # Mirror httpx behaviour by closing the response when leaving
-                    # the streaming context.  ``aclose`` is available on the real
-                    # response object while ``close`` is defined on this stub.
-                    close_async = getattr(self._response, "aclose", None)
-                    if callable(close_async):
-                        result = close_async()
-                        if inspect.isawaitable(result):
-                            await result
-                    close_sync = getattr(self._response, "close", None)
-                    if callable(close_sync):
-                        close_sync()
-                    return None
-
             return _StreamContext(response)
 
         async def aclose(self) -> None:
