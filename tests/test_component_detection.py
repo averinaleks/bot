@@ -38,3 +38,25 @@ def test_run_scan_uses_list_for_container_layer_ids(tmp_path: Path) -> None:
     assert components, "Expected at least one component in scan results"
     for component in components:
         assert component["containerLayerIds"] == []
+
+
+def test_main_ignores_unknown_arguments(tmp_path: Path, capsys) -> None:
+    module = _load_component_detection()
+    manifest = tmp_path / "requirements.txt"
+    manifest.write_text("requests==2.32.5\n", encoding="utf-8")
+
+    return_code = module.main(
+        [
+            "scan",
+            "--SourceDirectory",
+            str(tmp_path),
+            "--UnsupportedFlag",
+            "value",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert return_code == 0
+    assert "Ignoring unsupported component-detection arguments" in captured.err
+    assert "--UnsupportedFlag value" in captured.err

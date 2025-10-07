@@ -146,13 +146,25 @@ def main(argv: list[str] | None = None) -> int:
     list_parser = subparsers.add_parser("list-detectors")
     list_parser.set_defaults(func=lambda args: run_list_detectors())
 
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
 
-    if not args.command:
+    if unknown:
+        ignored = " ".join(unknown)
+        print(
+            f"Ignoring unsupported component-detection arguments: {ignored}",
+            file=sys.stderr,
+        )
+
+    if not getattr(args, "command", None):
         parser.print_help()
         return 1
 
-    return int(args.func(args))
+    func = getattr(args, "func", None)
+    if func is None:
+        parser.print_help()
+        return 1
+
+    return int(func(args))
 
 
 if __name__ == "__main__":
