@@ -100,6 +100,12 @@ def create_httpx_stub() -> SimpleNamespace:
                 return
             yield self._content
 
+        def iter_bytes(self):
+            if not self._content:
+                yield from ()
+                return
+            yield self._content
+
     def _build_response(method: str, url: str, **kwargs: Any) -> Response:
         json_payload = kwargs.get("json")
         data_payload = kwargs.get("data")
