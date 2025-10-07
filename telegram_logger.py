@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import errno
+import functools
 import logging
 import os
 import stat
@@ -95,6 +96,39 @@ def resolve_unsent_path(
     return resolved
 
 
+@functools.lru_cache(maxsize=1)
+def _get_log_dir() -> Path:
+    """Return the configured log directory resolved to an absolute path."""
+
+    try:
+        cfg = bot_config.load_config()
+    except Exception as exc:  # pragma: no cover - fallback for misconfigured envs
+        logger.warning(
+            "Falling back to default log_dir due to configuration error: %s",
+            sanitize_log_value(str(exc)),
+        )
+        cfg = bot_config.BotConfig()
+    return Path(cfg.log_dir).expanduser().resolve(strict=False)
+
+
+def _normalise_unsent_path(
+    log_dir: str | os.PathLike[str],
+    candidate: str | os.PathLike[str],
+) -> Path:
+    """Return a validated path for storing unsent Telegram messages."""
+
+    base = Path(log_dir).expanduser().resolve(strict=False)
+    path = Path(candidate)
+    if path.is_absolute():
+        resolved = path.expanduser().resolve(strict=False)
+        try:
+            resolved.relative_to(base)
+        except ValueError as exc:  # pragma: no cover - defensive guard
+            raise ValueError("unsent_telegram_path escapes log_dir") from exc
+        return resolved
+    return resolve_unsent_path(base, path)
+
+
 class TelegramLogger(logging.Handler):
     """Handler для пересылки логов и сообщений в Telegram."""
 
@@ -119,7 +153,18 @@ class TelegramLogger(logging.Handler):
         super().__init__(level)
         self.bot = bot
         self.chat_id = chat_id
-        self.unsent_path = Path(unsent_path) if unsent_path is not None else None
+        self.unsent_path: Path | None = None
+        if unsent_path is not None:
+            try:
+                self.unsent_path = _normalise_unsent_path(
+                    _get_log_dir(), unsent_path
+                )
+            except ValueError as exc:
+                logger.warning(
+                    "Ignoring unsafe unsent_telegram_path %s: %s",
+                    sanitize_log_value(str(unsent_path)),
+                    sanitize_log_value(str(exc)),
+                )
         self.last_message_time = 0.0
         self.message_interval = 1800
         self.message_lock = asyncio.Lock()

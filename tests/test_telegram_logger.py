@@ -217,10 +217,51 @@ def test_resolve_unsent_path_rejects_absolute(tmp_path):
         resolve_unsent_path(log_dir, tmp_path / "unsent.log")
 
 
+def test_logger_normalises_relative_unsent_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path="unsent.log")
+    try:
+        assert tl.unsent_path == (log_dir / "unsent.log").resolve(strict=False)
+    finally:
+        asyncio.run(TelegramLogger.shutdown())
+
+
+def test_logger_rejects_outside_unsent_path(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
+    outside = tmp_path / "outside" / "unsent.log"
+    outside.parent.mkdir()
+    caplog.set_level(logging.WARNING)
+
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=outside)
+    try:
+        assert tl.unsent_path is None
+        assert any(
+            "unsafe unsent_telegram_path" in rec.message for rec in caplog.records
+        )
+    finally:
+        asyncio.run(TelegramLogger.shutdown())
+
+
 def test_save_unsent_writes_to_resolved_path(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
     resolved = resolve_unsent_path(log_dir, "unsent.log")
     tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
     tl._save_unsent(42, "payload")
@@ -232,19 +273,23 @@ def test_save_unsent_rejects_symlink(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
     resolved = resolve_unsent_path(log_dir, "unsent.log")
     target = tmp_path / "outside.txt"
     target.write_text("sentinel", encoding="utf-8")
     if resolved.exists():
         resolved.unlink()
     resolved.symlink_to(target)
-    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
     caplog.set_level(logging.WARNING)
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
     tl._save_unsent(24, "payload")
+    assert tl.unsent_path is None
     assert target.read_text(encoding="utf-8") == "sentinel"
     assert any(
-        "Refusing to write Telegram fallback message" in rec.message
-        for rec in caplog.records
+        "unsafe unsent_telegram_path" in rec.message for rec in caplog.records
     )
     asyncio.run(TelegramLogger.shutdown())
 
@@ -253,6 +298,10 @@ def test_save_unsent_handles_symlink_race(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
     resolved = resolve_unsent_path(log_dir, "unsent.log")
     tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
 
@@ -276,6 +325,10 @@ def test_save_unsent_sets_strict_file_permissions(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
     resolved = resolve_unsent_path(log_dir, "unsent.log")
     tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
 
