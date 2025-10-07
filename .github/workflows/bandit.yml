@@ -34,11 +34,26 @@ jobs:
       - name: Check for SARIF results
         id: sarif_check
         run: |
-          if [ -s bandit.sarif ] && [ "$(jq '[.runs[].results] | flatten | length' bandit.sarif)" -gt 0 ]; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          fi
+          python - <<'PY'
+          import json
+          import os
+
+          sarif_path = "bandit.sarif"
+          upload = "false"
+
+          if os.path.isfile(sarif_path) and os.path.getsize(sarif_path) > 0:
+            try:
+              with open(sarif_path, "r", encoding="utf-8") as sarif_file:
+                sarif_data = json.load(sarif_file)
+            except json.JSONDecodeError:
+              upload = "false"
+            else:
+              if any(run.get("results") for run in sarif_data.get("runs", [])):
+                upload = "true"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"upload={upload}\n")
+          PY
       - name: Upload Bandit results
         uses: github/codeql-action/upload-sarif@64d10c13136e1c5bce3e5fbde8d4906eeaafc885 # v3.30.6
         if: steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
