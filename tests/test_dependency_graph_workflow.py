@@ -136,3 +136,5 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.workflow_run.head_commit.sha" in workflow
     assert "github.event.workflow_run.head_ref" in workflow
     assert "github.event.workflow_run.head_branch" in workflow
+    assert "github.event.repository.default_branch" in workflow
+    assert "format('refs/heads/{0}', github.event.repository.default_branch)" in workflow
