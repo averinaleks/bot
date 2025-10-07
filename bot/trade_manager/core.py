@@ -30,12 +30,12 @@ import shutil
 import numpy as np
 from bot import test_stubs
 from bot.dotenv_utils import load_dotenv
-from bot.test_stubs import IS_TEST_MODE  # noqa: E402
 from bot.ray_compat import ray  # noqa: E402
 import httpx  # noqa: E402
 import inspect  # noqa: E402
 from bot.utils_loader import require_utils  # noqa: E402
 from bot.trade_manager import order_utils  # noqa: E402
+from .errors import TradeManagerTaskError
 
 _utils = require_utils(
     "logger",
@@ -52,6 +52,41 @@ safe_api_call = _utils.safe_api_call
 TelegramLogger = _utils.TelegramLogger
 
 test_stubs.apply()
+
+
+def _is_test_mode_enabled() -> bool:
+    """Return ``True`` when the lightweight test stubs should be active."""
+
+    try:
+        if getattr(test_stubs, "IS_TEST_MODE", False):
+            return True
+    except Exception:  # pragma: no cover - defensive guard for exotic stubs
+        pass
+    return os.getenv("TEST_MODE") == "1"
+
+
+class _TestModeFlag:
+    """Boolean-like proxy that reflects the current test mode."""
+
+    def __bool__(self) -> bool:
+        return _is_test_mode_enabled()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        return str(_is_test_mode_enabled())
+
+    __str__ = __repr__
+
+    def __int__(self) -> int:  # pragma: no cover - compatibility helper
+        return int(_is_test_mode_enabled())
+
+
+IS_TEST_MODE = _TestModeFlag()
+
+
+def is_test_mode_enabled() -> bool:
+    """Public helper returning whether the trade manager runs in test mode."""
+
+    return bool(IS_TEST_MODE)
 
 aiohttp: Any
 try:  # pragma: no cover - optional dependency
@@ -140,10 +175,6 @@ except ImportError as exc:  # optional dependency may not be installed
 else:
     torch = cast(Any, _torch)
 import multiprocessing as mp  # noqa: E402
-
-
-class TradeManagerTaskError(RuntimeError):
-    """Raised when one of the TradeManager background tasks fails."""
 
 
 @dataclass(frozen=True)
@@ -2136,11 +2167,7 @@ class TradeManager:
                     f"❌ Critical TradeManager error: {e}"
                 )
             self._critical_error = True
-            if (
-                self.loop
-                and self.loop.is_running()
-                and not (IS_TEST_MODE or os.getenv("TEST_MODE") == "1")
-            ):
+            if self.loop and self.loop.is_running() and not _is_test_mode_enabled():
                 self.loop.stop()
             raise
         finally:
@@ -2176,7 +2203,7 @@ class TradeManager:
                 pass
         try:
             should_shutdown = False
-            if IS_TEST_MODE:
+            if _is_test_mode_enabled():
                 should_shutdown = True
             else:
                 is_initialized = getattr(ray, "is_initialized", None)
