@@ -127,8 +127,10 @@ _httpx: Any
 _offline_intent = service_stubs.is_offline_env()
 try:  # pragma: no cover - bot_config may lack OFFLINE_MODE in unusual setups
     _offline_intent = _offline_intent or bool(getattr(bot_config, "OFFLINE_MODE", False))
-except Exception:  # pragma: no cover - defensive guard
-    pass
+except Exception as exc:  # pragma: no cover - defensive guard
+    logging.getLogger(__name__).warning(
+        "Failed to read OFFLINE_MODE from bot_config: %s", exc
+    )
 
 if _offline_intent:
     _httpx = service_stubs.create_httpx_stub()
