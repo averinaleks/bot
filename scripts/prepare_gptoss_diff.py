@@ -22,8 +22,10 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import ssl
 import sys
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -271,6 +273,37 @@ def _fetch_pull_request(
     return PullRequestInfo(base_sha=base_sha, base_ref=base_ref)
 
 
+@lru_cache(maxsize=1)
+def _resolve_git_executable() -> str:
+    """Return an absolute path to the trusted git executable."""
+
+    override = os.getenv("GIT_EXECUTABLE")
+    candidates: list[str] = []
+    if override:
+        candidates.append(override)
+
+    resolved_from_path = shutil.which("git")
+    if resolved_from_path:
+        candidates.append(resolved_from_path)
+
+    for raw_path in candidates:
+        candidate = Path(raw_path).expanduser()
+        try:
+            resolved = candidate.resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        if not resolved.is_file():
+            continue
+        if not os.access(resolved, os.X_OK):
+            continue
+        return str(resolved)
+
+    raise RuntimeError(
+        "Не удалось определить путь до исполняемого файла git. "
+        "Убедитесь, что git установлен и доступен в PATH или задайте GIT_EXECUTABLE."
+    )
+
+
 def _run_git(args: Sequence[str], *, capture_output: bool = False) -> GitCompletedProcess:
     """Execute a validated git command and return the completed process."""
 
@@ -327,8 +360,11 @@ def _execute_git(argv: Sequence[str], *, capture_output: bool) -> GitCompletedPr
         stdout_pipe = asyncio.subprocess.PIPE if capture_output else None
         stderr_pipe = asyncio.subprocess.PIPE if capture_output else None
 
+        git_executable = _resolve_git_executable()
+        command = (git_executable, *argv[1:])
+
         process = await asyncio.create_subprocess_exec(
-            *argv,
+            *command,
             stdout=stdout_pipe,
             stderr=stderr_pipe,
         )
