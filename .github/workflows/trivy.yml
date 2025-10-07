@@ -24,6 +24,9 @@ jobs:
         uses: actions/checkout@2d1e4ee8c7c0e8a6c5a0f1f3af3c1b19aa9c9329
         # v4.2.2
 
+      - name: Prepare Trivy cache directory
+        run: mkdir -p "${{ env.TRIVY_CACHE_DIR }}"
+
       - name: Cache Trivy vulnerability database
         id: cache-trivy
         if: ${{ github.event_name != 'pull_request' }}
@@ -45,7 +48,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           cache-dir: ${{ env.TRIVY_CACHE_DIR }}
-          limit-severities-for-sarif: true
 
       - name: Summarize Trivy findings
         id: summarize
