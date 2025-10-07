@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Поведение Python по умолчанию с буферизацией stdout усложняет отладку
@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=1
 # ``dockerfile.security.apt-get-upgrade``) запрещает использование
 # ``apt-get upgrade``, поэтому поддержка безопасности возлагается на
 # своевременное обновление базового образа. Использование официального
-# python:3.11-slim по-прежнему избавляет от ручных PPA и «Release file not
+# python:3.12-slim по-прежнему избавляет от ручных PPA и «Release file not
 # found» в GitHub Actions.
 RUN <<'EOSHELL'
 set -eux
@@ -31,20 +31,20 @@ COPY requirements-core.txt .
 
 ENV VIRTUAL_ENV=/opt/venv
 
-# Строго убеждаемся, что в сборочном образе доступен Python 3.11. Именно
-# отсутствие бинарника python3.11 в прошлых сборках вызывало падения "exit
+# Строго убеждаемся, что в сборочном образе доступен Python 3.12. Именно
+# отсутствие бинарника python3.12 в прошлых сборках вызывало падения "exit
 # code 127" на шаге docker-publish. Такой ранний контроль делает причину
 # проблемы очевидной и предотвращает регресс при смене базового образа.
 RUN python - <<'PY'
 import sys
 major, minor = sys.version_info[:2]
-if (major, minor) != (3, 11):
+if (major, minor) != (3, 12):
     raise SystemExit(
-        f"Builder Python version mismatch: expected 3.11, got {major}.{minor}"
+        f"Builder Python version mismatch: expected 3.12, got {major}.{minor}"
     )
 PY
 
-# ``python:3.11-slim`` поставляется с устаревшим setuptools 65.5.1,
+# ``python:3.12-slim`` поставляется с устаревшим setuptools 65.5.1,
 # уязвимым к CVE-2024-6345 и CVE-2025-47273. Обновляем системные
 # packaging-инструменты до безопасных версий до того, как начнём собирать
 # виртуальное окружение, чтобы Trivy не находил high/critical уязвимости
@@ -209,7 +209,7 @@ RUN /bin/bash -euo pipefail -c "\
   find \"$VIRTUAL_ENV\" -type f -name '*.pyc' -delete\
 "
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 ARG DEBIAN_FRONTEND=noninteractive
 
 ENV PYTHONUNBUFFERED=1
@@ -230,15 +230,15 @@ apt-get install -y --no-install-recommends \
 rm -rf /var/lib/apt/lists/*
 EOSHELL
 
-# Проверяем, что рантайм тоже использует Python 3.11. Это гарантирует,
+# Проверяем, что рантайм тоже использует Python 3.12. Это гарантирует,
 # что окружение исполнения совпадает со сборочным и мы не столкнёмся с
 # несовместимостью зависимостей.
 RUN python - <<'PY'
 import sys
 major, minor = sys.version_info[:2]
-if (major, minor) != (3, 11):
+if (major, minor) != (3, 12):
     raise SystemExit(
-        f"Runtime Python version mismatch: expected 3.11, got {major}.{minor}"
+        f"Runtime Python version mismatch: expected 3.12, got {major}.{minor}"
     )
 PY
 
