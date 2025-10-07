@@ -9,6 +9,7 @@ import asyncio
 import atexit
 import signal
 import os
+import sys
 import types
 import json
 import logging
@@ -141,9 +142,19 @@ else:
     torch = cast(Any, _torch)
 import multiprocessing as mp  # noqa: E402
 
+_errors_module = sys.modules.setdefault(
+    "bot.trade_manager._errors_singleton",
+    types.ModuleType("bot.trade_manager._errors_singleton"),
+)
 
-class TradeManagerTaskError(RuntimeError):
-    """Raised when one of the TradeManager background tasks fails."""
+if hasattr(_errors_module, "TradeManagerTaskError"):
+    TradeManagerTaskError = _errors_module.TradeManagerTaskError  # type: ignore[attr-defined]
+else:
+
+    class TradeManagerTaskError(RuntimeError):
+        """Raised when one of the TradeManager background tasks fails."""
+
+    _errors_module.TradeManagerTaskError = TradeManagerTaskError
 
 
 @dataclass(frozen=True)
@@ -2176,16 +2187,30 @@ class TradeManager:
                 pass
         try:
             should_shutdown = False
-            if IS_TEST_MODE:
+            test_mode_value = os.getenv("TEST_MODE")
+            if test_mode_value is not None:
+                should_shutdown = test_mode_value == "1"
+            elif IS_TEST_MODE:
                 should_shutdown = True
             else:
                 is_initialized = getattr(ray, "is_initialized", None)
                 if callable(is_initialized):
                     should_shutdown = bool(is_initialized())
 
-            if should_shutdown and callable(getattr(ray, "shutdown", None)):
+            ray_shutdown = getattr(ray, "shutdown", None)
+            if should_shutdown and callable(ray_shutdown):
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
             logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
+
+
+# Ensure package-level aliases stay in sync after module reloads.
+try:  # pragma: no cover - defensive import
+    _pkg = sys.modules.get("bot.trade_manager")
+    if _pkg is not None:
+        setattr(_pkg, "TradeManager", TradeManager)
+        setattr(_pkg, "TradeManagerTaskError", TradeManagerTaskError)
+except Exception:  # pragma: no cover - defensive sync
+    logger.debug("Не удалось обновить экспорт TradeManager после перезагрузки", exc_info=True)
 
 
