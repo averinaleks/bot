@@ -28,11 +28,7 @@ jobs:
     if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     concurrency:
-      group: >-
-        release-drafter-${{
-          github.ref ||
-          github.run_id
-        }}
+      group: release-drafter-${{ github.ref || github.run_id }}
       cancel-in-progress: false
     steps:
       - name: Update release draft
@@ -50,10 +46,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     concurrency:
-      group: >-
-        release-drafter-pr-${{
-          github.event.pull_request.number
-        }}
+      group: release-drafter-pr-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
       - name: Update pull request metadata
