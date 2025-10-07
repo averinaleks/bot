@@ -306,7 +306,13 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
         if factory is None:
             if optional:
                 return None
-            hint = "; no offline fallback is available" if not offline else ""
+            if offline:
+                hint = "; add an entry to service_factories in config.json"
+            else:
+                hint = (
+                    "; add an entry to service_factories in config.json or run this "
+                    "script with --offline"
+                )
             raise ValueError(
                 "No service factory configured for %r%s" % (name, hint)
             )

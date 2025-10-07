@@ -14,7 +14,10 @@ def _base_config(**overrides):
 
 def test_build_components_missing_exchange_factory():
     cfg = _base_config()
-    with pytest.raises(ValueError, match="No service factory configured for 'exchange'"):
+    message = (
+        r"No service factory configured for 'exchange'.*service_factories.*--offline"
+    )
+    with pytest.raises(ValueError, match=message):
         run_bot._build_components(cfg, offline=False, symbols=None)
 
 
