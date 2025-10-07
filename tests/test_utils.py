@@ -312,7 +312,8 @@ def _reload_utils_with_blocked(monkeypatch, blocked_names):
         for mod_name in blocked_names:
             context.delitem(sys.modules, mod_name, raising=False)
         context.setattr(builtins, "__import__", fake_import)
-        return importlib.reload(sys.modules["bot.utils"])
+        module = sys.modules.get("bot.utils") or sys.modules.get("utils") or utils
+        return importlib.reload(module)
 
 
 def test_numba_warning_emitted_once(monkeypatch, caplog):
