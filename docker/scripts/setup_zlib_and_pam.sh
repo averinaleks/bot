@@ -7,7 +7,7 @@ cd /tmp/build
 # List potential symlinks that might interfere with extraction. Ignoring failures keeps the build resilient.
 find /usr -type l -lname '*..*' -print 2>/dev/null || true
 
-SAFE_TAR_DIR="$(mktemp -d -t zlib-setup.XXXXXX)"
+SAFE_TAR_DIR="$(mktemp -d -p "${TMPDIR:-/tmp}" zlib-setup.XXXXXX)"
 trap 'rm -rf "$SAFE_TAR_DIR"' EXIT
 
 # Extract zlib sources into a clean directory, mitigating CVE-2025-45582 by avoiding reused directories.

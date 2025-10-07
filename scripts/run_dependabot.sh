@@ -17,14 +17,18 @@ fi
 # writes into shared world-writable locations. This avoids Semgrep's
 # ``shell.lang.security.insecure-mktemp`` finding and guarantees cleanup on
 # abnormal exits.
-tmp_dir="$(mktemp -d -t run_dependabot.XXXXXX)"
+tmp_dir="$(mktemp -d -p "${TMPDIR:-/tmp}" run_dependabot.XXXXXX)"
 cleanup() {
   rm -rf "${tmp_dir}"
 }
 trap cleanup EXIT
 
 for ecosystem in pip github-actions; do
-  tmp_response="$(mktemp "${tmp_dir}/${ecosystem}.XXXXXX")"
+  tmp_response="$(mktemp -p "${tmp_dir}" "${ecosystem}.XXXXXX")"
+  if [[ -z "${tmp_response}" ]]; then
+    echo "Failed to allocate temporary file for ${ecosystem} response" >&2
+    exit 1
+  fi
   curl_exit=0
   http_status=$(curl -S -s -o "${tmp_response}" -w "%{http_code}" -X POST \
     -H "Authorization: Bearer ${token}" \
