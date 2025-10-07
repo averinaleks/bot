@@ -47,6 +47,7 @@ jobs:
           PR_DRAFT: ${{ github.event.pull_request.draft || 'false' }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login || '' }}
           COMMENT_AUTHOR_ASSOC: ${{ github.event.comment.author_association || '' }}
           COMMENT_BODY: ${{ github.event.comment.body || '' }}
@@ -80,7 +81,12 @@ jobs:
               fi
               ;;
             issue_comment)
-              pr_number="${ISSUE_NUMBER:-}"
+              issue_is_pr="${ISSUE_IS_PR:-false}"
+              if [ "$issue_is_pr" = "true" ]; then
+                pr_number="${ISSUE_NUMBER:-}"
+              else
+                pr_number=""
+              fi
               comment_author="${COMMENT_AUTHOR:-}"
               author_assoc="${COMMENT_AUTHOR_ASSOC:-}"
               comment_body="${COMMENT_BODY:-}"
