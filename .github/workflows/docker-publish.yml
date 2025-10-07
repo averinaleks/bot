@@ -235,7 +235,11 @@ jobs:
           # регрессиях и оставляя включённый ``ignore-error`` как сетку
           # безопасности.
           cache-from: type=gha,scope=${{ matrix.image }}-oci-v4,ignore-error=true
-          cache-to: type=gha,scope=${{ matrix.image }}-oci-v4,mode=max,oci-mediatypes=true
+          # ``ignore-error`` избавляет от редких падений buildx с "failed to parse
+          # error response 400: <h2>Our services aren't available right now</h2>"
+          # при временных сбоях бэкенда GitHub Actions Cache. Для ``cache-from``
+          # флаг уже включён, но запись артефакта по умолчанию прерывает сборку.
+          cache-to: type=gha,scope=${{ matrix.image }}-oci-v4,mode=max,oci-mediatypes=true,ignore-error=true
 
       - name: Cleanup before Trivy scan
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
