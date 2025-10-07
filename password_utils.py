@@ -128,7 +128,8 @@ def verify_password(password: str, stored_hash: str) -> bool:
         try:
             return bcrypt.checkpw(password.encode(), stored_hash.encode())
         except (ValueError, TypeError) as exc:  # pragma: no cover - bcrypt may raise varied errors
-            raise ValueError("Повреждён bcrypt-хэш пароля") from exc
+            logger.error("Повреждён bcrypt-хэш пароля: %s", exc)
+            raise ValueError(f"Повреждён bcrypt-хэш пароля: {exc}") from exc
         except (RuntimeError, SystemError) as exc:  # pragma: no cover - handle PyO3 panics
             if exc.__class__.__module__ == "pyo3_runtime":
                 raise ValueError("Повреждён bcrypt-хэш пароля") from exc
