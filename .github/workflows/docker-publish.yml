@@ -151,9 +151,10 @@ jobs:
           driver: docker-container
           # Принудительно используем свежий BuildKit, который умеет работать
           # с OCI media types и не воспроизводит "unexpected media type" при
-          # чтении кэша, созданного с ``oci-mediatypes=true``. Образ
-          # ``moby/buildkit:v0.16.2`` поддерживает эту функциональность.
-          driver-opts: image=moby/buildkit:v0.16.2
+          # чтении кэша, созданного с ``oci-mediatypes=true``. Берём стабильный
+          # образ ``moby/buildkit:v0.24.0``, доступный на Docker Hub и уже
+          # содержащий необходимые исправления.
+          driver-opts: image=moby/buildkit:v0.24.0
 
       - name: Verify /mnt mount
         run: |
