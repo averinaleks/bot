@@ -132,7 +132,10 @@ jobs:
 
   review:
     needs: evaluate
-    if: ${{ needs.evaluate.outputs.run_review == 'true' && github.event_name != 'pull_request_target' }}
+    if: >-
+      ${{ fromJSON(needs.evaluate.outputs.run_review || 'false')
+          && (github.event_name == 'pull_request'
+              || github.event_name == 'issue_comment') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -166,7 +169,11 @@ jobs:
           path: ${{ env.HELPERS_DIR }}
 
       - name: Проверка статуса PR
-        if: ${{ steps.validate_event.outputs.skip != 'true' }}
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && github.event_name != 'pull_request_target'
+              && (github.event_name == 'pull_request'
+                  || github.event_name == 'issue_comment') }}
         id: ensure_pr_ready
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -50,14 +50,12 @@ def test_pr_status_step_skips_pull_request_target() -> None:
     assert notice_message in workflow_text
 
 
-def test_review_job_skips_target_events() -> None:
+def test_review_job_runs_only_for_supported_events() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    condition = (
-        "needs.evaluate.outputs.run_review == 'true' && github.event_name != 'pull_request_target'"
-    )
-
-    assert condition in workflow_text
+    assert "fromJSON(needs.evaluate.outputs.run_review || 'false')" in workflow_text
+    assert "github.event_name == 'pull_request'" in workflow_text
+    assert "github.event_name == 'issue_comment'" in workflow_text
 
 
 def test_skip_job_covers_target_events() -> None:
@@ -68,3 +66,12 @@ def test_skip_job_covers_target_events() -> None:
     )
 
     assert condition in workflow_text
+
+
+def test_pr_status_step_gates_supported_events() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert "Проверка статуса PR" in workflow_text
+    assert "github.event_name != 'pull_request_target'" in workflow_text
+    assert "github.event_name == 'pull_request'" in workflow_text
+    assert "github.event_name == 'issue_comment'" in workflow_text
