@@ -17,12 +17,13 @@ jobs:
       contents: read
       security-events: write
       actions: write
-    env:
-      TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@2d1e4ee8c7c0e8a6c5a0f1f3af3c1b19aa9c9329
         # v4.2.2
+
+      - name: Define Trivy cache directory
+        run: echo "TRIVY_CACHE_DIR=$RUNNER_TEMP/trivy-cache" >> "$GITHUB_ENV"
 
       - name: Prepare Trivy cache directory
         run: mkdir -p "${{ env.TRIVY_CACHE_DIR }}"
@@ -60,32 +61,7 @@ jobs:
             exit 0
           fi
           echo "sarif=true" >>"$GITHUB_OUTPUT"
-          count=$(python3 - <<'PY'
-import json
-from typing import Iterable
-
-def iter_results(runs: Iterable[dict]) -> int:
-    total = 0
-    for run in runs:
-        results = run.get("results")
-        if isinstance(results, list):
-            total += len(results)
-        elif results is None:
-            continue
-        else:
-            try:
-                total += len(list(results))
-            except TypeError:
-                continue
-    return total
-
-with open("trivy-results.sarif", "r", encoding="utf-8") as sarif_file:
-    sarif = json.load(sarif_file)
-
-runs = sarif.get("runs", [])
-print(iter_results(runs))
-PY
-          )
+          count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif)
           printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Trivy SARIF to GitHub Security tab
