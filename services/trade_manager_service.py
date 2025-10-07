@@ -241,6 +241,7 @@ class OpenPositionErrorCode(str, Enum):
     INVALID_AMOUNT = 'invalid_amount'
     NEGATIVE_RISK = 'negative_risk'
     EXCHANGE_NOT_INITIALIZED = 'exchange_not_initialized'
+    INTERNAL_ERROR = 'internal_error'
 
 
 def _open_position_error(
@@ -642,7 +643,16 @@ def open_position() -> ResponseReturnValue:
     model, error_response = _load_open_position_request()
     if error_response is not None:
         return error_response
-    assert model is not None
+    if model is None:  # pragma: no cover - defensive branch
+        app.logger.error(
+            'open_position_request returned no model and no error response'
+        )
+        return _open_position_error(
+            OpenPositionErrorCode.INTERNAL_ERROR,
+            'internal error',
+            500,
+            log_level=logging.ERROR,
+        )
     symbol = model.symbol
     side = model.side
     price = model.price if model.price is not None else 0.0
