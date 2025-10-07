@@ -49,3 +49,16 @@ def test_generate_placeholder_credential_entropy():
     assert token_one != token_two
     assert token_one.startswith("offline-entropy-check-")
     assert token_two.startswith("offline-entropy-check-")
+
+
+def test_default_placeholders_include_telegram(monkeypatch):
+    monkeypatch.setattr(offline, "OFFLINE_MODE", True)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    applied = offline.ensure_offline_env()
+
+    assert "TELEGRAM_BOT_TOKEN" in applied
+    assert "TELEGRAM_CHAT_ID" in applied
+    assert os.environ["TELEGRAM_BOT_TOKEN"].startswith("offline-telegram-token-")
+    assert os.environ["TELEGRAM_CHAT_ID"].startswith("offline-telegram-chat-")

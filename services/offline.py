@@ -51,6 +51,8 @@ _OFFLINE_ENV_DEFAULTS: dict[str, _PlaceholderValue] = {
     "BYBIT_API_KEY": lambda: generate_placeholder_credential("bybit-key"),
     "BYBIT_API_SECRET": lambda: generate_placeholder_credential("bybit-secret"),
     "TRADE_MANAGER_TOKEN": lambda: generate_placeholder_credential("trade-token"),
+    "TELEGRAM_BOT_TOKEN": lambda: generate_placeholder_credential("telegram-token"),
+    "TELEGRAM_CHAT_ID": lambda: generate_placeholder_credential("telegram-chat"),
 }
 
 
