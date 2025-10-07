@@ -176,7 +176,11 @@ jobs:
           total=$(echo "${response}" | jq -r '.total_count // 0')
           if [ "${total}" -gt 0 ]; then
             echo "Found ${total} stale cache entr(ies) for scope ${CACHE_SCOPE}, deleting"
-            curl -fsS -X DELETE -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "${api_url}" >/dev/null
+            curl -fsS -X DELETE \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              "${api_url}" \
+              >/dev/null
           else
             echo "No cache entries found for scope ${CACHE_SCOPE}"
           fi
