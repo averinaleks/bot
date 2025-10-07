@@ -14,19 +14,12 @@ import threading
 import concurrent.futures
 from typing import Any, Awaitable, Mapping, TypeVar, cast
 
-from services.stubs import create_httpx_stub
-
-httpx: Any
-
-try:  # pragma: no cover - exercised in environments without httpx
-    import httpx as _httpx  # type: ignore
-except Exception:  # noqa: BLE001 - ensure service works without httpx installed
-    httpx = create_httpx_stub()
-else:
-    httpx = _httpx
 from bot.ray_compat import ray
 from flask import Flask, Response, jsonify, request
 
+from services.stubs import create_httpx_stub
+
+from . import server_common
 from .core import (
     IS_TEST_MODE as CORE_TEST_MODE,
     TradeManager,
@@ -37,10 +30,15 @@ from .core import (
     logger,
     setup_multiprocessing,
 )
-from . import server_common
 
+httpx: Any
 
-
+try:  # pragma: no cover - exercised in environments without httpx
+    import httpx as _httpx  # type: ignore
+except Exception:  # noqa: BLE001 - ensure service works without httpx installed
+    httpx = create_httpx_stub()
+else:
+    httpx = _httpx
 
 __all__ = [
     "api_app",
