@@ -5,9 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
-  dependency_graph:
-    types:
-      - auto-submission
+  # NOTE: The dependency_graph event is not yet available for this repository.
+  #       The workflow still understands github.event_name == 'dependency_graph'
+  #       so that it can start handling the event once GitHub enables it, but we
+  #       cannot declare the trigger today because GitHub rejects the workflow
+  #       configuration when an unknown event is listed.
   repository_dispatch:
     types:
       # Custom type used by auto-submission hooks. GitHub restricts repository

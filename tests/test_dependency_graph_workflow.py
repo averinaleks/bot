@@ -129,12 +129,11 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
     assert "github.event_name == 'repository_dispatch'" in workflow
 
 
-def test_dependency_graph_supports_dependency_graph_auto_submission() -> None:
+def test_dependency_graph_notes_dependency_graph_event_limitations() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
-    assert "dependency_graph:" in workflow
-    assert "auto-submission" in workflow
     assert "github.event_name == 'dependency_graph'" in workflow
+    assert "dependency_graph event is not yet available" in workflow
 
 
 def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
