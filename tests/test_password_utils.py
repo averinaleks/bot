@@ -4,7 +4,9 @@ import password_utils
 from password_utils import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
+    PBKDF2_ITERATIONS,
     PBKDF2_PREFIX,
+    PBKDF2_VERSION,
     hash_password,
     verify_password,
 )
@@ -67,9 +69,20 @@ def test_hash_password_uses_pbkdf2_when_bcrypt_missing(
     monkeypatch.setattr(password_utils, "bcrypt", None)
 
     hashed = hash_password(valid_password)
-    assert hashed.startswith(f"{PBKDF2_PREFIX}$")
+    prefix, version, iterations, *_rest = hashed.split("$")
+    assert prefix == PBKDF2_PREFIX
+    assert version == PBKDF2_VERSION
+    assert iterations == str(PBKDF2_ITERATIONS)
     assert verify_password(valid_password, hashed)
     assert not verify_password(valid_password + "z", hashed)
+
+
+def test_verify_password_supports_legacy_pbkdf2_format(valid_password: str):
+    """Старый формат без версии продолжает успешно проходить проверку."""
+    hashed = password_utils._hash_with_pbkdf2(valid_password)
+    parts = hashed.split("$")
+    legacy_hash = "$".join([parts[0], parts[2], parts[3], parts[4]])
+    assert verify_password(valid_password, legacy_hash)
 
 
 def test_verify_password_rejects_corrupted_pbkdf2_hash(valid_password: str):
