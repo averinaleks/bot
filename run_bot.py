@@ -87,6 +87,9 @@ def configure_environment(args: argparse.Namespace) -> bool:
     offline_mode = offline_env in {"1", "true", "yes", "on"}
     if offline_mode:
         os.environ.setdefault("TEST_MODE", "1")
+        from services import offline as offline_env_module
+
+        offline_env_module.ensure_offline_env()
     return offline_mode
 
 
