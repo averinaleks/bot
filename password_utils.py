@@ -22,6 +22,7 @@ MAX_PASSWORD_LENGTH = 64
 DEFAULT_BCRYPT_ROUNDS = 12
 PBKDF2_PREFIX = "pbkdf2_sha256"
 PBKDF2_ITERATIONS = 240_000
+PBKDF2_VERSION = "v1"
 PBKDF2_SALT_BYTES = 16
 PBKDF2_DIGEST = "sha256"
 
@@ -93,7 +94,8 @@ def _hash_with_pbkdf2(password: str) -> str:
         PBKDF2_DIGEST, password.encode(), salt, PBKDF2_ITERATIONS
     )
     return (
-        f"{PBKDF2_PREFIX}${PBKDF2_ITERATIONS}${salt.hex()}${derived.hex()}"
+        f"{PBKDF2_PREFIX}${PBKDF2_VERSION}${PBKDF2_ITERATIONS}"
+        f"${salt.hex()}${derived.hex()}"
     )
 
 
@@ -139,10 +141,16 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def _verify_with_pbkdf2(password: str, stored_hash: str) -> bool:
-    try:
-        prefix, iterations_str, salt_hex, derived_hex = stored_hash.split("$")
-    except ValueError as exc:  # pragma: no cover - defensive
-        raise ValueError("PBKDF2-хэш имеет неверный формат") from exc
+    parts = stored_hash.split("$")
+
+    if len(parts) == 5:
+        prefix, version, iterations_str, salt_hex, derived_hex = parts
+        if version != PBKDF2_VERSION:
+            raise ValueError("Неподдерживаемая версия PBKDF2-хэша")
+    elif len(parts) == 4:
+        prefix, iterations_str, salt_hex, derived_hex = parts
+    else:  # pragma: no cover - defensive
+        raise ValueError("PBKDF2-хэш имеет неверный формат")
 
     if prefix != PBKDF2_PREFIX:
         raise ValueError("Неподдерживаемый тип PBKDF2-хэша")
