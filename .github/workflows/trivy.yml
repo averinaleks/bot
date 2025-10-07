@@ -59,11 +59,28 @@ jobs:
           echo "sarif=true" >>"$GITHUB_OUTPUT"
           count=$(python - <<'PY'
 import json
+from typing import Iterable
+
+def iter_results(runs: Iterable[dict]) -> int:
+    total = 0
+    for run in runs:
+        results = run.get("results")
+        if isinstance(results, list):
+            total += len(results)
+        elif results is None:
+            continue
+        else:
+            try:
+                total += len(list(results))
+            except TypeError:
+                continue
+    return total
+
 with open("trivy-results.sarif", "r", encoding="utf-8") as sarif_file:
     sarif = json.load(sarif_file)
+
 runs = sarif.get("runs", [])
-total = sum(len(run.get("results", [])) for run in runs)
-print(total)
+print(iter_results(runs))
 PY
           )
           printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
