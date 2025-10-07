@@ -28,7 +28,16 @@ class MissingEnvError(Exception):
 
     def __init__(self, missing_keys: list[str]):
         self.missing_keys = tuple(missing_keys)
-        message = "Missing required environment variables: " + ", ".join(missing_keys)
+        hint = (
+            " Run 'python run_bot.py --offline' or create a .env file with the required"
+            " variables."
+        )
+        message = (
+            "Missing required environment variables: "
+            + ", ".join(missing_keys)
+            + "."
+            + hint
+        )
         super().__init__(message)
 
 
@@ -94,8 +103,9 @@ except MissingEnvError as exc:
         )
     else:
         logger.critical(
-            "Не заданы обязательные переменные окружения: %s",
-            missing,
+            "Не заданы обязательные переменные окружения: %s. "
+            "Запустите `python run_bot.py --offline` или создайте файл .env с обязательными переменными.",
+            sanitize_log_value(missing),
         )
         raise
 
