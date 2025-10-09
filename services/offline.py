@@ -28,8 +28,18 @@ _IntLike = SupportsInt | SupportsIndex | str | bytes | bytearray
 _FloatLike = SupportsFloat | SupportsIndex | str | bytes | bytearray
 
 # Personalisation string for deterministic price derivation in ``OfflineBybit``.
-# The value must be at most 16 bytes as required by ``hashlib.blake2s``.
-_OFFLINE_PRICE_PERSONALISATION = b"offline-price"
+# ``hashlib.blake2s`` limits the ``person`` parameter to ``PERSON_SIZE`` bytes
+# (8 for ``blake2s``).  A regression introduced a 13-byte tag which crashed the
+# data handler service with ``ValueError: maximum person length is 8 bytes``
+# during health checks and Docker builds.  Keep the identifier short and fail
+# fast if it is ever lengthened beyond the supported limit.
+_OFFLINE_PRICE_PERSONALISATION = b"botprc01"
+
+_BLAKE2S_PERSON_SIZE = getattr(hashlib.blake2s, "PERSON_SIZE", 8)
+if len(_OFFLINE_PRICE_PERSONALISATION) > _BLAKE2S_PERSON_SIZE:
+    raise ValueError(
+        "Offline price personalisation exceeds blake2s PERSON_SIZE"
+    )
 
 # Mirror the configuration flag so tests can override it via monkeypatch.
 def generate_placeholder_credential(name: str, *, entropy_bytes: int = 32) -> str:
