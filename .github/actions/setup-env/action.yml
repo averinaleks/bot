@@ -16,6 +16,11 @@ runs:
       shell: bash
       run: >-
         git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
+    - name: Purge runner diagnostics cache
+      shell: bash
+      run: |
+        sudo rm -rf /home/runner/actions-runner/_diag/* || true
+        sudo rm -rf /home/runner/actions-runner/cached/_diag/* || true
     - name: Free disk space
       shell: bash
       run: |
@@ -41,7 +46,7 @@ runs:
     - name: Maximize build space
       uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
       with:
-        root-reserve-mb: 1024
+        root-reserve-mb: 2048
         temp-reserve-mb: 100
         swap-size-mb: 4096
         build-mount-path: /mnt
