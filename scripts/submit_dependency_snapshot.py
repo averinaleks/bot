@@ -88,6 +88,10 @@ _PAYLOAD_REF_KEYS = (
     "branch",
     "head_ref",
 )
+_PAYLOAD_BASE_REF_KEYS = (
+    "base_ref",
+    "base_branch",
+)
 _WORKFLOW_RUN_REPOSITORY_KEYS = ("head_repository", "repository")
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
@@ -138,6 +142,15 @@ def _extract_workflow_run(payload: Mapping[str, object] | None) -> Mapping[str, 
     if not isinstance(payload, Mapping):
         return None
     candidate = payload.get("workflow_run")
+    return _as_mapping(candidate)
+
+
+def _extract_dependency_graph_payload(
+    payload: Mapping[str, object] | None,
+) -> Mapping[str, object] | None:
+    if not isinstance(payload, Mapping):
+        return None
+    candidate = payload.get("dependency_graph")
     return _as_mapping(candidate)
 
 
@@ -1013,6 +1026,9 @@ def submit_dependency_snapshot() -> None:
     client_workflow_run_payload = (
         _extract_workflow_run(client_payload) if client_payload is not None else None
     )
+    dependency_graph_payload = (
+        _extract_dependency_graph_payload(payload) if allow_event_payload else None
+    )
 
     repository = _normalise_optional_string(os.getenv("GITHUB_REPOSITORY"))
     payload_used = False
@@ -1022,6 +1038,7 @@ def submit_dependency_snapshot() -> None:
             client_payload,
             client_workflow_run_payload,
             workflow_run_payload,
+            dependency_graph_payload,
             payload if isinstance(payload, Mapping) else None,
         ):
             if not isinstance(candidate_payload, Mapping):
@@ -1049,6 +1066,8 @@ def submit_dependency_snapshot() -> None:
     token_override = _extract_payload_token(client_payload)
     if not token_override and allow_event_payload:
         token_override = _extract_payload_token(payload)
+    if not token_override and dependency_graph_payload is not None:
+        token_override = _extract_payload_token(dependency_graph_payload)
     token = token_override or token_env
 
     try:
@@ -1078,6 +1097,13 @@ def submit_dependency_snapshot() -> None:
                     if ref_candidate:
                         ref = _normalise_ref_value(ref_candidate)
                         payload_used_local = True
+        if allow_event_payload and dependency_graph_payload is not None and not sha:
+            sha_candidate = _extract_payload_value(
+                dependency_graph_payload, *_PAYLOAD_SHA_KEYS
+            )
+            if sha_candidate:
+                sha = sha_candidate
+                payload_used_local = True
         if allow_event_payload and not sha and isinstance(payload, Mapping):
             sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
             if sha_candidate:
@@ -1088,11 +1114,32 @@ def submit_dependency_snapshot() -> None:
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
+        if allow_event_payload and dependency_graph_payload is not None and not ref:
+            ref_candidate = _extract_payload_value(
+                dependency_graph_payload, *_PAYLOAD_REF_KEYS
+            )
+            if ref_candidate:
+                ref = _normalise_ref_value(ref_candidate)
+                payload_used_local = True
+            elif dependency_graph_payload is not None:
+                base_candidate = _extract_payload_value(
+                    dependency_graph_payload, *_PAYLOAD_BASE_REF_KEYS
+                )
+                if base_candidate:
+                    ref = _normalise_ref_value(base_candidate)
+                    payload_used_local = True
         if allow_event_payload and not ref and isinstance(payload, Mapping):
             ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
             if ref_candidate:
                 ref = _normalise_ref_value(ref_candidate)
                 payload_used_local = True
+            else:
+                base_candidate = _extract_payload_value(
+                    payload, *_PAYLOAD_BASE_REF_KEYS
+                )
+                if base_candidate:
+                    ref = _normalise_ref_value(base_candidate)
+                    payload_used_local = True
         if allow_event_payload and not ref and client_workflow_run_payload is not None:
             ref_candidate = _extract_workflow_run_ref(client_workflow_run_payload)
             if ref_candidate:

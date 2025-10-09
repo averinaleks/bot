@@ -349,6 +349,61 @@ def test_submit_dependency_snapshot_uses_dependency_graph_payload(
     assert submitted["ref"] == "refs/heads/feature/auto"
 
 
+def test_submit_dependency_snapshot_falls_back_to_dependency_graph_base_ref(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "action": "auto-submission",
+                "commit_oid": "feedfacecafebabe",
+                "base_ref": "refs/heads/stable",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "dependency_graph")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    submitted: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        submitted.update(json.loads(body))
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "Missing required environment variable" not in captured.err
+    assert submitted["sha"] == "feedfacecafebabe"
+    assert submitted["ref"] == "refs/heads/stable"
+
+
 def test_submit_dependency_snapshot_recovers_repository_from_workflow_run_parts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

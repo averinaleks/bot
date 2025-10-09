@@ -5,11 +5,9 @@ on:
     branches:
       - main
   workflow_dispatch:
-  # NOTE: The dependency_graph event is not yet available for this repository.
-  #       The workflow still understands github.event_name == 'dependency_graph'
-  #       so that it can start handling the event once GitHub enables it, but we
-  #       cannot declare the trigger today because GitHub rejects the workflow
-  #       configuration when an unknown event is listed.
+  dependency_graph:
+    types:
+      - auto-submission
   repository_dispatch:
     types:
       # Custom type used by auto-submission hooks. GitHub restricts repository
@@ -37,6 +35,10 @@ jobs:
               github.event.branch ||
               github.event.head_ref ||
               github.event.base_ref ||
+              github.event.dependency_graph.sha ||
+              github.event.dependency_graph.commit_oid ||
+              github.event.dependency_graph.ref ||
+              github.event.dependency_graph.ref_name ||
               github.event.client_payload.sha ||
               github.event.client_payload.commit_sha ||
               github.event.client_payload.commit_oid ||
@@ -69,6 +71,9 @@ jobs:
               github.event.before ||
               github.event.base_sha ||
               github.event.base_ref ||
+              github.event.dependency_graph.before_sha ||
+              github.event.dependency_graph.base_ref ||
+              github.event.dependency_graph.base_sha ||
               github.event.client_payload.before ||
               github.event.client_payload.base_sha ||
               github.event.client_payload.before_sha ||
@@ -85,6 +90,11 @@ jobs:
               github.event.commit_oid ||
               github.event.commit_sha ||
               github.event.sha ||
+              github.event.dependency_graph.sha ||
+              github.event.dependency_graph.commit_oid ||
+              github.event.dependency_graph.after_sha ||
+              github.event.dependency_graph.after ||
+              github.event.dependency_graph.ref ||
               github.event.ref ||
               github.event.client_payload.after ||
               github.event.client_payload.head_sha ||
