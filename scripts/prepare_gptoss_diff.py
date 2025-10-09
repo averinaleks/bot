@@ -357,37 +357,36 @@ def _execute_git(argv: Sequence[str], *, capture_output: bool) -> GitCompletedPr
     """Spawn git via :mod:`asyncio` and return a completed process."""
 
     async def _run() -> GitCompletedProcess:
-        stdout_pipe = asyncio.subprocess.PIPE if capture_output else None
-        stderr_pipe = asyncio.subprocess.PIPE if capture_output else None
-
         git_executable = _resolve_git_executable()
         command = (git_executable, *argv[1:])
 
         process = await asyncio.create_subprocess_exec(
             *command,
-            stdout=stdout_pipe,
-            stderr=stderr_pipe,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
 
         stdout_bytes, stderr_bytes = await process.communicate()
-        if capture_output:
-            stdout_text = (stdout_bytes or b"").decode("utf-8", "replace")
-            stderr_text = (stderr_bytes or b"").decode("utf-8", "replace")
-        else:
-            stdout_text = None
-            stderr_text = None
+
+        stdout_text = (stdout_bytes or b"").decode("utf-8", "replace")
+        stderr_text = (stderr_bytes or b"").decode("utf-8", "replace")
 
         returncode = process.returncode
         if returncode is None:  # pragma: no cover - process should always set returncode
             raise RuntimeError("git процесс завершился без кода возврата")
         if returncode != 0:
-            raise GitCommandError(returncode, argv, stdout_text, stderr_text)
+            raise GitCommandError(
+                returncode,
+                argv,
+                stdout_text or None,
+                stderr_text or None,
+            )
 
         return GitCompletedProcess(
             args=tuple(argv),
             returncode=returncode,
-            stdout=stdout_text,
-            stderr=stderr_text,
+            stdout=stdout_text if capture_output else None,
+            stderr=stderr_text if capture_output else None,
         )
 
     try:
@@ -428,7 +427,13 @@ def _ensure_base_available(base_ref: str, base_sha: str) -> None:
     except GitCommandError as exc:
         if _commit_exists(base_sha):
             return
-        raise RuntimeError(f"git fetch origin {base_ref} завершился с ошибкой") from exc
+        detail = (exc.stderr or exc.stdout or "").strip()
+        if detail:
+            detail = detail.splitlines()[-1]
+            message = f"git fetch origin {base_ref} завершился с ошибкой: {detail}"
+        else:
+            message = f"git fetch origin {base_ref} завершился с ошибкой"
+        raise RuntimeError(message) from exc
 
 
 def _build_diff_args(base_sha: str, paths: Iterable[str]) -> list[str]:
