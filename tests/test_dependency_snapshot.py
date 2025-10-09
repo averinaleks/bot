@@ -109,6 +109,30 @@ def test_parse_requirements_handles_filesystem_errors(
     assert "requirements.txt" in captured.err
 
 
+def test_extract_payload_value_supports_camel_case_keys() -> None:
+    payload = {
+        "afterOid": "abc",
+        "afterSha": "def",
+        "after_sha": "ghi",
+    }
+
+    result = snapshot._extract_payload_value(payload, *snapshot._PAYLOAD_SHA_KEYS)
+
+    assert result == "abc"
+
+
+def test_extract_payload_value_supports_camel_case_refs() -> None:
+    payload = {
+        "refName": "refs/heads/main",
+        "branchName": "main",
+        "ref": "",
+    }
+
+    result = snapshot._extract_payload_value(payload, *snapshot._PAYLOAD_REF_KEYS)
+
+    assert result == "refs/heads/main"
+
+
 def test_submit_dependency_snapshot_skips_when_env_missing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

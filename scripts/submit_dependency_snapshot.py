@@ -73,24 +73,49 @@ _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
 _NULL_STRINGS = {"null", "none", "undefined", '""', "''"}
 _PAYLOAD_SHA_KEYS = (
+    "afterOid",
+    "after_oid",
+    "afterCommitOid",
+    "after_commit_oid",
+    "afterSha",
+    "after_sha",
     "after",
     "sha",
     "head_sha",
+    "headSha",
     "commit_oid",
+    "commitOid",
     "commit_sha",
-    "after_sha",
     "head_commit_oid",
+    "headCommitOid",
     "head_commit_sha",
+    "headCommitSha",
+    "previous_sha",
+    "previousSha",
+    "previous_oid",
+    "previousOid",
 )
 _PAYLOAD_REF_KEYS = (
     "ref",
     "ref_name",
+    "refName",
     "branch",
+    "branch_name",
+    "branchName",
     "head_ref",
+    "headRef",
+    "head_ref_name",
+    "headRefName",
 )
 _PAYLOAD_BASE_REF_KEYS = (
     "base_ref",
+    "baseRef",
     "base_branch",
+    "baseBranch",
+    "base_ref_name",
+    "baseRefName",
+    "base_branch_name",
+    "baseBranchName",
 )
 _WORKFLOW_RUN_REPOSITORY_KEYS = ("head_repository", "repository")
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
