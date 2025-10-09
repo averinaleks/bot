@@ -82,14 +82,24 @@ def test_submit_with_headers_rejects_redirect(monkeypatch: pytest.MonkeyPatch) -
         def close(self) -> None:
             pass
 
+    created_sessions: list["DummySession"] = []
+
     class DummySession:
+        def __init__(self) -> None:
+            self.trust_env = True
+            self.proxies = {"http": "http://proxy"}
+            self.verify = True
+            self.captured_kwargs: dict[str, object] = {}
+
         def __enter__(self) -> "DummySession":
+            created_sessions.append(self)
             return self
 
         def __exit__(self, *_args: object) -> None:
             return None
 
-        def post(self, *_args: object, **_kwargs: object) -> DummyResponse:
+        def post(self, *_args: object, **kwargs: object) -> DummyResponse:
+            self.captured_kwargs = dict(kwargs)
             return DummyResponse()
 
     monkeypatch.setattr(snapshot.requests, "Session", lambda: DummySession())
@@ -98,3 +108,8 @@ def test_submit_with_headers_rejects_redirect(monkeypatch: pytest.MonkeyPatch) -
         snapshot._submit_with_headers("https://example.com/api", b"{}", {})
 
     assert excinfo.value.status_code == 302
+    assert created_sessions, "session should have been instantiated"
+    session = created_sessions[-1]
+    assert session.trust_env is False
+    assert session.proxies == {}
+    assert session.captured_kwargs.get("allow_redirects") is False

@@ -887,7 +887,15 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     for attempt in range(1, 4):
         try:
             with requests.Session() as session:  # type: ignore[union-attr]
-                response = session.post(url, data=body, headers=headers, timeout=30)
+                session.trust_env = False
+                session.proxies = {}
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
                 status_code = int(response.status_code)
                 reason = response.reason or ""
                 redirect_location = response.headers.get("Location", "")
