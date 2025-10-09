@@ -131,6 +131,17 @@ _required_packages: list[tuple[str, str]] = [
     ("cloudpickle", "cloudpickle>=3.1"),
 ]
 
+_bcrypt_stub_path = Path(__file__).with_name("bcrypt.py")
+_test_mode_enabled = os.environ.get("TEST_MODE") == "1"
+_ci_environment = os.environ.get("CI", "").lower() == "true"
+
+if (_test_mode_enabled or _ci_environment) and _bcrypt_stub_path.is_file():
+    _required_packages = [
+        requirement
+        for requirement in _required_packages
+        if requirement[0] != "bcrypt"
+    ]
+
 if sys.version_info < (3, 12):
     _required_packages.append(("sklearn", "scikit-learn==1.7.2"))
 
