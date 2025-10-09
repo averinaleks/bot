@@ -32,6 +32,13 @@ runs:
           sudo npm cache clean --force || true
           sudo rm -rf /var/lib/docker/*
         ' || true
+    - name: Ensure LVM tools are available
+      shell: bash
+      run: |
+        if ! command -v pvcreate >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lvm2
+        fi
     - name: Prepare build volume
       shell: bash
       run: |
