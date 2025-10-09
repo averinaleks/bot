@@ -2,8 +2,6 @@ import socket
 
 import asyncio
 
-import pytest
-
 import model_builder_client
 
 
