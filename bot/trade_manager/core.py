@@ -54,6 +54,9 @@ TelegramLogger = _utils.TelegramLogger
 test_stubs.apply()
 
 
+_module_logger = logging.getLogger(__name__)
+
+
 def _is_test_mode() -> bool:
     """Return whether the trade manager operates in the lightweight test mode."""
 
@@ -79,7 +82,11 @@ IS_TEST_MODE = _TestModeFlag()
 aiohttp: Any
 try:  # pragma: no cover - optional dependency
     import aiohttp as _aiohttp
-except Exception:  # pragma: no cover - minimal stub
+except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - minimal stub
+    _module_logger.warning("aiohttp import failed: %s", exc)
+    aiohttp = types.SimpleNamespace(ClientError=Exception)
+except Exception as exc:  # pragma: no cover - unexpected import failure
+    _module_logger.exception("Unexpected error importing aiohttp: %s", exc)
     aiohttp = types.SimpleNamespace(ClientError=Exception)
 else:
     aiohttp = _aiohttp
@@ -88,7 +95,7 @@ pd: Any
 try:  # pragma: no cover - optional dependency
     import pandas as _pd
 except ImportError as exc:  # allow missing pandas
-    logging.getLogger(__name__).warning("pandas import failed: %s", exc)
+    _module_logger.warning("pandas import failed: %s", exc)
     pd = types.SimpleNamespace(
         DataFrame=dict,
         Series=list,
@@ -127,7 +134,7 @@ _offline_intent = service_stubs.is_offline_env()
 try:  # pragma: no cover - bot_config may lack OFFLINE_MODE in unusual setups
     _offline_intent = _offline_intent or bool(getattr(bot_config, "OFFLINE_MODE", False))
 except Exception as exc:  # pragma: no cover - defensive guard
-    logging.getLogger(__name__).warning(
+    _module_logger.warning(
         "Failed to read OFFLINE_MODE from bot_config: %s", exc
     )
 
@@ -136,7 +143,11 @@ if _offline_intent:
 else:
     try:  # pragma: no cover - optional dependency
         import httpx as _imported_httpx  # type: ignore  # noqa: E402
-    except Exception:  # pragma: no cover - fallback to stub on import issues
+    except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - dependency missing
+        _module_logger.warning("httpx import failed: %s", exc)
+        _httpx = service_stubs.create_httpx_stub()
+    except Exception as exc:  # pragma: no cover - unexpected import failure
+        _module_logger.exception("Unexpected error importing httpx: %s", exc)
         _httpx = service_stubs.create_httpx_stub()
     else:
         _httpx = cast(Any, _imported_httpx)

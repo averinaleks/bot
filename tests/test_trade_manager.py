@@ -11,6 +11,7 @@ import tempfile
 import httpx
 import cloudpickle
 import os
+import builtins
 from pathlib import Path
 from typing import Any
 from bot.config import BotConfig
@@ -167,6 +168,9 @@ def test_trade_manager_uses_httpx_stub_when_httpx_missing(monkeypatch):
         if original_tm is not None:
             sys.modules["bot.trade_manager.core"] = original_tm
             globals()["trade_manager"] = original_tm
+            globals()["TradeManager"] = getattr(
+                original_tm, "TradeManager", globals().get("TradeManager")
+            )
 
         if original_httpx is not None:
             sys.modules["httpx"] = original_httpx
@@ -174,6 +178,82 @@ def test_trade_manager_uses_httpx_stub_when_httpx_missing(monkeypatch):
             sys.modules.pop("httpx", None)
 
         monkeypatch.delenv("OFFLINE_MODE", raising=False)
+
+
+def test_trade_manager_logs_missing_aiohttp(monkeypatch, caplog):
+    original_import = builtins.__import__
+    original_tm = sys.modules.get("bot.trade_manager.core")
+    original_aiohttp = sys.modules.get("aiohttp")
+    sys.modules.pop("bot.trade_manager.core", None)
+    sys.modules.pop("aiohttp", None)
+
+    def fake_import(name, *args, **kwargs):
+        if name == "aiohttp":
+            raise ModuleNotFoundError("No module named 'aiohttp'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        tm_mod = importlib.import_module("bot.trade_manager.core")
+
+    try:
+        assert getattr(tm_mod.aiohttp, "ClientError") is Exception
+        assert any(
+            "aiohttp import failed" in record.message for record in caplog.records
+        )
+    finally:
+        sys.modules.pop("bot.trade_manager.core", None)
+        if original_tm is not None:
+            sys.modules["bot.trade_manager.core"] = original_tm
+            globals()["trade_manager"] = original_tm
+            globals()["TradeManager"] = getattr(
+                original_tm, "TradeManager", globals().get("TradeManager")
+            )
+        if original_aiohttp is not None:
+            sys.modules["aiohttp"] = original_aiohttp
+        else:
+            sys.modules.pop("aiohttp", None)
+
+
+def test_trade_manager_logs_unexpected_aiohttp_import_error(monkeypatch, caplog):
+    original_import = builtins.__import__
+    original_tm = sys.modules.get("bot.trade_manager.core")
+    original_aiohttp = sys.modules.get("aiohttp")
+    sys.modules.pop("bot.trade_manager.core", None)
+    sys.modules.pop("aiohttp", None)
+
+    def fake_import(name, *args, **kwargs):
+        if name == "aiohttp":
+            raise RuntimeError("boom")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    caplog.clear()
+    with caplog.at_level(logging.ERROR):
+        tm_mod = importlib.import_module("bot.trade_manager.core")
+
+    try:
+        assert getattr(tm_mod.aiohttp, "ClientError") is Exception
+        assert any(
+            record.levelno >= logging.ERROR
+            and "Unexpected error importing aiohttp" in record.message
+            for record in caplog.records
+        )
+    finally:
+        sys.modules.pop("bot.trade_manager.core", None)
+        if original_tm is not None:
+            sys.modules["bot.trade_manager.core"] = original_tm
+            globals()["trade_manager"] = original_tm
+            globals()["TradeManager"] = getattr(
+                original_tm, "TradeManager", globals().get("TradeManager")
+            )
+        if original_aiohttp is not None:
+            sys.modules["aiohttp"] = original_aiohttp
+        else:
+            sys.modules.pop("aiohttp", None)
 
 def test_utils_injected_before_trade_manager_import():
     import importlib
