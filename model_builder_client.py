@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -43,6 +44,9 @@ _ALLOWED_HOSTS_ENV = "MODEL_BUILDER_ALLOWED_HOSTS"
 _DEFAULT_ALLOWED_HOSTS = frozenset(
     {"127.0.0.1", "localhost", "::1", "model_builder", "data_handler"}
 )
+
+
+_MAX_TRAINING_PAYLOAD_BYTES = 1_000_000
 
 
 AddrInfo = Tuple[Any, Any, Any, Any, Tuple[Any, ...]]
@@ -306,7 +310,37 @@ async def _fetch_training_data_from_endpoint(
         if resp.status_code != 200:
             logger.error("Failed to fetch OHLCV: HTTP %s", resp.status_code)
             return features, labels
-        ohlcv = resp.json().get("ohlcv", [])
+
+        content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        if content_type and content_type != "application/json":
+            logger.error(
+                "Rejected training data with unexpected Content-Type %s",
+                sanitize_log_value(resp.headers.get("Content-Type", "")),
+            )
+            return features, labels
+
+        payload_bytes = resp.content
+        if len(payload_bytes) > _MAX_TRAINING_PAYLOAD_BYTES:
+            logger.error(
+                "Training data response exceeded %s bytes limit",
+                _MAX_TRAINING_PAYLOAD_BYTES,
+            )
+            return features, labels
+
+        try:
+            parsed = resp.json()
+        except json.JSONDecodeError as exc:
+            logger.error("Failed to decode training data JSON: %s", exc)
+            return features, labels
+
+        if not isinstance(parsed, dict):
+            logger.error(
+                "Training data payload must be a JSON object, got %s",
+                type(parsed).__name__,
+            )
+            return features, labels
+
+        ohlcv = parsed.get("ohlcv", [])
     except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.error("Training data request error: %s", exc)
         return features, labels

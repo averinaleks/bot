@@ -1,5 +1,9 @@
 import socket
 
+import asyncio
+
+import pytest
+
 import model_builder_client
 
 
@@ -96,3 +100,111 @@ def test_prepare_endpoint_rejects_unlisted_host(monkeypatch):
     )
 
     assert endpoint is None
+
+
+class _DummyResponse:
+    def __init__(self, *, headers=None, content=b"{}", parsed=None, json_exc=None):
+        self.status_code = 200
+        self.headers = headers or {}
+        self._content = content
+        self._parsed = parsed if parsed is not None else {"ohlcv": []}
+        self._json_exc = json_exc
+
+    @property
+    def content(self):
+        return self._content
+
+    def json(self):
+        if self._json_exc:
+            raise self._json_exc
+        return self._parsed
+
+
+class _DummyAsyncClient:
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, *_args, **_kwargs):
+        return self._response
+
+
+def test_fetch_training_data_rejects_unexpected_content_type(monkeypatch, caplog):
+    endpoint = model_builder_client.ServiceEndpoint(
+        scheme="http",
+        base_url="http://model_builder:8001",
+        hostname="model_builder",
+        allowed_ips=frozenset({"127.0.0.1"}),
+    )
+
+    async def _allow(_endpoint):
+        return True
+
+    monkeypatch.setattr(model_builder_client, "_hostname_still_allowed", _allow)
+    response = _DummyResponse(
+        headers={"Content-Type": "text/html"},
+        content=b"<html></html>",
+        json_exc=AssertionError("json should not be called"),
+    )
+    monkeypatch.setattr(
+        model_builder_client.httpx,
+        "AsyncClient",
+        lambda *a, **k: _DummyAsyncClient(response),
+    )
+
+    async def _run():
+        return await model_builder_client._fetch_training_data_from_endpoint(  # type: ignore[attr-defined]
+            endpoint,
+            "BTCUSDT",
+        )
+
+    with caplog.at_level("ERROR"):
+        features, labels = asyncio.run(_run())
+
+    assert features == []
+    assert labels == []
+    assert "Content-Type" in caplog.text
+
+
+def test_fetch_training_data_limits_payload_size(monkeypatch, caplog):
+    endpoint = model_builder_client.ServiceEndpoint(
+        scheme="http",
+        base_url="http://model_builder:8001",
+        hostname="model_builder",
+        allowed_ips=frozenset({"127.0.0.1"}),
+    )
+
+    async def _allow(_endpoint):
+        return True
+
+    monkeypatch.setattr(model_builder_client, "_hostname_still_allowed", _allow)
+
+    oversized = b"{" + b"0" * (model_builder_client._MAX_TRAINING_PAYLOAD_BYTES + 1) + b"}"
+    response = _DummyResponse(
+        headers={"Content-Type": "application/json"},
+        content=oversized,
+        json_exc=AssertionError("json should not be called"),
+    )
+    monkeypatch.setattr(
+        model_builder_client.httpx,
+        "AsyncClient",
+        lambda *a, **k: _DummyAsyncClient(response),
+    )
+
+    async def _run():
+        return await model_builder_client._fetch_training_data_from_endpoint(  # type: ignore[attr-defined]
+            endpoint,
+            "BTCUSDT",
+        )
+
+    with caplog.at_level("ERROR"):
+        features, labels = asyncio.run(_run())
+
+    assert features == []
+    assert labels == []
+    assert "exceeded" in caplog.text
