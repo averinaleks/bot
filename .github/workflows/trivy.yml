@@ -42,6 +42,7 @@ jobs:
       - name: Run Trivy scan
         id: trivy
         uses: aquasecurity/trivy-action@0.33.1
+        continue-on-error: true
         with:
           scan-type: fs
           ignore-unfixed: true
@@ -58,11 +59,13 @@ jobs:
           if [ ! -f trivy-results.sarif ]; then
             printf '### Trivy scan summary\n\n* Отчёт Trivy не был создан.\n' >> "$GITHUB_STEP_SUMMARY"
             echo "sarif=false" >>"$GITHUB_OUTPUT"
+            echo "count=0" >>"$GITHUB_OUTPUT"
             exit 0
           fi
           echo "sarif=true" >>"$GITHUB_OUTPUT"
           count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif)
           printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
+          echo "count=$count" >>"$GITHUB_OUTPUT"
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: ${{ github.event_name != 'pull_request' && always() && steps.summarize.outputs.sarif == 'true' }}
@@ -79,3 +82,17 @@ jobs:
         with:
           name: trivy-results
           path: trivy-results.sarif
+
+      - name: Fail workflow on Trivy execution error
+        if: ${{ steps.trivy.outcome == 'failure' && steps.summarize.outputs.sarif != 'true' }}
+        shell: bash
+        run: |
+          echo 'Trivy scan завершился с ошибкой и не создал SARIF отчёт.' >&2
+          exit 1
+
+      - name: Fail workflow on Trivy findings
+        if: ${{ steps.summarize.outputs.sarif == 'true' && steps.summarize.outputs.count != '0' }}
+        shell: bash
+        run: |
+          echo "Обнаружено high/critical уязвимостей: ${{ steps.summarize.outputs.count }}" >&2
+          exit 1
