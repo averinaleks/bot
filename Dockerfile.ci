@@ -1,10 +1,15 @@
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1.6
 
 # Используем официальный python:3.12-slim и отказываемся от сложной
 # двухстадийной сборки на базе Ubuntu. Это устраняет периодические падения
 # docker buildx на шаге docker-publish, связанные с ``apt upgrade`` и
 # зависимостями Ubuntu, и минимизирует число внешних точек отказа. Теперь мы
-# работаем с минимальной средой, поставляемой самим образом Python.
+# работаем с минимальной средой, поставляемой самим образом Python. Чтобы
+# совместить образ с зафиксированным в CI BuildKit ``moby/buildkit:v0.25.0``
+# (см. ``.github/workflows/docker-publish.yml``), придерживаемся стабильного
+# синтаксиса Dockerfile 1.6 без ``-labs``. Версия 1.7-labs требует более
+# нового BuildKit и приводила к мгновенному «failed to solve: dockerfile parse
+# error» при запуске workflow.
 FROM --platform=linux/amd64 python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1
