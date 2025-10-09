@@ -32,27 +32,49 @@ jobs:
             ${{
               github.event.ref ||
               github.event.ref_name ||
+              github.event.refName ||
               github.event.branch ||
+              github.event.branch_name ||
               github.event.head_ref ||
               github.event.base_ref ||
               github.event.dependency_graph.sha ||
               github.event.dependency_graph.commit_oid ||
+              github.event.dependency_graph.commitOid ||
               github.event.dependency_graph.ref ||
               github.event.dependency_graph.ref_name ||
+              github.event.dependency_graph.refName ||
+              github.event.dependency_graph.branch ||
+              github.event.dependency_graph.branchName ||
               github.event.client_payload.sha ||
               github.event.client_payload.commit_sha ||
+              github.event.client_payload.commitSha ||
               github.event.client_payload.commit_oid ||
+              github.event.client_payload.commitOid ||
               github.event.client_payload.head_sha ||
+              github.event.client_payload.headSha ||
               github.event.client_payload.after ||
+              github.event.client_payload.after_sha ||
+              github.event.client_payload.afterSha ||
+              github.event.client_payload.after_oid ||
+              github.event.client_payload.afterOid ||
               github.event.client_payload.ref ||
               github.event.client_payload.ref_name ||
+              github.event.client_payload.refName ||
               github.event.client_payload.head_ref ||
+              github.event.client_payload.headRef ||
               github.event.client_payload.branch ||
+              github.event.client_payload.branch_name ||
+              github.event.client_payload.branchName ||
               github.event.workflow_run.head_sha ||
               github.event.workflow_run.head_commit.id ||
               github.event.workflow_run.head_commit.sha ||
+              github.event.workflow_run.head_commit.before ||
+              github.event.workflow_run.head_commit.beforeSha ||
               github.event.workflow_run.head_ref ||
+              github.event.workflow_run.headRef ||
               github.event.workflow_run.head_branch ||
+              github.event.workflow_run.head_branch_name ||
+              github.event.workflow_run.headBranch ||
               github.ref ||
               (
                 github.event.repository.default_branch &&
@@ -72,39 +94,65 @@ jobs:
               github.event.base_sha ||
               github.event.base_ref ||
               github.event.dependency_graph.before_sha ||
+              github.event.dependency_graph.beforeSha ||
+              github.event.dependency_graph.before_oid ||
+              github.event.dependency_graph.beforeOid ||
               github.event.dependency_graph.base_ref ||
               github.event.dependency_graph.base_sha ||
+              github.event.dependency_graph.baseRef ||
+              github.event.dependency_graph.baseRefName ||
+              github.event.dependency_graph.baseSha ||
               github.event.client_payload.before ||
               github.event.client_payload.base_sha ||
               github.event.client_payload.before_sha ||
+              github.event.client_payload.baseSha ||
+              github.event.client_payload.beforeSha ||
+              github.event.client_payload.before_oid ||
+              github.event.client_payload.beforeOid ||
               github.event.client_payload.previous_sha ||
               github.event.client_payload.previous_oid ||
+              github.event.client_payload.previousSha ||
+              github.event.client_payload.previousOid ||
               github.event.workflow_run.before ||
               github.event.workflow_run.previous_sha ||
               github.event.workflow_run.head_commit.before ||
+              github.event.workflow_run.head_commit.beforeSha ||
+              github.event.workflow_run.head_commit.previousSha ||
               ''
             }}
           AFTER: >-
             ${{
               github.sha ||
               github.event.commit_oid ||
+              github.event.commitOid ||
               github.event.commit_sha ||
               github.event.sha ||
               github.event.dependency_graph.sha ||
               github.event.dependency_graph.commit_oid ||
+              github.event.dependency_graph.commitOid ||
               github.event.dependency_graph.after_sha ||
+              github.event.dependency_graph.afterSha ||
+              github.event.dependency_graph.after_oid ||
+              github.event.dependency_graph.afterOid ||
               github.event.dependency_graph.after ||
               github.event.dependency_graph.ref ||
               github.event.ref ||
               github.event.client_payload.after ||
               github.event.client_payload.head_sha ||
+              github.event.client_payload.headSha ||
               github.event.client_payload.commit_oid ||
+              github.event.client_payload.commitOid ||
               github.event.client_payload.commit_sha ||
               github.event.client_payload.after_sha ||
+              github.event.client_payload.afterSha ||
+              github.event.client_payload.after_oid ||
+              github.event.client_payload.afterOid ||
               github.event.client_payload.sha ||
               github.event.workflow_run.head_sha ||
               github.event.workflow_run.head_commit.id ||
               github.event.workflow_run.head_commit.sha ||
+              github.event.workflow_run.head_commit.after ||
+              github.event.workflow_run.head_commit.afterSha ||
               ''
             }}
         run: |
