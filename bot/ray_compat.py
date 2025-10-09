@@ -95,7 +95,10 @@ def _load_ray() -> tuple[Any, bool]:
 
     existing = sys.modules.get("ray")
     if existing is not None:
-        return existing, getattr(existing, "__ray_stub__", False)
+        is_stub = getattr(existing, "__ray_stub__", False)
+        if not is_stub:
+            ensure_minimum_ray_version(existing)
+        return existing, is_stub
 
     if os.getenv("TEST_MODE") == "1":
         stub, is_stub = _create_stub()

@@ -43,3 +43,35 @@ jobs:
         continue-on-error: true
       - name: Run tests (pytest)
         run: pytest -q --maxfail=1 --disable-warnings
+
+  ray-integration:
+    if: ${{ vars.ENABLE_RAY_TESTS != '0' }}
+    needs: run-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TEST_MODE: "0"
+      PYTHONHASHSEED: "0"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      RAY_USAGE_STATS_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+      - name: Install pip/setuptools/wheel with fixed versions
+        run: python -m pip install "pip==24.0" "setuptools>=78.1.1" "wheel>=0.44"
+      - name: Install deps (ci + extras if exist)
+        run: |
+          set -eux
+          test -f requirements-ci.txt && python -m pip install -r requirements-ci.txt || true
+          test -f requirements-extras.txt && python -m pip install -r requirements-extras.txt || true
+      - name: Install Ray with security-patched version
+        run: python -m pip install "ray[default]==2.49.2"
+      - name: Run Ray integration tests
+        run: pytest -q --maxfail=1 --disable-warnings tests/test_ray_integration.py tests/test_optimizer_ray.py
