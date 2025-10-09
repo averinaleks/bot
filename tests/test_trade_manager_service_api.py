@@ -93,6 +93,39 @@ def test_open_position_negative_risk_returns_code(monkeypatch, caplog):
     assert any('open_position_error[negative_risk]' in message for message in messages)
 
 
+def test_open_position_uses_offline_risk_placeholder(monkeypatch):
+    from services import trade_manager_service as tms
+    from services import offline
+
+    class DummyExchange:
+        def __init__(self):
+            self.calls = []
+
+        def create_order(self, symbol, typ, side, amount, price=None, params=None):
+            self.calls.append({'symbol': symbol, 'type': typ, 'side': side, 'amount': amount})
+            return {'id': 'primary'}
+
+    exchange = DummyExchange()
+    tms.exchange_provider.override(exchange)
+    monkeypatch.setenv('OFFLINE_MODE', '1')
+    monkeypatch.setenv('TRADE_MANAGER_TOKEN', 'test-token')
+    monkeypatch.delenv('TRADE_RISK_USD', raising=False)
+    monkeypatch.setattr(offline, 'OFFLINE_MODE', True)
+    offline.ensure_offline_env()
+
+    with tms.app.test_client() as client:
+        response = _post_open_position(
+            client,
+            {'symbol': 'BTCUSDT', 'side': 'buy', 'price': 100, 'amount': 0},
+        )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['status'] == 'ok'
+    assert exchange.calls
+    assert exchange.calls[0]['amount'] == pytest.approx(0.1)
+
+
 def test_post_without_token_rejected_when_not_configured(monkeypatch, caplog):
     from services import trade_manager_service as tms
 

@@ -62,3 +62,13 @@ def test_default_placeholders_include_telegram(monkeypatch):
     assert "TELEGRAM_CHAT_ID" in applied
     assert os.environ["TELEGRAM_BOT_TOKEN"].startswith("offline-telegram-token-")
     assert os.environ["TELEGRAM_CHAT_ID"].startswith("offline-telegram-chat-")
+
+
+def test_default_placeholders_include_trade_risk(monkeypatch):
+    monkeypatch.setattr(offline, "OFFLINE_MODE", True)
+    monkeypatch.delenv("TRADE_RISK_USD", raising=False)
+
+    applied = offline.ensure_offline_env()
+
+    assert "TRADE_RISK_USD" in applied
+    assert os.environ["TRADE_RISK_USD"] == "10"
