@@ -20,10 +20,13 @@ Thank you for your interest in contributing to this project!
     ```bash
     pytest -m "not integration"
     pytest -m integration
-    flake8 . && pip-audit
+    flake8 .
+    bandit -r . -ll -x ./tests,./scripts,./gptoss_check
+    pip-audit
     ```
-   The CI workflow runs these checks and will fail if any issues are reported,
-   so it's best to fix them locally first.
+   The CI workflow runs these checks and will now fail immediately if `flake8`
+   or `bandit` report any violations. Fix all findings locally before opening a
+   pull request to avoid unnecessary workflow reruns.
 
 ### Running tests
 
