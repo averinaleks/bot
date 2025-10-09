@@ -137,6 +137,18 @@ def test_timeframe_path_traversal_rejected(tmp_path, monkeypatch, caplog):
     assert loaded is None
 
 
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlink support required")
+def test_cache_dir_symlink_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
+    target = tmp_path / "real_cache"
+    target.mkdir()
+    link = tmp_path / "link_cache"
+    link.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symbolic link"):
+        HistoricalDataCache(cache_dir=str(link), min_free_disk_gb=0)
+
+
 def test_symbol_path_traversal_rejected(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(psutil, "virtual_memory", _mock_virtual_memory)
     cache = HistoricalDataCache(cache_dir=str(tmp_path), min_free_disk_gb=0)

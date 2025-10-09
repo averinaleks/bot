@@ -74,11 +74,29 @@ class HistoricalDataCache:
     """Manage on-disk storage for historical OHLCV data."""
 
     def __init__(self, cache_dir="/app/cache", min_free_disk_gb=0.1):
-        base_path = Path(cache_dir)
-        self.cache_dir = str(base_path)
-        self._base_path = base_path.resolve(strict=False)
+        raw_path = Path(cache_dir)
+        self.cache_dir = str(raw_path)
         self.min_free_disk_gb = min_free_disk_gb
+
         os.makedirs(self.cache_dir, exist_ok=True)
+        try:
+            if raw_path.is_symlink():
+                raise ValueError(
+                    f"Cache directory {raw_path} must not be a symbolic link"
+                )
+            resolved_path = raw_path.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"Failed to resolve cache directory {raw_path}: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"Failed to inspect cache directory {raw_path}: {exc}"
+            ) from exc
+
+        self._base_path = resolved_path
+        self.cache_dir = str(resolved_path)
+
         if not os.access(self.cache_dir, os.W_OK):
             raise PermissionError(
                 f"Нет прав на запись в директорию кэша: {self.cache_dir}"
