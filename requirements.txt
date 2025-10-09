@@ -337,7 +337,7 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.22.0
     # via transformers
-tomli==2.2.1
+tomli==2.3.0
     # via pytest
 torch==2.8.0+cpu
     # via
