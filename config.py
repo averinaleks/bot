@@ -7,6 +7,7 @@ load configuration values from ``config.json`` and environment variables.
 from __future__ import annotations
 
 import builtins
+import errno
 import json
 import logging
 import os
@@ -195,14 +196,38 @@ def _fd_resolved_path(fd: int, original: Path) -> Path | None:
 def open_config_file(path: Path) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
+    inspected_path = Path(path)
+    try:
+        if inspected_path.is_symlink():
+            safe_path = sanitize_log_value(str(inspected_path))
+            raise RuntimeError(f"Configuration file {safe_path} must not be a symlink")
+    except OSError as exc:
+        safe_path = sanitize_log_value(str(inspected_path))
+        raise RuntimeError(
+            f"Unable to inspect configuration file {safe_path}: {exc}"
+        ) from exc
+
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0)
-    fd = os.open(path, flags)
+    nofollow_flag = getattr(os, "O_NOFOLLOW", 0)
+    use_nofollow = bool(nofollow_flag)
+    if use_nofollow:
+        flags |= nofollow_flag
+
+    try:
+        fd = os.open(inspected_path, flags)
+    except OSError as exc:
+        if use_nofollow and exc.errno in {errno.ELOOP, getattr(errno, "EMLINK", errno.ELOOP)}:
+            safe_path = sanitize_log_value(str(inspected_path))
+            raise RuntimeError(
+                f"Refusing to open configuration symlink {safe_path}: {exc}"
+            ) from exc
+        raise
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
             raise RuntimeError(f"Configuration file {path} is not a regular file")
 
-        actual = _fd_resolved_path(fd, Path(path))
+        actual = _fd_resolved_path(fd, inspected_path)
         if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
             raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
 
