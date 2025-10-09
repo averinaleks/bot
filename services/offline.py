@@ -63,6 +63,7 @@ _OFFLINE_ENV_DEFAULTS: dict[str, _PlaceholderValue] = {
     "TRADE_MANAGER_TOKEN": lambda: generate_placeholder_credential("trade-token"),
     "TELEGRAM_BOT_TOKEN": lambda: generate_placeholder_credential("telegram-token"),
     "TELEGRAM_CHAT_ID": lambda: generate_placeholder_credential("telegram-chat"),
+    "TRADE_RISK_USD": lambda: "10",
 }
 
 
