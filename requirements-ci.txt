@@ -1,6 +1,8 @@
 # Minimal requirements for running tests in CI
+# NOTE: The real ``bcrypt`` wheel is intentionally omitted here. The test
+# suite relies on the lightweight ``bcrypt.py`` stub shipped in the repo so
+# that CI jobs do not have to compile the Rust extension.
 aiohttp==3.13.0
-bcrypt==5.0.0
 flake8==7.3.0
 bandit==1.8.6
 ruff==0.14.0
