@@ -2,31 +2,33 @@
 
 from __future__ import annotations
 
-import shutil
-# Bandit note: subprocess используется только для чтения списка файлов через git.
-import subprocess  # nosec B404
 from pathlib import Path
 
-import pytest
 
-
-GIT_EXECUTABLE = shutil.which("git")
-
-if GIT_EXECUTABLE is None:  # pragma: no cover - защитный сценарий окружения
-    pytest.skip("Для теста требуется установленный git", allow_module_level=True)
+_SKIP_DIRS = {
+    ".git",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+}
 
 
 def _tracked_python_files(root: Path) -> list[Path]:
-    command = [GIT_EXECUTABLE, "ls-files", "--", "*.py"]
-    # Bandit note: команда git формируется из фиксированных аргументов.
-    result = subprocess.run(  # nosec B603
-        command,
-        check=True,
-        cwd=root,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    return [(root / line.strip()) for line in result.stdout.splitlines() if line.strip()]
+    """Return Python sources rooted under *root* excluding transient folders."""
+
+    candidates: list[Path] = []
+    for path in root.rglob("*.py"):
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            # Files outside the repository root are irrelevant.
+            continue
+        if any(part in _SKIP_DIRS for part in relative.parts):
+            continue
+        if not path.is_file():
+            continue
+        candidates.append(path)
+    return candidates
 
 
 def test_no_legacy_trade_manager_imports() -> None:
