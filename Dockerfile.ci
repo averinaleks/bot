@@ -18,13 +18,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN <<'EOSHELL'
 set -euxo pipefail
-apt-get update
-apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    patch
-rm -rf /var/lib/apt/lists/*
+apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        patch \
+    && rm -rf /var/lib/apt/lists/*
 EOSHELL
 
 WORKDIR /app
