@@ -22,6 +22,7 @@ env:
   TEST_MODE: "1"
   CSRF_SECRET: testsecret
   PYTHONPYCACHEPREFIX: /mnt/pycache
+  COMPOSE_PROJECT_NAME: ci
 
 jobs:
   lint-type-test:
@@ -104,11 +105,60 @@ jobs:
             rm server.pid
             test ! -f server.pid
           fi
+      - name: Restore Docker BuildKit cache
+        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: /mnt/buildkit-cache
+          key: ${{ runner.os }}-buildkit-ci-${{ hashFiles('Dockerfile', 'Dockerfile.cpu', 'Dockerfile.gptoss', 'docker/patches/**', 'docker/scripts/**', 'requirements-core.txt', 'requirements-gpu.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-ci-
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+        with:
+          driver: docker-container
+          driver-opts: image=moby/buildkit:v0.25.0
+      - name: Build CPU images with cache
+        env:
+          CACHE_DIR: /mnt/buildkit-cache
+          DOCKERFILE: ${{ env.DOCKERFILE }}
+          PROJECT_NAME: ${{ env.COMPOSE_PROJECT_NAME }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "${CACHE_DIR}"
+          docker buildx build \
+            --file "${DOCKERFILE}" \
+            --cache-from "type=local,src=${CACHE_DIR}" \
+            --cache-to "type=local,dest=${CACHE_DIR},mode=max" \
+            --load \
+            --tag "${PROJECT_NAME}-data_handler" \
+            --tag "${PROJECT_NAME}_data_handler" \
+            --tag "${PROJECT_NAME}-model_builder" \
+            --tag "${PROJECT_NAME}_model_builder" \
+            --tag "${PROJECT_NAME}-trade_manager" \
+            --tag "${PROJECT_NAME}_trade_manager" \
+            --tag "${PROJECT_NAME}-bot" \
+            --tag "${PROJECT_NAME}_bot" \
+            .
+      - name: Build GPT-OSS image with cache
+        env:
+          CACHE_DIR: /mnt/buildkit-cache
+          PROJECT_NAME: ${{ env.COMPOSE_PROJECT_NAME }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "${CACHE_DIR}"
+          docker buildx build \
+            --file Dockerfile.gptoss \
+            --cache-from "type=local,src=${CACHE_DIR}" \
+            --cache-to "type=local,dest=${CACHE_DIR},mode=max" \
+            --load \
+            --tag "${PROJECT_NAME}-gptoss" \
+            --tag "${PROJECT_NAME}_gptoss" \
+            .
       - name: Run docker compose
         run: |
           docker compose -f docker-compose.yml \
             -f docker-compose.cpu.yml \
-            up --build --abort-on-container-exit \
+            up --no-build --abort-on-container-exit \
             --exit-code-from gptoss_check
           docker compose -f docker-compose.yml -f docker-compose.cpu.yml down
       - name: Cleanup buildx
