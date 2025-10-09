@@ -12,6 +12,8 @@ from typing import Any
 import pytest
 
 from security import (
+    SAFE_RAY_VERSION,
+    SAFE_RAY_VERSION_STR,
     _MLFLOW_DISABLED_ATTRS,
     ArtifactDeserializationError,
     apply_ray_security_defaults,
@@ -135,14 +137,20 @@ def test_harden_mlflow_disables_all_loaders() -> None:
 
 def test_ensure_minimum_ray_version_accepts_safe_release() -> None:
     ray_stub = ModuleType("ray")
-    ray_stub.__version__ = "2.49.2"
+    ray_stub.__version__ = SAFE_RAY_VERSION_STR
 
     ensure_minimum_ray_version(ray_stub)
 
 
 def test_ensure_minimum_ray_version_rejects_legacy_release() -> None:
     ray_stub = ModuleType("ray")
-    ray_stub.__version__ = "2.49.1"
+    release = list(SAFE_RAY_VERSION.release)
+    for idx in range(len(release) - 1, -1, -1):
+        if release[idx] > 0:
+            release[idx] -= 1
+            release = release[: idx + 1]
+            break
+    ray_stub.__version__ = ".".join(str(part) for part in release)
 
     with pytest.raises(RuntimeError) as exc:
         ensure_minimum_ray_version(ray_stub)

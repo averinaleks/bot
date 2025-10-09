@@ -283,7 +283,13 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
 logger = logging.getLogger(__name__)
 
 
-_MIN_RAY_VERSION = Version("2.49.2")
+SAFE_RAY_VERSION = Version("2.49.2")
+"""Latest Ray release vetted against CVE-2023-48022."""
+
+SAFE_RAY_VERSION_STR = str(SAFE_RAY_VERSION)
+"""String representation reused by tests and documentation."""
+
+_MIN_RAY_VERSION = SAFE_RAY_VERSION
 _MODEL_STATE_HMAC_ENV = "MODEL_STATE_HMAC_KEY"
 _MODEL_STATE_SIG_SUFFIX = ".sig"
 
