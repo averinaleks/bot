@@ -167,6 +167,10 @@ def _extract_workflow_run_repository(payload: Mapping[str, object]) -> str:
                         login = owner_mapping.get("login")
                         if isinstance(login, str):
                             owner_login = _normalise_optional_string(login)
+                        if not owner_login:
+                            owner_name = owner_mapping.get("name")
+                            if isinstance(owner_name, str):
+                                owner_login = _normalise_optional_string(owner_name)
                 if owner_login:
                     candidate = _normalise_optional_string(name)
                     if candidate:

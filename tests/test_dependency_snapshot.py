@@ -420,6 +420,73 @@ def test_submit_dependency_snapshot_recovers_repository_from_workflow_run_parts(
     assert submitted["ref"] == "refs/heads/auto-main"
 
 
+def test_submit_dependency_snapshot_recovers_owner_name_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "workflow_run": {
+                    "head_sha": "abcdef123456",
+                    "head_branch": "owner-name-branch",
+                    "head_repository": {
+                        "name": "bot",
+                        "owner": {"name": "averinaleks"},
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "777")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    submitted: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        submitted.update(json.loads(body))
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert "Missing required environment variable" not in captured.err
+    assert "Using event payload" in captured.out
+
+    assert submitted["sha"] == "abcdef123456"
+    assert submitted["ref"] == "refs/heads/owner-name-branch"
+    assert submitted["job"]["html_url"].endswith("/actions/runs/777")
+    assert submitted["job"]["correlator"].startswith("dependency-graph:submit")
+
+
 def test_submit_dependency_snapshot_supports_commit_oid_and_ref_name(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
