@@ -34,6 +34,13 @@ def test_pr_status_step_has_missing_script_guard() -> None:
     assert '::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден' in workflow_text
 
 
+def test_helpers_are_preserved_outside_workspace() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert 'RUNNER_TEMP%/}/gptoss_helpers' in workflow_text
+    assert "printf 'HELPERS_DIR=%s\\n' \"$safe_dir\" >> \"$GITHUB_ENV\"" in workflow_text
+
+
 def test_pr_status_step_sets_outputs_on_failure() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 

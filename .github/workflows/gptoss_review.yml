@@ -175,6 +175,29 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           path: ${{ env.HELPERS_DIR }}
 
+      - name: Preserve workflow helpers outside workspace
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && github.event_name != 'pull_request_target' }}
+        run: |
+          set -euo pipefail
+
+          source_dir="${HELPERS_DIR:-}"
+          if [ -z "$source_dir" ]; then
+            echo "::warning::Переменная HELPERS_DIR не задана – пропускаю сохранение вспомогательных скриптов" >&2
+            exit 0
+          fi
+          if [ ! -d "$source_dir" ]; then
+            echo "::warning::Каталог $source_dir не найден – пропускаю сохранение вспомогательных скриптов" >&2
+            exit 0
+          fi
+
+          safe_dir="${RUNNER_TEMP%/}/gptoss_helpers"
+          rm -rf "$safe_dir"
+          mkdir -p "$safe_dir"
+          cp -R "$source_dir/." "$safe_dir"
+          printf 'HELPERS_DIR=%s\n' "$safe_dir" >> "$GITHUB_ENV"
+
       - name: Проверка статуса PR
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
