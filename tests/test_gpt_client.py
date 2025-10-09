@@ -122,6 +122,59 @@ def test_parse_gpt_response_message_content_list():
     assert _parse_gpt_response(content) == "hello world!"
 
 
+def test_parse_gpt_response_structured_content_parts():
+    content = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": [
+                                    {"type": "output_text", "text": "multi"},
+                                    {
+                                        "type": "output_text",
+                                        "text": {"value": "part"},
+                                    },
+                                ],
+                            },
+                            {"type": "output_text", "text": {"value": " response"}},
+                        ]
+                    }
+                }
+            ]
+        }
+    ).encode()
+    assert _parse_gpt_response(content) == "multipart response"
+
+
+def test_parse_gpt_response_delta_content_parts():
+    content = json.dumps(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": [
+                                    {"type": "system", "text": "ignored"},
+                                    {
+                                        "type": "output_text",
+                                        "text": {"value": "streamed"},
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ).encode()
+    assert _parse_gpt_response(content) == "streamed"
+
+
 def test_parse_gpt_response_invalid_json():
     with pytest.raises(GPTClientJSONError):
         _parse_gpt_response(b"not json")

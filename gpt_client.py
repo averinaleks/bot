@@ -15,6 +15,7 @@ import socket
 import threading
 from enum import Enum
 from ipaddress import ip_address
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Coroutine, Mapping
 from urllib.parse import urljoin, urlparse
 
@@ -629,33 +630,36 @@ def _parse_gpt_response(content: bytes) -> str:
             return text
 
         def _coalesce_content(value: Any) -> str | None:
-            if isinstance(value, str):
-                return value
-            if isinstance(value, list):
-                parts: list[str] = []
-                for item in value:
-                    if isinstance(item, str):
-                        parts.append(item)
-                        continue
-                    if isinstance(item, Mapping):
-                        part = item.get("text")
-                        if isinstance(part, str):
-                            parts.append(part)
-                            continue
-                        if isinstance(part, Mapping):
-                            nested = part.get("value")
-                            if isinstance(nested, str):
-                                parts.append(nested)
+            allowed_direct_types = {None, "output_text"}
+
+            def _collect_parts(node: Any) -> list[str]:
+                if isinstance(node, str):
+                    return [node]
+                if isinstance(node, Mapping):
+                    for key in ("text", "value", "content"):
+                        if key in node:
+                            value = node[key]
+                            if (
+                                isinstance(value, str)
+                                and node.get("type") not in allowed_direct_types
+                            ):
                                 continue
-                        value_field = item.get("value")
-                        if isinstance(value_field, str):
-                            parts.append(value_field)
-                if parts:
-                    return "".join(parts)
-            if isinstance(value, Mapping):
-                nested_value = value.get("value")
-                if isinstance(nested_value, str):
-                    return nested_value
+                            parts = _collect_parts(value)
+                            if parts:
+                                return parts
+                    return []
+                if isinstance(node, Sequence) and not isinstance(
+                    node, (str, bytes, bytearray)
+                ):
+                    parts: list[str] = []
+                    for item in node:
+                        parts.extend(_collect_parts(item))
+                    return parts
+                return []
+
+            parts = _collect_parts(value)
+            if parts:
+                return "".join(parts)
             return None
 
         for key in ("message", "delta", "content"):
