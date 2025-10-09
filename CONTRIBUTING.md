@@ -54,6 +54,20 @@ We pass `--strip-extras` explicitly so that updating `pip-tools` doesn't change 
 
 Commit both the `.in` and generated `.txt` files when updating.
 
+#### Release monitoring for critical libraries
+
+Some upstream projects have a history of introducing backwards-incompatible
+changes in minor releases. To avoid being caught off guard:
+
+* Every Monday check whether **ccxt**, **stable-baselines3**, and
+  **transformers** published new releases. `pip index versions <package>` is a
+  quick way to see the latest version without installing anything.
+* If a new release exists, create a short-lived branch that pins the new
+  version inside the relevant `.in` file, run `pip-compile`, and execute the
+  integration suite (`pytest -m integration`).
+* File an issue immediately if the smoke tests fail or expose API changes so we
+  can plan the migration before the next bot release.
+
 ## Repository secrets
 
 Some GitHub Actions workflows pull container images from GitHub Container Registry
