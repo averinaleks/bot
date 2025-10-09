@@ -39,7 +39,7 @@ if __package__ in {None, ""}:
     if package_root_str not in sys.path:
         sys.path.insert(0, package_root_str)
 
-from scripts.github_paths import resolve_github_path
+from scripts.github_path_resolver import resolve_github_path
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")

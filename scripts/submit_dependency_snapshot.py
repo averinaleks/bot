@@ -41,7 +41,7 @@ if __package__ in {None, ""}:
     # ``import scripts`` fail.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.github_paths import resolve_github_path  # noqa: E402
+from scripts.github_path_resolver import resolve_github_path  # noqa: E402
 
 MANIFEST_PATTERNS = (
     "requirements*.txt",
