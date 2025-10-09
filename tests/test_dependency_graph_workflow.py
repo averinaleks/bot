@@ -71,6 +71,9 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
 
     assert "github.event.base_sha" in workflow
     assert "github.event.base_ref" in workflow
+    assert "github.event.dependency_graph.before_sha" in workflow
+    assert "github.event.dependency_graph.base_ref" in workflow
+    assert "github.event.dependency_graph.base_sha" in workflow
     assert "github.event.client_payload.before" in workflow
     assert "github.event.client_payload.base_sha" in workflow
     assert "github.event.client_payload.before_sha" in workflow
@@ -85,6 +88,10 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
     assert "github.event.commit_oid" in workflow
     assert "github.event.commit_sha" in workflow
     assert "github.event.sha" in workflow
+    assert "github.event.dependency_graph.commit_oid" in workflow
+    assert "github.event.dependency_graph.after_sha" in workflow
+    assert "github.event.dependency_graph.after" in workflow
+    assert "github.event.dependency_graph.ref" in workflow
     assert "github.event.ref" in workflow
     assert "github.event.workflow_run.head_sha" in workflow
     assert "github.event.workflow_run.head_commit.id" in workflow
@@ -132,8 +139,8 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
 def test_dependency_graph_notes_dependency_graph_event_limitations() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
 
-    assert "github.event_name == 'dependency_graph'" in workflow
-    assert "dependency_graph event is not yet available" in workflow
+    assert "dependency_graph:" in workflow
+    assert "auto-submission" in workflow
 
 
 def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
@@ -144,6 +151,10 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.branch" in workflow
     assert "github.event.head_ref" in workflow
     assert "github.event.base_ref" in workflow
+    assert "github.event.dependency_graph.sha" in workflow
+    assert "github.event.dependency_graph.commit_oid" in workflow
+    assert "github.event.dependency_graph.ref" in workflow
+    assert "github.event.dependency_graph.ref_name" in workflow
     assert "github.event.client_payload.head_sha" in workflow
     assert "github.event.client_payload.commit_sha" in workflow
     assert "github.event.client_payload.ref_name" in workflow
