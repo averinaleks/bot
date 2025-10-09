@@ -14,6 +14,7 @@ import types
 import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import (
@@ -382,9 +383,17 @@ class TradeManager:
         self.last_save_time = time.time()
         self.save_interval = 900
         self.positions_changed = False
+        self._state_dirty_version = 0
+        self._last_saved_version = 0
+        self._save_state_thread: threading.Thread | None = None
+        self._save_state_thread_lock = threading.Lock()
         self.last_volatility = {symbol: 0.0 for symbol in data_handler.usdt_pairs}
         self.last_stats_day = int(time.time() // 86400)
         self._min_retrain_size: dict[str, int] = {}
+        self._stats_cache: dict[str, float] | None = None
+        self._stats_cache_time = 0.0
+        self._stats_cache_ttl = float(config.get("stats_cache_ttl", 30.0))
+        self._stats_cache_stale = True
         self.load_state()
         self.http_client = None
 
@@ -414,6 +423,15 @@ class TradeManager:
     def _init_returns_state(self) -> dict[str, list[tuple[float, float]]]:
         pairs = getattr(self.data_handler, "usdt_pairs", [])
         return {symbol: [] for symbol in pairs}
+
+    def _mark_positions_dirty(self) -> None:
+        """Flag that in-memory positions diverged from the persisted state."""
+
+        self.positions_changed = True
+        self._state_dirty_version += 1
+
+    def _invalidate_stats_cache(self) -> None:
+        self._stats_cache_stale = True
 
     def _has_position(self, symbol: str) -> bool:
         """Check if a position for ``symbol`` exists using the MultiIndex."""
@@ -487,38 +505,106 @@ class TradeManager:
                 break
         return count
 
-    async def compute_stats(self) -> Dict[str, float]:
+    async def compute_stats(self, *, force: bool = False) -> Dict[str, float]:
         """Return overall win rate, average profit/loss and max drawdown."""
+
         async with self.returns_lock:
-            all_returns = [r for vals in self.returns_by_symbol.values() for _, r in vals]
-        total = len(all_returns)
-        win_rate = sum(1 for r in all_returns if r > 0) / total if total else 0.0
-        avg_pnl = float(np.mean(all_returns)) if all_returns else 0.0
-        if all_returns:
-            cum = np.cumsum(all_returns)
-            running_max = np.maximum.accumulate(cum)
-            drawdowns = running_max - cum
-            max_dd = float(np.max(drawdowns))
-        else:
-            max_dd = 0.0
-        return {
-            "win_rate": win_rate,
-            "avg_pnl": avg_pnl,
-            "max_drawdown": max_dd,
-        }
+            now = time.time()
+            if (
+                not force
+                and not self._stats_cache_stale
+                and self._stats_cache is not None
+                and now - self._stats_cache_time < self._stats_cache_ttl
+            ):
+                return dict(self._stats_cache)
+
+            all_returns = [
+                r for vals in self.returns_by_symbol.values() for _, r in vals
+            ]
+            total = len(all_returns)
+            win_rate = sum(1 for r in all_returns if r > 0) / total if total else 0.0
+            avg_pnl = float(np.mean(all_returns)) if all_returns else 0.0
+            if all_returns:
+                cum = np.cumsum(all_returns)
+                running_max = np.maximum.accumulate(cum)
+                drawdowns = running_max - cum
+                max_dd = float(np.max(drawdowns))
+            else:
+                max_dd = 0.0
+
+            stats = {
+                "win_rate": win_rate,
+                "avg_pnl": avg_pnl,
+                "max_drawdown": max_dd,
+            }
+            self._stats_cache = dict(stats)
+            self._stats_cache_time = now
+            self._stats_cache_stale = False
+            return stats
 
     def get_stats(self) -> Dict[str, float]:
         """Synchronous wrapper for :py:meth:`compute_stats`."""
+        now = time.time()
+        if (
+            not self._stats_cache_stale
+            and self._stats_cache is not None
+            and now - self._stats_cache_time < self._stats_cache_ttl
+        ):
+            return dict(self._stats_cache)
+
         if self.loop and self.loop.is_running():
             fut = asyncio.run_coroutine_threadsafe(self.compute_stats(), self.loop)
             return fut.result()
         return asyncio.run(self.compute_stats())
 
     def save_state(self):
-        if not self.positions_changed or (
-            time.time() - self.last_save_time < self.save_interval
+        if not self.positions_changed:
+            return
+
+        if self._state_dirty_version == self._last_saved_version:
+            self._state_dirty_version += 1
+
+        unsaved_changes = self._state_dirty_version > self._last_saved_version
+        if (
+            not unsaved_changes
+            and time.time() - self.last_save_time < self.save_interval
         ):
             return
+
+        version = self._state_dirty_version
+        if _is_test_mode():
+            self._persist_state(version)
+            if self.positions_changed and self._state_dirty_version > version:
+                self.save_state()
+            return
+
+        with self._save_state_thread_lock:
+            if self._save_state_thread and self._save_state_thread.is_alive():
+                return
+            thread = threading.Thread(
+                target=self._run_save_state,
+                args=(version,),
+                name="TradeManagerStateWriter",
+                daemon=True,
+            )
+            self._save_state_thread = thread
+            thread.start()
+
+    def _run_save_state(self, version: int) -> None:
+        try:
+            self._persist_state(version)
+        except Exception:
+            with self._save_state_thread_lock:
+                self._save_state_thread = None
+            return
+
+        with self._save_state_thread_lock:
+            self._save_state_thread = None
+
+        if self.positions_changed and self._state_dirty_version > version:
+            self.save_state()
+
+    def _persist_state(self, version: int) -> None:
         try:
             os.makedirs(self.config["cache_dir"], exist_ok=True)
             disk_usage = shutil.disk_usage(self.config["cache_dir"])
@@ -537,9 +623,6 @@ class TradeManager:
                     "Parquet support unavailable, falling back to JSON: %s",
                     exc,
                 )
-                # ``orient='split'`` cannot be round-tripped with MultiIndex in
-                # recent pandas versions. Serialize as records and rebuild the
-                # index on load instead to avoid ``NotImplementedError``.
                 self.positions.drop(columns="symbol", errors="ignore").reset_index().to_json(
                     tmp_state, orient="records", date_format="iso"
                 )
@@ -548,7 +631,9 @@ class TradeManager:
             os.replace(tmp_state, self.state_file)
             os.replace(tmp_returns, self.returns_file)
             self.last_save_time = time.time()
-            self.positions_changed = False
+            self._last_saved_version = max(self._last_saved_version, version)
+            if self._state_dirty_version == version:
+                self.positions_changed = False
             logger.info("Состояние TradeManager сохранено")
         except (OSError, ValueError) as e:
             logger.exception("Failed to save state (%s): %s", type(e).__name__, e)
@@ -618,6 +703,11 @@ class TradeManager:
 
         if corrupted:
             self._dispatch_state_reset_notice([c for c in corrupted if c])
+
+        self._state_dirty_version = 0
+        self._last_saved_version = 0
+        self.positions_changed = False
+        self._stats_cache_stale = True
 
     def _sort_positions(self) -> None:
         """Ensure positions are sorted by symbol then timestamp."""
@@ -1036,7 +1126,7 @@ class TradeManager:
                     return
                 self.positions.loc[idx, :] = new_position
                 self._sort_positions()
-                self.positions_changed = True
+                self._mark_positions_dirty()
             self.save_state()
             logger.info(
                 "Position opened: %s, %s, size=%s, entry=%s",
@@ -1118,6 +1208,7 @@ class TradeManager:
         profit *= self.leverage
 
         # Re-acquire locks to update state, verifying position still exists
+        updated_returns = False
         async with self.position_lock:
             async with self.returns_lock:
                 if (
@@ -1126,15 +1217,19 @@ class TradeManager:
                 ):
                     self.positions = self.positions.drop(pos_idx)
                     self._sort_positions()
-                    self.positions_changed = True
+                    self._mark_positions_dirty()
                     self.returns_by_symbol[symbol].append(
                         (pd.Timestamp.now(tz="UTC").timestamp(), profit)
                     )
+                    updated_returns = True
                     self.save_state()
                 else:
                     logger.warning(
                         "Position for %s modified before close confirmation", symbol
                     )
+
+        if updated_returns:
+            self._invalidate_stats_cache()
 
         logger.info(
             "Position closed: %s, profit=%.2f, reason=%s",
@@ -1221,7 +1316,7 @@ class TradeManager:
                     self.positions.loc[
                         pd.IndexSlice[symbol, :], "breakeven_triggered"
                     ] = True
-                    self.positions_changed = True
+                    self._mark_positions_dirty()
                     self.save_state()
                     await self.telegram_logger.send_telegram_message(
                         f"🏁 {symbol} moved to breakeven, partial profits taken"
@@ -1245,7 +1340,7 @@ class TradeManager:
                             new_lowest = min(position["lowest_price"], close_price)
                             self.positions.loc[idx, "lowest_price"] = new_lowest
                         self.positions.loc[idx, "last_trailing_ts"] = current_ts
-                        self.positions_changed = True
+                        self._mark_positions_dirty()
                         self.save_state()
                         position = self.positions.xs(symbol, level="symbol").iloc[0]
 
@@ -1317,7 +1412,7 @@ class TradeManager:
                 if pd.notna(last_checked) and last_checked >= current_ts:
                     return
                 self.positions.loc[pd.IndexSlice[symbol, :], "last_checked_ts"] = current_ts
-                self.positions_changed = True
+                self._mark_positions_dirty()
                 self.save_state()
                 indicators = self.data_handler.indicators.get(symbol)
                 if not indicators or not indicators.atr.iloc[-1]:
@@ -1506,19 +1601,19 @@ class TradeManager:
     async def monitor_performance(self):
         while True:
             try:
+                returns_trimmed = False
                 async with self.returns_lock:
                     current_time = pd.Timestamp.now(tz="UTC").timestamp()
                     for symbol in self.returns_by_symbol:
-                        returns = [
-                            r
-                            for t, r in self.returns_by_symbol[symbol]
-                            if current_time - t <= self.performance_window
-                        ]
-                        self.returns_by_symbol[symbol] = [
+                        filtered = [
                             (t, r)
                             for t, r in self.returns_by_symbol[symbol]
                             if current_time - t <= self.performance_window
                         ]
+                        if filtered != self.returns_by_symbol[symbol]:
+                            self.returns_by_symbol[symbol] = filtered
+                            returns_trimmed = True
+                        returns = [r for _, r in filtered]
                         if returns:
                             sharpe_ratio = (
                                 np.mean(returns)
@@ -1572,9 +1667,11 @@ class TradeManager:
                                 await self.telegram_logger.send_telegram_message(
                                     f"⚠️ Low Sharpe Ratio for {symbol}: {sharpe_ratio:.2f}"
                                 )
+                if returns_trimmed:
+                    self._invalidate_stats_cache()
                 current_day = int(current_time // 86400)
                 if current_day != self.last_stats_day:
-                    stats = await self.compute_stats()
+                    stats = await self.compute_stats(force=True)
                     logger.info(
                         "Daily stats: win_rate=%.2f%% avg_pnl=%.2f max_drawdown=%.2f",
                         stats["win_rate"] * 100,

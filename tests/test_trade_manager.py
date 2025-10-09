@@ -8,6 +8,8 @@ import logging
 import math
 import contextlib
 import tempfile
+import threading
+import time
 import httpx
 import cloudpickle
 import os
@@ -1565,6 +1567,69 @@ def test_compute_stats():
     assert stats["win_rate"] == pytest.approx(2 / 3)
     assert stats["avg_pnl"] == pytest.approx(1.0 / 3)
     assert stats["max_drawdown"] == pytest.approx(2.0)
+
+
+def test_get_stats_uses_cache(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm._stats_cache = {"win_rate": 0.1, "avg_pnl": 0.2, "max_drawdown": 0.3}
+    tm._stats_cache_time = time.time()
+    tm._stats_cache_stale = False
+
+    def fake_run(coro):
+        raise AssertionError("asyncio.run should not be called when cache is fresh")
+
+    monkeypatch.setattr(asyncio, "run", fake_run)
+
+    stats = tm.get_stats()
+    assert stats == tm._stats_cache
+
+
+@pytest.mark.asyncio
+async def test_compute_stats_cache_invalidation():
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm.returns_by_symbol["BTCUSDT"] = [(0.0, 1.0)]
+
+    stats_before = await tm.compute_stats(force=True)
+    tm.returns_by_symbol["BTCUSDT"].append((1.0, -1.0))
+    tm._invalidate_stats_cache()
+    stats_after = await tm.compute_stats()
+
+    assert stats_after["avg_pnl"] != stats_before["avg_pnl"]
+
+
+def test_save_state_runs_in_background(monkeypatch):
+    dh = DummyDataHandler()
+    tm = TradeManager(make_config(), dh, None, None, None)
+    tm.save_interval = 0
+    tm.last_save_time = 0
+    tm._mark_positions_dirty()
+
+    from bot import test_stubs as tm_test_stubs
+
+    monkeypatch.setenv("TEST_MODE", "0")
+    monkeypatch.setattr(tm_test_stubs, "IS_TEST_MODE", False, raising=False)
+
+    finished = threading.Event()
+    threads: list[int] = []
+
+    def fake_persist(version: int) -> None:
+        threads.append(threading.get_ident())
+        time.sleep(0.05)
+        tm._last_saved_version = version
+        tm.positions_changed = False
+        finished.set()
+
+    monkeypatch.setattr(tm, "_persist_state", fake_persist)
+
+    start = time.perf_counter()
+    tm.save_state()
+    duration = time.perf_counter() - start
+
+    assert duration < 0.02
+    assert finished.wait(1.0)
+    assert threads and threads[0] != threading.get_ident()
 
 
 @pytest.mark.asyncio
