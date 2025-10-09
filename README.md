@@ -574,6 +574,33 @@ docker build --build-arg ENABLE_TF=1 -t trading-bot-x .
 
 Omit the argument to skip the import and avoid the associated warnings.
 
+### Переиспользуемый слой безопасности
+
+Основной `Dockerfile` выделяет этап `security-base`, в котором компилируются
+пропатченные zlib и PAM. Слой оставляет маркер `/opt/security-layer/.ready`,
+поэтому при повторной сборке через `--build-arg SECURITY_BASE_IMAGE=<образ>`
+Docker просто подтянет готовый промежуточный образ и пропустит трудоёмкие шаги.
+
+Чтобы локально собрать и закешировать этот слой, воспользуйтесь скриптом:
+
+```bash
+docker/scripts/build_security_base_image.sh --tag ghcr.io/<org>/bot-security-base:latest
+```
+
+Добавьте `--push`, если нужно отправить результат в собственный реестр. Скрипт
+включает BuildKit-кэш в каталоге `.docker-cache/security-base`, поэтому
+повторные сборки занимают секунды. Затем укажите образ при сборке приложения:
+
+```bash
+docker build \
+  --build-arg SECURITY_BASE_IMAGE=ghcr.io/<org>/bot-security-base:latest \
+  -t trading-bot .
+```
+
+CI пайплайн использует тот же механизм (`--cache-from/--cache-to`), поэтому
+неизменившиеся слои zlib/PAM скачиваются из кэша GitHub Actions и не
+пересобираются каждый раз.
+
 When both TensorFlow and PyTorch start in the same container you might see
 messages like `Unable to register cuDNN factory` or `computation placer already
 registered`. These lines appear while each framework loads CUDA plugins and
