@@ -78,7 +78,7 @@ exceptiongroup==1.3.0
     #   pytest
 farama-notifications==0.0.4
     # via gymnasium
-fastapi==0.118.0
+fastapi==0.118.2
     # via -r requirements-core.in
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in

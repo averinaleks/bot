@@ -5,7 +5,7 @@ ccxt==4.5.8
 # automatically in CI. Install it manually in production environments if
 # real-time WebSocket support is required.
 python-telegram-bot>=20.7
-aiohttp>=3.12.15
+aiohttp>=3.13.0
 websockets>=12.0
 ta>=0.11.0
 scikit-learn>=1.5.1
@@ -22,7 +22,7 @@ stable-baselines3==2.7.0
 gymnasium>=0.29.1
 pytorch-lightning>=2.5.2
 transformers==4.57.0
-fastapi>=0.116.1
+fastapi>=0.118.2
 fastapi-csrf-protect>=1.0.7
 flask>=3.1.2
 pybit>=5.11.0

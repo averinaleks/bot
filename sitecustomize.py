@@ -117,11 +117,11 @@ def _run_pip_install(requirement: str) -> None:
 _required_packages: list[tuple[str, str]] = [
     ("numpy", "numpy==2.2.6"),
     ("pandas", "pandas==2.3.3"),
-    ("pydantic", "pydantic==2.11.10"),
+    ("pydantic", "pydantic==2.12.0"),
     ("flask", "flask>=3.0.3,<4"),
     ("requests", "requests>=2.32.3"),
     ("httpx", "httpx>=0.27.0"),
-    ("aiohttp", "aiohttp>=3.10.10"),
+    ("aiohttp", "aiohttp>=3.13.0"),
     ("openai", "openai==2.2.0"),
     ("bcrypt", "bcrypt>=4.1.3"),
     ("psutil", "psutil>=5.9.0"),
