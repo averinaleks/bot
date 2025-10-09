@@ -34,6 +34,38 @@ def _extract_permissions(text: str) -> dict[str, str]:
     return permissions
 
 
+def _extract_events(text: str) -> list[str]:
+    events: list[str] = []
+    inside_block = False
+    base_indent: int | None = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not inside_block:
+            if stripped == "on:":
+                inside_block = True
+            continue
+
+        current_indent = len(line) - len(line.lstrip())
+        if current_indent <= 0:
+            break
+
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        if base_indent is None:
+            base_indent = current_indent
+
+        if current_indent < base_indent:
+            break
+        if current_indent > base_indent:
+            continue
+
+        events.append(stripped.rstrip(":"))
+
+    return events
+
+
 def test_dependency_graph_permissions_are_valid() -> None:
     workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
     permissions = _extract_permissions(workflow)
@@ -47,6 +79,14 @@ def test_dependency_graph_permissions_are_valid() -> None:
 
     assert permissions.get("contents") == "write"
     assert permissions.get("security-events") == "write"
+
+
+def test_dependency_graph_events_exclude_dependency_graph_trigger() -> None:
+    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    events = _extract_events(workflow)
+
+    assert {"push", "workflow_dispatch", "repository_dispatch"} <= set(events)
+    assert "dependency_graph" not in events
 
 
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
