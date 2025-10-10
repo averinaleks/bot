@@ -14,7 +14,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
-from security import ensure_minimum_ray_version
+from security import SAFE_RAY_VERSION_STR, ensure_minimum_ray_version
 
 __all__ = ["ray", "IS_RAY_STUB"]
 
@@ -90,6 +90,20 @@ def _create_stub() -> tuple[ModuleType, bool]:
     return stub, True
 
 
+def _augment_ray_module(module: ModuleType) -> ModuleType:
+    """Patch missing Ray attributes on *module* using the local stub implementation."""
+
+    stub, _ = _create_stub()
+    if not getattr(module, "__version__", ""):
+        module.__dict__.setdefault("__version__", SAFE_RAY_VERSION_STR)
+
+    for name in ("remote", "get", "init", "shutdown", "is_initialized", "ObjectRef"):
+        if not hasattr(module, name):
+            module.__dict__[name] = getattr(stub, name)
+
+    return module
+
+
 def _load_ray() -> tuple[Any, bool]:
     """Import Ray if available, otherwise fall back to a stub."""
 
@@ -97,7 +111,7 @@ def _load_ray() -> tuple[Any, bool]:
     if existing is not None:
         is_stub = getattr(existing, "__ray_stub__", False)
         if not is_stub:
-            ensure_minimum_ray_version(existing)
+            ensure_minimum_ray_version(_augment_ray_module(existing))
         return existing, is_stub
 
     if os.getenv("TEST_MODE") == "1":
@@ -112,7 +126,7 @@ def _load_ray() -> tuple[Any, bool]:
         sys.modules["ray"] = stub
         return stub, is_stub
     else:  # pragma: no cover - настоящая установка Ray недоступна в CI
-        ensure_minimum_ray_version(ray)
+        ensure_minimum_ray_version(_augment_ray_module(ray))
         return ray, False
 
 
