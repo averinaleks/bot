@@ -15,12 +15,14 @@ def _reset_positions(tmp_path, monkeypatch):
     cache_file = tmp_path / 'positions.json'
     monkeypatch.setattr(tms, 'POSITIONS_FILE', cache_file, raising=False)
     monkeypatch.setattr(tms, 'API_TOKEN', 'test-token')
+    tms._reset_exchange_executor()
     tms.exchange_provider.override(None)
     state = tms._get_state()
     state.clear_positions()
     state.set_exchange(None)
     yield
     tms.exchange_provider.close()
+    tms._reset_exchange_executor()
 
 
 def _post_open_position(client, payload):
@@ -218,6 +220,42 @@ def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     assert 'details' in warning
     assert len(state.snapshot_positions()) == 1
     assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
+
+
+def test_open_position_returns_timeout(monkeypatch):
+    from services import trade_manager_service as tms
+
+    class SlowExchange:
+        def __init__(self):
+            self.calls = 0
+
+        def create_order_with_trailing_stop(
+            self, symbol, typ, side, amount, price, trailing, params=None
+        ):
+            self.calls += 1
+            time.sleep(0.05)
+            return {'id': f'slow-{self.calls}'}
+
+    exchange = SlowExchange()
+    tms.exchange_provider.override(exchange)
+    monkeypatch.setenv('TRADE_MANAGER_EXCHANGE_TIMEOUT', '0.01')
+
+    with tms.app.test_client() as client:
+        response = _post_open_position(
+            client,
+            {
+                'symbol': 'BTCUSDT',
+                'side': 'buy',
+                'amount': 1,
+                'trailing_stop': 1,
+            },
+        )
+
+    assert response.status_code == 504
+    assert response.get_json() == {
+        'error': 'exchange request timed out',
+        'code': 'exchange_timeout',
+    }
 
 
 def test_open_position_emergency_close_when_cancel_unavailable(monkeypatch):

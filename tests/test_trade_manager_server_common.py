@@ -110,6 +110,8 @@ def test_flask_service_uses_common_token_validator(monkeypatch):
     module = importlib.reload(importlib.import_module("services.trade_manager_service"))
     from bot.trade_manager import server_common
 
+    module._reset_exchange_executor()
+
     calls: list[tuple[dict, str | None]] = []
 
     api_placeholder = "placeholder" + "_value"
@@ -122,10 +124,13 @@ def test_flask_service_uses_common_token_validator(monkeypatch):
     module.API_TOKEN = api_placeholder
     module.IS_TEST_MODE = False
 
-    with module.app.test_request_context(
-        "/open_position", method="POST", json={"symbol": "BTC"}
-    ):
-        response = module._require_api_token()
+    try:
+        with module.app.test_request_context(
+            "/open_position", method="POST", json={"symbol": "BTC"}
+        ):
+            response = module._require_api_token()
+    finally:
+        module._reset_exchange_executor()
 
     assert calls
     assert response[1] == 401

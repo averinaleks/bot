@@ -11,7 +11,11 @@ def trade_manager_service(monkeypatch):
     monkeypatch.delenv('OFFLINE_MODE', raising=False)
     monkeypatch.delenv('TRADE_MANAGER_USE_STUB', raising=False)
     monkeypatch.setattr(module, 'POSITIONS', [])
-    return module
+    module._reset_exchange_executor()
+    try:
+        yield module
+    finally:
+        module._reset_exchange_executor()
 
 
 def test_positions_requires_token(trade_manager_service):

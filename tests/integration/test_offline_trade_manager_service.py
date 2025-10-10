@@ -23,11 +23,13 @@ def offline_trade_manager(monkeypatch, tmp_path):
     module_name = "services.trade_manager_service"
     original_module = sys.modules.pop(module_name, None)
     try:
-        module = importlib.import_module(module_name)
-        module = importlib.reload(module)
+        loaded_module = importlib.import_module(module_name)
+        loaded_module = importlib.reload(loaded_module)
+
+        loaded_module._reset_exchange_executor()
 
         offline_mod = importlib.import_module("services.offline")
-        monkeypatch.setattr(module.ccxt, "bybit", offline_mod.OfflineBybit)
+        monkeypatch.setattr(loaded_module.ccxt, "bybit", offline_mod.OfflineBybit)
 
         # Normalise ccxt exception hierarchy for the stub environment.
         class NetworkError(Exception):
@@ -36,28 +38,29 @@ def offline_trade_manager(monkeypatch, tmp_path):
         class BadRequestError(Exception):
             pass
 
-        monkeypatch.setattr(module, "CCXT_BASE_ERROR", Exception)
-        monkeypatch.setattr(module, "CCXT_NETWORK_ERROR", NetworkError)
-        monkeypatch.setattr(module, "CCXT_BAD_REQUEST", BadRequestError)
+        monkeypatch.setattr(loaded_module, "CCXT_BASE_ERROR", Exception)
+        monkeypatch.setattr(loaded_module, "CCXT_NETWORK_ERROR", NetworkError)
+        monkeypatch.setattr(loaded_module, "CCXT_BAD_REQUEST", BadRequestError)
 
         cache_file = tmp_path / "positions.json"
-        monkeypatch.setattr(module, "POSITIONS_FILE", cache_file)
-        state = module._get_state()
+        monkeypatch.setattr(loaded_module, "POSITIONS_FILE", cache_file)
+        state = loaded_module._get_state()
         state.clear_positions()
         if cache_file.exists():
             cache_file.unlink()
-        module._load_positions()
+        loaded_module._load_positions()
 
-        module.init_exchange()
+        loaded_module.init_exchange()
 
-        with module.app.test_client() as client:
-            yield module, client, NetworkError, state
+        with loaded_module.app.test_client() as client:
+            yield loaded_module, client, NetworkError, state
     finally:
-        module = sys.modules.pop(module_name, None)
+        current_module = sys.modules.pop(module_name, None)
+        if current_module is not None:
+            current_module._reset_exchange_executor()
+            current_module._get_state().set_exchange(None)
         if original_module is not None:
             sys.modules[module_name] = original_module
-        if module is not None:
-            module._get_state().set_exchange(None)
 
 
 def test_offline_open_close_cycle(offline_trade_manager):
