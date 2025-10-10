@@ -557,10 +557,41 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     return hardened
 
 
+def _detect_ray_version(ray_module: ModuleType) -> str:
+    """Return the version string for *ray_module* if it can be determined."""
+
+    version_str = getattr(ray_module, "__version__", "")
+    if version_str:
+        return version_str
+
+    try:
+        from importlib import metadata
+    except ImportError:  # pragma: no cover - Python < 3.8
+        return ""
+
+    candidates: tuple[str, ...] = (
+        getattr(ray_module, "__name__", "ray"),
+        getattr(ray_module, "__package__", "ray"),
+        "ray",
+    )
+
+    for distribution in candidates:
+        name = (distribution or "ray").split("[")[0]
+        try:
+            detected = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            continue
+        else:
+            setattr(ray_module, "__version__", detected)
+            return detected
+
+    return ""
+
+
 def ensure_minimum_ray_version(ray_module: ModuleType) -> None:
     """Raise an error if *ray_module* is older than the patched release."""
 
-    version_str = getattr(ray_module, "__version__", "")
+    version_str = _detect_ray_version(ray_module)
     try:
         parsed = Version(version_str)
     except InvalidVersion:

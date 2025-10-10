@@ -25,15 +25,11 @@ def _create_stub() -> tuple[ModuleType, bool]:
     class _ObjectRef:
         """Эмуляция ``ray.ObjectRef``."""
 
-        __slots__ = ("_value",)
-
         def __init__(self, value: Any) -> None:
             self._value = value
 
     class _RemoteHandle:
         """Обёртка, предоставляющая ``.remote`` и ``.options``."""
-
-        __slots__ = ("_func",)
 
         def __init__(self, func):
             self._func = func
@@ -102,14 +98,12 @@ def _load_ray() -> tuple[Any, bool]:
 
     if os.getenv("TEST_MODE") == "1":
         stub, is_stub = _create_stub()
-        sys.modules["ray"] = stub
         return stub, is_stub
 
     try:
         import ray  # type: ignore
     except ImportError:
         stub, is_stub = _create_stub()
-        sys.modules["ray"] = stub
         return stub, is_stub
     else:  # pragma: no cover - настоящая установка Ray недоступна в CI
         ensure_minimum_ray_version(ray)

@@ -134,45 +134,6 @@ def apply() -> None:
     if not IS_TEST_MODE:
         return
 
-    # ------------------------------------------------------------------ Ray
-    ray_mod = cast(RayModule, _create_module("ray"))
-
-    class _RayRemoteFunction:
-        def __init__(self, func):
-            self._function = func
-
-        def remote(self, *args, **kwargs):
-            return self._function(*args, **kwargs)
-
-        def options(self, *args, **kwargs):  # pragma: no cover - simple chain
-            return self
-
-    def _ray_remote(func=None, **_kwargs):
-        if func is None:
-            def wrapper(f):
-                return _RayRemoteFunction(f)
-
-            return wrapper
-        return _RayRemoteFunction(func)
-
-    _ray_state = {"initialized": False}
-
-    def _init(*_a, **_k):
-        _ray_state["initialized"] = True
-
-    def _is_initialized() -> bool:
-        return _ray_state["initialized"]
-
-    def _shutdown(*_a, **_k):
-        _ray_state["initialized"] = False
-
-    setattr(ray_mod, "remote", _ray_remote)
-    setattr(ray_mod, "get", lambda x: x)
-    setattr(ray_mod, "init", _init)
-    setattr(ray_mod, "is_initialized", _is_initialized)
-    setattr(ray_mod, "shutdown", _shutdown)
-    sys.modules["ray"] = cast(ModuleType, ray_mod)
-
     # ----------------------------------------------------------------- HTTPX
     try:
         import httpx as _real_httpx  # noqa: F401
