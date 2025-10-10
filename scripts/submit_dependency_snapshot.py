@@ -102,6 +102,10 @@ _PAYLOAD_REF_KEYS = (
     "branch",
     "branch_name",
     "branchName",
+    "head_branch",
+    "headBranch",
+    "head_branch_name",
+    "headBranchName",
     "head_ref",
     "headRef",
     "head_ref_name",
@@ -229,10 +233,22 @@ def _extract_workflow_run_sha(payload: Mapping[str, object]) -> str:
 
 
 def _extract_workflow_run_ref(payload: Mapping[str, object]) -> str:
-    branch = _extract_payload_value(payload, "head_branch")
+    branch = _extract_payload_value(
+        payload,
+        "head_branch",
+        "headBranch",
+        "head_branch_name",
+        "headBranchName",
+    )
     if branch:
         return _normalise_ref_value(branch)
-    head_ref = _extract_payload_value(payload, "head_ref")
+    head_ref = _extract_payload_value(
+        payload,
+        "head_ref",
+        "headRef",
+        "head_ref_name",
+        "headRefName",
+    )
     if head_ref:
         return _normalise_ref_value(head_ref)
     return ""
