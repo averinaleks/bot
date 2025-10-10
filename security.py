@@ -19,6 +19,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Tuple, cast
 
+from importlib import metadata
+from importlib.metadata import PackageNotFoundError
 from packaging.version import InvalidVersion, Version
 
 
@@ -557,10 +559,69 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
     return hardened
 
 
+def _detect_ray_version(ray_module: ModuleType) -> str:
+    """Return the installed version string for *ray_module* if available."""
+
+    version_str = getattr(ray_module, "__version__", "")
+    if version_str:
+        return version_str
+
+    candidates = [ray_module.__name__]
+    if "." in ray_module.__name__:
+        candidates.append(ray_module.__name__.split(".", 1)[0])
+    candidates.extend(["ray", "ray-core", "ray-default", "ray-nightly"])
+
+    for dist_name in dict.fromkeys(candidates):
+        if not dist_name:
+            continue
+        try:
+            detected = metadata.version(dist_name)
+        except PackageNotFoundError:
+            continue
+        else:
+            setattr(ray_module, "__version__", detected)  # cache for future checks
+            return detected
+
+    module_file = getattr(ray_module, "__file__", None)
+    if module_file:
+        version_from_files = _read_version_from_metadata_files(Path(module_file))
+        if version_from_files:
+            setattr(ray_module, "__version__", version_from_files)
+            return version_from_files
+
+    return ""
+
+
+def _read_version_from_metadata_files(module_path: Path) -> str:
+    """Inspect adjacent ``*.dist-info`` directories for a version string."""
+
+    for parent in module_path.parents:
+        try:
+            candidates = list(parent.glob("ray*.dist-info"))
+        except OSError:  # pragma: no cover - defensive filesystem guard
+            continue
+
+        for dist_info in candidates[:5]:  # avoid scanning too many directories
+            for metadata_name in ("METADATA", "PKG-INFO"):
+                metadata_path = dist_info / metadata_name
+                if not metadata_path.exists():
+                    continue
+                try:
+                    for line in metadata_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                        if line.startswith("Version:"):
+                            version = line.partition(":")[2].strip()
+                            if version:
+                                return version
+                except OSError:  # pragma: no cover - filesystem access issues
+                    continue
+
+    return ""
+
+
 def ensure_minimum_ray_version(ray_module: ModuleType) -> None:
     """Raise an error if *ray_module* is older than the patched release."""
 
-    version_str = getattr(ray_module, "__version__", "")
+    version_str = _detect_ray_version(ray_module)
     try:
         parsed = Version(version_str)
     except InvalidVersion:
