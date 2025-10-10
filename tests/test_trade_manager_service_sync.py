@@ -16,6 +16,7 @@ def _reload_service(monkeypatch, tmp_path, exchange):
     monkeypatch.setenv('TRADE_MANAGER_TOKEN', 'token')
     service = importlib.reload(importlib.import_module('services.trade_manager_service'))
     service.POSITIONS_FILE = tmp_path / 'positions.json'
+    service._reset_exchange_executor()
     state = service._get_state()
     state.replace_positions([])
     service.exchange_provider.override(exchange)
@@ -52,6 +53,7 @@ def test_sync_removes_closed_positions(monkeypatch, tmp_path):
     with service.POSITIONS_FILE.open('r', encoding='utf-8') as fh:
         cached = json.load(fh)
     assert [pos['id'] for pos in cached] == ['2']
+    service._reset_exchange_executor()
 
 
 def test_positions_endpoint_triggers_sync(monkeypatch, tmp_path):
@@ -79,6 +81,7 @@ def test_positions_endpoint_triggers_sync(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json['positions'] == []
     assert exchange.calls == 1
+    service._reset_exchange_executor()
 
 
 def test_positions_endpoint_respects_rotated_token(monkeypatch, tmp_path):
@@ -107,3 +110,4 @@ def test_positions_endpoint_respects_rotated_token(monkeypatch, tmp_path):
 
     rejected = client.get('/positions', headers={'Authorization': 'Bearer token'})
     assert rejected.status_code == 401
+    service._reset_exchange_executor()

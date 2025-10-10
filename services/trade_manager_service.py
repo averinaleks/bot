@@ -5,6 +5,7 @@ Bybit. API keys are taken from ``BYBIT_API_KEY`` and ``BYBIT_API_SECRET``
 environment variables.
 """
 
+import atexit
 import json
 import logging
 import math
@@ -12,6 +13,7 @@ import os
 import stat
 import tempfile
 import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
@@ -101,6 +103,33 @@ def _get_state() -> TradeManagerState:
 logger = logging.getLogger(__name__)
 
 _exchange_runtime: server_common.ExchangeRuntime | None = None
+_EXCHANGE_TIMEOUT_DEFAULT = 4.0
+_EXCHANGE_TIMEOUT_ENV = "TRADE_MANAGER_EXCHANGE_TIMEOUT"
+
+_executor_lock = threading.Lock()
+_executor: ThreadPoolExecutor | None = None
+
+
+def _reset_exchange_executor() -> None:
+    """Dispose of the shared executor. Intended for tests."""
+
+    global _executor
+    with _executor_lock:
+        executor = _executor
+        _executor = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _get_exchange_executor() -> ThreadPoolExecutor:
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tm-exchange")
+        return _executor
+
+
+atexit.register(_reset_exchange_executor)
 
 # Initialise default state on import so dependent modules can access it immediately.
 # Ensure the legacy module-level ``POSITIONS`` attribute remains available for
@@ -123,15 +152,47 @@ def _current_exchange(state: TradeManagerState | None = None) -> Any | None:
     return state.get_exchange()
 
 
+def _exchange_call_timeout() -> float | None:
+    raw = os.getenv(_EXCHANGE_TIMEOUT_ENV)
+    if raw is None:
+        return _EXCHANGE_TIMEOUT_DEFAULT
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid %s value %r; falling back to default timeout",
+            _EXCHANGE_TIMEOUT_ENV,
+            raw,
+        )
+        return _EXCHANGE_TIMEOUT_DEFAULT
+    if value <= 0:
+        return None
+    return value
+
+
 def _call_exchange_method(target: Any, method: str, *args, **kwargs) -> Any:
-    """Invoke an exchange method under a global lock."""
+    """Invoke an exchange method under a global lock with a timeout."""
 
     state = _get_state()
-    if target is None:
-        return state.call_exchange(method, *args, **kwargs)
-    with state.exchange_lock:
-        fn = getattr(target, method)
-        return fn(*args, **kwargs)
+
+    def _invoke() -> Any:
+        if target is None:
+            return state.call_exchange(method, *args, **kwargs)
+        with state.exchange_lock:
+            fn = getattr(target, method)
+            return fn(*args, **kwargs)
+
+    timeout = _exchange_call_timeout()
+    if not timeout:
+        return _invoke()
+
+    executor = _get_exchange_executor()
+    future = executor.submit(_invoke)
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeout as exc:
+        future.cancel()
+        raise TimeoutError("exchange call timed out") from exc
 
 
 def init_exchange() -> None:
@@ -241,6 +302,7 @@ class OpenPositionErrorCode(str, Enum):
     INVALID_AMOUNT = 'invalid_amount'
     NEGATIVE_RISK = 'negative_risk'
     EXCHANGE_NOT_INITIALIZED = 'exchange_not_initialized'
+    EXCHANGE_TIMEOUT = 'exchange_timeout'
     INTERNAL_ERROR = 'internal_error'
 
 
@@ -451,7 +513,10 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
         return
 
     try:
-        remote_positions = exchange.fetch_positions()
+        remote_positions = _call_exchange_method(exchange, 'fetch_positions')
+    except TimeoutError as exc:
+        logging.warning('fetch_positions timed out: %s', exc)
+        return
     except Exception as exc:  # pragma: no cover - network/API issues
         logging.warning('fetch_positions failed: %s', exc)
         return
@@ -939,6 +1004,15 @@ def open_position() -> ResponseReturnValue:
         if warnings_payload:
             response['warnings'] = warnings_payload
         return jsonify(response)
+    except TimeoutError as exc:
+        app.logger.exception('exchange request timed out while creating order: %s', exc)
+        return _open_position_error(
+            OpenPositionErrorCode.EXCHANGE_TIMEOUT,
+            'exchange request timed out',
+            504,
+            symbol=symbol,
+            log_level=logging.ERROR,
+        )
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error creating order: %s', exc)
         return jsonify({'error': 'network error contacting exchange'}), 503
@@ -1039,6 +1113,9 @@ def close_position() -> ResponseReturnValue:
         if cache_warning is not None:
             response_payload['warnings'] = {'positions_cache_failed': cache_warning}
         return jsonify(response_payload)
+    except TimeoutError as exc:
+        app.logger.exception('exchange request timed out while closing order: %s', exc)
+        return jsonify({'error': 'exchange request timed out'}), 504
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         app.logger.exception('network error closing position: %s', exc)
         return jsonify({'error': 'network error contacting exchange'}), 503
