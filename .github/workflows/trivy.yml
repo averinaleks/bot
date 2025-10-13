@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload Trivy report artifact
         if: ${{ always() && steps.summarize.outputs.sarif == 'true' }}
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4.6.2
         # v4.4.0
         with:
           name: trivy-results
