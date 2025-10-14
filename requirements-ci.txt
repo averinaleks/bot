@@ -11,7 +11,7 @@ pytest-asyncio==1.2.0
 fastapi==0.118.2
 fastapi-csrf-protect==1.0.7
 flask==3.1.2
-pydantic==2.12.0
+pydantic==2.12.1
 # gymnasium and scikit-learn are unavailable on some Python versions
 gymnasium==1.2.0; python_version<'3.12'
 # Pin pandas to stay compatible with the numpy version used across builds
