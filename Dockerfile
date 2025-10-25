@@ -25,8 +25,8 @@ mkdir -p /opt/security-layer
 if [ -f /opt/security-layer/.ready ]; then
   echo "Security layer already provisioned, skipping zlib/PAM rebuild"
 else
-  apt-get update
-  apt-get install -y --no-install-recommends \
+  apt-get update \
+    && apt-get install -y --no-install-recommends \
     tzdata \
     linux-libc-dev \
     build-essential \
