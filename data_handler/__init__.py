@@ -7,6 +7,8 @@ import json
 import os
 from typing import Any
 
+from .storage import DEFAULT_PRICE
+
 try:  # Optional dependency
     import numpy as _NUMPY  # type: ignore[import-not-found]
 except ImportError:  # pragma: no cover - environment without numpy
@@ -17,7 +19,7 @@ def _is_offline_mode() -> bool:
     """Best-effort detection of OFFLINE_MODE without importing heavy deps."""
 
     try:  # Local import avoids module-level side effects during tests
-        from bot import config as bot_config  # noqa: WPS433 - local import is intentional
+        from bot import config as bot_config
     except Exception:  # pragma: no cover - configuration import errors
         return False
     return bool(getattr(bot_config, "OFFLINE_MODE", False))
@@ -42,7 +44,6 @@ try:  # pragma: no cover - optional dependency
     from .api import api_app
 except Exception:  # pragma: no cover - Flask not installed
     api_app = None  # type: ignore[assignment]
-from .storage import DEFAULT_PRICE
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +58,7 @@ def _load_bot_config() -> Any | None:
     """Best-effort loading of :class:`bot.config.BotConfig`."""
 
     try:  # Deferred import keeps data_handler usable without full config
-        from bot import config as bot_config  # noqa: WPS433 - local import is intentional
+        from bot import config as bot_config
     except Exception:  # pragma: no cover - configuration import errors
         return None
 

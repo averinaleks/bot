@@ -50,7 +50,12 @@ def _true_range(high: Sequence[float], low: Sequence[float], close: Sequence[flo
     return result
 
 
-def _average_true_range(high: Sequence[float], low: Sequence[float], close: Sequence[float], period: int) -> list[float]:
+def _average_true_range(
+    high: Sequence[float],
+    low: Sequence[float],
+    close: Sequence[float],
+    period: int,
+) -> list[float]:
     tr = _true_range(high, low, close)
     if not tr:
         return []
