@@ -1,6 +1,9 @@
+import builtins
+import importlib.util
 import logging
 import http.client
 import socket
+import sys
 import threading
 import time
 from contextlib import closing
@@ -301,6 +304,34 @@ def test_main_handles_timeout(monkeypatch, tmp_path):
 
     assert exit_code == 0
     assert "has_content=false" in github_output.read_text(encoding="utf-8")
+
+
+def test_write_github_output_survives_missing_resolver(monkeypatch, tmp_path):
+    module_name = "temp_run_gptoss_review"
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "scripts.github_path_resolver":
+            raise ModuleNotFoundError("no helper")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path("scripts/run_gptoss_review.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+
+    try:
+        output_file = tmp_path / "output.txt"
+        monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
+        module._write_github_output(True)
+        assert output_file.read_text(encoding="utf-8") == "has_content=true\n"
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 def test_extract_review_fallback_to_text() -> None:

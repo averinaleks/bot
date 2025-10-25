@@ -35,7 +35,32 @@ if __package__ in {None, ""}:
     if package_root_str not in sys.path:
         sys.path.insert(0, package_root_str)
 
-from scripts.github_path_resolver import resolve_github_path
+try:  # pragma: no branch - import fallback handled immediately
+    from scripts.github_path_resolver import resolve_github_path as _resolve_github_path
+except Exception:  # pragma: no cover - executed when helper module is missing
+    try:
+        from scripts.github_path_resolver_fallback import (
+            resolve_github_path as _resolve_github_path,
+        )
+    except Exception:  # pragma: no cover - extremely defensive guard
+        def _resolve_github_path(
+            raw_path: str | None,
+            *,
+            allow_missing: bool = False,
+            description: str = "GitHub provided path",
+        ) -> Path | None:
+            if not raw_path:
+                return None
+            try:
+                return Path(raw_path).resolve(strict=not allow_missing)
+            except OSError as exc:
+                print(
+                    f"::warning::Не удалось определить {description} '{raw_path}': {exc}",
+                    file=sys.stderr,
+                )
+                return None
+
+resolve_github_path = _resolve_github_path
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
