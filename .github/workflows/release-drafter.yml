@@ -32,13 +32,32 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    concurrency:
+      group: release-drafter-${{ github.ref_name || github.event.repository.default_branch || github.run_id }}
+      cancel-in-progress: true
     steps:
       - name: Update release draft
+        id: release_drafter_initial
         uses: release-drafter/release-drafter@v6.1.0
+        continue-on-error: true
         with:
           config-name: release-drafter.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retry release draft update
+        if: steps.release_drafter_initial.conclusion == 'failure'
+        id: release_drafter_retry
+        uses: release-drafter/release-drafter@v6.1.0
+        continue-on-error: true
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fail if release draft update still failing
+        if: steps.release_drafter_initial.conclusion == 'failure' && steps.release_drafter_retry.conclusion == 'failure'
+        run: |
+          echo 'Release Drafter failed twice; aborting.'
+          exit 1
 
   autolabel_pull_request:
     if: >-
@@ -52,11 +71,31 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+    concurrency:
+      group: release-drafter-pr-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: true
     steps:
       - name: Update pull request metadata
+        id: release_drafter_pr_initial
         uses: release-drafter/release-drafter@v6.1.0
+        continue-on-error: true
         with:
           config-name: release-drafter.yml
           disable-releases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retry pull request metadata update
+        if: steps.release_drafter_pr_initial.conclusion == 'failure'
+        id: release_drafter_pr_retry
+        uses: release-drafter/release-drafter@v6.1.0
+        continue-on-error: true
+        with:
+          config-name: release-drafter.yml
+          disable-releases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fail if pull request metadata update still failing
+        if: steps.release_drafter_pr_initial.conclusion == 'failure' && steps.release_drafter_pr_retry.conclusion == 'failure'
+        run: |
+          echo 'Release Drafter metadata update failed twice; aborting.'
+          exit 1
