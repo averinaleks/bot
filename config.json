@@ -110,5 +110,10 @@
     "trading_fee": 0.0,
     "enable_notifications": true,
     "save_unsent_telegram": false,
-    "unsent_telegram_path": "unsent_telegram.log"
+    "unsent_telegram_path": "unsent_telegram.log",
+    "service_factories": {
+        "exchange": "services.service_factories:build_exchange",
+        "telegram_logger": "services.service_factories:build_telegram_logger",
+        "gpt_client": "services.service_factories:build_gpt_client"
+    }
 }
