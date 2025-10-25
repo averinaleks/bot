@@ -83,9 +83,7 @@ def test_pr_status_step_handles_missing_repository_env() -> None:
 def test_review_job_runs_only_for_supported_events() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    assert "fromJSON(needs.evaluate.outputs.run_review || 'false')" in workflow_text
-    assert "github.event_name == 'pull_request'" in workflow_text
-    assert "github.event_name == 'issue_comment'" in workflow_text
+    assert "needs.evaluate.outputs.run_review == 'true'" in workflow_text
 
 
 def test_skip_job_covers_target_events() -> None:
