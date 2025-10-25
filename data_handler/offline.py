@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Iterable, Sequence
 
-_SYMBOL_PERSONALISATION = b"bot-offline-handler"
+_SYMBOL_PERSONALISATION = b"botdho1"
+_BLAKE2S_PERSON_SIZE = getattr(hashlib.blake2s, "PERSON_SIZE", 8)
+if len(_SYMBOL_PERSONALISATION) > _BLAKE2S_PERSON_SIZE:
+    raise ValueError(
+        "Offline data handler personalisation exceeds blake2s PERSON_SIZE"
+    )
 
 
 @dataclass(frozen=True)
