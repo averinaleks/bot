@@ -51,10 +51,10 @@ def _ensure_module_version_attr(module: ModuleType) -> None:
         if not distribution:
             continue
         with contextlib.suppress(importlib_metadata.PackageNotFoundError):
-            module.__version__ = importlib_metadata.version(distribution)
+            setattr(module, "__version__", importlib_metadata.version(distribution))
             return
 
-    module.__version__ = SAFE_RAY_VERSION_STR
+    setattr(module, "__version__", SAFE_RAY_VERSION_STR)
 
 
 def _create_stub() -> tuple[ModuleType, bool]:
