@@ -123,22 +123,17 @@ def test_prepare_data_handler_without_pandas(monkeypatch, caplog):
 
     cfg = _Cfg()
 
-    with caplog.at_level(logging.WARNING):
-        prepare_data_handler(handler, cfg, symbols=None)
+    prepare_data_handler(handler, cfg, symbols=None)
 
     assert handler.usdt_pairs == ["BTCUSDT"]
     assert "pandas" not in sys.modules
 
     indicator_df = handler.indicators["BTCUSDT"].df
     indicator_df_2h = handler.indicators_2h["BTCUSDT"].df
-    assert getattr(indicator_df, "empty", None) is True
-    assert getattr(indicator_df, "columns", None) == ()
+    assert indicator_df == ()
+    assert indicator_df_2h == ()
     assert indicator_df is handler.ohlcv
     assert indicator_df_2h is handler.ohlcv_2h
 
     assert handler.funding_rates == {"BTCUSDT": 0.0}
     assert handler.open_interest == {"BTCUSDT": 0.0}
-
-    assert any(
-        "офлайн-заглушка DataFrame" in record.message for record in caplog.records
-    )

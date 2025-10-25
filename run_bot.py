@@ -114,42 +114,46 @@ def ensure_directories(cfg: "BotConfig") -> None:
             os.environ["CACHE_DIR"] = str(value)
 
 
-def prepare_data_handler(handler, cfg: "BotConfig", symbols: list[str] | None) -> None:
-    """Populate missing attributes required by downstream services."""
 
-    try:
+def _resolve_dataset(handler: Any, primary: str, legacy: str) -> Any:
+    value = getattr(handler, primary, None)
+    if value is not None:
+        return value
+    legacy_value = getattr(handler, legacy, None)
+    if legacy_value is not None:
+        return legacy_value
+    try:  # Local import keeps pandas optional
         import pandas as pd  # type: ignore[import-not-found]
     except ImportError:
-        class _OfflineDataFrame:
-            """Minimal stub replicating pandas.DataFrame attributes used by the bot."""
+        return ()
+    return pd.DataFrame()
 
-            columns: tuple = ()
-            empty: bool = True
 
-            def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401 - simple stub
-                self.columns = ()
-                self.empty = True
-
-        logger.warning(
-            "Pandas недоступен; используется офлайн-заглушка DataFrame для индикаторов"
-        )
-        pd = SimpleNamespace(DataFrame=lambda *args, **kwargs: _OfflineDataFrame())
+def prepare_data_handler(handler, cfg: "BotConfig", symbols: list[str] | None) -> None:
+    """Populate missing attributes required by downstream services."""
 
     pairs = symbols or getattr(handler, "usdt_pairs", None)
     if not pairs:
         pairs = ["BTCUSDT"]
     handler.usdt_pairs = list(dict.fromkeys(pairs))
 
-    handler.indicators = getattr(handler, "indicators", {}) or {}
-    handler.indicators_2h = getattr(handler, "indicators_2h", {}) or {}
+    indicators = getattr(handler, "indicators", {}) or {}
+    indicators_2h = getattr(handler, "indicators_2h", {}) or {}
+    handler.indicators = dict(indicators)
+    handler.indicators_2h = dict(indicators_2h)
 
-    empty_df = pd.DataFrame()
+    primary_dataset = _resolve_dataset(handler, "ohlcv", "_ohlcv")
+    secondary_dataset = _resolve_dataset(handler, "ohlcv_2h", "_ohlcv_2h")
+    handler.ohlcv = primary_dataset
+    handler.ohlcv_2h = secondary_dataset
+
     for sym in handler.usdt_pairs:
-        handler.indicators.setdefault(sym, SimpleNamespace(df=empty_df))
-        handler.indicators_2h.setdefault(sym, SimpleNamespace(df=empty_df))
-
-    handler.ohlcv = getattr(handler, "ohlcv", getattr(handler, "_ohlcv", empty_df))
-    handler.ohlcv_2h = getattr(handler, "ohlcv_2h", getattr(handler, "_ohlcv_2h", empty_df))
+        entry = handler.indicators.setdefault(sym, SimpleNamespace())
+        if not hasattr(entry, "df"):
+            entry.df = primary_dataset
+        entry_2h = handler.indicators_2h.setdefault(sym, SimpleNamespace())
+        if not hasattr(entry_2h, "df"):
+            entry_2h.df = secondary_dataset
 
     existing_funding = getattr(handler, "funding_rates", {}) or {}
     handler.funding_rates = {sym: float(existing_funding.get(sym, 0.0)) for sym in handler.usdt_pairs}
@@ -159,7 +163,7 @@ def prepare_data_handler(handler, cfg: "BotConfig", symbols: list[str] | None) -
 
     optimizer = getattr(handler, "parameter_optimizer", None)
     if optimizer is None or not hasattr(optimizer, "optimize"):
-        async def _return_config(_symbol: str) -> dict[str, object]:
+        async def _return_config(_symbol: str) -> dict[str, object]:  # noqa: ARG001
             return cfg.asdict()
 
         handler.parameter_optimizer = SimpleNamespace(optimize=_return_config)

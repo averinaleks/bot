@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -6,9 +7,37 @@ import json
 import os
 from typing import Any
 
-import numpy as np
+try:  # Optional dependency
+    import numpy as _NUMPY  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - environment without numpy
+    _NUMPY = None
 
-from .core import DataHandler
+
+def _is_offline_mode() -> bool:
+    """Best-effort detection of OFFLINE_MODE without importing heavy deps."""
+
+    try:  # Local import avoids module-level side effects during tests
+        from bot import config as bot_config  # noqa: WPS433 - local import is intentional
+    except Exception:  # pragma: no cover - configuration import errors
+        return False
+    return bool(getattr(bot_config, "OFFLINE_MODE", False))
+
+
+_OFFLINE_REQUESTED = _is_offline_mode()
+_CORE_DATA_HANDLER: type[Any] | None = None
+if _NUMPY is not None and not _OFFLINE_REQUESTED:
+    try:
+        from .core import DataHandler as _CORE_DATA_HANDLER  # type: ignore[assignment]
+    except Exception:  # pragma: no cover - pandas or other deps missing
+        _CORE_DATA_HANDLER = None
+
+if _CORE_DATA_HANDLER is None:
+    from .offline import OfflineDataHandler as DataHandler  # noqa: F401
+    np = None  # type: ignore[assignment]
+else:
+    DataHandler = _CORE_DATA_HANDLER
+    np = _NUMPY
+
 try:  # pragma: no cover - optional dependency
     from .api import api_app
 except Exception:  # pragma: no cover - Flask not installed
@@ -102,28 +131,35 @@ def atr_fast(
     low: Iterable[float],
     close: Iterable[float],
     period: int,
-) -> np.ndarray:
-    """Compute a simple moving-average based ATR.
+) -> Any:
+    """Compute a simple moving-average based ATR without requiring numpy."""
 
-    This implementation is intentionally lightweight and only supports the
-    features required by the tests.  ``high``, ``low`` and ``close`` should be
-    index-aligned iterables of equal length.
-    """
+    highs = [float(value) for value in high]
+    lows = [float(value) for value in low]
+    closes = [float(value) for value in close]
+    length = min(len(highs), len(lows), len(closes))
+    if length == 0:
+        return [] if np is None else np.asarray([], dtype=float)
 
-    high_array = np.asarray(list(high), dtype=float)
-    low_array = np.asarray(list(low), dtype=float)
-    close_array = np.asarray(list(close), dtype=float)
-    true_range = np.empty_like(close_array)
-    true_range[0] = high_array[0] - low_array[0]
-    prev_close = close_array[:-1]
-    true_range[1:] = np.maximum(high_array[1:], prev_close) - np.minimum(
-        low_array[1:], prev_close
-    )
-    atr = np.empty_like(true_range)
+    true_range: list[float] = []
+    for index in range(length):
+        if index == 0:
+            true_range.append(highs[0] - lows[0])
+            continue
+        upper = max(highs[index], closes[index - 1])
+        lower = min(lows[index], closes[index - 1])
+        true_range.append(upper - lower)
+
+    atr_values: list[float] = []
+    window = max(1, int(period))
     for index in range(len(true_range)):
-        start = max(0, index - period + 1)
-        atr[index] = true_range[start : index + 1].mean()
-    return atr
+        start = max(0, index - window + 1)
+        segment = true_range[start : index + 1]
+        atr_values.append(sum(segment) / len(segment))
+
+    if np is not None:
+        return np.asarray(atr_values, dtype=float)
+    return atr_values
 
 
 __all__ = [
