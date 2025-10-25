@@ -122,6 +122,12 @@ _PAYLOAD_BASE_REF_KEYS = (
     "baseBranchName",
 )
 _WORKFLOW_RUN_REPOSITORY_KEYS = ("head_repository", "repository")
+_DEPENDENCY_GRAPH_REPOSITORY_KEYS = (
+    "repository",
+    "repository_full_name",
+    "repositoryFullName",
+    "repo",
+)
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
 
 _SKIPPED_PACKAGES = {"ccxtpro"}
@@ -181,6 +187,52 @@ def _extract_dependency_graph_payload(
         return None
     candidate = payload.get("dependency_graph")
     return _as_mapping(candidate)
+
+
+def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
+    for key in _DEPENDENCY_GRAPH_REPOSITORY_KEYS:
+        repository = payload.get(key)
+        if isinstance(repository, str):
+            normalised = _normalise_optional_string(repository)
+            if normalised:
+                return normalised
+        mapping = _as_mapping(repository)
+        if mapping:
+            full_name = mapping.get("full_name")
+            if isinstance(full_name, str):
+                normalised = _normalise_optional_string(full_name)
+                if normalised:
+                    return normalised
+            name_value = mapping.get("name")
+            owner_value = mapping.get("owner")
+            owner_login = ""
+            if isinstance(owner_value, str):
+                owner_login = _normalise_optional_string(owner_value)
+            else:
+                owner_mapping = _as_mapping(owner_value)
+                if owner_mapping:
+                    login = owner_mapping.get("login")
+                    if isinstance(login, str):
+                        owner_login = _normalise_optional_string(login)
+                    if not owner_login:
+                        owner_name = owner_mapping.get("name")
+                        if isinstance(owner_name, str):
+                            owner_login = _normalise_optional_string(owner_name)
+            repo_name = (
+                _normalise_optional_string(name_value)
+                if isinstance(name_value, str)
+                else ""
+            )
+            if owner_login and repo_name:
+                return f"{owner_login}/{repo_name}"
+    owner = _normalise_optional_string(payload.get("repository_owner"))
+    repo = _normalise_optional_string(payload.get("repository_name"))
+    if owner and repo:
+        return f"{owner}/{repo}"
+    repo = _normalise_optional_string(payload.get("repo"))
+    if owner and repo:
+        return f"{owner}/{repo}"
+    return ""
 
 
 def _extract_workflow_run_repository(payload: Mapping[str, object]) -> str:
@@ -1082,6 +1134,11 @@ def submit_dependency_snapshot() -> None:
     dependency_graph_payload = (
         _extract_dependency_graph_payload(payload) if allow_event_payload else None
     )
+    client_dependency_graph_payload = (
+        _extract_dependency_graph_payload(client_payload)
+        if client_payload is not None
+        else None
+    )
 
     repository = _normalise_optional_string(os.getenv("GITHUB_REPOSITORY"))
     payload_used = False
@@ -1089,6 +1146,7 @@ def submit_dependency_snapshot() -> None:
     if not repository and allow_event_payload:
         for candidate_payload in (
             client_payload,
+            client_dependency_graph_payload,
             client_workflow_run_payload,
             workflow_run_payload,
             dependency_graph_payload,
@@ -1097,6 +1155,10 @@ def submit_dependency_snapshot() -> None:
             if not isinstance(candidate_payload, Mapping):
                 continue
             repository_candidate = _extract_workflow_run_repository(candidate_payload)
+            if not repository_candidate:
+                repository_candidate = _extract_dependency_graph_repository(
+                    candidate_payload
+                )
             if repository_candidate:
                 repository = repository_candidate
                 payload_used = True
@@ -1117,6 +1179,8 @@ def submit_dependency_snapshot() -> None:
     payload_used_local = payload_used
 
     token_override = _extract_payload_token(client_payload)
+    if not token_override and client_dependency_graph_payload is not None:
+        token_override = _extract_payload_token(client_dependency_graph_payload)
     if not token_override and allow_event_payload:
         token_override = _extract_payload_token(payload)
     if not token_override and dependency_graph_payload is not None:
@@ -1144,66 +1208,105 @@ def submit_dependency_snapshot() -> None:
                     sha = sha_candidate
                     payload_used_local = True
             if not ref:
-                    ref_candidate = _extract_payload_value(
-                        client_payload, *_PAYLOAD_REF_KEYS
+                ref_candidate = _extract_payload_value(
+                    client_payload, *_PAYLOAD_REF_KEYS
+                )
+                if ref_candidate:
+                    ref = _normalise_ref_value(ref_candidate)
+                    payload_used_local = True
+                else:
+                    base_candidate = _extract_payload_value(
+                        client_payload, *_PAYLOAD_BASE_REF_KEYS
                     )
-                    if ref_candidate:
-                        ref = _normalise_ref_value(ref_candidate)
+                    if base_candidate:
+                        ref = _normalise_ref_value(base_candidate)
                         payload_used_local = True
-        if allow_event_payload and dependency_graph_payload is not None and not sha:
-            sha_candidate = _extract_payload_value(
-                dependency_graph_payload, *_PAYLOAD_SHA_KEYS
-            )
-            if sha_candidate:
-                sha = sha_candidate
-                payload_used_local = True
-        if allow_event_payload and not sha and isinstance(payload, Mapping):
-            sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
-            if sha_candidate:
-                sha = sha_candidate
-                payload_used_local = True
-        if allow_event_payload and not sha and client_workflow_run_payload is not None:
+        if allow_event_payload and client_dependency_graph_payload is not None:
+            if not sha:
+                sha_candidate = _extract_payload_value(
+                    client_dependency_graph_payload, *_PAYLOAD_SHA_KEYS
+                )
+                if sha_candidate:
+                    sha = sha_candidate
+                    payload_used_local = True
+            if not ref:
+                ref_candidate = _extract_payload_value(
+                    client_dependency_graph_payload, *_PAYLOAD_REF_KEYS
+                )
+                if ref_candidate:
+                    ref = _normalise_ref_value(ref_candidate)
+                    payload_used_local = True
+                else:
+                    base_candidate = _extract_payload_value(
+                        client_dependency_graph_payload, *_PAYLOAD_BASE_REF_KEYS
+                    )
+                    if base_candidate:
+                        ref = _normalise_ref_value(base_candidate)
+                        payload_used_local = True
+        if allow_event_payload and dependency_graph_payload is not None:
+            if not sha:
+                sha_candidate = _extract_payload_value(
+                    dependency_graph_payload, *_PAYLOAD_SHA_KEYS
+                )
+                if sha_candidate:
+                    sha = sha_candidate
+                    payload_used_local = True
+            if not ref:
+                ref_candidate = _extract_payload_value(
+                    dependency_graph_payload, *_PAYLOAD_REF_KEYS
+                )
+                if ref_candidate:
+                    ref = _normalise_ref_value(ref_candidate)
+                    payload_used_local = True
+                else:
+                    base_candidate = _extract_payload_value(
+                        dependency_graph_payload, *_PAYLOAD_BASE_REF_KEYS
+                    )
+                    if base_candidate:
+                        ref = _normalise_ref_value(base_candidate)
+                        payload_used_local = True
+        if allow_event_payload and isinstance(payload, Mapping):
+            if not sha:
+                sha_candidate = _extract_payload_value(payload, *_PAYLOAD_SHA_KEYS)
+                if sha_candidate:
+                    sha = sha_candidate
+                    payload_used_local = True
+            if not ref:
+                ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
+                if ref_candidate:
+                    ref = _normalise_ref_value(ref_candidate)
+                    payload_used_local = True
+                else:
+                    base_candidate = _extract_payload_value(
+                        payload, *_PAYLOAD_BASE_REF_KEYS
+                    )
+                    if base_candidate:
+                        ref = _normalise_ref_value(base_candidate)
+                        payload_used_local = True
+        if (
+            allow_event_payload
+            and client_workflow_run_payload is not None
+            and not sha
+        ):
             sha_candidate = _extract_workflow_run_sha(client_workflow_run_payload)
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
-        if allow_event_payload and dependency_graph_payload is not None and not ref:
-            ref_candidate = _extract_payload_value(
-                dependency_graph_payload, *_PAYLOAD_REF_KEYS
-            )
-            if ref_candidate:
-                ref = _normalise_ref_value(ref_candidate)
-                payload_used_local = True
-            elif dependency_graph_payload is not None:
-                base_candidate = _extract_payload_value(
-                    dependency_graph_payload, *_PAYLOAD_BASE_REF_KEYS
-                )
-                if base_candidate:
-                    ref = _normalise_ref_value(base_candidate)
-                    payload_used_local = True
-        if allow_event_payload and not ref and isinstance(payload, Mapping):
-            ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
-            if ref_candidate:
-                ref = _normalise_ref_value(ref_candidate)
-                payload_used_local = True
-            else:
-                base_candidate = _extract_payload_value(
-                    payload, *_PAYLOAD_BASE_REF_KEYS
-                )
-                if base_candidate:
-                    ref = _normalise_ref_value(base_candidate)
-                    payload_used_local = True
-        if allow_event_payload and not ref and client_workflow_run_payload is not None:
+        if (
+            allow_event_payload
+            and client_workflow_run_payload is not None
+            and not ref
+        ):
             ref_candidate = _extract_workflow_run_ref(client_workflow_run_payload)
             if ref_candidate:
                 ref = ref_candidate
                 payload_used_local = True
-        if allow_event_payload and not sha and workflow_run_payload is not None:
+        if allow_event_payload and workflow_run_payload is not None and not sha:
             sha_candidate = _extract_workflow_run_sha(workflow_run_payload)
             if sha_candidate:
                 sha = sha_candidate
                 payload_used_local = True
-        if allow_event_payload and not ref and workflow_run_payload is not None:
+        if allow_event_payload and workflow_run_payload is not None and not ref:
             ref_candidate = _extract_workflow_run_ref(workflow_run_payload)
             if ref_candidate:
                 ref = ref_candidate

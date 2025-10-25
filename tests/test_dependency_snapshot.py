@@ -328,6 +328,81 @@ def test_submit_dependency_snapshot_uses_repository_dispatch_payload(
     assert submitted["ref"] == "refs/heads/auto"
 
 
+def test_submit_dependency_snapshot_uses_nested_dependency_graph_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "client_payload": {
+                    "dependency_graph": {
+                        "commit_oid": "feedfacecafebabe",
+                        "ref": "feature/nested",
+                        "token": "ghs_nested_token",
+                        "repository": "averinaleks/bot",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "repository_dispatch")
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "999")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    captured_submission: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        captured_submission["url"] = url
+        captured_submission["payload"] = json.loads(body)
+        captured_submission["authorization"] = headers.get("Authorization")
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured_stream = capsys.readouterr()
+    assert "Missing required environment variable" not in captured_stream.err
+    assert "Using event payload" in captured_stream.out
+
+    authorization = captured_submission.get("authorization")
+    assert authorization == "Bearer ghs_nested_token"
+
+    payload = captured_submission.get("payload")
+    assert isinstance(payload, dict)
+    assert payload["sha"] == "feedfacecafebabe"
+    assert payload["ref"] == "refs/heads/feature/nested"
+
+    url = captured_submission.get("url")
+    assert isinstance(url, str)
+    assert url.endswith("/repos/averinaleks/bot/dependency-graph/snapshots")
+
+
 def test_submit_dependency_snapshot_uses_dependency_graph_payload(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
