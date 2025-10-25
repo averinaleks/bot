@@ -575,8 +575,11 @@ def ensure_minimum_ray_version(ray_module: ModuleType) -> None:
             else:
                 try:
                     setattr(ray_module, "__version__", version_str)
-                except Exception:  # pragma: no cover - attribute may be read-only
-                    pass
+                except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive
+                    logger.debug(
+                        "Не удалось установить версию Ray через атрибут __version__: %s",
+                        exc,
+                    )
                 break
 
     try:
