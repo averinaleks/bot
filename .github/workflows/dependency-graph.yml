@@ -14,6 +14,8 @@ on:
       # Backwards compatibility with older hooks that still emit the original
       # "auto-submission" event type directly.
       - "auto-submission"
+      # Some integrations use underscores instead of hyphens.
+      - "dependency_graph_auto_submission"
 # NOTE: GitHub does not yet accept the experimental ``dependency_graph`` event
 # key in workflow files for public repositories. Auto-submission payloads should
 # therefore be forwarded via the repository dispatch hook declared above.

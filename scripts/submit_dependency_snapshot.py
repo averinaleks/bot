@@ -126,6 +126,10 @@ _DEPENDENCY_GRAPH_REPOSITORY_KEYS = (
     "repository",
     "repository_full_name",
     "repositoryFullName",
+    "repository_name_with_owner",
+    "repositoryNameWithOwner",
+    "repository_nwo",
+    "repositoryNwo",
     "repo",
 )
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
@@ -189,6 +193,16 @@ def _extract_dependency_graph_payload(
     return _as_mapping(candidate)
 
 
+def _extract_mapping_string(mapping: Mapping[str, object], *keys: str) -> str:
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, str):
+            normalised = _normalise_optional_string(value)
+            if normalised:
+                return normalised
+    return ""
+
+
 def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
     for key in _DEPENDENCY_GRAPH_REPOSITORY_KEYS:
         repository = payload.get(key)
@@ -198,12 +212,19 @@ def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
                 return normalised
         mapping = _as_mapping(repository)
         if mapping:
-            full_name = mapping.get("full_name")
-            if isinstance(full_name, str):
-                normalised = _normalise_optional_string(full_name)
-                if normalised:
-                    return normalised
-            name_value = mapping.get("name")
+            full_name = _extract_mapping_string(
+                mapping,
+                "full_name",
+                "fullName",
+                "name_with_owner",
+                "nameWithOwner",
+            )
+            if full_name:
+                if "/" in full_name:
+                    return full_name
+                # Some payloads include owner and repository in separate fields
+                # while still providing a combined value without a separator.
+                # Prefer the combined value when it already contains ``owner/repo``.
             owner_value = mapping.get("owner")
             owner_login = ""
             if isinstance(owner_value, str):
@@ -211,18 +232,33 @@ def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
             else:
                 owner_mapping = _as_mapping(owner_value)
                 if owner_mapping:
-                    login = owner_mapping.get("login")
-                    if isinstance(login, str):
-                        owner_login = _normalise_optional_string(login)
-                    if not owner_login:
-                        owner_name = owner_mapping.get("name")
-                        if isinstance(owner_name, str):
-                            owner_login = _normalise_optional_string(owner_name)
-            repo_name = (
-                _normalise_optional_string(name_value)
-                if isinstance(name_value, str)
-                else ""
+                    owner_login = _extract_mapping_string(
+                        owner_mapping,
+                        "login",
+                        "name",
+                        "username",
+                        "slug",
+                    )
+            repo_name = _extract_mapping_string(
+                mapping,
+                "name",
+                "repo",
+                "repository",
+                "repositoryName",
             )
+            if not owner_login and "/" in repo_name:
+                # When the repository name already contains ``owner/repo`` we
+                # can return it directly.
+                return repo_name
+            if not owner_login:
+                combined = _extract_mapping_string(
+                    mapping,
+                    "name_with_owner",
+                    "nameWithOwner",
+                    "fullName",
+                )
+                if combined:
+                    return combined
             if owner_login and repo_name:
                 return f"{owner_login}/{repo_name}"
     owner = _normalise_optional_string(payload.get("repository_owner"))
