@@ -211,6 +211,26 @@ class HistoricalDataCache:
             raise
         return os.fdopen(fd, "wb")
 
+    def _open_secure_for_read(self, path: Path):
+        flags = os.O_RDONLY
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        if nofollow:
+            flags |= nofollow
+        try:
+            fd = os.open(path, flags)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.EPERM):
+                logger.warning(
+                    "Отказ чтения кэша: путь %s является символической ссылкой",
+                    path,
+                )
+            raise
+        try:
+            return os.fdopen(fd, "rb")
+        except Exception:
+            os.close(fd)
+            raise
+
     def _aggressive_clean(self):
         try:
             files = []
@@ -380,15 +400,42 @@ class HistoricalDataCache:
                     return None
                 start_time = time.time()
                 try:
-                    data = pd.read_parquet(filename)
+                    with self._open_secure_for_read(filename) as fh:
+                        data = pd.read_parquet(fh)
                     fmt = "parquet"
+                except OSError as exc:
+                    if exc.errno in (errno.ELOOP, errno.EPERM):
+                        logger.warning(
+                            "Обнаружен небезопасный кэш %s_%s: %s",
+                            symbol,
+                            timeframe,
+                            exc,
+                        )
+                        self._delete_cache_file(filename)
+                        return None
+                    raise
                 except Exception as exc:
                     logger.warning(
                         "Parquet read failed, attempting JSON: %s",
                         exc,
                     )
-                    with filename.open("r", encoding="utf-8") as f:
-                        data = pd.read_json(f, orient="split")
+                    try:
+                        with self._open_secure_for_read(filename) as fh:
+                            raw_json = fh.read()
+                    except OSError as sec_exc:
+                        if sec_exc.errno in (errno.ELOOP, errno.EPERM):
+                            logger.warning(
+                                "Обнаружен небезопасный JSON-кэш %s_%s: %s",
+                                symbol,
+                                timeframe,
+                                sec_exc,
+                            )
+                            self._delete_cache_file(filename)
+                            return None
+                        raise
+                    data = pd.read_json(
+                        StringIO(raw_json.decode("utf-8")), orient="split"
+                    )
                     fmt = "json"
                 elapsed_time = time.time() - start_time
                 if elapsed_time > 0.5:
@@ -426,8 +473,33 @@ class HistoricalDataCache:
                     symbol,
                     timeframe,
                 )
-                with gzip.open(legacy_json, "rt", encoding="utf-8") as f:
-                    payload = json.load(f)
+                try:
+                    with self._open_secure_for_read(legacy_json) as fh:
+                        compressed = fh.read()
+                except OSError as exc:
+                    if exc.errno in (errno.ELOOP, errno.EPERM):
+                        logger.warning(
+                            "Обнаружен небезопасный legacy-кэш %s_%s: %s",
+                            symbol,
+                            timeframe,
+                            exc,
+                        )
+                        self._delete_cache_file(legacy_json)
+                        return None
+                    raise
+                try:
+                    payload = json.loads(
+                        gzip.decompress(compressed).decode("utf-8")
+                    )
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    logger.error(
+                        "Не удалось прочитать старый JSON-кэш %s_%s: %s",
+                        symbol,
+                        timeframe,
+                        exc,
+                    )
+                    self._delete_cache_file(legacy_json)
+                    return None
                 data_json = payload.get("data")
                 data = pd.read_json(StringIO(data_json), orient="split")
                 if isinstance(data, pd.DataFrame):
