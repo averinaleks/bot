@@ -244,29 +244,60 @@ jobs:
             exit 1
           fi
 
-          build_args=(--progress plain --file "${DOCKERFILE_PATH}")
-          if [ -n "${BUILDER_NAME}" ]; then
-            build_args+=(--builder "${BUILDER_NAME}")
+          mapfile -t ALL_IMAGE_TAGS < <(printf '%s\n' "${IMAGE_TAGS}" | tr -d '\r' | sed '/^$/d')
+
+          if [ "${#ALL_IMAGE_TAGS[@]}" -eq 0 ]; then
+            echo "::error::Не удалось подготовить теги Docker-образа"
+            exit 1
           fi
 
-          if [ "${SHOULD_PUSH}" = "true" ]; then
-            build_args+=(--push)
-          else
-            build_args+=(--load)
-          fi
-
-          while IFS= read -r tag; do
-            tag="${tag%$'\r'}"
-            if [ -n "${tag}" ]; then
-              build_args+=(--tag "${tag}")
+          DOCKERHUB_TAGS=()
+          for tag in "${ALL_IMAGE_TAGS[@]}"; do
+            if [[ "${tag}" == docker.io/* ]]; then
+              DOCKERHUB_TAGS+=("${tag}")
             fi
-          done <<< "${IMAGE_TAGS}"
-
-          build_args+=(.)
+          done
 
           run_build() {
             local use_cache="$1"
-            local args=("${build_args[@]}")
+            local push_mode="$2"
+            shift 2
+            local tags=("$@")
+
+            local args=(--progress plain --file "${DOCKERFILE_PATH}")
+            if [ -n "${BUILDER_NAME}" ]; then
+              args+=(--builder "${BUILDER_NAME}")
+            fi
+
+            case "${push_mode}" in
+              auto)
+                if [ "${SHOULD_PUSH}" = "true" ]; then
+                  args+=(--push)
+                else
+                  args+=(--load)
+                fi
+                ;;
+              push)
+                args+=(--push)
+                ;;
+              local)
+                args+=(--load)
+                ;;
+              *)
+                echo "::error::Unknown push mode: ${push_mode}"
+                return 2
+                ;;
+            esac
+
+            if [ "${#tags[@]}" -gt 0 ]; then
+              for image_tag in "${tags[@]}"; do
+                args+=(--tag "${image_tag}")
+              done
+            elif [ "${push_mode}" != "local" ] && [ "${SHOULD_PUSH}" = "true" ]; then
+              echo "::error::No image tags available for docker build push"
+              return 2
+            fi
+
             if [ "${use_cache}" = "true" ]; then
               args+=(--cache-from "type=gha,scope=${CACHE_SCOPE},ignore-error=true")
               args+=(--cache-to "type=gha,scope=${CACHE_SCOPE},mode=max,oci-mediatypes=true,ignore-error=true")
@@ -274,32 +305,103 @@ jobs:
               args+=(--no-cache)
             fi
 
-            docker buildx build "${args[@]}"
+            args+=(.)
+
+            local log_file
+            log_file=$(mktemp -t buildx-log.XXXXXX)
+
+            docker buildx build "${args[@]}" |& tee "${log_file}"
+            local status=${PIPESTATUS[0]}
+            BUILD_LOG="${log_file}"
+            return "${status}"
           }
 
+          detect_ghcr_outage() {
+            local log_file="$1"
+            if [ -f "${log_file}" ] && grep -Fq "Our services aren't available right now" "${log_file}"; then
+              return 0
+            fi
+            if [ -f "${log_file}" ] && grep -Fq "invalid character '<' looking for beginning of value" "${log_file}"; then
+              return 0
+            fi
+            return 1
+          }
+
+          ghcr_outage="false"
+
           set +e
-          run_build true
+          run_build true auto "${ALL_IMAGE_TAGS[@]}"
           status=$?
+          first_log="${BUILD_LOG}"
           set -e
 
           if [ "${status}" -eq 0 ]; then
+            rm -f "${first_log}"
             echo "status=success" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
-          echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
+          if detect_ghcr_outage "${first_log}"; then
+            ghcr_outage="true"
+            echo "::warning::GHCR responded with an HTML error during docker build (cache enabled)"
+          else
+            echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
+          fi
 
           set +e
-          run_build false
+          run_build false auto "${ALL_IMAGE_TAGS[@]}"
           retry_status=$?
+          second_log="${BUILD_LOG}"
           set -e
 
           if [ "${retry_status}" -eq 0 ]; then
+            rm -f "${first_log}" "${second_log}"
             echo "status=success" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
+          if detect_ghcr_outage "${second_log}"; then
+            ghcr_outage="true"
+            echo "::warning::GHCR responded with an HTML error during docker build (cache disabled)"
+          fi
+
+          if [ "${ghcr_outage}" = "true" ] && [ "${SHOULD_PUSH}" = "true" ]; then
+            if [ "${#DOCKERHUB_TAGS[@]}" -gt 0 ]; then
+              echo "::warning::Retrying docker build with Docker Hub tags only due to GHCR outage"
+              set +e
+              run_build false auto "${DOCKERHUB_TAGS[@]}"
+              dockerhub_status=$?
+              dockerhub_log="${BUILD_LOG}"
+              set -e
+              if [ "${dockerhub_status}" -eq 0 ]; then
+                rm -f "${first_log}" "${second_log}" "${dockerhub_log}"
+                echo "::notice::GHCR push skipped; Docker Hub image updated successfully"
+                echo "status=success" >> "${GITHUB_OUTPUT}"
+                exit 0
+              fi
+              rm -f "${dockerhub_log}"
+            fi
+
+            echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification"
+            set +e
+            run_build false local "${ALL_IMAGE_TAGS[@]}"
+            local_status=$?
+            local_log="${BUILD_LOG}"
+            set -e
+            if [ "${local_status}" -eq 0 ]; then
+              rm -f "${first_log}" "${second_log}" "${local_log}"
+              echo "::notice::Docker image built locally without pushing because GHCR was unavailable"
+              echo "status=success" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            rm -f "${local_log}"
+          fi
+
           echo "::error::Docker build failed even after retry without cache (exit code ${retry_status})"
+          if [ -f "${second_log}" ]; then
+            tail -n 50 "${second_log}" || true
+          fi
+          rm -f "${first_log}" "${second_log}"
           exit "${retry_status}"
 
       - name: Cleanup before Trivy scan
