@@ -785,6 +785,7 @@ def _install_dummy_openai(monkeypatch, recorder):
     class DummyResponse:
         def __init__(self, data):
             self._data = data
+            self.output_text = data.get("output_text")
 
         def model_dump(self):
             return self._data
@@ -797,6 +798,14 @@ def _install_dummy_openai(monkeypatch, recorder):
             self._record["request"] = kwargs
             return DummyResponse({"choices": [{"message": {"content": "ok"}}]})
 
+    class DummyResponses:
+        def __init__(self, record):
+            self._record = record
+
+        def create(self, **kwargs):
+            self._record["request"] = kwargs
+            return DummyResponse({"output_text": "ok"})
+
     class DummyChat:
         def __init__(self, record):
             self.completions = DummyCompletions(record)
@@ -805,6 +814,7 @@ def _install_dummy_openai(monkeypatch, recorder):
         def __init__(self, **kwargs):
             recorder["client_kwargs"] = kwargs
             self.chat = DummyChat(recorder)
+            self.responses = DummyResponses(recorder)
 
     monkeypatch.setattr("bot.gpt_client.OpenAI", DummyOpenAI)
 
@@ -819,7 +829,12 @@ def test_query_gpt_openai_fallback(monkeypatch):
 
     assert result == "ok"
     assert recorder["client_kwargs"].get("timeout") == 5.0
-    assert recorder["request"]["messages"][0]["content"] == "привет"
+    request = recorder["request"]
+    if "messages" in request:
+        assert request["messages"][0]["content"] == "привет"
+    else:
+        content = request["input"][0]["content"]
+        assert content[0]["text"] == "привет"
 
 
 def test_query_gpt_openai_scheme(monkeypatch):
@@ -846,7 +861,9 @@ def test_query_gpt_openai_invalid_max_tokens(monkeypatch, caplog):
 
     assert result == "ok"
     assert "Invalid OPENAI_MAX_TOKENS value 'oops'; ignoring" in caplog.text
-    assert "max_tokens" not in recorder["request"]
+    request = recorder["request"]
+    assert "max_tokens" not in request
+    assert "max_output_tokens" not in request
 
 
 @pytest.mark.asyncio

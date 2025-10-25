@@ -8,6 +8,7 @@ or private address (HTTP is allowed only for such addresses).
 import asyncio
 import importlib
 import importlib.util
+import inspect
 import json
 import logging
 import os
@@ -162,6 +163,13 @@ def _resolve_openai_base_url(api_url: str | None) -> str | None:
 def _serialise_openai_response(response: Any) -> bytes:
     """Serialise *response* to JSON bytes compatible with :func:`_parse_gpt_response`."""
 
+    # Newer OpenAI responses expose ``output_text`` instead of ``choices``.
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str):
+        return json.dumps(
+            {"choices": [{"message": {"content": output_text}}]}
+        ).encode("utf-8")
+
     if hasattr(response, "model_dump_json"):
         dumped = response.model_dump_json()
         if isinstance(dumped, str):
@@ -232,12 +240,47 @@ def _query_openai(prompt: str, api_url: str | None) -> str:
             )
 
     try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=timeout,
-            **completion_kwargs,
-        )
+        response = None
+        responses_api = getattr(client, "responses", None)
+        create_fn = getattr(responses_api, "create", None)
+        if create_fn is not None:
+            try:
+                parameters = inspect.signature(create_fn).parameters
+            except (TypeError, ValueError):  # pragma: no cover - defensive guard
+                parameters = {}
+
+            request_kwargs: dict[str, Any] = {"model": model_name}
+            if "timeout" in parameters:
+                request_kwargs["timeout"] = timeout
+
+            prepared_kwargs = completion_kwargs.copy()
+            if "max_tokens" in prepared_kwargs and "max_tokens" not in parameters:
+                max_tokens = prepared_kwargs.pop("max_tokens")
+                if "max_output_tokens" in parameters:
+                    prepared_kwargs["max_output_tokens"] = max_tokens
+            request_kwargs.update(prepared_kwargs)
+
+            request_kwargs.setdefault(
+                "input",
+                [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ],
+            )
+            try:
+                response = create_fn(**request_kwargs)
+            except TypeError:  # pragma: no cover - fallback to legacy API
+                response = None
+
+        if response is None:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=timeout,
+                **completion_kwargs,
+            )
     except Exception as exc:  # pragma: no cover - depends on runtime env
         logger.exception("Error querying OpenAI API: %s", exc)
         raise GPTClientNetworkError("Failed to query OpenAI API") from exc
