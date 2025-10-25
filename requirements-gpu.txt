@@ -76,7 +76,7 @@ namex==0.1.0
     # via keras
 networkx==3.4.2
     # via torch
-numpy==2.2.6
+numpy==2.1.3
     # via
     #   cupy-cuda12x
     #   h5py

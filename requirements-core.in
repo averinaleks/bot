@@ -1,4 +1,4 @@
-numpy>=2.2.6  # core numeric library
+numpy>=2.1.3  # core numeric library
 pandas>=2.2.2
 ccxt>=4.5.8,<5
 # ccxtpro is distributed under a commercial license and cannot be installed
