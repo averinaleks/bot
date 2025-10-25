@@ -55,6 +55,60 @@ TelegramLogger = _utils.TelegramLogger
 test_stubs.apply()
 
 
+def _ensure_minimal_ray_api(ray_module: Any) -> Any:
+    """Patch *ray_module* to expose the attributes used by the trade manager."""
+
+    if all(hasattr(ray_module, name) for name in ("remote", "get")):
+        return ray_module
+
+    class _ObjectRef:
+        __slots__ = ("_value",)
+
+        def __init__(self, value: Any) -> None:
+            self._value = value
+
+    def _remote(func=None, **_options):
+        if func is None:
+            def _decorator(inner):
+                return _RemoteHandle(inner)
+
+            return _decorator
+        return _RemoteHandle(func)
+
+    class _RemoteHandle:
+        __slots__ = ("_func",)
+
+        def __init__(self, func):
+            self._func = func
+
+        def remote(self, *args: Any, **kwargs: Any) -> _ObjectRef:
+            return _ObjectRef(self._func(*args, **kwargs))
+
+        def options(self, *args: Any, **kwargs: Any) -> "_RemoteHandle":
+            return self
+
+    def _unwrap(value: Any) -> Any:
+        if isinstance(value, _ObjectRef):
+            return value._value
+        if isinstance(value, dict):
+            return {k: _unwrap(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            iterable = (_unwrap(v) for v in value)
+            return type(value)(iterable)
+        return value
+
+    ray_module.remote = _remote
+    ray_module.get = _unwrap
+    ray_module.ObjectRef = getattr(ray_module, "ObjectRef", _ObjectRef)
+    ray_module.shutdown = getattr(ray_module, "shutdown", lambda **_k: None)
+    ray_module.is_initialized = getattr(ray_module, "is_initialized", lambda: False)
+
+    return ray_module
+
+
+ray = _ensure_minimal_ray_api(ray)
+
+
 _module_logger = logging.getLogger(__name__)
 
 
