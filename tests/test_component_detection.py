@@ -88,6 +88,46 @@ def test_run_scan_rejects_manifest_symlink_parent(tmp_path: Path, capsys) -> Non
     assert not manifest_path.exists()
 
 
+def test_run_scan_rejects_manifest_with_control_characters(
+    tmp_path: Path, capsys
+) -> None:
+    module = _load_component_detection()
+    manifest = tmp_path / "requirements.txt"
+    manifest.write_text("requests==2.32.5\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        SourceDirectory=str(tmp_path),
+        ManifestFile="reports/bad\nname.json",
+        PrintManifest=False,
+    )
+
+    return_code = module.run_scan(args)  # type: ignore[attr-defined]
+
+    captured = capsys.readouterr()
+    assert return_code == 1
+    assert "control characters" in captured.err
+
+
+def test_run_scan_rejects_source_directory_control_characters(
+    tmp_path: Path, capsys
+) -> None:
+    module = _load_component_detection()
+    manifest = tmp_path / "requirements.txt"
+    manifest.write_text("requests==2.32.5\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        SourceDirectory=str(tmp_path / "bad\nsource"),
+        ManifestFile=str(tmp_path / "manifest.json"),
+        PrintManifest=False,
+    )
+
+    return_code = module.run_scan(args)  # type: ignore[attr-defined]
+
+    captured = capsys.readouterr()
+    assert return_code == 1
+    assert "Invalid SourceDirectory" in captured.err
+
+
 def test_main_ignores_unknown_arguments(tmp_path: Path, capsys) -> None:
     module = _load_component_detection()
     manifest = tmp_path / "requirements.txt"

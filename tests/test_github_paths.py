@@ -8,6 +8,9 @@ import pytest
 import importlib
 import sys
 
+from scripts.github_path_resolver_fallback import (
+    resolve_github_path as fallback_resolve_github_path,
+)
 from scripts.github_paths import allowed_github_directories, resolve_github_path
 
 
@@ -45,6 +48,24 @@ def test_resolve_github_path_rejects_untrusted_locations(tmp_path: Path, monkeyp
     malicious.write_text("{}", encoding="utf-8")
 
     assert resolve_github_path(str(malicious)) is None
+
+
+def test_resolve_github_path_rejects_control_characters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    target = str(workspace / "artifact\n.json")
+    assert resolve_github_path(target) is None
+    captured = capsys.readouterr()
+    assert "control characters" in captured.err
+
+    capsys.readouterr()  # reset capture before calling fallback
+    assert fallback_resolve_github_path(target) is None
+    captured = capsys.readouterr()
+    assert "control characters" in captured.err
 
 
 def test_github_path_resolver_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -71,10 +71,28 @@ def _build_components(root: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return components, manifest_paths
 
 
+_CONTROL_CHAR_THRESHOLD = 32
+
+
+def _ensure_safe_path_string(
+    raw_path: str | os.PathLike[str], *, description: str
+) -> str:
+    """Return a textual path representation rejecting control characters."""
+
+    path_str = os.fsdecode(raw_path)
+    if any(ord(char) < _CONTROL_CHAR_THRESHOLD or ord(char) == 127 for char in path_str):
+        raise ValueError(f"{description} must not contain control characters")
+    return path_str
+
+
 def _resolve_source_directory(raw_path: str | os.PathLike[str] | None) -> Path:
     """Return the absolute source directory path used for scanning."""
 
-    candidate = Path(raw_path or ".").expanduser()
+    candidate_input = raw_path or "."
+    candidate_str = _ensure_safe_path_string(
+        candidate_input, description="SourceDirectory"
+    )
+    candidate = Path(candidate_str).expanduser()
     resolved = candidate.resolve(strict=False)
     if resolved.exists():
         try:
@@ -102,10 +120,13 @@ def _ensure_within_directory(base: Path, target: Path) -> Path:
 def _normalise_manifest_path(base: Path, raw_path: str | os.PathLike[str]) -> Path:
     """Return a safe manifest output path anchored inside ``base``."""
 
-    if not raw_path or not str(raw_path):
+    if raw_path is None:
+        raise ValueError("ManifestFile must not be empty")
+    manifest_str = _ensure_safe_path_string(raw_path, description="ManifestFile")
+    if not manifest_str:
         raise ValueError("ManifestFile must not be empty")
 
-    candidate = Path(raw_path).expanduser()
+    candidate = Path(manifest_str).expanduser()
     if candidate.is_absolute():
         resolved = candidate.resolve(strict=False)
     else:
@@ -161,7 +182,11 @@ def _write_manifest(base: Path, output_path: Path, serialized: str) -> None:
 
 
 def run_scan(args: argparse.Namespace) -> int:
-    source_directory = _resolve_source_directory(args.SourceDirectory)
+    try:
+        source_directory = _resolve_source_directory(args.SourceDirectory)
+    except ValueError as exc:
+        print(f"Invalid SourceDirectory: {exc}", file=sys.stderr)
+        return 1
     if not source_directory.exists():
         print(f"Source directory not found: {source_directory}", file=sys.stderr)
         return 1
