@@ -72,6 +72,14 @@ def test_pr_status_step_skips_pull_request_target() -> None:
     assert notice_message in workflow_text
 
 
+def test_pr_status_step_handles_missing_repository_env() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert 'repo="${REPOSITORY:-}"' in workflow_text
+    assert 'token="${GITHUB_TOKEN:-}"' in workflow_text
+    assert 'Переменная REPOSITORY не задана – пропускаю проверку PR' in workflow_text
+
+
 def test_review_job_runs_only_for_supported_events() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
