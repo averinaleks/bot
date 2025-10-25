@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple, cast
 
@@ -16,6 +17,7 @@ from pip_audit._format import JsonFormat
 from pip_audit._service import PyPIService
 from pip_audit._service.interface import (
     ResolvedDependency,
+    ServiceError,
     SkippedDependency,
     VulnerabilityResult,
 )
@@ -62,7 +64,13 @@ def _should_ignore_vulnerability(
     return bool(identifiers & ignored_ids)
 
 
-def _run_audit(strict: bool) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
+_MAX_AUDIT_RETRIES = 3
+_RETRY_BACKOFF_SECONDS = 2.0
+
+
+def _run_audit_once(
+    strict: bool,
+) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
     state = AuditState()
     auditor = Auditor(PyPIService(), options=AuditOptions(dry_run=False))
     source = PipSource(state=state)
@@ -88,6 +96,33 @@ def _run_audit(strict: bool) -> Tuple[Dict[ResolvedDependency, List[Vulnerabilit
             raise
 
     return result, skipped
+
+
+def _run_audit(
+    strict: bool,
+) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
+    last_error: ServiceError | None = None
+    delay = _RETRY_BACKOFF_SECONDS
+
+    for attempt in range(1, _MAX_AUDIT_RETRIES + 1):
+        try:
+            return _run_audit_once(strict=strict)
+        except ServiceError as exc:
+            last_error = exc
+            if attempt == _MAX_AUDIT_RETRIES:
+                break
+
+            wait_for = min(30.0, delay)
+            print(
+                f"pip-audit query failed (attempt {attempt}/{_MAX_AUDIT_RETRIES}): {exc}. "
+                f"Retrying in {wait_for:.1f}s...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_for)
+            delay *= 2
+
+    assert last_error is not None
+    raise last_error
 
 
 def main(argv: Sequence[str] | None = None) -> int:
