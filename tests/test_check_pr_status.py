@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import builtins
+import importlib.util
 from pathlib import Path
 import socket
+import sys
 
 import pytest
 
@@ -108,6 +111,39 @@ def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
     assert result == 0
     assert output_file.read_text(encoding="utf-8") == "skip=false\nhead_sha={}\n".format("deadbeef" * 5)
+
+
+def test_write_output_survives_missing_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module_name = "temp_check_pr_status"
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "scripts.github_path_resolver":
+            raise ModuleNotFoundError("no helper")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path("scripts/check_pr_status.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+
+    try:
+        output_file = tmp_path / "output.txt"
+        monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
+        module._write_github_output(True, "abc123")
+        assert (
+            output_file.read_text(encoding="utf-8")
+            == "skip=true\nhead_sha=abc123\n"
+        )
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 def test_main_handles_http_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
