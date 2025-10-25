@@ -146,6 +146,7 @@ jobs:
           docker info
 
       - name: Set up Buildx
+        id: buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3
         with:
           driver: docker-container
@@ -221,79 +222,88 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # Собираем образ напрямую через docker buildx CLI, чтобы можно было
+      # перехватить типичную ошибку GitHub Actions Cache (HTML-ответ 400) и
+      # выполнить повтор без кэшей. build-push-action не позволяет надёжно
+      # переиспользовать ``continue-on-error`` для сохранения успешного статуса
+      # job после такого сбоя, поэтому fallback реализован вручную.
       - name: Build and push Docker image
-        id: build_with_cache
-        continue-on-error: true
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          push: ${{ env.PUBLISH_IMAGES == 'true' }}
-          tags: ${{ steps.tags.outputs.list }}
-          # Используем отдельный scope с OCI media types, чтобы BuildKit
-          # не пытался читать устаревший кэш с generic "application/octet-stream"
-          # и не падал с "unexpected media type ... not found". Новый суффикс
-          # ``-oci-v4`` гарантирует создание отдельного пула слоёв. ``v3`` уже
-          # использовался в прошлых сборках, и BuildKit продолжал пытаться
-          # читать устаревшие слои с generic ``application/octet-stream``,
-          # падая с "unexpected media type ... not found". Новый суффикс
-          # сбрасывает кеш, сохраняя предыдущий сценарий восстановления при
-          # регрессиях и оставляя включённый ``ignore-error`` как сетку
-          # безопасности.
-          cache-from: type=gha,scope=${{ matrix.image }}-oci-v4,ignore-error=true
-          # ``ignore-error`` избавляет от редких падений buildx с "failed to parse
-          # error response 400: <h2>Our services aren't available right now</h2>"
-          # при временных сбоях бэкенда GitHub Actions Cache. Для ``cache-from``
-          # флаг уже включён, но запись артефакта по умолчанию прерывает сборку.
-          cache-to: type=gha,scope=${{ matrix.image }}-oci-v4,mode=max,oci-mediatypes=true,ignore-error=true
-
-      # Даже с ``ignore-error=true`` back-end GitHub Actions Cache периодически
-      # возвращает HTML-ответы 400 "Our services aren't available right now",
-      # из-за чего buildx прерывает сборку с ``invalid character '<'``. Печатаем
-      # предупреждение и запускаем повтор без ``type=gha`` кэшей, чтобы не
-      # терять публикацию образа.
-      - name: Note cache-backed build failure
-        if: ${{ steps.build_with_cache.outcome == 'failure' }}
-        run: |
-          echo "::warning::docker buildx with GitHub Actions cache failed, retrying without cache"
-
-      - name: Retry build without GitHub Actions cache
-        if: ${{ steps.build_with_cache.outcome == 'failure' }}
-        id: build_without_cache
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          push: ${{ env.PUBLISH_IMAGES == 'true' }}
-          tags: ${{ steps.tags.outputs.list }}
-          no-cache: true
-
-      - name: Finalize build result
-        id: build_result
+        id: build
         env:
-          CACHED_OUTCOME: ${{ steps.build_with_cache.outcome }}
-          RETRY_OUTCOME: ${{ steps.build_without_cache.outcome }}
+          BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+          CACHE_SCOPE: ${{ matrix.image }}-oci-v4
+          DOCKERFILE_PATH: ${{ matrix.file }}
+          IMAGE_TAGS: ${{ steps.tags.outputs.list }}
+          SHOULD_PUSH: ${{ env.PUBLISH_IMAGES }}
+        shell: bash
         run: |
           set -euo pipefail
-          if [ "$CACHED_OUTCOME" = "success" ]; then
-            echo "status=success" >> "$GITHUB_OUTPUT"
-            exit 0
+
+          if [ -z "${IMAGE_TAGS}" ]; then
+            echo "::error::Не удалось подготовить теги Docker-образа"
+            exit 1
           fi
-          if [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "success" ]; then
-            echo "status=success" >> "$GITHUB_OUTPUT"
-            exit 0
+
+          build_args=(--progress plain --file "${DOCKERFILE_PATH}")
+          if [ -n "${BUILDER_NAME}" ]; then
+            build_args+=(--builder "${BUILDER_NAME}")
           fi
-          if [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "skipped" ]; then
-            echo "::error::Build failed before retry could run"
-          elif [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "failure" ]; then
-            echo "::error::Docker build failed even after retry without cache"
+
+          if [ "${SHOULD_PUSH}" = "true" ]; then
+            build_args+=(--push)
           else
-            echo "::error::Docker build failed with unexpected state (cached=$CACHED_OUTCOME, retry=$RETRY_OUTCOME)"
+            build_args+=(--load)
           fi
-          exit 1
+
+          while IFS= read -r tag; do
+            tag="${tag%$'\r'}"
+            if [ -n "${tag}" ]; then
+              build_args+=(--tag "${tag}")
+            fi
+          done <<< "${IMAGE_TAGS}"
+
+          build_args+=(.)
+
+          run_build() {
+            local use_cache="$1"
+            local args=("${build_args[@]}")
+            if [ "${use_cache}" = "true" ]; then
+              args+=(--cache-from "type=gha,scope=${CACHE_SCOPE},ignore-error=true")
+              args+=(--cache-to "type=gha,scope=${CACHE_SCOPE},mode=max,oci-mediatypes=true,ignore-error=true")
+            else
+              args+=(--no-cache)
+            fi
+
+            docker buildx build "${args[@]}"
+          }
+
+          set +e
+          run_build true
+          status=$?
+          set -e
+
+          if [ "${status}" -eq 0 ]; then
+            echo "status=success" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
+
+          set +e
+          run_build false
+          retry_status=$?
+          set -e
+
+          if [ "${retry_status}" -eq 0 ]; then
+            echo "status=success" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "::error::Docker build failed even after retry without cache (exit code ${retry_status})"
+          exit "${retry_status}"
 
       - name: Cleanup before Trivy scan
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' }}
         run: |
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
@@ -301,12 +311,12 @@ jobs:
           sudo mkdir -p /mnt/trivy-cache
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-cache
       - name: Prepare Trivy temp
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' }}
         run: |
           sudo mkdir -p /mnt/trivy-tmp
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' }}
         id: trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # 0.33.1
         continue-on-error: true
@@ -320,11 +330,11 @@ jobs:
           output: ${{ matrix.artifact }}.txt
           scanners: vuln
       - name: Show Trivy scan results
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
