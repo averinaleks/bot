@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -70,15 +71,104 @@ def _build_components(root: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return components, manifest_paths
 
 
+def _resolve_source_directory(raw_path: str | os.PathLike[str] | None) -> Path:
+    """Return the absolute source directory path used for scanning."""
+
+    candidate = Path(raw_path or ".").expanduser()
+    resolved = candidate.resolve(strict=False)
+    if resolved.exists():
+        try:
+            resolved = resolved.resolve(strict=True)
+        except OSError:
+            # Fall back to the non-strict resolution if permissions block us.
+            resolved = resolved.resolve(strict=False)
+    return resolved
+
+
+def _ensure_within_directory(base: Path, target: Path) -> Path:
+    """Return *target* if it stays within *base*, otherwise raise ``ValueError``."""
+
+    base = base.resolve(strict=False)
+    target = target.resolve(strict=False)
+    try:
+        target.relative_to(base)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise ValueError(
+            f"ManifestFile must be located within SourceDirectory ({base})"
+        ) from exc
+    return target
+
+
+def _normalise_manifest_path(base: Path, raw_path: str | os.PathLike[str]) -> Path:
+    """Return a safe manifest output path anchored inside ``base``."""
+
+    if not raw_path or not str(raw_path):
+        raise ValueError("ManifestFile must not be empty")
+
+    candidate = Path(raw_path).expanduser()
+    if candidate.is_absolute():
+        resolved = candidate.resolve(strict=False)
+    else:
+        resolved = (base / candidate).resolve(strict=False)
+    return _ensure_within_directory(base, resolved)
+
+
+def _ensure_manifest_parents_safe(base: Path, target: Path) -> None:
+    """Ensure that the manifest path and its parents are not symlinks."""
+
+    base = base.resolve(strict=False)
+    target = target.resolve(strict=False)
+
+    for parent in target.parents:
+        if parent == base:
+            break
+        if not parent.exists():  # Newly created directories are safe.
+            continue
+        if parent.is_symlink():
+            raise ValueError(
+                f"ManifestFile parent directory {parent} must not be a symlink"
+            )
+    else:  # pragma: no cover - ``target`` unexpectedly escaped ``base``
+        raise ValueError(
+            "ManifestFile path escapes SourceDirectory and cannot be written"
+        )
+
+    if target.exists() and target.is_symlink():
+        raise ValueError("ManifestFile path must not be a symlink")
+
+
+def _write_manifest(base: Path, output_path: Path, serialized: str) -> None:
+    """Persist the scan result safely under ``base``."""
+
+    _ensure_manifest_parents_safe(base, output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_manifest_parents_safe(base, output_path)
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW  # type: ignore[attr-defined]
+
+    fd: int | None = None
+    try:
+        fd = os.open(os.fspath(output_path), flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = None  # ``fdopen`` now owns the descriptor.
+            handle.write(serialized)
+            handle.write("\n")
+    finally:
+        if fd is not None:  # pragma: no cover - defensive cleanup
+            os.close(fd)
+
+
 def run_scan(args: argparse.Namespace) -> int:
-    source_directory = Path(args.SourceDirectory or ".").resolve()
+    source_directory = _resolve_source_directory(args.SourceDirectory)
     if not source_directory.exists():
         print(f"Source directory not found: {source_directory}", file=sys.stderr)
         return 1
 
     components, manifest_paths = _build_components(source_directory)
 
-    result = {
+    result: dict[str, Any] = {
         "componentsFound": components,
         "detectorsInScan": [
             {
@@ -93,11 +183,26 @@ def run_scan(args: argparse.Namespace) -> int:
         "sourceDirectory": str(source_directory),
     }
 
+    serialized = json.dumps(result, indent=2, ensure_ascii=False)
     if args.ManifestFile:
-        output_path = Path(args.ManifestFile)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        serialized = json.dumps(result, indent=2, ensure_ascii=False)
-        output_path.write_text(f"{serialized}\n")
+        try:
+            output_path = _normalise_manifest_path(
+                source_directory, args.ManifestFile
+            )
+        except ValueError as exc:
+            print(
+                f"Refusing to write manifest outside SourceDirectory: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            _write_manifest(source_directory, output_path, serialized)
+        except (OSError, ValueError) as exc:
+            print(
+                f"Failed to write manifest to {output_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
     if args.PrintManifest:
         json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")

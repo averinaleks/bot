@@ -1,14 +1,15 @@
-# Этап с переиспользуемым слоем безопасности
-ARG SECURITY_BASE_IMAGE
-FROM ${SECURITY_BASE_IMAGE:-nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04} AS security-base
+# syntax=docker/dockerfile:1
+# Security stage with a reusable hardened base layer
+ARG SECURITY_BASE_IMAGE=nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+FROM ${SECURITY_BASE_IMAGE} AS security_base
 ARG ZLIB_VERSION=1.3.1
 ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
-# Установка необходимых пакетов для сборки и обновление критических библиотек.
-# При наличии заранее подготовленного SECURITY_BASE_IMAGE блок повторной
-# компиляции пропускается по маркеру `/opt/security-layer/.ready`.
+# Install build dependencies and refresh critical libraries.
+# When a prepared SECURITY_BASE_IMAGE is available, the rebuild block is skipped
+# via the `/opt/security-layer/.ready` marker.
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
@@ -83,8 +84,8 @@ EOSHELL
 
 RUN rm -rf /tmp/build /tmp/security
 
-# Этап сборки приложения
-FROM security-base AS builder
+# Application build stage
+FROM security_base AS builder
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -96,14 +97,15 @@ WORKDIR /app
 # Copy requirements files
 COPY requirements-core.txt requirements-gpu.txt ./
 
-# Создаем виртуальное окружение
+# Create an isolated virtual environment
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY docker/scripts/update_commons_lang3.py /tmp/security/update_commons_lang3.py
 
-# Устанавливаем зависимости (pip >=24.0 устраняет CVE-2023-32681, setuptools>=80.9.0 закрывает свежие уязвимости)
+# Install dependencies (pip >=24.0 mitigates CVE-2023-32681; setuptools>=80.9.0
+# addresses recent vulnerabilities)
 RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=80.9.0,<81' wheel && \
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     $VIRTUAL_ENV/bin/python /tmp/security/update_commons_lang3.py
@@ -113,7 +115,7 @@ RUN find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
     pip uninstall -y pip setuptools wheel && \
     find /app/venv -name "*.so" -exec strip --strip-unneeded {} +
 
-# Этап выполнения (минимальный образ)
+# Runtime stage (minimal image)
 FROM nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
 ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
 ARG PYTHON_META=3.12.3-0ubuntu2
@@ -125,14 +127,15 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 
 WORKDIR /app
 
-# Копируем виртуальное окружение из этапа сборки
+# Copy virtual environment from the build stage
 COPY --from=builder /app/venv /app/venv
-COPY --from=security-base /opt/security-layer/pam-fixed /tmp/pam-fixed
+COPY --from=security_base /opt/security-layer/pam-fixed /tmp/pam-fixed
 COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 
-# Установка минимальных пакетов выполнения
-# ``apt-get upgrade`` исключён ради выполнения правила
-# ``dockerfile.security.apt-get-upgrade`` Semgrep и воспроизводимости сборки.
+# Install minimal runtime packages.
+# ``apt-get upgrade`` is intentionally skipped to satisfy the
+# ``dockerfile.security.apt-get-upgrade`` Semgrep rule and keep builds
+# reproducible.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
@@ -156,13 +159,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && /app/venv/bin/python --version \
     && openssl version
 
-# Копируем исходный код в /app/bot
+# Copy project source into /app/bot
 COPY . /app/bot
 
-# Устанавливаем переменные окружения для виртуального окружения
+# Configure environment variables for the virtual environment
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-# Добавляем PYTHONPATH, чтобы модуль bot был доступен
+# Extend PYTHONPATH so the bot package is importable
 ENV PYTHONPATH=/app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
@@ -171,7 +174,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # Optionally enable TensorFlow checks during build
 ARG ENABLE_TF=0
 
-# Проверяем версии библиотек и доступность CUDA с отладкой
+# Verify library versions and CUDA availability for diagnostics
 RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3 -c "import ccxt; print('CCXT Version:', ccxt.__version__)" || echo "CCXT check failed" && \
     /app/venv/bin/python3 -c "import torch; print('PyTorch Version:', torch.__version__); print('CUDA Available:', torch.cuda.is_available()); print('CUDA Device Count:', torch.cuda.device_count()); print('CUDA Device Name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')" || echo "PyTorch check failed" && \
@@ -191,5 +194,5 @@ RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --s
 
 USER bot
 
-# Указываем команду для запуска
+# Define the default entrypoint command
 CMD ["/app/venv/bin/python3", "-m", "bot.trading_bot"]

@@ -133,6 +133,22 @@ def test_extract_payload_value_supports_camel_case_refs() -> None:
     assert result == "refs/heads/main"
 
 
+def test_extract_workflow_run_ref_supports_branch_variants() -> None:
+    payload = {"headBranchName": "release-candidate"}
+
+    result = snapshot._extract_workflow_run_ref(payload)
+
+    assert result == "refs/heads/release-candidate"
+
+
+def test_extract_workflow_run_ref_supports_head_ref_name() -> None:
+    payload = {"headRefName": "refs/heads/hotfix"}
+
+    result = snapshot._extract_workflow_run_ref(payload)
+
+    assert result == "refs/heads/hotfix"
+
+
 def test_submit_dependency_snapshot_skips_when_env_missing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

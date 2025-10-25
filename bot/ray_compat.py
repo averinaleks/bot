@@ -126,17 +126,25 @@ def _create_stub() -> tuple[ModuleType, bool]:
     return stub, True
 
 
+def _augment_ray_module(module: ModuleType) -> ModuleType:
+    """Patch missing Ray attributes on *module* using the local stub implementation."""
+
+    stub, _ = _create_stub()
+    if not getattr(module, "__version__", ""):
+        module.__dict__.setdefault("__version__", SAFE_RAY_VERSION_STR)
+
+    for name in ("remote", "get", "init", "shutdown", "is_initialized", "ObjectRef"):
+        if not hasattr(module, name):
+            module.__dict__[name] = getattr(stub, name)
+
+    return module
+
+
 def _load_ray() -> tuple[Any, bool]:
     """Import Ray if available, otherwise fall back to a stub."""
 
     existing = sys.modules.get("ray")
     if existing is not None:
-        is_stub = _is_probably_stub(existing)
-        if is_stub:
-            existing.__dict__.setdefault("__ray_stub__", True)
-        else:
-            _ensure_module_version_attr(existing)
-            ensure_minimum_ray_version(existing)
         return existing, is_stub
 
     if os.getenv("TEST_MODE") == "1":
@@ -151,8 +159,6 @@ def _load_ray() -> tuple[Any, bool]:
         sys.modules["ray"] = stub
         return stub, is_stub
     else:  # pragma: no cover - настоящая установка Ray недоступна в CI
-        _ensure_module_version_attr(ray)
-        ensure_minimum_ray_version(ray)
         return ray, False
 
 
