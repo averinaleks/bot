@@ -19,8 +19,8 @@ jobs:
       actions: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
-        # v4.2.2
+        uses: actions/checkout@v5.0.0
+        # v5.0.0
 
       - name: Define Trivy cache directory
         run: echo "TRIVY_CACHE_DIR=$RUNNER_TEMP/trivy-cache" >> "$GITHUB_ENV"
@@ -69,16 +69,16 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: ${{ github.event_name != 'pull_request' && always() && steps.summarize.outputs.sarif == 'true' }}
-        uses: github/codeql-action/upload-sarif@v3.30.6
-        # v3.30.6
+        uses: github/codeql-action/upload-sarif@v4.30.7
+        # v4.30.7
         with:
           category: trivy-fs
           sarif_file: trivy-results.sarif
 
       - name: Upload Trivy report artifact
         if: ${{ always() && steps.summarize.outputs.sarif == 'true' }}
-        uses: actions/upload-artifact@v4.4.0
-        # v4.4.0
+        uses: actions/upload-artifact@v4.6.2
+        # v4.6.2
         with:
           name: trivy-results
           path: trivy-results.sarif
