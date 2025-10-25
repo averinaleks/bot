@@ -33,7 +33,7 @@ jobs:
       pull-requests: write
       issues: write
     concurrency:
-      group: release-drafter-${{ github.ref_name || github.event.repository.default_branch || github.run_id }}
+      group: ${{ format('release-drafter-{0}', github.ref_name || github.event.repository.default_branch || github.run_id) }}
       cancel-in-progress: true
     steps:
       - name: Update release draft
@@ -72,7 +72,7 @@ jobs:
       pull-requests: write
       issues: write
     concurrency:
-      group: release-drafter-pr-${{ github.event.pull_request.number || github.run_id }}
+      group: ${{ github.event.pull_request.number != null && format('release-drafter-pr-{0}', github.event.pull_request.number) || format('release-drafter-ref-{0}', github.ref_name || github.event.repository.default_branch || github.run_id) }}
       cancel-in-progress: true
     steps:
       - name: Update pull request metadata
