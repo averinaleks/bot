@@ -78,3 +78,31 @@ def test_factory_with_config_keyword():
     result = _instantiate_factory(factory, cfg)
 
     assert result is cfg
+
+
+def test_build_components_offline_overrides_factories(monkeypatch):
+    cfg = BotConfig(
+        service_factories={
+            "exchange": "services.bybit:RealBybit",
+            "telegram_logger": "services.telegram:RealTelegram",
+            "gpt_client": "services.gpt:RealGPT",
+            "model_builder": "model_builder.core:ModelBuilder",
+        }
+    )
+
+    import bot.config as config_module
+
+    monkeypatch.setattr(config_module, "OFFLINE_MODE", True, raising=False)
+
+    import services.offline as offline_module
+
+    def _stopper(factory, config):  # noqa: ARG001
+        raise RuntimeError("stop instantiation")
+
+    monkeypatch.setattr(run_bot, "_instantiate_factory", _stopper)
+
+    with pytest.raises(RuntimeError, match="stop instantiation"):
+        run_bot._build_components(cfg, offline=True, symbols=None)
+
+    for key in ("exchange", "telegram_logger", "gpt_client", "model_builder"):
+        assert cfg.service_factories[key] == offline_module.OFFLINE_SERVICE_FACTORIES[key]

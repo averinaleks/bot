@@ -323,13 +323,41 @@ def _instantiate_factory(factory: Callable[..., Any] | type | None, cfg: "BotCon
     return None
 
 
+def _is_offline_override(candidate: Any) -> bool:
+    """Return ``True`` when *candidate* already points to an offline stub."""
+
+    if candidate is None:
+        return False
+
+    if isinstance(candidate, str):
+        return "offline" in candidate.lower()
+
+    target = candidate
+    if not callable(candidate):
+        target = type(candidate)
+
+    if getattr(target, "__offline_stub__", False):
+        return True
+
+    module = getattr(target, "__module__", "")
+    qualname = getattr(target, "__qualname__", getattr(target, "__name__", ""))
+    fingerprint = f"{module}.{qualname}".lower()
+    return "offline" in fingerprint
+
+
 def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None):
     service_factories = dict(getattr(cfg, "service_factories", {}) or {})
     if offline:
         from services.offline import OFFLINE_SERVICE_FACTORIES
 
+        forced_offline_keys = {"exchange", "telegram_logger", "gpt_client", "model_builder"}
         for key, value in OFFLINE_SERVICE_FACTORIES.items():
-            service_factories.setdefault(key, value)
+            if key in forced_offline_keys:
+                current = service_factories.get(key)
+                if not _is_offline_override(current):
+                    service_factories[key] = value
+            else:
+                service_factories.setdefault(key, value)
     cfg.service_factories = service_factories
 
     def _load_factory(name: str, *, optional: bool = False):
