@@ -106,6 +106,8 @@ jobs:
               github.event.dependency_graph.beforeSha ||
               github.event.dependency_graph.before_oid ||
               github.event.dependency_graph.beforeOid ||
+              github.event.dependency_graph.before_commit_oid ||
+              github.event.dependency_graph.beforeCommitOid ||
               github.event.dependency_graph.base_ref ||
               github.event.dependency_graph.base_sha ||
               github.event.dependency_graph.baseRef ||
@@ -118,15 +120,23 @@ jobs:
               github.event.client_payload.beforeSha ||
               github.event.client_payload.before_oid ||
               github.event.client_payload.beforeOid ||
+              github.event.client_payload.before_commit_oid ||
+              github.event.client_payload.beforeCommitOid ||
               github.event.client_payload.previous_sha ||
               github.event.client_payload.previous_oid ||
               github.event.client_payload.previousSha ||
               github.event.client_payload.previousOid ||
+              github.event.client_payload.previous_commit_oid ||
+              github.event.client_payload.previousCommitOid ||
               github.event.workflow_run.before ||
               github.event.workflow_run.previous_sha ||
               github.event.workflow_run.head_commit.before ||
               github.event.workflow_run.head_commit.beforeSha ||
+              github.event.workflow_run.head_commit.beforeOid ||
+              github.event.workflow_run.head_commit.beforeCommitOid ||
               github.event.workflow_run.head_commit.previousSha ||
+              github.event.workflow_run.head_commit.previousOid ||
+              github.event.workflow_run.head_commit.previousCommitOid ||
               ''
             }}
           AFTER: >-
@@ -143,6 +153,8 @@ jobs:
               github.event.dependency_graph.afterSha ||
               github.event.dependency_graph.after_oid ||
               github.event.dependency_graph.afterOid ||
+              github.event.dependency_graph.after_commit_oid ||
+              github.event.dependency_graph.afterCommitOid ||
               github.event.dependency_graph.after ||
               github.event.dependency_graph.ref ||
               github.event.ref ||
@@ -156,12 +168,16 @@ jobs:
               github.event.client_payload.afterSha ||
               github.event.client_payload.after_oid ||
               github.event.client_payload.afterOid ||
+              github.event.client_payload.after_commit_oid ||
+              github.event.client_payload.afterCommitOid ||
               github.event.client_payload.sha ||
               github.event.workflow_run.head_sha ||
               github.event.workflow_run.head_commit.id ||
               github.event.workflow_run.head_commit.sha ||
               github.event.workflow_run.head_commit.after ||
               github.event.workflow_run.head_commit.afterSha ||
+              github.event.workflow_run.head_commit.afterOid ||
+              github.event.workflow_run.head_commit.afterCommitOid ||
               ''
             }}
         run: |
