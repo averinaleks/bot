@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -54,3 +55,31 @@ def test_real_ray_module_is_used(monkeypatch, _reload_ray_compat):
 
     result = compat.ray.get(_double.remote(21))
     assert result == 42
+
+
+def test_existing_stub_is_reused(monkeypatch, _reload_ray_compat):
+    """A pre-loaded stub should be returned without running version checks."""
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    stub = ModuleType("ray")
+    stub.__ray_stub__ = True
+    stub.__version__ = "0.0.0-stub"
+
+    sys.modules["ray"] = stub
+
+    calls: dict[str, None] = {}
+
+    def _fail_if_called(module):  # pragma: no cover - defensive guard
+        calls["checker"] = None
+        raise AssertionError("version check should not run for a stub")
+
+    monkeypatch.setattr("security.ensure_minimum_ray_version", _fail_if_called)
+
+    try:
+        compat = _reload_ray_compat()
+    finally:
+        sys.modules.pop("ray", None)
+
+    assert compat.IS_RAY_STUB is True
+    assert compat.ray is stub
+    assert "checker" not in calls

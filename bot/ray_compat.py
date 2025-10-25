@@ -128,6 +128,18 @@ def _create_stub() -> tuple[ModuleType, bool]:
     return stub, True
 
 
+def _register_stub(stub: ModuleType | None = None) -> tuple[ModuleType, bool]:
+    """Register *stub* as the active Ray module and return it with its stub flag."""
+
+    if stub is None:
+        stub, is_stub = _create_stub()
+    else:
+        is_stub = _is_probably_stub(stub)
+
+    sys.modules["ray"] = stub
+    return stub, is_stub
+
+
 def _augment_ray_module(module: ModuleType) -> ModuleType:
     """Patch missing Ray attributes on *module* using the local stub implementation."""
 
@@ -157,16 +169,12 @@ def _load_ray() -> tuple[Any, bool]:
         return augmented_existing, False
 
     if os.getenv("TEST_MODE") == "1":
-        stub, is_stub = _create_stub()
-        sys.modules["ray"] = stub
-        return stub, is_stub
+        return _register_stub()
 
     try:
         import ray  # type: ignore
     except ImportError:
-        stub, is_stub = _create_stub()
-        sys.modules["ray"] = stub
-        return stub, is_stub
+        return _register_stub()
 
     _ensure_module_version_attr(ray)
     security.ensure_minimum_ray_version(ray)
