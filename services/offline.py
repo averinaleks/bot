@@ -411,4 +411,5 @@ OFFLINE_SERVICE_FACTORIES: dict[str, str] = {
     "exchange": "services.offline:OfflineBybit",
     "telegram_logger": "services.offline:OfflineTelegram",
     "gpt_client": "services.offline:OfflineGPT",
+    "model_builder": "model_builder.offline:OfflineModelBuilder",
 }
