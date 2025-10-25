@@ -242,10 +242,24 @@ jobs:
             fi
           fi
 
+          repo="${REPOSITORY:-}"
+          token="${GITHUB_TOKEN:-}"
+
+          if [ -z "$repo" ]; then
+            echo "::notice::Переменная REPOSITORY не задана – пропускаю проверку PR"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              {
+                echo "skip=true"
+                echo "head_sha="
+              } >>"$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
           if ! python3 "$script_path" \
-            --repo "${REPOSITORY}" \
+            --repo "$repo" \
             --pr-number "${PR_NUMBER:-}" \
-            --token "${GITHUB_TOKEN}"; then
+            --token "$token"; then
             echo "::warning::Проверка статуса PR завершилась с ошибкой – пропускаю обзор"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
               {
