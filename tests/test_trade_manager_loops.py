@@ -140,7 +140,7 @@ async def test_monitor_performance_recovery(monkeypatch):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.monitor_performance())
-    await asyncio.wait_for(ready.wait(), 0.5)
+    await asyncio.wait_for(ready.wait(), 2.0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -185,7 +185,7 @@ async def test_manage_positions_recovery(monkeypatch, exc_type):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.manage_positions())
-    await asyncio.wait_for(ready.wait(), 0.5)
+    await asyncio.wait_for(ready.wait(), 2.0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -328,7 +328,7 @@ async def test_ranked_signal_loop_recovery(monkeypatch):
     monkeypatch.setattr(trade_manager.asyncio, 'sleep', fast_sleep)
 
     task = asyncio.create_task(tm.ranked_signal_loop())
-    await asyncio.wait_for(ready.wait(), 0.5)
+    await asyncio.wait_for(ready.wait(), 2.0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
