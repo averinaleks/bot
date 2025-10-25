@@ -94,6 +94,10 @@ _PAYLOAD_SHA_KEYS = (
     "previousSha",
     "previous_oid",
     "previousOid",
+    "previous_commit_oid",
+    "previousCommitOid",
+    "before_commit_oid",
+    "beforeCommitOid",
 )
 _PAYLOAD_REF_KEYS = (
     "ref",
