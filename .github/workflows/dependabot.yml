@@ -94,6 +94,11 @@ jobs:
         # v5.0.0
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
+          # Do not expose a writable token to the checked-out repository when
+          # running in the pull_request_target context.  Dependabot updates are
+          # trusted, but GitHub still reports an injection risk unless the
+          # credentials are explicitly dropped.
+          persist-credentials: false
           fetch-depth: 0
           repository: ${{ github.repository }}
           ref: ${{ (github.event.pull_request && github.event.pull_request.head.sha) || github.sha }}
