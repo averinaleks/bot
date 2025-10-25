@@ -12,6 +12,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, TypedDict
+from typing import Literal
 from urllib.parse import quote, urlparse
 
 _REQUESTS_IMPORT_ERROR: ImportError | None
@@ -111,6 +112,17 @@ _PAYLOAD_REF_KEYS = (
     "head_ref_name",
     "headRefName",
 )
+_PAYLOAD_TAG_KEYS = (
+    "tag",
+    "tag_name",
+    "tagName",
+    "release_tag",
+    "releaseTag",
+    "head_tag",
+    "headTag",
+    "head_tag_name",
+    "headTagName",
+)
 _PAYLOAD_BASE_REF_KEYS = (
     "base_ref",
     "baseRef",
@@ -120,6 +132,12 @@ _PAYLOAD_BASE_REF_KEYS = (
     "baseRefName",
     "base_branch_name",
     "baseBranchName",
+)
+_PAYLOAD_BASE_TAG_KEYS = (
+    "base_tag",
+    "baseTag",
+    "base_tag_name",
+    "baseTagName",
 )
 _WORKFLOW_RUN_REPOSITORY_KEYS = ("head_repository", "repository")
 _DEVELOPMENT_TOKEN_HINTS = ("ci",)
@@ -157,6 +175,46 @@ def _extract_payload_token(payload: Mapping[str, object] | None) -> str:
     if not isinstance(payload, Mapping):
         return ""
     return _extract_payload_value(payload, *_TOKEN_PAYLOAD_KEYS)
+
+
+def _extract_payload_ref_info(
+    payload: Mapping[str, object] | None,
+) -> tuple[str, RefKind | None]:
+    if not isinstance(payload, Mapping):
+        return "", None
+    for key in _PAYLOAD_TAG_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, str):
+            normalised = _normalise_optional_string(candidate)
+            if normalised:
+                return normalised, "tags"
+    for key in _PAYLOAD_REF_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, str):
+            normalised = _normalise_optional_string(candidate)
+            if normalised:
+                return normalised, "heads"
+    return "", None
+
+
+def _extract_payload_base_ref_info(
+    payload: Mapping[str, object] | None,
+) -> tuple[str, RefKind | None]:
+    if not isinstance(payload, Mapping):
+        return "", None
+    for key in _PAYLOAD_BASE_TAG_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, str):
+            normalised = _normalise_optional_string(candidate)
+            if normalised:
+                return normalised, "tags"
+    for key in _PAYLOAD_BASE_REF_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, str):
+            normalised = _normalise_optional_string(candidate)
+            if normalised:
+                return normalised, "heads"
+    return "", None
 
 
 def _as_mapping(value: object) -> Mapping[str, object] | None:
@@ -242,6 +300,15 @@ def _extract_workflow_run_ref(payload: Mapping[str, object]) -> str:
     )
     if branch:
         return _normalise_ref_value(branch)
+    tag = _extract_payload_value(
+        payload,
+        "head_tag",
+        "headTag",
+        "head_tag_name",
+        "headTagName",
+    )
+    if tag:
+        return _normalise_ref_value(tag, kind="tags")
     head_ref = _extract_payload_value(
         payload,
         "head_ref",
@@ -574,7 +641,10 @@ def _derive_scope(manifest_name: str) -> str:
     return "runtime"
 
 
-def _normalise_ref_value(ref: str) -> str:
+RefKind = Literal["heads", "tags"]
+
+
+def _normalise_ref_value(ref: str, *, kind: RefKind = "heads") -> str:
     ref = ref.strip()
     if not ref:
         return ref
@@ -582,7 +652,8 @@ def _normalise_ref_value(ref: str) -> str:
         return ref
     if ref.startswith("heads/") or ref.startswith("tags/"):
         return f"refs/{ref}"
-    return f"refs/heads/{ref}"
+    prefix = "tags" if kind == "tags" else "heads"
+    return f"refs/{prefix}/{ref}"
 
 
 class ResolvedDependency(TypedDict):
@@ -1144,12 +1215,12 @@ def submit_dependency_snapshot() -> None:
                     sha = sha_candidate
                     payload_used_local = True
             if not ref:
-                    ref_candidate = _extract_payload_value(
-                        client_payload, *_PAYLOAD_REF_KEYS
+                ref_candidate, ref_kind = _extract_payload_ref_info(client_payload)
+                if ref_candidate:
+                    ref = _normalise_ref_value(
+                        ref_candidate, kind=ref_kind or "heads"
                     )
-                    if ref_candidate:
-                        ref = _normalise_ref_value(ref_candidate)
-                        payload_used_local = True
+                    payload_used_local = True
         if allow_event_payload and dependency_graph_payload is not None and not sha:
             sha_candidate = _extract_payload_value(
                 dependency_graph_payload, *_PAYLOAD_SHA_KEYS
@@ -1168,30 +1239,36 @@ def submit_dependency_snapshot() -> None:
                 sha = sha_candidate
                 payload_used_local = True
         if allow_event_payload and dependency_graph_payload is not None and not ref:
-            ref_candidate = _extract_payload_value(
-                dependency_graph_payload, *_PAYLOAD_REF_KEYS
+            ref_candidate, ref_kind = _extract_payload_ref_info(
+                dependency_graph_payload
             )
             if ref_candidate:
-                ref = _normalise_ref_value(ref_candidate)
+                ref = _normalise_ref_value(
+                    ref_candidate, kind=ref_kind or "heads"
+                )
                 payload_used_local = True
             elif dependency_graph_payload is not None:
-                base_candidate = _extract_payload_value(
-                    dependency_graph_payload, *_PAYLOAD_BASE_REF_KEYS
+                base_candidate, base_kind = _extract_payload_base_ref_info(
+                    dependency_graph_payload
                 )
                 if base_candidate:
-                    ref = _normalise_ref_value(base_candidate)
+                    ref = _normalise_ref_value(
+                        base_candidate, kind=base_kind or "heads"
+                    )
                     payload_used_local = True
         if allow_event_payload and not ref and isinstance(payload, Mapping):
-            ref_candidate = _extract_payload_value(payload, *_PAYLOAD_REF_KEYS)
+            ref_candidate, ref_kind = _extract_payload_ref_info(payload)
             if ref_candidate:
-                ref = _normalise_ref_value(ref_candidate)
+                ref = _normalise_ref_value(
+                    ref_candidate, kind=ref_kind or "heads"
+                )
                 payload_used_local = True
             else:
-                base_candidate = _extract_payload_value(
-                    payload, *_PAYLOAD_BASE_REF_KEYS
-                )
+                base_candidate, base_kind = _extract_payload_base_ref_info(payload)
                 if base_candidate:
-                    ref = _normalise_ref_value(base_candidate)
+                    ref = _normalise_ref_value(
+                        base_candidate, kind=base_kind or "heads"
+                    )
                     payload_used_local = True
         if allow_event_payload and not ref and client_workflow_run_payload is not None:
             ref_candidate = _extract_workflow_run_ref(client_workflow_run_payload)

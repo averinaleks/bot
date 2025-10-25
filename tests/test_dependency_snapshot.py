@@ -772,6 +772,65 @@ def test_submit_dependency_snapshot_prefers_payload_token(
     assert payload["ref"] == "refs/heads/auto"
 
 
+def test_submit_dependency_snapshot_uses_client_payload_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps(
+            {"client_payload": {"sha": "feedface", "tag": "release-1.2.3"}}
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "repository_dispatch")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "456")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(
+        snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest}
+    )
+
+    captured: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        del url, headers
+        captured["payload"] = json.loads(body)
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured_stream = capsys.readouterr()
+    assert "Missing required environment variable" not in captured_stream.err
+
+    payload = captured.get("payload")
+    assert isinstance(payload, dict)
+    assert payload["sha"] == "feedface"
+    assert payload["ref"] == "refs/tags/release-1.2.3"
+
+
 def test_submit_dependency_snapshot_uses_workflow_run_payload(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -835,6 +894,77 @@ def test_submit_dependency_snapshot_uses_workflow_run_payload(
     assert isinstance(payload, dict)
     assert payload["sha"] == "feedface"
     assert payload["ref"] == "refs/heads/auto"
+
+    url = captured.get("url")
+    assert isinstance(url, str)
+    assert url.endswith("/repos/averinaleks/bot/dependency-graph/snapshots")
+
+
+def test_submit_dependency_snapshot_uses_workflow_run_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "workflow_run": {
+                    "head_sha": "feedface",
+                    "head_tag": "release-2025.10.07",
+                    "head_repository": {"full_name": "averinaleks/bot"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "654")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(
+        snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest}
+    )
+
+    captured: dict[str, object] = {}
+
+    def capture_submission(url: str, body: bytes, headers: dict[str, str]) -> None:
+        captured["url"] = url
+        captured["payload"] = json.loads(body)
+        captured["authorization"] = headers.get("Authorization")
+
+    monkeypatch.setattr(snapshot, "_submit_with_headers", capture_submission)
+
+    snapshot.submit_dependency_snapshot()
+
+    captured_stream = capsys.readouterr()
+    assert "Missing required environment variable" not in captured_stream.err
+    assert "Using event payload" in captured_stream.out
+
+    payload = captured.get("payload")
+    assert isinstance(payload, dict)
+    assert payload["sha"] == "feedface"
+    assert payload["ref"] == "refs/tags/release-2025.10.07"
 
     url = captured.get("url")
     assert isinstance(url, str)
