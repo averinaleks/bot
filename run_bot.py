@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import inspect
 import logging
 import os
 import sys
@@ -271,19 +272,50 @@ def _resolve_factory(cfg: "BotConfig", name: str) -> Callable[..., Any] | type |
     return raw
 
 
+def _call_factory(factory: Callable[..., Any] | type, *args: Any, **kwargs: Any) -> Any:
+    return factory(*args, **kwargs)
+
+
+def _type_error_from_adapter(exc: TypeError) -> bool:
+    tb = exc.__traceback__
+    saw_adapter = False
+    while tb is not None:
+        frame = tb.tb_frame
+        if frame.f_globals.get("__name__") == __name__ and frame.f_code.co_name == "_call_factory":
+            saw_adapter = True
+        elif saw_adapter:
+            return False
+        tb = tb.tb_next
+    return saw_adapter
+
+
 def _instantiate_factory(factory: Callable[..., Any] | type | None, cfg: "BotConfig") -> Any:
     if factory is None:
         return None
-    for creator in (
-        lambda: factory(cfg),
-        lambda: factory(config=cfg),
-        lambda: factory(),
-    ):
+
+    signature = inspect.signature(factory)
+    attempts: tuple[tuple[tuple[Any, ...], dict[str, Any]], ...] = (
+        ((cfg,), {}),
+        ((), {"config": cfg}),
+        ((), {}),
+    )
+
+    for args, kwargs in attempts:
         try:
-            return creator()
+            signature.bind(*args, **kwargs)
         except TypeError:
             continue
-    logger.warning("Failed to instantiate %r with supported signatures", factory)
+        try:
+            return _call_factory(factory, *args, **kwargs)
+        except TypeError as exc:
+            if not _type_error_from_adapter(exc):
+                raise
+            continue
+
+    logger.warning(
+        "Не удалось создать экземпляр %r: поддерживаются сигнатуры factory(cfg), factory(config=cfg) или factory()",
+        factory,
+    )
     return None
 
 
