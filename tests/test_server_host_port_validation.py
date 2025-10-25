@@ -13,6 +13,7 @@ _ALL_INTERFACES = ".".join(["0"] * 4)
     "env_port, env_host, expected_message",
     [
         ("notaport", "127.0.0.1", "Invalid PORT value"),
+        ("70000", "127.0.0.1", "Invalid PORT value"),
         ("8000", _ALL_INTERFACES, "Invalid HOST"),
     ],
 )

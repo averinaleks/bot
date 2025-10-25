@@ -363,6 +363,16 @@ except ValueError as exc:  # pragma: no cover - exercised in tests
         f"Invalid PORT value '{safe_port}'; must be an integer"
     ) from exc
 
+if not (1 <= port <= 65_535):
+    safe_port = sanitize_log_value(port_str)
+    logger.error(
+        "Invalid PORT value '%s'; must be between 1 and 65535",
+        safe_port,
+    )
+    raise ServerConfigurationError(
+        f"Invalid PORT value '{safe_port}'; must be between 1 and 65535"
+    )
+
 if host not in ALLOWED_HOSTS:
     safe_host = sanitize_log_value(host)
     logger.error("Invalid HOST '%s'; allowed values are %s", safe_host, ALLOWED_HOSTS)

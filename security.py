@@ -15,6 +15,7 @@ import logging
 import os
 import stat
 import sys
+from importlib import metadata
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Tuple, cast
@@ -560,7 +561,24 @@ def apply_ray_security_defaults(params: dict[str, Any]) -> dict[str, Any]:
 def ensure_minimum_ray_version(ray_module: ModuleType) -> None:
     """Raise an error if *ray_module* is older than the patched release."""
 
-    version_str = getattr(ray_module, "__version__", "")
+    version_str = getattr(ray_module, "__version__", "") or ""
+    if not version_str:
+        candidates = [getattr(ray_module, "__name__", "ray")]
+        root_name = candidates[0].split(".", 1)[0]
+        if root_name not in candidates:
+            candidates.append(root_name)
+        for dist_name in candidates:
+            try:
+                version_str = metadata.version(dist_name)
+            except metadata.PackageNotFoundError:  # pragma: no cover - defensive
+                continue
+            else:
+                try:
+                    setattr(ray_module, "__version__", version_str)
+                except Exception:  # pragma: no cover - attribute may be read-only
+                    pass
+                break
+
     try:
         parsed = Version(version_str)
     except InvalidVersion:

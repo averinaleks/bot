@@ -223,6 +223,7 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.dependency_graph.ref" in workflow
     assert "github.event.dependency_graph.refName" in workflow
     assert "github.event.dependency_graph.branch" in workflow
+    assert "github.event.dependency_graph.branch_name" in workflow
     assert "github.event.dependency_graph.branchName" in workflow
     assert "github.event.client_payload.ref" in workflow
     assert "github.event.client_payload.ref_name" in workflow
@@ -232,19 +233,26 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.client_payload.branchName" in workflow
     assert "github.event.workflow_run.head_ref" in workflow
     assert "github.event.workflow_run.headRef" in workflow
+    assert "github.event.workflow_run.head_ref_name" in workflow
+    assert "github.event.workflow_run.headRefName" in workflow
     assert "github.event.workflow_run.head_branch" in workflow
     assert "github.event.workflow_run.head_branch_name" in workflow
     assert "github.event.workflow_run.headBranch" in workflow
+    assert "github.event.workflow_run.headBranchName" in workflow
     assert "github.event.dependency_graph.ref_name" in workflow
     assert "github.event.client_payload.head_sha" in workflow
     assert "github.event.client_payload.commit_sha" in workflow
     assert "github.event.client_payload.ref_name" in workflow
     assert "github.event.client_payload.head_ref" in workflow
+    assert "github.event.client_payload.head_ref_name" in workflow
+    assert "github.event.client_payload.headRefName" in workflow
     assert "github.event.client_payload.branch" in workflow
     assert "github.event.workflow_run.head_sha" in workflow
     assert "github.event.workflow_run.head_commit.id" in workflow
     assert "github.event.workflow_run.head_commit.sha" in workflow
     assert "github.event.workflow_run.head_ref" in workflow
+    assert "github.event.workflow_run.head_ref_name" in workflow
+    assert "github.event.workflow_run.headRefName" in workflow
     assert "github.event.workflow_run.head_branch" in workflow
     assert "github.event.repository.default_branch" in workflow
     assert "format('refs/heads/{0}', github.event.repository.default_branch)" in workflow

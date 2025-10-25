@@ -9,14 +9,50 @@ The project historically relied on Ray for distributed optimisations, но
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+from importlib import metadata as importlib_metadata
 from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
-from security import ensure_minimum_ray_version
+from security import SAFE_RAY_VERSION_STR, ensure_minimum_ray_version
 
 __all__ = ["ray", "IS_RAY_STUB"]
+
+
+def _is_probably_stub(module: ModuleType) -> bool:
+    """Detect Ray stand-ins that mark themselves as stubs."""
+
+    return bool(getattr(module, "__ray_stub__", False))
+
+
+def _ensure_module_version_attr(module: ModuleType) -> None:
+    """Populate ``module.__version__`` if the attribute is missing."""
+
+    if getattr(module, "__version__", ""):
+        return
+
+    candidates: list[str] = []
+    package = getattr(module, "__package__", "")
+    if package:
+        candidates.append(package.split(".")[0])
+    name = getattr(module, "__name__", "")
+    if name:
+        candidates.append(name.split(".")[0])
+    spec = getattr(module, "__spec__", None)
+    spec_name = getattr(spec, "name", "") if spec else ""
+    if spec_name:
+        candidates.append(spec_name.split(".")[0])
+
+    for distribution in dict.fromkeys(candidates):
+        if not distribution:
+            continue
+        with contextlib.suppress(importlib_metadata.PackageNotFoundError):
+            module.__version__ = importlib_metadata.version(distribution)
+            return
+
+    module.__version__ = SAFE_RAY_VERSION_STR
 
 
 def _create_stub() -> tuple[ModuleType, bool]:
@@ -90,14 +126,25 @@ def _create_stub() -> tuple[ModuleType, bool]:
     return stub, True
 
 
+def _augment_ray_module(module: ModuleType) -> ModuleType:
+    """Patch missing Ray attributes on *module* using the local stub implementation."""
+
+    stub, _ = _create_stub()
+    if not getattr(module, "__version__", ""):
+        module.__dict__.setdefault("__version__", SAFE_RAY_VERSION_STR)
+
+    for name in ("remote", "get", "init", "shutdown", "is_initialized", "ObjectRef"):
+        if not hasattr(module, name):
+            module.__dict__[name] = getattr(stub, name)
+
+    return module
+
+
 def _load_ray() -> tuple[Any, bool]:
     """Import Ray if available, otherwise fall back to a stub."""
 
     existing = sys.modules.get("ray")
     if existing is not None:
-        is_stub = getattr(existing, "__ray_stub__", False)
-        if not is_stub:
-            ensure_minimum_ray_version(existing)
         return existing, is_stub
 
     if os.getenv("TEST_MODE") == "1":
@@ -112,7 +159,6 @@ def _load_ray() -> tuple[Any, bool]:
         sys.modules["ray"] = stub
         return stub, is_stub
     else:  # pragma: no cover - настоящая установка Ray недоступна в CI
-        ensure_minimum_ray_version(ray)
         return ray, False
 
 

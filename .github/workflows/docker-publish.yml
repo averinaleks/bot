@@ -222,6 +222,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
+        id: build_with_cache
+        continue-on-error: true
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
         with:
           context: .
@@ -245,8 +247,53 @@ jobs:
           # флаг уже включён, но запись артефакта по умолчанию прерывает сборку.
           cache-to: type=gha,scope=${{ matrix.image }}-oci-v4,mode=max,oci-mediatypes=true,ignore-error=true
 
+      # Даже с ``ignore-error=true`` back-end GitHub Actions Cache периодически
+      # возвращает HTML-ответы 400 "Our services aren't available right now",
+      # из-за чего buildx прерывает сборку с ``invalid character '<'``. Печатаем
+      # предупреждение и запускаем повтор без ``type=gha`` кэшей, чтобы не
+      # терять публикацию образа.
+      - name: Note cache-backed build failure
+        if: ${{ steps.build_with_cache.outcome == 'failure' }}
+        run: |
+          echo "::warning::docker buildx with GitHub Actions cache failed, retrying without cache"
+
+      - name: Retry build without GitHub Actions cache
+        if: ${{ steps.build_with_cache.outcome == 'failure' }}
+        id: build_without_cache
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: ${{ env.PUBLISH_IMAGES == 'true' }}
+          tags: ${{ steps.tags.outputs.list }}
+          no-cache: true
+
+      - name: Finalize build result
+        id: build_result
+        env:
+          CACHED_OUTCOME: ${{ steps.build_with_cache.outcome }}
+          RETRY_OUTCOME: ${{ steps.build_without_cache.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$CACHED_OUTCOME" = "success" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "success" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "skipped" ]; then
+            echo "::error::Build failed before retry could run"
+          elif [ "$CACHED_OUTCOME" = "failure" ] && [ "$RETRY_OUTCOME" = "failure" ]; then
+            echo "::error::Docker build failed even after retry without cache"
+          else
+            echo "::error::Docker build failed with unexpected state (cached=$CACHED_OUTCOME, retry=$RETRY_OUTCOME)"
+          fi
+          exit 1
+
       - name: Cleanup before Trivy scan
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
         run: |
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -exec rm -rf {} + || true
           sudo rm -rf /mnt/trivy-cache /mnt/trivy-tmp || true
@@ -254,12 +301,12 @@ jobs:
           sudo mkdir -p /mnt/trivy-cache
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-cache
       - name: Prepare Trivy temp
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
         run: |
           sudo mkdir -p /mnt/trivy-tmp
           sudo chown "$(id -u):$(id -g)" /mnt/trivy-tmp
       - name: Run Trivy vulnerability scanner
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' }}
         id: trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # 0.33.1
         continue-on-error: true
@@ -273,11 +320,11 @@ jobs:
           output: ${{ matrix.artifact }}.txt
           scanners: vuln
       - name: Show Trivy scan results
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.trivy.outcome == 'success' }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build_result.outputs.status == 'success' && steps.trivy.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
