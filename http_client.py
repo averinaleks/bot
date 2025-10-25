@@ -44,14 +44,42 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     import requests  # type: ignore[import-untyped]
 
 DEFAULT_TIMEOUT_STR = os.getenv("MODEL_DOWNLOAD_TIMEOUT", "10")
-try:
-    DEFAULT_TIMEOUT = float(DEFAULT_TIMEOUT_STR)
-except ValueError:
-    logging.warning(
-        "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout 10s",
-        sanitize_log_value(DEFAULT_TIMEOUT_STR),
-    )
-    DEFAULT_TIMEOUT = 10.0
+
+
+def _coerce_timeout(raw_value: float | str | int, *, fallback: float = 10.0) -> float:
+    """Return a positive timeout value derived from ``raw_value``.
+
+    Bandit flags several categories of network timeouts where callers can
+    accidentally disable protections by providing ``0`` or a negative number.
+    The helper clamps the parsed value to a sane minimum so that even when the
+    environment variable is set incorrectly we still enforce a timeout.  The
+    fallback mirrors the historic behaviour of :mod:`http_client` which defaulted
+    to 10 seconds.
+    """
+
+    minimum_timeout = 0.1
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        logging.warning(
+            "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout %.1fs",
+            sanitize_log_value(str(raw_value)),
+            fallback,
+        )
+        return fallback
+
+    if parsed < minimum_timeout:
+        logging.warning(
+            "MODEL_DOWNLOAD_TIMEOUT %.3fs is too small; using %.1fs",
+            parsed,
+            fallback,
+        )
+        return fallback
+
+    return parsed
+
+
+DEFAULT_TIMEOUT = _coerce_timeout(DEFAULT_TIMEOUT_STR)
 
 
 @contextmanager
@@ -75,6 +103,8 @@ def get_requests_session(
         ``False`` explicitly enable or disable certificate checks.
     """
     import requests  # type: ignore[import-untyped]
+
+    timeout = _coerce_timeout(timeout, fallback=DEFAULT_TIMEOUT)
 
     session = requests.Session()
     # Avoid respecting proxy-related environment variables which can cause
@@ -104,7 +134,7 @@ def get_httpx_client(
     timeout: float = DEFAULT_TIMEOUT, **kwargs
 ) -> Generator[HTTPXClient, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
-    kwargs.setdefault("timeout", timeout)
+    kwargs.setdefault("timeout", _coerce_timeout(timeout, fallback=DEFAULT_TIMEOUT))
     # For consistency with the asynchronous helpers, avoid inheriting proxy
     # settings from the environment unless explicitly requested.  This mirrors
     # the behaviour of :func:`get_async_http_client` and prevents surprising
@@ -136,7 +166,9 @@ async def get_async_http_client(
     global _ASYNC_CLIENT
     async with _ASYNC_CLIENT_LOCK:
         if _ASYNC_CLIENT is None:
-            kwargs.setdefault("timeout", timeout)
+            kwargs.setdefault(
+                "timeout", _coerce_timeout(timeout, fallback=DEFAULT_TIMEOUT)
+            )
             kwargs.setdefault("trust_env", False)
             try:
                 _ASYNC_CLIENT = httpx.AsyncClient(**kwargs)

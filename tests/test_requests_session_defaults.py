@@ -62,3 +62,31 @@ def test_get_requests_session_defaults(monkeypatch: pytest.MonkeyPatch, method: 
     assert recorded["timeout"] == 5.5
     assert recorded["allow_redirects"] is False
     assert recorded["data"] == b"payload"
+
+
+def test_get_requests_session_timeout_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = DummySession()
+
+    def factory() -> DummySession:
+        return session
+
+    fake_requests = SimpleNamespace(Session=factory)
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    with http_client.get_requests_session(timeout=0) as wrapped:
+        wrapped.get("https://example.test")
+
+    assert session.requests[0]["timeout"] == http_client.DEFAULT_TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("invalid", http_client.DEFAULT_TIMEOUT),
+        (-5, http_client.DEFAULT_TIMEOUT),
+        (0.05, http_client.DEFAULT_TIMEOUT),
+        (2, 2.0),
+    ],
+)
+def test_coerce_timeout_values(raw: float | str, expected: float) -> None:
+    assert http_client._coerce_timeout(raw, fallback=http_client.DEFAULT_TIMEOUT) == expected
