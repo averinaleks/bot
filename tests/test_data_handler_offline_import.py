@@ -54,3 +54,20 @@ def test_import_uses_offline_handler_when_core_dependencies_missing(monkeypatch)
     assert module.DataHandler.__name__ == "OfflineDataHandler"
     atr = module.atr_fast([10.0, 11.0], [9.0, 8.5], [9.5, 9.0], 1)
     assert atr[-1] > 0
+
+
+def test_offline_data_handler_personalisation_is_short(monkeypatch):
+    monkeypatch.setenv("OFFLINE_MODE", "1")
+    _clear_data_handler_modules()
+
+    module = importlib.import_module("bot.data_handler.offline")
+
+    # Instantiation should not raise due to blake2s personalisation length.
+    handler = module.OfflineDataHandler()
+
+    seed_first = handler._symbol_seed("BTCUSDT")
+    seed_second = handler._symbol_seed("BTCUSDT")
+    handler_again = module.OfflineDataHandler()
+    seed_third = handler_again._symbol_seed("BTCUSDT")
+
+    assert seed_first == seed_second == seed_third
