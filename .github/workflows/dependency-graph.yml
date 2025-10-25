@@ -11,6 +11,9 @@ on:
       # dispatch event names to alphanumeric characters plus '-' and '_', so we
       # cannot include a '/' separator here.
       - "dependency-graph-auto-submission"
+      # Backwards compatibility with older hooks that still emit the original
+      # "auto-submission" event type directly.
+      - "auto-submission"
 # NOTE: GitHub does not yet accept the experimental ``dependency_graph`` event
 # key in workflow files for public repositories. Auto-submission payloads should
 # therefore be forwarded via the repository dispatch hook declared above.

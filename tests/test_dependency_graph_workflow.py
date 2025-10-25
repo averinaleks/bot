@@ -192,6 +192,7 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
 
     assert "repository_dispatch" in workflow
     assert "dependency-graph-auto-submission" in workflow
+    assert "auto-submission" in workflow
     assert "github.event_name == 'repository_dispatch'" in workflow
 
 
