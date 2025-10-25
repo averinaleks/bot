@@ -159,13 +159,14 @@ def _load_ray() -> tuple[Any, bool]:
 
     existing = sys.modules.get("ray")
     if existing is not None:
-        if _is_probably_stub(existing):
-            return existing, True
-
         _ensure_module_version_attr(existing)
-        security.ensure_minimum_ray_version(existing)
         augmented_existing = _augment_ray_module(existing)
         sys.modules["ray"] = augmented_existing
+
+        if _is_probably_stub(augmented_existing):
+            return augmented_existing, True
+
+        security.ensure_minimum_ray_version(augmented_existing)
         return augmented_existing, False
 
     if os.getenv("TEST_MODE") == "1":
