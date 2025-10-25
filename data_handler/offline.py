@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Iterable, Sequence
+
+
+logger = logging.getLogger(__name__)
 
 _SYMBOL_PERSONALISATION = b"bot-offline-handler"
 
@@ -105,8 +109,12 @@ class OfflineDataHandler:
             if callable(asdict):
                 try:
                     return dict(asdict())
-                except Exception:  # pragma: no cover - defensive
-                    pass
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "Failed to convert cfg via asdict(); falling back to vars(): %s",
+                        exc,
+                        exc_info=True,
+                    )
             return dict(vars(self.cfg))
 
         return SimpleNamespace(optimize=_return_config)
