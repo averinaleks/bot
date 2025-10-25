@@ -16,7 +16,9 @@ from importlib import metadata as importlib_metadata
 from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
-from security import SAFE_RAY_VERSION_STR, ensure_minimum_ray_version
+import security
+
+SAFE_RAY_VERSION_STR = security.SAFE_RAY_VERSION_STR
 
 __all__ = ["ray", "IS_RAY_STUB"]
 
@@ -145,7 +147,14 @@ def _load_ray() -> tuple[Any, bool]:
 
     existing = sys.modules.get("ray")
     if existing is not None:
-        return existing, is_stub
+        if _is_probably_stub(existing):
+            return existing, True
+
+        _ensure_module_version_attr(existing)
+        security.ensure_minimum_ray_version(existing)
+        augmented_existing = _augment_ray_module(existing)
+        sys.modules["ray"] = augmented_existing
+        return augmented_existing, False
 
     if os.getenv("TEST_MODE") == "1":
         stub, is_stub = _create_stub()
@@ -158,8 +167,12 @@ def _load_ray() -> tuple[Any, bool]:
         stub, is_stub = _create_stub()
         sys.modules["ray"] = stub
         return stub, is_stub
-    else:  # pragma: no cover - настоящая установка Ray недоступна в CI
-        return ray, False
+
+    _ensure_module_version_attr(ray)
+    security.ensure_minimum_ray_version(ray)
+    augmented = _augment_ray_module(ray)
+    sys.modules["ray"] = augmented
+    return augmented, _is_probably_stub(augmented)
 
 
 ray, IS_RAY_STUB = _load_ray()
