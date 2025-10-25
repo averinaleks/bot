@@ -8,6 +8,10 @@ import tempfile
 from pathlib import Path
 
 
+def _has_control_characters(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
 def _deduplicate(bases: list[Path]) -> list[Path]:
     unique: list[Path] = []
     seen: set[Path] = set()
@@ -73,7 +77,26 @@ def resolve_github_path(
         return None
 
     try:
-        candidate = Path(raw_path).resolve(strict=not allow_missing)
+        decoded = os.fsdecode(raw_path)
+    except (TypeError, ValueError) as exc:
+        print(
+            f"::warning::Unable to decode {description} '{raw_path}': {exc}",
+            file=sys.stderr,
+        )
+        return None
+
+    if not decoded:
+        return None
+
+    if _has_control_characters(decoded):
+        print(
+            f"::warning::Ignoring {description} containing control characters",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        candidate = Path(decoded).resolve(strict=not allow_missing)
     except OSError as exc:
         print(
             f"::warning::Unable to resolve {description} '{raw_path}': {exc}",

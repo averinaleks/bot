@@ -73,6 +73,10 @@ def _allowed_directories() -> list[Path]:
     return _deduplicate(allowed)
 
 
+def _has_control_characters(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
 def resolve_github_path(
     raw_path: str | None,
     *,
@@ -85,7 +89,26 @@ def resolve_github_path(
         return None
 
     try:
-        candidate = Path(raw_path).resolve(strict=not allow_missing)
+        decoded = os.fsdecode(raw_path)
+    except (TypeError, ValueError) as exc:
+        print(
+            f"::warning::Unable to decode {description} '{raw_path}': {exc}",
+            file=sys.stderr,
+        )
+        return None
+
+    if not decoded:
+        return None
+
+    if _has_control_characters(decoded):
+        print(
+            f"::warning::Ignoring {description} containing control characters",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        candidate = Path(decoded).resolve(strict=not allow_missing)
     except OSError as exc:
         print(
             f"::warning::Unable to resolve {description} '{raw_path}': {exc}",
