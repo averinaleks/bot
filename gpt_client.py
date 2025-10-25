@@ -848,14 +848,16 @@ async def query_gpt_json_async(prompt: str) -> dict:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
         logger.error("Invalid JSON from GPT OSS API: %s", exc)
-        return {"signal": "hold"}
+        raise GPTClientJSONError("Invalid JSON from GPT OSS API") from exc
     if not isinstance(data, dict):
         raise GPTClientResponseError("Unexpected response structure from GPT OSS API")
     required = {"signal", "tp_mult", "sl_mult"}
     if not required.issubset(data):
         missing = sorted(required - set(data))
         logger.error("Missing fields in GPT response: %s", missing)
-        return {"signal": "hold"}
+        raise GPTClientResponseError(
+            "Missing required fields in GPT response"
+        )
     return data
 
 

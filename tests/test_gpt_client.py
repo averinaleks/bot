@@ -2,10 +2,13 @@ import asyncio
 import socket
 import logging
 import json
+from collections import deque
 
 import pytest
 import httpx
 from typing import Any
+
+import bot.trading_bot as trading_bot
 
 from bot.gpt_client import (
     GPTClientError,
@@ -720,8 +723,8 @@ async def test_query_gpt_json_async_missing_fields(monkeypatch, caplog):
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with caplog.at_level(logging.ERROR):
-        result = await query_gpt_json_async("hi")
-    assert result == {"signal": "hold"}
+        with pytest.raises(GPTClientResponseError, match="Missing required fields"):
+            await query_gpt_json_async("hi")
     assert "Missing fields in GPT response" in caplog.text
 
 
@@ -735,10 +738,48 @@ async def test_query_gpt_json_async_invalid_payload(monkeypatch, caplog):
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     with caplog.at_level(logging.ERROR):
-        result = await query_gpt_json_async("hi")
-    assert result == {"signal": "hold"}
+        with pytest.raises(GPTClientJSONError, match="Invalid JSON"):
+            await query_gpt_json_async("hi")
     assert "Invalid JSON from GPT OSS API" in caplog.text
 
+
+@pytest.mark.asyncio
+async def test_refresh_gpt_advice_enters_safe_mode_after_json_errors(monkeypatch):
+    monkeypatch.setattr(trading_bot, "SYMBOLS", ["BTCUSDT"])
+    monkeypatch.setattr(
+        trading_bot,
+        "_PRICE_HISTORY",
+        {"BTCUSDT": deque([1.0], maxlen=200)},
+    )
+    async def fake_features(symbol: str, price: float) -> list[float]:
+        return [price, 0.0, price, 0.0, 50.0]
+
+    monkeypatch.setattr(trading_bot, "build_feature_vector", fake_features)
+    monkeypatch.setattr(trading_bot, "GPT_ADVICE", trading_bot.GPTAdviceModel())
+    monkeypatch.setattr(trading_bot, "_GPT_ADVICE_ERROR_COUNT", 0)
+    monkeypatch.setattr(trading_bot, "_GPT_SAFE_MODE", False)
+
+    alerts: list[str] = []
+    async def fake_alert(message: str) -> None:
+        alerts.append(message)
+
+    toggles: list[bool] = []
+    async def fake_toggle(enabled: bool) -> None:
+        toggles.append(enabled)
+
+    async def failing_query(prompt: str) -> dict:
+        raise GPTClientJSONError("bad json")
+
+    monkeypatch.setattr(trading_bot, "send_telegram_alert", fake_alert)
+    monkeypatch.setattr(trading_bot, "set_trading_enabled", fake_toggle)
+    monkeypatch.setattr(trading_bot, "query_gpt_json_async", failing_query)
+
+    for _ in range(trading_bot.GPT_ADVICE_MAX_ATTEMPTS):
+        await trading_bot.refresh_gpt_advice()
+
+    assert trading_bot._GPT_SAFE_MODE is True
+    assert toggles == [False]
+    assert alerts
 
 def _install_dummy_openai(monkeypatch, recorder):
     class DummyResponse:
