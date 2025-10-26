@@ -83,7 +83,9 @@ jobs:
           shopt -u nocasematch
 
       - name: Auto approve
-        if: ${{ steps.metadata.outputs['update-type'] != 'version-update:semver-major' }}
+        if: >-
+          steps.metadata.outputs['update-type'] != 'version-update:semver-major' &&
+          steps.manifest.outputs.requires_gpu != 'true'
         # v4.0.0
         uses: hmarr/auto-approve-action@8f929096a962e83ccdfa8afcf855f39f12d4dac7
         with:
@@ -262,6 +264,7 @@ jobs:
           }
 
           write_summary "GPU-specific dependency updates require manual verification. Tests were skipped to avoid missing CUDA runtimes."
+          write_summary "Auto-approve and auto-merge were disabled automatically for this update."
 
       - name: Check auto-merge availability
         id: auto_merge
@@ -288,7 +291,8 @@ jobs:
         id: enable_automerge
         if: >-
           steps.auto_merge.outputs.allowed == 'true' &&
-          steps.metadata.outputs['update-type'] != 'version-update:semver-major'
+          steps.metadata.outputs['update-type'] != 'version-update:semver-major' &&
+          steps.manifest.outputs.requires_gpu != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
