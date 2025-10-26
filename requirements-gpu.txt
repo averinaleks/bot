@@ -111,7 +111,7 @@ nvidia-cusparse-cu12==12.5.8.93
     #   torch
 nvidia-cusparselt-cu12==0.7.1
     # via torch
-nvidia-nccl-cu12==2.27.3
+nvidia-nccl-cu12==2.27.5
     # via torch
 nvidia-nvjitlink-cu12==12.8.93
     # via
@@ -119,6 +119,8 @@ nvidia-nvjitlink-cu12==12.8.93
     #   nvidia-cusolver-cu12
     #   nvidia-cusparse-cu12
     #   torch
+nvidia-nvshmem-cu12==3.3.20
+    # via torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
 opt-einsum==3.4.0
@@ -166,9 +168,9 @@ tensorflow==2.20.0
     # via -r requirements-gpu.in
 termcolor==3.1.0
     # via tensorflow
-torch==2.8.0
+torch==2.9.0
     # via -r requirements-gpu.in
-triton==3.4.0
+triton==3.5.0
     # via torch
 typing-extensions==4.14.1
     # via
