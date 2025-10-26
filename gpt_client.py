@@ -160,14 +160,80 @@ def _resolve_openai_base_url(api_url: str | None) -> str | None:
     return base_url
 
 
+def _collect_openai_output_text(response: Any) -> str | None:
+    """Extract concatenated text from ``response.output`` when available."""
+
+    output = getattr(response, "output", None)
+    if not output:
+        return None
+
+    texts: list[str] = []
+
+    def _coerce_mapping(item: Any) -> Mapping[str, Any] | None:
+        if isinstance(item, Mapping):
+            return item
+        if hasattr(item, "__dict__"):
+            return getattr(item, "__dict__")
+        return None
+
+    for block in output:
+        mapping = _coerce_mapping(block)
+        block_type = getattr(block, "type", None)
+        if mapping is not None and block_type is None:
+            block_type = mapping.get("type")
+
+        if block_type == "output_text":
+            text = getattr(block, "text", None)
+            if mapping is not None and not isinstance(text, str):
+                text = mapping.get("text")
+            if isinstance(text, str) and text:
+                texts.append(text)
+            continue
+
+        if block_type != "message":
+            continue
+
+        content = getattr(block, "content", None)
+        if mapping is not None and content is None:
+            content = mapping.get("content")
+        if not content:
+            continue
+
+        for entry in content:
+            entry_mapping = _coerce_mapping(entry)
+            entry_type = getattr(entry, "type", None)
+            if entry_mapping is not None and entry_type is None:
+                entry_type = entry_mapping.get("type")
+            if entry_type != "output_text":
+                continue
+            text = getattr(entry, "text", None)
+            if entry_mapping is not None and not isinstance(text, str):
+                text = entry_mapping.get("text")
+            if isinstance(text, str) and text:
+                texts.append(text)
+
+    if not texts:
+        return None
+    return "".join(texts)
+
+
 def _serialise_openai_response(response: Any) -> bytes:
     """Serialise *response* to JSON bytes compatible with :func:`_parse_gpt_response`."""
 
     # Newer OpenAI responses expose ``output_text`` instead of ``choices``.
     output_text = getattr(response, "output_text", None)
-    if isinstance(output_text, str):
+    if isinstance(output_text, str) and output_text:
         return json.dumps(
             {"choices": [{"message": {"content": output_text}}]}
+        ).encode("utf-8")
+
+    # Some SDK releases populate only the low-level ``output`` field without the
+    # convenience property.  Aggregate textual blocks manually so the parser
+    # still receives the expected chat completion payload.
+    collected_text = _collect_openai_output_text(response)
+    if collected_text is not None:
+        return json.dumps(
+            {"choices": [{"message": {"content": collected_text}}]}
         ).encode("utf-8")
 
     if hasattr(response, "model_dump_json"):
