@@ -115,3 +115,10 @@ def test_issue_comment_requires_pull_request_reference() -> None:
     assert 'ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}' in workflow_text
     assert 'issue_is_pr="${ISSUE_IS_PR:-false}"' in workflow_text
     assert 'Комментарий не относится к pull request' in workflow_text
+
+
+def test_issue_comment_command_is_case_insensitive() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert 'comment_body_lower="${comment_body,,}"' in workflow_text
+    assert '[[ "$comment_body_lower" != *"/llm-review"* ]]' in workflow_text
