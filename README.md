@@ -688,6 +688,11 @@ flask --app services/model_builder_service.py run --host 0.0.0.0 --port 8001
 flask --app services/trade_manager_service.py run --host 0.0.0.0 --port 8002
 ```
 
+⚠️ `trade_manager_service` завершит запуск с ошибкой, если не найти
+`TRADE_MANAGER_TOKEN`. В боевом режиме задайте токен явно в `.env` или окружении.
+Для локальных экспериментов разрешено включить `OFFLINE_MODE=1` (или `TEST_MODE=1`),
+чтобы использовать заглушки без токена.
+
 Для production-окружений можно заменить `flask run` на WSGI/ASGI-серверы,
 например `gunicorn services.data_handler_service:app` или `waitress-serve
 services.data_handler_service:app`.

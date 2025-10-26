@@ -1881,6 +1881,7 @@ def test_shutdown_handles_missing_is_initialized(monkeypatch):
 
 def test_warn_when_token_missing(monkeypatch, caplog):
     monkeypatch.delenv("TRADE_MANAGER_TOKEN", raising=False)
+    monkeypatch.setenv("OFFLINE_MODE", "1")
     ray_stub = types.ModuleType("ray")
     ray_stub.is_initialized = lambda: False
     ray_stub.init = lambda *a, **k: None
