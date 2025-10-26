@@ -67,6 +67,17 @@ else:  # pragma: no cover - реальная инициализация
     ]
 
 
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+_LAZY_SUBMODULES = {"service"}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LAZY_SUBMODULES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = importlib.import_module(f"{__name__}.{name}")
+    globals()[name] = module
+    return module
+
+
+def __dir__() -> list[str]:  # pragma: no cover - introspection helper
+    return sorted(set(globals()) | _LAZY_SUBMODULES)

@@ -20,6 +20,21 @@ _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
 
+_SYMBOL_COMPONENT = r"[A-Z0-9]{1,15}"
+_SYMBOL_PATTERN = re.compile(
+    rf"^{_SYMBOL_COMPONENT}/{_SYMBOL_COMPONENT}(?::(?:{_SYMBOL_COMPONENT}))?$"
+)
+_SYMBOL_SIMPLE_PATTERN = re.compile(rf"^{_SYMBOL_COMPONENT}$")
+_SIMPLE_SYMBOL_PATTERN = _SYMBOL_SIMPLE_PATTERN
+_KNOWN_QUOTE_SUFFIXES = (
+    "USDT",
+    "USDC",
+    "USD",
+    "BTC",
+    "ETH",
+)
+
+
 load_dotenv()
 
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"
@@ -285,13 +300,8 @@ def _load_initial_history(exchange: Any) -> None:
 def _allow_compact_symbol_format() -> bool:
     """Return ``True`` when compact symbols like ``BTCUSDT`` are allowed."""
 
-    flask_app: Any = app
-    if current_app is not None:
-        try:
-            flask_app = current_app._get_current_object()
-        except Exception:  # pragma: no cover - fall back to global app
-            flask_app = app
-    return bool(getattr(flask_app, "testing", False))
+    flag = os.getenv("DATA_HANDLER_ALLOW_COMPACT_SYMBOLS", "")
+    return flag.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _close_exchange_instance(instance: Any) -> None:
@@ -462,11 +472,15 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = candidate
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
+
     try:
         ticker = exchange.fetch_ticker(normalised_symbol)
         last_raw = ticker.get('last')
@@ -499,8 +513,11 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = normalized_symbol
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
