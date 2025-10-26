@@ -140,6 +140,21 @@ _get_state()
 POSITIONS: list[dict] = _get_state()._positions
 
 
+def _normalize_trade_side(value: Any) -> str:
+    """Normalise side values like ``long``/``short`` to ``buy``/``sell``."""
+
+    if value is None:
+        return ""
+    side = str(value).lower()
+    if side == "long":
+        return "buy"
+    if side == "short":
+        return "sell"
+    if side in {"buy", "sell"}:
+        return side
+    return ""
+
+
 def _current_exchange(state: TradeManagerState | None = None) -> Any | None:
     state = state or _get_state()
     runtime = _exchange_runtime
@@ -1031,7 +1046,7 @@ def close_position() -> ResponseReturnValue:
     except BadRequest:
         return jsonify({'error': 'invalid json'}), 400
     order_id = data.get('order_id')
-    side = str(data.get('side', '')).lower()
+    side_input = str(data.get('side', '')).lower()
     close_amount = data.get('close_amount')
     if close_amount is not None:
         try:
@@ -1043,7 +1058,7 @@ def close_position() -> ResponseReturnValue:
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
-    if not order_id or not side:
+    if not order_id or not side_input:
         return jsonify({'error': 'invalid order'}), 400
 
     state = _get_state()
@@ -1064,6 +1079,32 @@ def close_position() -> ResponseReturnValue:
     if not math.isfinite(amount) or amount <= 0:
         return jsonify({'error': 'invalid order'}), 400
 
+    stored_side = _normalize_trade_side(rec.get('side'))
+    if stored_side not in {'buy', 'sell'}:
+        app.logger.error(
+            'невозможно определить направление для закрытия позиции %s: %r',
+            sanitize_log_value(order_id),
+            sanitize_log_value(rec.get('side')),
+        )
+        return jsonify({'error': 'invalid order'}), 400
+
+    requested_side = _normalize_trade_side(side_input)
+    expected_close_side = 'sell' if stored_side == 'buy' else 'buy'
+    warnings_payload: dict[str, Any] = {}
+    if requested_side != expected_close_side:
+        app.logger.info(
+            'скорректировано направление закрытия позиции %s: ожидали %s, получено %s — используем %s',
+            sanitize_log_value(order_id),
+            expected_close_side,
+            sanitize_log_value(requested_side or side_input),
+            expected_close_side,
+        )
+        warnings_payload['side_adjusted'] = {
+            'message': 'направление заявки скорректировано для закрытия позиции',
+            'requested': side_input,
+            'used': expected_close_side,
+        }
+
     params = {'reduce_only': True}
     try:
         order = _call_exchange_method(
@@ -1071,7 +1112,7 @@ def close_position() -> ResponseReturnValue:
             'create_order',
             symbol,
             'market',
-            side,
+            expected_close_side,
             amount,
             params=params,
         )
@@ -1111,7 +1152,9 @@ def close_position() -> ResponseReturnValue:
                     }
         response_payload: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
         if cache_warning is not None:
-            response_payload['warnings'] = {'positions_cache_failed': cache_warning}
+            warnings_payload['positions_cache_failed'] = cache_warning
+        if warnings_payload:
+            response_payload['warnings'] = warnings_payload
         return jsonify(response_payload)
     except TimeoutError as exc:
         app.logger.exception('exchange request timed out while closing order: %s', exc)
