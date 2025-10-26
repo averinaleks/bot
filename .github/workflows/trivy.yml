@@ -40,6 +40,7 @@ jobs:
       - name: Run Trivy scan
         id: trivy
         continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
           scan-type: fs
           scanners: vuln,secret  # disable misconfig scans that crash on AWS policy bundle
