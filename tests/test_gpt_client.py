@@ -2,6 +2,7 @@ import asyncio
 import socket
 import logging
 import json
+import types
 from collections import deque
 
 import pytest
@@ -886,6 +887,47 @@ def _install_dummy_openai(monkeypatch, recorder):
 
     monkeypatch.setattr("bot.gpt_client.OpenAI", DummyOpenAI)
 
+
+def test_serialise_openai_response_collects_output_blocks():
+    from bot.gpt_client import _serialise_openai_response
+
+    class _Block:
+        def __init__(self, type_, text=None, content=None):
+            self.type = type_
+            self.text = text
+            self.content = content or []
+
+    response = types.SimpleNamespace(
+        output=[
+            _Block(
+                "message",
+                content=[
+                    _Block("output_text", text="Hello"),
+                    {"type": "output_text", "text": ", world"},
+                ],
+            ),
+            {"type": "output_text", "text": "!"},
+        ]
+    )
+
+    payload = json.loads(_serialise_openai_response(response).decode("utf-8"))
+    assert payload["choices"][0]["message"]["content"] == "Hello, world!"
+
+
+def test_serialise_openai_response_handles_mapping_entries():
+    from bot.gpt_client import _serialise_openai_response
+
+    response = types.SimpleNamespace(
+        output=[
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": "test"}],
+            }
+        ]
+    )
+
+    payload = json.loads(_serialise_openai_response(response).decode("utf-8"))
+    assert payload["choices"][0]["message"]["content"] == "test"
 
 def test_query_gpt_openai_fallback(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
