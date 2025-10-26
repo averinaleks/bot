@@ -1,5 +1,7 @@
 import asyncio
+import builtins
 import importlib
+import logging
 import sys
 import types
 
@@ -77,6 +79,98 @@ async def test_create_trade_manager_uses_shared_config(monkeypatch):
 
     assert manager is not None
     assert called["path"] == "config.json"
+
+
+@pytest.mark.asyncio
+async def test_create_trade_manager_without_telegram_dependency(monkeypatch, caplog):
+    import bot.trade_manager
+
+    module = importlib.reload(bot.trade_manager.service)
+    from bot.trade_manager import server_common
+
+    sentinel_cfg = {"ray_num_cpus": 1}
+    called = {}
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token-value")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat-value")
+
+    def fake_load(path="config.json"):
+        called["path"] = path
+        return sentinel_cfg
+
+    monkeypatch.setattr(server_common, "load_trade_manager_config", fake_load)
+
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "telegram":
+            raise ModuleNotFoundError("No module named 'telegram'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    class DummyDataHandler:
+        def __init__(self, cfg, telegram_bot, chat_id):
+            assert cfg is sentinel_cfg
+            assert telegram_bot is None
+            assert chat_id == "chat-value"
+            self.feature_callback = None
+            self.usdt_pairs = []
+
+        async def load_initial(self):
+            return None
+
+        async def stop(self):
+            return None
+
+        async def subscribe_to_klines(self, pairs):
+            return None
+
+    class DummyModelBuilder:
+        def __init__(self, cfg, data_handler, trade_manager):
+            assert cfg is sentinel_cfg
+            self.precompute_features = lambda *_, **__: None
+
+        async def train(self):
+            return None
+
+        async def backtest_loop(self):
+            return None
+
+    class DummyTradeManager:
+        def __init__(self, cfg, dh, mb, bot_instance, chat_id):
+            assert cfg is sentinel_cfg
+            assert bot_instance is None
+            assert chat_id == "chat-value"
+            self.loop = asyncio.get_event_loop()
+            self.telegram_bot = bot_instance
+
+    monkeypatch.setitem(
+        sys.modules,
+        "bot.data_handler",
+        types.SimpleNamespace(DataHandler=DummyDataHandler),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "bot.model_builder",
+        types.SimpleNamespace(ModelBuilder=DummyModelBuilder),
+    )
+    monkeypatch.setattr(module, "TradeManager", DummyTradeManager)
+    monkeypatch.setattr(module.ray, "is_initialized", lambda: True)
+
+    module.trade_manager_factory.reset()
+    with caplog.at_level(logging.WARNING):
+        try:
+            manager = await module.create_trade_manager()
+        finally:
+            module.trade_manager_factory.reset()
+
+    assert manager is not None
+    assert manager.telegram_bot is None
+    assert called["path"] == "config.json"
+    assert any(
+        "python-telegram-bot" in record.getMessage() for record in caplog.records
+    )
 
 
 def test_package_service_uses_common_token_validator(monkeypatch):
