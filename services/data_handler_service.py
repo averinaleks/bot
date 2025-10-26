@@ -25,6 +25,20 @@ load_dotenv()
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"
 ALLOW_ANONYMOUS_ENV_VAR = "DATA_HANDLER_ALLOW_ANONYMOUS"
 
+_SYMBOL_SEGMENT_PATTERN = r"[A-Z0-9]{2,20}"
+_SYMBOL_SIMPLE_PATTERN = re.compile(_SYMBOL_SEGMENT_PATTERN)
+_SIMPLE_SYMBOL_PATTERN = _SYMBOL_SIMPLE_PATTERN
+_SYMBOL_PATTERN = re.compile(
+    rf"{_SYMBOL_SEGMENT_PATTERN}/{_SYMBOL_SEGMENT_PATTERN}(?::{_SYMBOL_SEGMENT_PATTERN})?"
+)
+_KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
+    "USDT",
+    "USDC",
+    "BTC",
+    "ETH",
+    "USD",
+)
+
 try:  # optional dependency
     import flask
 except Exception:  # pragma: no cover - flask missing entirely
@@ -462,8 +476,9 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = candidate
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -499,8 +514,9 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = normalized_symbol
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503

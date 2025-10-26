@@ -24,7 +24,14 @@ if bot_config.OFFLINE_MODE:
     TradeManager = cast(type[TradeManagerType], OfflineTradeManager)
     TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
 
-    __all__ = ["TradeManager", "TelegramLogger", "service"]
+    __all__ = [
+        "TradeManager",
+        "TelegramLogger",
+        "service",
+        "order_utils",
+        "server_common",
+        "errors",
+    ]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
     from bot.utils_loader import require_utils
@@ -64,9 +71,35 @@ else:  # pragma: no cover - реальная инициализация
         "get_http_client",
         "close_http_client",
         "service",
+        "order_utils",
+        "server_common",
+        "errors",
     ]
 
 
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+_LEGACY_EXPORTS: dict[str, str] = {
+    name: f"{__name__}.{name}"
+    for name in ("service", "order_utils", "server_common", "errors")
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Ленивая подгрузка вспомогательных модулей.
+
+    Ранее потребители обращались к ``bot.trade_manager`` как к пространству
+    имён, содержащему вложенные модули вроде ``order_utils``.  Чтобы сохранить
+    обратную совместимость и не тянуть тяжёлые зависимости при импорте,
+    модули загружаются по требованию.
+    """
+
+    target = _LEGACY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = importlib.import_module(target)
+    globals()[name] = module
+    return module
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LEGACY_EXPORTS))
