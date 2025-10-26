@@ -351,7 +351,32 @@ jobs:
                 "i/o timeout"
                 "TLS handshake timeout"
               )
+              # GHCR также может отвечать 4xx-статусами с HTML/текстом вместо JSON,
+              # когда сервис авторизации недоступен. В таких случаях buildx
+              # завершается с сообщениями о ``unexpected status code 40x`` или
+              # ``error parsing HTTP 403 response body``. Распознаём эти ошибки
+              # и обрабатываем их как временный сбой GHCR.
+              local -a ghcr_http_patterns=(
+                "error parsing HTTP 40"
+                "unexpected status code 40"
+                "unexpected status code: 40"
+                "HTTP status: 401"
+                "HTTP status: 403"
+                "HTTP status: 429"
+                "response status: 401"
+                "response status: 403"
+                "response status: 429"
+                "error fetching anonymous token"
+                "token exchange is currently unavailable"
+                "TOOMANYREQUESTS"
+                "Too Many Requests"
+              )
               for pattern in "${ghcr_network_patterns[@]}"; do
+                if grep -Fqi "${pattern}" "${log_file}"; then
+                  return 0
+                fi
+              done
+              for pattern in "${ghcr_http_patterns[@]}"; do
                 if grep -Fqi "${pattern}" "${log_file}"; then
                   return 0
                 fi
