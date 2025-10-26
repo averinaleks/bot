@@ -16,308 +16,265 @@ jobs:
   submit:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve event metadata
+        id: event-metadata
+        run: |
+          python3 <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from typing import Any, Iterable, Tuple
+
+          _NULL_STRINGS = {"", "null", "none", "undefined", '""', "''"}
+
+
+          def _normalise(value: Any) -> str:
+              if value is None:
+                  return ""
+              if isinstance(value, str):
+                  candidate = value.strip()
+                  if not candidate or candidate.lower() in _NULL_STRINGS:
+                      return ""
+                  return candidate
+              if isinstance(value, (int, float)):
+                  candidate = str(value).strip()
+                  if not candidate or candidate.lower() in _NULL_STRINGS:
+                      return ""
+                  return candidate
+              return ""
+
+
+          def _load_payload() -> dict[str, Any]:
+              path = os.getenv("GITHUB_EVENT_PATH")
+              if not path:
+                  return {}
+              try:
+                  with open(path, "r", encoding="utf-8") as stream:
+                      data = json.load(stream)
+              except Exception:
+                  return {}
+              return data if isinstance(data, dict) else {}
+
+
+          PAYLOAD = _load_payload()
+
+
+          def _lookup(path: str) -> str:
+              if not path:
+                  return ""
+              if path.startswith("env."):
+                  return _normalise(os.getenv(path.split(".", 1)[1]))
+              current: Any = PAYLOAD
+              for segment in path.split("."):
+                  if segment == "payload":
+                      continue
+                  if isinstance(current, dict):
+                      current = current.get(segment)
+                  else:
+                      return ""
+              return _normalise(current)
+
+
+          def _lines(block: str) -> Tuple[str, ...]:
+              return tuple(
+                  line.strip()
+                  for line in block.splitlines()
+                  if line.strip()
+              )
+
+
+          def _choose(candidates: Iterable[str]) -> str:
+              for candidate in candidates:
+                  value = _lookup(candidate)
+                  if value:
+                      return value
+              return ""
+
+
+          REF_CANDIDATES = _lines(
+              """
+              payload.ref
+              payload.ref_name
+              payload.refName
+              payload.branch
+              payload.branch_name
+              payload.branchName
+              payload.head_branch
+              payload.headBranch
+              payload.head_branch_name
+              payload.headBranchName
+              payload.head_ref
+              payload.headRef
+              payload.head_ref_name
+              payload.headRefName
+              env.GITHUB_HEAD_REF
+              payload.dependency_graph.sha
+              payload.dependency_graph.commit_oid
+              payload.dependency_graph.commitOid
+              payload.dependency_graph.ref
+              payload.dependency_graph.ref_name
+              payload.dependency_graph.refName
+              payload.dependency_graph.branch
+              payload.dependency_graph.branch_name
+              payload.dependency_graph.branchName
+              payload.client_payload.sha
+              payload.client_payload.commit_sha
+              payload.client_payload.commitSha
+              payload.client_payload.commit_oid
+              payload.client_payload.commitOid
+              payload.client_payload.head_sha
+              payload.client_payload.headSha
+              payload.client_payload.after
+              payload.client_payload.after_sha
+              payload.client_payload.afterSha
+              payload.client_payload.after_oid
+              payload.client_payload.afterOid
+              payload.client_payload.ref
+              payload.client_payload.ref_name
+              payload.client_payload.refName
+              payload.client_payload.head_ref
+              payload.client_payload.headRef
+              payload.client_payload.head_ref_name
+              payload.client_payload.headRefName
+              payload.client_payload.branch
+              payload.client_payload.branch_name
+              payload.client_payload.branchName
+              payload.workflow_run.head_sha
+              payload.workflow_run.head_commit.id
+              payload.workflow_run.head_commit.sha
+              payload.workflow_run.head_commit.after
+              payload.workflow_run.head_commit.afterSha
+              payload.workflow_run.head_commit.afterOid
+              payload.workflow_run.head_commit.afterCommitOid
+              payload.workflow_run.head_ref
+              payload.workflow_run.headRef
+              payload.workflow_run.head_ref_name
+              payload.workflow_run.headRefName
+              payload.workflow_run.head_branch
+              payload.workflow_run.head_branch_name
+              payload.workflow_run.headBranch
+              payload.workflow_run.headBranchName
+              env.GITHUB_REF
+              env.GITHUB_SHA
+              """
+          )
+
+          checkout_ref = _choose(REF_CANDIDATES)
+          if not checkout_ref:
+              default_branch = _lookup("payload.repository.default_branch")
+              if default_branch:
+                  checkout_ref = f"refs/heads/{default_branch}"
+          if not checkout_ref:
+              checkout_ref = "refs/heads/main"
+
+          BEFORE_CANDIDATES = _lines(
+              """
+              payload.before
+              payload.dependency_graph.before_sha
+              payload.dependency_graph.beforeSha
+              payload.dependency_graph.before_oid
+              payload.dependency_graph.beforeOid
+              payload.dependency_graph.before_commit_oid
+              payload.dependency_graph.beforeCommitOid
+              payload.dependency_graph.base_ref
+              payload.dependency_graph.base_sha
+              payload.dependency_graph.baseRef
+              payload.dependency_graph.baseRefName
+              payload.dependency_graph.baseSha
+              payload.client_payload.before
+              payload.client_payload.before_sha
+              payload.client_payload.beforeSha
+              payload.client_payload.before_oid
+              payload.client_payload.beforeOid
+              payload.client_payload.before_commit_oid
+              payload.client_payload.beforeCommitOid
+              payload.client_payload.previous_sha
+              payload.client_payload.previousSha
+              payload.client_payload.previous_oid
+              payload.client_payload.previousOid
+              payload.client_payload.previous_commit_oid
+              payload.client_payload.previousCommitOid
+              payload.workflow_run.before
+              payload.workflow_run.previous_sha
+              payload.workflow_run.head_commit.before
+              payload.workflow_run.head_commit.beforeSha
+              payload.workflow_run.head_commit.beforeOid
+              payload.workflow_run.head_commit.beforeCommitOid
+              payload.workflow_run.head_commit.previousSha
+              payload.workflow_run.head_commit.previousOid
+              payload.workflow_run.head_commit.previousCommitOid
+              """
+          )
+
+          AFTER_CANDIDATES = _lines(
+              """
+              env.GITHUB_SHA
+              payload.commit_oid
+              payload.commitOid
+              payload.commit_sha
+              payload.sha
+              payload.dependency_graph.sha
+              payload.dependency_graph.commit_oid
+              payload.dependency_graph.commitOid
+              payload.dependency_graph.after_sha
+              payload.dependency_graph.afterSha
+              payload.dependency_graph.after_oid
+              payload.dependency_graph.afterOid
+              payload.dependency_graph.after_commit_oid
+              payload.dependency_graph.afterCommitOid
+              payload.dependency_graph.after
+              payload.client_payload.after
+              payload.client_payload.head_sha
+              payload.client_payload.headSha
+              payload.client_payload.commit_oid
+              payload.client_payload.commitOid
+              payload.client_payload.commit_sha
+              payload.client_payload.after_sha
+              payload.client_payload.afterSha
+              payload.client_payload.after_oid
+              payload.client_payload.afterOid
+              payload.client_payload.after_commit_oid
+              payload.client_payload.afterCommitOid
+              payload.client_payload.sha
+              payload.workflow_run.head_sha
+              payload.workflow_run.head_commit.id
+              payload.workflow_run.head_commit.sha
+              payload.workflow_run.head_commit.after
+              payload.workflow_run.head_commit.afterSha
+              payload.workflow_run.head_commit.afterOid
+              payload.workflow_run.head_commit.afterCommitOid
+              """
+          )
+
+          before = _choose(BEFORE_CANDIDATES)
+          after = _choose(AFTER_CANDIDATES)
+
+          output_path = os.getenv("GITHUB_OUTPUT")
+          if output_path:
+              with open(output_path, "a", encoding="utf-8") as stream:
+                  stream.write(f"checkout_ref={checkout_ref}\n")
+                  stream.write(f"before={before}\n")
+                  stream.write(f"after={after}\n")
+
+          print(f"Checkout reference resolved to: {checkout_ref}")
+          if before:
+              print(f"Resolved 'before' commit: {before}")
+          if after:
+              print(f"Resolved 'after' commit: {after}")
+          PY
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
         with:
           fetch-depth: 0
-          ref: >-
-            ${{
-              github.event.ref ||
-              github.event.ref_name ||
-              github.event.refName ||
-              github.event.branch ||
-              github.event.branch_name ||
-              github.event.head_branch ||
-              github.event.headBranch ||
-              github.event.head_branch_name ||
-              github.event.headBranchName ||
-              github.event.head_ref ||
-              github.head_ref ||
-              github.event.dependency_graph.sha ||
-              github.event.dependency_graph.commit_oid ||
-              github.event.dependency_graph.commitOid ||
-              github.event.dependency_graph.ref ||
-              github.event.dependency_graph.ref_name ||
-              github.event.dependency_graph.refName ||
-              github.event.dependency_graph.branch ||
-              github.event.dependency_graph.branch_name ||
-              github.event.dependency_graph.branchName ||
-              github.event.client_payload.sha ||
-              github.event.client_payload.commit_sha ||
-              github.event.client_payload.commitSha ||
-              github.event.client_payload.commit_oid ||
-              github.event.client_payload.commitOid ||
-              github.event.client_payload.head_sha ||
-              github.event.client_payload.headSha ||
-              github.event.client_payload.after ||
-              github.event.client_payload.after_sha ||
-              github.event.client_payload.afterSha ||
-              github.event.client_payload.after_oid ||
-              github.event.client_payload.afterOid ||
-              github.event.client_payload.ref ||
-              github.event.client_payload.ref_name ||
-              github.event.client_payload.refName ||
-              github.event.client_payload.head_ref ||
-              github.event.client_payload.headRef ||
-              github.event.client_payload.head_ref_name ||
-              github.event.client_payload.headRefName ||
-              github.event.client_payload.branch ||
-              github.event.client_payload.branch_name ||
-              github.event.client_payload.branchName ||
-              github.event.workflow_run.head_sha ||
-              github.event.workflow_run.head_commit.id ||
-              github.event.workflow_run.head_commit.sha ||
-              github.event.workflow_run.head_commit.after ||
-              github.event.workflow_run.head_commit.afterSha ||
-              github.event.workflow_run.head_commit.afterOid ||
-              github.event.workflow_run.head_commit.afterCommitOid ||
-              github.event.workflow_run.head_ref ||
-              github.event.workflow_run.headRef ||
-              github.event.workflow_run.head_ref_name ||
-              github.event.workflow_run.headRefName ||
-              github.event.workflow_run.head_branch ||
-              github.event.workflow_run.head_branch_name ||
-              github.event.workflow_run.headBranch ||
-              github.event.workflow_run.headBranchName ||
-              github.ref ||
-              github.sha
-            }}
+          ref: ${{ steps.event-metadata.outputs.checkout_ref }}
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: '3.11'
       - name: Detect dependency manifest changes
         id: detect
         env:
-          BEFORE: >-
-            ${{
-              github.event.before ||
-              github.event.base_sha ||
-              github.event.base_ref ||
-              github.event.dependency_graph.before_sha ||
-              github.event.dependency_graph.beforeSha ||
-              github.event.dependency_graph.before_oid ||
-              github.event.dependency_graph.beforeOid ||
-              github.event.dependency_graph.before_commit_oid ||
-              github.event.dependency_graph.beforeCommitOid ||
-              github.event.dependency_graph.base_ref ||
-              github.event.dependency_graph.base_sha ||
-              github.event.dependency_graph.baseRef ||
-              github.event.dependency_graph.baseRefName ||
-              github.event.dependency_graph.baseSha ||
-              github.event.client_payload.before ||
-              github.event.client_payload.base_sha ||
-              github.event.client_payload.before_sha ||
-              github.event.client_payload.baseSha ||
-              github.event.client_payload.beforeSha ||
-              github.event.client_payload.before_oid ||
-              github.event.client_payload.beforeOid ||
-              github.event.client_payload.before_commit_oid ||
-              github.event.client_payload.beforeCommitOid ||
-              github.event.client_payload.previous_sha ||
-              github.event.client_payload.previous_oid ||
-              github.event.client_payload.previousSha ||
-              github.event.client_payload.previousOid ||
-              github.event.client_payload.previous_commit_oid ||
-              github.event.client_payload.previousCommitOid ||
-              github.event.previous_sha ||
-              github.event.previousSha ||
-              github.event.previous_oid ||
-              github.event.previousOid ||
-              github.event.previous_commit_oid ||
-              github.event.previousCommitOid ||
-              github.event.head_commit.before ||
-              github.event.head_commit.beforeSha ||
-              github.event.head_commit.beforeOid ||
-              github.event.head_commit.beforeCommitOid ||
-              github.event.head_commit.previousSha ||
-              github.event.head_commit.previousOid ||
-              github.event.head_commit.previousCommitOid ||
-              github.event.workflow_run.before ||
-              github.event.workflow_run.previous_sha ||
-              github.event.workflow_run.head_commit.before ||
-              github.event.workflow_run.head_commit.beforeSha ||
-              github.event.workflow_run.head_commit.beforeOid ||
-              github.event.workflow_run.head_commit.beforeCommitOid ||
-              github.event.workflow_run.head_commit.previousSha ||
-              github.event.workflow_run.head_commit.previousOid ||
-              github.event.workflow_run.head_commit.previousCommitOid ||
-              ''
-            }}
-          AFTER: >-
-            ${{
-              github.sha ||
-              github.event.commit_oid ||
-              github.event.commitOid ||
-              github.event.commit_sha ||
-              github.event.sha ||
-              github.event.dependency_graph.sha ||
-              github.event.dependency_graph.commit_oid ||
-              github.event.dependency_graph.commitOid ||
-              github.event.dependency_graph.after_sha ||
-              github.event.dependency_graph.afterSha ||
-              github.event.dependency_graph.after_oid ||
-              github.event.dependency_graph.afterOid ||
-              github.event.dependency_graph.after_commit_oid ||
-              github.event.dependency_graph.afterCommitOid ||
-              github.event.dependency_graph.after ||
-              github.event.head_sha ||
-              github.event.headSha ||
-              github.event.after ||
-              github.event.after_sha ||
-              github.event.afterSha ||
-              github.event.after_oid ||
-              github.event.afterOid ||
-              github.event.after_commit_oid ||
-              github.event.afterCommitOid ||
-              github.event.head_commit.id ||
-              github.event.head_commit.sha ||
-              github.event.head_commit.after ||
-              github.event.head_commit.afterSha ||
-              github.event.head_commit.afterOid ||
-              github.event.head_commit.afterCommitOid ||
-              github.event.dependency_graph.ref ||
-              github.event.ref ||
-              github.event.client_payload.after ||
-              github.event.client_payload.head_sha ||
-              github.event.client_payload.headSha ||
-              github.event.client_payload.commit_oid ||
-              github.event.client_payload.commitOid ||
-              github.event.client_payload.commit_sha ||
-              github.event.client_payload.after_sha ||
-              github.event.client_payload.afterSha ||
-              github.event.client_payload.after_oid ||
-              github.event.client_payload.afterOid ||
-              github.event.client_payload.after_commit_oid ||
-              github.event.client_payload.afterCommitOid ||
-              github.event.client_payload.sha ||
-              github.event.workflow_run.head_sha ||
-              github.event.workflow_run.head_commit.id ||
-              github.event.workflow_run.head_commit.sha ||
-              github.event.workflow_run.head_commit.after ||
-              github.event.workflow_run.head_commit.afterSha ||
-              github.event.workflow_run.head_commit.afterOid ||
-              github.event.workflow_run.head_commit.afterCommitOid ||
-              ''
-            }}
-        run: |
-          python <<'PY'
-          from __future__ import annotations
-
-          import fnmatch
-          import os
-          import subprocess
-          from pathlib import Path
-          from typing import Sequence
-
-          _NULL_STRINGS = {"null", "none", "undefined", '""', "''"}
-
-          def _normalise_value(raw: str | None) -> str:
-              if not raw:
-                  return ""
-              candidate = raw.strip()
-              if candidate.lower() in _NULL_STRINGS:
-                  return ""
-              return candidate
-
-          patterns: Sequence[str] = (
-              "requirements*.txt",
-              "requirements*.in",
-              "requirements*.out",
-          )
-          before = _normalise_value(os.environ.get("BEFORE"))
-          after = _normalise_value(os.environ.get("AFTER"))
-
-          diff_failed = False
-          changed: list[str]
-
-          if not after:
-              print(
-                  "::warning::Missing GITHUB_SHA value; assuming dependency manifests changed.",
-                  flush=True,
-              )
-              diff_failed = True
-              changed = []
-          else:
-              if not before or set(before) == {"0"}:
-                  before = f"{after}^"
-
-              try:
-                  completed = subprocess.run(
-                      ["git", "diff", "--name-only", before, after],
-                      check=True,
-                      stdout=subprocess.PIPE,
-                      text=True,
-                  )
-              except subprocess.CalledProcessError as exc:
-                  print(f"::warning::Unable to determine diff: {exc}", flush=True)
-                  diff_failed = True
-                  changed = []
-              except Exception as exc:  # pragma: no cover - defensive guard for CI
-                  print(
-                      "::warning::Unexpected error while detecting manifest changes:",
-                      exc,
-                      flush=True,
-                  )
-                  diff_failed = True
-                  changed = []
-              else:
-                  files = [
-                      line.strip()
-                      for line in completed.stdout.splitlines()
-                      if line.strip()
-                  ]
-                  changed = []
-                  for file in files:
-                      if not file:
-                          continue
-                      try:
-                          filename = Path(file).name
-                      except Exception:
-                          filename = file
-                      file_lower = file.lower()
-                      filename_lower = filename.lower()
-                      if any(
-                          fnmatch.fnmatch(file, pattern)
-                          or fnmatch.fnmatch(filename, pattern)
-                          or fnmatch.fnmatch(file_lower, pattern)
-                          or fnmatch.fnmatch(filename_lower, pattern)
-                          for pattern in patterns
-                      ):
-                          changed.append(file)
-
-          changed_flag = "true" if diff_failed or bool(changed) else "false"
-          output_path = os.environ.get("GITHUB_OUTPUT")
-          if not output_path:
-              print(
-                  "::warning::GITHUB_OUTPUT is not available; downstream steps will be skipped.",
-                  flush=True,
-              )
-          else:
-              try:
-                  with open(output_path, "a", encoding="utf-8") as stream:
-                      stream.write(f"changed={changed_flag}\n")
-                      if changed:
-                          stream.write("files<<EOF\n")
-                          stream.write("\n".join(changed))
-                          stream.write("\nEOF\n")
-              except OSError as exc:  # pragma: no cover - filesystem guard for CI
-                  print(
-                      "::warning::Unable to write change detection outputs:",
-                      exc,
-                      flush=True,
-                  )
-
-          if changed_flag == "true" and not changed and diff_failed:
-              print(
-                  "Diff calculation failed; proceeding with dependency snapshot submission.",
-                  flush=True,
-              )
-          elif changed:
-              print("Dependency manifest changes detected:", flush=True)
-              for path in changed:
-                  print(f"  - {path}", flush=True)
-          else:
-              print("No dependency manifest changes detected.", flush=True)
-          PY
+          BEFORE: ${{ steps.event-metadata.outputs.before }}
+          AFTER: ${{ steps.event-metadata.outputs.after }}
       - name: Install dependency snapshot dependencies
         if: >-
           steps.detect.outputs.changed == 'true' ||
