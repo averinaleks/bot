@@ -28,6 +28,22 @@ def _run_git(*args: str, check: bool = True, **kwargs):
     return subprocess.run(command, check=check, **kwargs)  # nosec B603
 
 
+def test_resolve_git_executable_ignores_world_writable_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prepare_gptoss_diff._resolve_git_executable.cache_clear()
+    insecure = tmp_path / "git"
+    insecure.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    insecure.chmod(0o777)
+    monkeypatch.setenv("GIT_EXECUTABLE", str(insecure))
+
+    try:
+        resolved = Path(prepare_gptoss_diff._resolve_git_executable())
+        assert resolved != insecure
+    finally:
+        prepare_gptoss_diff._resolve_git_executable.cache_clear()
+
+
 @pytest.fixture()
 def temp_repo(tmp_path: Path) -> Iterator[Path]:
     remote = tmp_path / "remote.git"

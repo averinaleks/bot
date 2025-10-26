@@ -25,6 +25,7 @@ import re
 import shutil
 import ssl
 import sys
+import stat
 from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -273,6 +274,45 @@ def _fetch_pull_request(
     return PullRequestInfo(base_sha=base_sha, base_ref=base_ref)
 
 
+_WRITE_MASK = stat.S_IWGRP | stat.S_IWOTH
+
+
+def _is_trusted_executable(path: Path) -> bool:
+    """Return ``True`` when *path* points to a safe executable."""
+
+    if not path.is_absolute():
+        return False
+    try:
+        info = path.stat()
+    except OSError:
+        return False
+    if not stat.S_ISREG(info.st_mode):
+        return False
+    if info.st_mode & _WRITE_MASK:
+        return False
+    if not os.access(path, os.X_OK):
+        return False
+
+    trusted_uids = {0}
+    try:  # pragma: no cover - ``os.getuid`` missing on Windows
+        trusted_uids.add(os.getuid())
+    except AttributeError:
+        pass
+    if info.st_uid not in trusted_uids:
+        return False
+
+    for parent in path.parents:
+        try:
+            parent_info = parent.stat()
+        except OSError:
+            return False
+        if not stat.S_ISDIR(parent_info.st_mode):
+            return False
+        if parent_info.st_mode & _WRITE_MASK:
+            return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def _resolve_git_executable() -> str:
     """Return an absolute path to the trusted git executable."""
@@ -292,9 +332,7 @@ def _resolve_git_executable() -> str:
             resolved = candidate.resolve(strict=True)
         except FileNotFoundError:
             continue
-        if not resolved.is_file():
-            continue
-        if not os.access(resolved, os.X_OK):
+        if not _is_trusted_executable(resolved):
             continue
         return str(resolved)
 
