@@ -67,6 +67,18 @@ else:  # pragma: no cover - реальная инициализация
     ]
 
 
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+def __getattr__(name: str) -> Any:
+    """Поддержка ленивого импорта подмодуля :mod:`service`.
+
+    Модуль ``service`` зависит от большинства внешних интеграций и загружается
+    достаточно долго.  В офлайн-режиме он вообще не нужен, поэтому импортируем
+    его только по запросу.  ``importlib.import_module`` используется вместо
+    ``from . import service`` чтобы избежать рекурсии при старте.
+    """
+
+    if name != "service":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = importlib.import_module(f"{__name__}.service")
+    globals()[name] = module
+    return module
