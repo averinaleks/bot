@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Any, Callable
 
-import config as bot_config
+from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
 from services.stubs import is_offline_env
 

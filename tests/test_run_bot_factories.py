@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import logging
 import sys
 from types import SimpleNamespace
@@ -135,3 +136,21 @@ def test_build_components_offline_overrides_factories(monkeypatch):
     assert getattr(model_builder, "__offline_stub__", False)
     assert trade_manager.gpt_client_factory is OfflineGPT
     assert isinstance(trade_manager.telegram_logger, OfflineTelegram)
+
+
+def test_build_exchange_uses_offline_stub_when_config_requests(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+
+    import bot.config as config_module
+    import services.service_factories as service_factories
+
+    importlib.reload(service_factories)
+
+    monkeypatch.setattr(config_module, "OFFLINE_MODE", True, raising=False)
+
+    exchange = service_factories.build_exchange()
+
+    from services.offline import OfflineBybit
+
+    assert isinstance(exchange, OfflineBybit)
