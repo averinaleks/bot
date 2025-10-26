@@ -7,7 +7,7 @@
 """
 
 import importlib
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, List, cast
 
 from bot import config as bot_config
 
@@ -66,7 +66,15 @@ else:  # pragma: no cover - реальная инициализация
         "service",
     ]
 
+def __getattr__(name: str) -> Any:
+    """Ленивая загрузка дополнительных атрибутов пакета."""
 
+    if name == "service":
+        module = importlib.import_module(f"{__name__}.service")
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> List[str]:  # pragma: no cover - стабильно, зависит от __all__
+    return sorted(__all__)
