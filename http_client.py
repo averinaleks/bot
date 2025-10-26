@@ -173,7 +173,19 @@ def get_httpx_client(
 # ---------------------------------------------------------------------------
 
 _ASYNC_CLIENT: HTTPXAsyncClient | None = None
-_ASYNC_CLIENT_LOCK = asyncio.Lock()
+_ASYNC_CLIENT_LOCK: asyncio.Lock | None = None
+_ASYNC_CLIENT_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _get_async_client_lock() -> asyncio.Lock:
+    """Return an ``asyncio.Lock`` bound to the current event loop."""
+
+    global _ASYNC_CLIENT_LOCK, _ASYNC_CLIENT_LOCK_LOOP
+    loop = asyncio.get_running_loop()
+    if _ASYNC_CLIENT_LOCK is None or _ASYNC_CLIENT_LOCK_LOOP is not loop:
+        _ASYNC_CLIENT_LOCK = asyncio.Lock()
+        _ASYNC_CLIENT_LOCK_LOOP = loop
+    return _ASYNC_CLIENT_LOCK
 
 # In-memory caches and metrics for HTTP requests
 REFERENCE_CACHE: Dict[str, Tuple[int, HTTPXHeaders, bytes]] = {}
@@ -185,7 +197,8 @@ async def get_async_http_client(
 ) -> HTTPXAsyncClient:
     """Return a shared :class:`httpx.AsyncClient` instance."""
     global _ASYNC_CLIENT
-    async with _ASYNC_CLIENT_LOCK:
+    lock = _get_async_client_lock()
+    async with lock:
         if _ASYNC_CLIENT is None:
             if "timeout" in kwargs:
                 kwargs["timeout"] = _normalise_timeout(
@@ -206,14 +219,16 @@ async def get_async_http_client(
 async def close_async_http_client() -> None:
     """Close the shared asynchronous HTTP client if it exists."""
     global _ASYNC_CLIENT
-    if _ASYNC_CLIENT is not None:
-        close = getattr(_ASYNC_CLIENT, "aclose", None)
-        if callable(close):
-            try:
-                await close()
-            except Exception:
-                logging.exception("Failed to close async HTTP client")
-        _ASYNC_CLIENT = None
+    lock = _get_async_client_lock()
+    async with lock:
+        if _ASYNC_CLIENT is not None:
+            close = getattr(_ASYNC_CLIENT, "aclose", None)
+            if callable(close):
+                try:
+                    await close()
+                except Exception:
+                    logging.exception("Failed to close async HTTP client")
+            _ASYNC_CLIENT = None
 
 
 @asynccontextmanager
