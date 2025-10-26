@@ -6,6 +6,7 @@ import logging
 import re
 from contextlib import asynccontextmanager
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, List
 
 try:  # pragma: no cover - exercised in CI when dependency installed
@@ -145,6 +146,66 @@ except (ImportError, AttributeError):  # pragma: no cover - export varies by ver
 load_dotenv()
 
 
+def _prepare_model_cache_dir(raw_path: str | None) -> Path | None:
+    """Return a hardened cache directory for model artefacts.
+
+    HuggingFace writes downloaded models into ``cache_dir`` without additional
+    validation.  Accepting arbitrary user input would therefore allow path
+    traversal via symlinks or control characters that make log inspection
+    difficult.  The helper normalises the path, rejects symlinks, and ensures
+    the directory exists before handing control to ``transformers``.
+    """
+
+    if not raw_path:
+        return None
+
+    try:
+        candidate = Path(raw_path).expanduser()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "Ignoring MODEL_CACHE_DIR %s: invalid path (%s)",
+            sanitize_log_value(str(raw_path)),
+            exc,
+        )
+        return None
+
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        logger.warning(
+            "Ignoring MODEL_CACHE_DIR %s: failed to create directory (%s)",
+            sanitize_log_value(str(candidate)),
+            exc,
+        )
+        return None
+
+    try:
+        if candidate.is_symlink():
+            logger.warning(
+                "Ignoring MODEL_CACHE_DIR %s: path must not be a symlink",
+                sanitize_log_value(str(candidate)),
+            )
+            return None
+        if not candidate.is_dir():
+            logger.warning(
+                "Ignoring MODEL_CACHE_DIR %s: path is not a directory",
+                sanitize_log_value(str(candidate)),
+            )
+            return None
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        logger.warning(
+            "Ignoring MODEL_CACHE_DIR %s: failed to inspect directory (%s)",
+            sanitize_log_value(str(candidate)),
+            exc,
+        )
+        return None
+
+    return resolved
+
+
 class ModelManager:
     """Manage loading and inference model state."""
 
@@ -191,7 +252,8 @@ class ModelManager:
             raise ValueError(
                 "GPT_MODEL_FALLBACK_REVISION must be a 40-character SHA commit"
             )
-        cache_dir = os.getenv("MODEL_CACHE_DIR")
+        cache_dir_path = _prepare_model_cache_dir(os.getenv("MODEL_CACHE_DIR"))
+        cache_dir = str(cache_dir_path) if cache_dir_path is not None else None
 
         load_tokenizer = AutoTokenizer.from_pretrained
         load_model = AutoModelForCausalLM.from_pretrained
