@@ -235,6 +235,7 @@ jobs:
           DOCKERFILE_PATH: ${{ matrix.file }}
           IMAGE_TAGS: ${{ steps.tags.outputs.list }}
           SHOULD_PUSH: ${{ env.PUBLISH_IMAGES }}
+          MATRIX_IMAGE: ${{ matrix.image }}
         shell: bash
         run: |
           set -euo pipefail
@@ -417,13 +418,28 @@ jobs:
 
             echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification"
             set +e
-            run_build false local "${ALL_IMAGE_TAGS[@]}"
+            local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
+            local_tags=()
+            for image_tag in "${ALL_IMAGE_TAGS[@]}"; do
+              if [[ "${image_tag}" == ghcr.io/* ]]; then
+                continue
+              fi
+              local_tags+=("${image_tag}")
+            done
+
+            if [ "${#local_tags[@]}" -eq 0 ]; then
+              local_tags=("${local_fallback_tag}")
+            fi
+
+            run_build false local "${local_tags[@]}"
             local_status=$?
             local_log="${BUILD_LOG}"
             set -e
             if [ "${local_status}" -eq 0 ]; then
               rm -f "${first_log}" "${second_log}" "${local_log}"
-              echo "::notice::Docker image built locally without pushing because GHCR was unavailable"
+              printf -v rendered_tags '%s, ' "${local_tags[@]}"
+              rendered_tags=${rendered_tags%, }
+              echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
               echo "status=success" >> "${GITHUB_OUTPUT}"
               exit 0
             fi
