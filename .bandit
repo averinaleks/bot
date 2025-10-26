@@ -1,12 +1,3 @@
-# Exclude directories that contain test fixtures, helper scripts, or tooling
-# that intentionally use patterns flagged by Bandit (for example, assertions in
-# tests). Using the YAML syntax ensures Bandit can parse the configuration and
-# respect the exclusions during analysis.
-exclude_dirs:
-  - tests
-  - scripts
-  - gptoss_check
-# Skip rules that consistently produce false positives for the project.
-# B101 warns about ``assert`` statements, which are expected in pytest tests.
-skips:
-  - B101
+[bandit]
+exclude = tests,scripts,gptoss_check
+skips = B101
