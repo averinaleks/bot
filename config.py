@@ -127,7 +127,7 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
 
 
 def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
-    """Return a config path confined to ``_CONFIG_DIR``."""
+    """Return a configuration path with basic validation."""
 
     if raw is None:
         return _DEFAULT_CONFIG_PATH
@@ -141,18 +141,10 @@ def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
         logger.warning("Invalid CONFIG_PATH %r; falling back to default", raw)
         return _DEFAULT_CONFIG_PATH
 
-    if not candidate.is_absolute():
-        candidate = (_CONFIG_DIR / candidate).resolve(strict=False)
-    else:
-        try:
-            candidate = candidate.resolve(strict=False)
-        except OSError as exc:
-            logger.warning(
-                "Failed to resolve CONFIG_PATH %s: %s; using default",
-                sanitize_log_value(str(candidate)),
-                sanitize_log_value(str(exc)),
-            )
-            return _DEFAULT_CONFIG_PATH
+    if candidate.is_absolute():
+        return candidate
+
+    candidate = (_CONFIG_DIR / candidate).resolve(strict=False)
 
     if candidate.is_symlink():
         logger.warning(
@@ -193,10 +185,21 @@ def _fd_resolved_path(fd: int, original: Path) -> Path | None:
     return target.resolve(strict=False)
 
 
-def open_config_file(path: Path) -> TextIO:
+def open_config_file(path: Path, *, allowed_root: Path | None = None) -> TextIO:
     """Open *path* for reading while preventing symlink and directory escape attacks."""
 
     inspected_path = Path(path)
+    resolved_root: Path | None
+    if allowed_root is None:
+        resolved_root = _CONFIG_DIR.resolve(strict=False)
+    else:
+        try:
+            resolved_root = Path(allowed_root).resolve(strict=False)
+        except OSError as exc:
+            safe_root = sanitize_log_value(str(allowed_root))
+            raise RuntimeError(
+                f"Unable to resolve allowed configuration root {safe_root}: {exc}"
+            ) from exc
     try:
         if inspected_path.is_symlink():
             safe_path = sanitize_log_value(str(inspected_path))
@@ -228,8 +231,14 @@ def open_config_file(path: Path) -> TextIO:
             raise RuntimeError(f"Configuration file {path} is not a regular file")
 
         actual = _fd_resolved_path(fd, inspected_path)
-        if actual is not None and not _is_within_directory(actual, _CONFIG_DIR):
-            raise RuntimeError(f"Configuration file {actual} escapes {_CONFIG_DIR}")
+        if (
+            resolved_root is not None
+            and actual is not None
+            and not _is_within_directory(actual, resolved_root)
+        ):
+            safe_actual = sanitize_log_value(str(actual))
+            safe_root = sanitize_log_value(str(resolved_root))
+            raise RuntimeError(f"Configuration file {safe_actual} escapes {safe_root}")
 
         return os.fdopen(fd, "r", encoding="utf-8")
     except Exception:
@@ -518,15 +527,32 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
     """Load configuration from JSON file and environment variables."""
     cfg: dict[str, Any] = {}
     candidate = Path(path)
-    if not candidate.is_absolute():
-        candidate = (_CONFIG_DIR / candidate).resolve()
+    if candidate.is_absolute():
+        try:
+            resolved_candidate = candidate.resolve(strict=False)
+        except OSError as exc:
+            safe_path = sanitize_log_value(str(candidate))
+            raise ValueError(
+                f"Unable to resolve configuration path {safe_path}: {exc}"
+            ) from exc
+        allowed_root = resolved_candidate.parent
     else:
-        candidate = candidate.resolve()
-    allowed_dir = Path(CONFIG_PATH).resolve().parent
-    if not candidate.is_relative_to(allowed_dir):
-        raise ValueError(f"Path {candidate} is outside of {allowed_dir}")
+        candidate = _CONFIG_DIR / candidate
+        try:
+            resolved_candidate = candidate.resolve(strict=False)
+        except OSError as exc:
+            safe_path = sanitize_log_value(str(candidate))
+            raise ValueError(
+                f"Unable to resolve configuration path {safe_path}: {exc}"
+            ) from exc
+        allowed_root = _CONFIG_DIR.resolve(strict=False)
+        if not _is_within_directory(resolved_candidate, allowed_root):
+            safe_candidate = sanitize_log_value(str(resolved_candidate))
+            safe_root = sanitize_log_value(str(allowed_root))
+            raise ValueError(f"Path {safe_candidate} escapes {safe_root}")
+
     try:
-        with open_config_file(candidate) as handle:
+        with open_config_file(candidate, allowed_root=allowed_root) as handle:
             try:
                 cfg.update(json.load(handle))
             except json.JSONDecodeError as exc:
