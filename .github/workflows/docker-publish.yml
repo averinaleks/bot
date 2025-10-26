@@ -431,19 +431,28 @@ jobs:
               local_tags=("${local_fallback_tag}")
             fi
 
-            run_build false local "${local_tags[@]}"
-            local_status=$?
-            local_log="${BUILD_LOG}"
+            primary_local_tag="${local_tags[0]}"
+            local_log=$(mktemp -t docker-build-log.XXXXXX)
+            docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
+            local_status=${PIPESTATUS[0]}
+
+            if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
+              for extra_tag in "${local_tags[@]:1}"; do
+                docker tag "${primary_local_tag}" "${extra_tag}" || local_status=$?
+              done
+            fi
+
+            local_log_path="${local_log}"
             set -e
             if [ "${local_status}" -eq 0 ]; then
-              rm -f "${first_log}" "${second_log}" "${local_log}"
+              rm -f "${first_log}" "${second_log}" "${local_log_path}"
               printf -v rendered_tags '%s, ' "${local_tags[@]}"
               rendered_tags=${rendered_tags%, }
               echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
               echo "status=success" >> "${GITHUB_OUTPUT}"
               exit 0
             fi
-            rm -f "${local_log}"
+            rm -f "${local_log_path}"
           fi
 
           echo "::error::Docker build failed even after retry without cache (exit code ${retry_status})"
