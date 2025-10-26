@@ -52,11 +52,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Wait before retrying draft update
         if: >-
-          steps.release_drafter_initial.conclusion == 'failure'
+          steps.release_drafter_initial.outcome == 'failure'
         run: sleep 15
       - name: Retry release draft update
         if: >-
-          steps.release_drafter_initial.conclusion == 'failure'
+          steps.release_drafter_initial.outcome == 'failure'
         id: release_drafter_retry
         uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
         continue-on-error: true
@@ -66,8 +66,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Fail if release draft update still failing
         if: >-
-          steps.release_drafter_initial.conclusion == 'failure' &&
-          steps.release_drafter_retry.conclusion == 'failure'
+          steps.release_drafter_initial.outcome == 'failure' &&
+          steps.release_drafter_retry.outcome == 'failure'
         run: |
           echo 'Release Drafter failed twice; aborting.'
           exit 1
@@ -112,11 +112,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Wait before retrying metadata update
         if: >-
-          steps.release_drafter_pr_initial.conclusion == 'failure'
+          steps.release_drafter_pr_initial.outcome == 'failure'
         run: sleep 15
       - name: Retry pull request metadata update
         if: >-
-          steps.release_drafter_pr_initial.conclusion == 'failure'
+          steps.release_drafter_pr_initial.outcome == 'failure'
         id: release_drafter_pr_retry
         uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # v6.1.0
         continue-on-error: true
@@ -127,8 +127,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Fail if pull request metadata update still failing
         if: >-
-          steps.release_drafter_pr_initial.conclusion == 'failure' &&
-          steps.release_drafter_pr_retry.conclusion == 'failure'
+          steps.release_drafter_pr_initial.outcome == 'failure' &&
+          steps.release_drafter_pr_retry.outcome == 'failure'
         run: |
           echo 'Release Drafter metadata update failed twice; aborting.'
           exit 1
