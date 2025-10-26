@@ -38,7 +38,7 @@ jobs:
     steps:
       - name: Update release draft
         id: release_drafter_initial
-        uses: release-drafter/release-drafter@v6.1.0
+        uses: release-drafter/release-drafter@v5.25.0
         continue-on-error: true
         with:
           config-name: release-drafter.yml
@@ -47,7 +47,7 @@ jobs:
       - name: Retry release draft update
         if: steps.release_drafter_initial.conclusion == 'failure'
         id: release_drafter_retry
-        uses: release-drafter/release-drafter@v6.1.0
+        uses: release-drafter/release-drafter@v5.25.0
         continue-on-error: true
         with:
           config-name: release-drafter.yml
@@ -77,7 +77,7 @@ jobs:
     steps:
       - name: Update pull request metadata
         id: release_drafter_pr_initial
-        uses: release-drafter/release-drafter@v6.1.0
+        uses: release-drafter/release-drafter@v5.25.0
         continue-on-error: true
         with:
           config-name: release-drafter.yml
@@ -87,7 +87,7 @@ jobs:
       - name: Retry pull request metadata update
         if: steps.release_drafter_pr_initial.conclusion == 'failure'
         id: release_drafter_pr_retry
-        uses: release-drafter/release-drafter@v6.1.0
+        uses: release-drafter/release-drafter@v5.25.0
         continue-on-error: true
         with:
           config-name: release-drafter.yml
