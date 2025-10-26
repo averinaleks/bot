@@ -239,6 +239,69 @@ def test_submit_dependency_snapshot_reports_submission_error(
     assert "HTTP 400" in captured.err
 
 
+def test_submit_dependency_snapshot_handles_conflict_notice(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123456")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "dependency-graph")
+    monkeypatch.setenv("GITHUB_JOB", "submit")
+
+    manifest: snapshot.Manifest = {
+        "name": "requirements.txt",
+        "file": {"source_location": "requirements.txt"},
+        "resolved": {
+            "httpx": {
+                "package_url": HTTPX_PURL,
+                "relationship": "direct",
+                "scope": "runtime",
+                "dependencies": [],
+            }
+        },
+    }
+    monkeypatch.setattr(snapshot, "_build_manifests", lambda _: {"requirements.txt": manifest})
+
+    class DummyResponse:
+        status_code = 409
+        reason = "Conflict"
+        headers: dict[str, str] = {}
+        text = "snapshot already exists"
+
+        def close(self) -> None:
+            return None
+
+    post_calls: list[dict[str, object]] = []
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.trust_env = True
+            self.proxies = {"http": "http://proxy"}
+            self.verify = True
+
+        def __enter__(self) -> "DummySession":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, *_args: object, **kwargs: object) -> DummyResponse:
+            post_calls.append(dict(kwargs))
+            return DummyResponse()
+
+    monkeypatch.setattr(snapshot.requests, "Session", lambda: DummySession())
+
+    snapshot.submit_dependency_snapshot()
+
+    captured = capsys.readouterr()
+    assert post_calls, "HTTP POST should be attempted"
+    assert captured.err == ""
+    assert "Dependency snapshot submission skipped" in captured.out
+    assert "HTTP 409" in captured.out
+
+
 def test_submit_dependency_snapshot_reports_missing_requests(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

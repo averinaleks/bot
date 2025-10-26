@@ -1052,6 +1052,14 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     f"Failed to submit dependency snapshot: HTTP {status_code}: unexpected redirect to {target}",
                 )
 
+            if status_code == 409:
+                message = payload_text.strip() or reason or "conflict"
+                print(
+                    "Dependency snapshot submission skipped: "
+                    f"{message} (HTTP 409)."
+                )
+                return
+
             if status_code in _RETRYABLE_STATUS_CODES:
                 if attempt < 3:
                     wait_time = 2 ** (attempt - 1)
@@ -1115,6 +1123,13 @@ _ORIGINAL_SUBMIT_WITH_HEADERS = _submit_with_headers
 def _report_dependency_submission_error(error: DependencySubmissionError) -> None:
     status_code = error.status_code
     message = str(error).strip()
+    if status_code == 409:
+        detail = message or "conflict"
+        print(
+            "Dependency snapshot submission skipped: "
+            f"{detail} (HTTP 409)."
+        )
+        return
     if status_code == 401:
         print(
             "Dependency snapshot submission skipped из-за ошибки авторизации токена (HTTP 401).",
