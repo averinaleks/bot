@@ -19,6 +19,22 @@ from services.exchange_provider import ExchangeProvider
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
+_SYMBOL_COMPONENT_RE = r"[A-Z0-9]{2,20}"
+_SYMBOL_PATTERN = re.compile(rf"^{_SYMBOL_COMPONENT_RE}/{_SYMBOL_COMPONENT_RE}$")
+_SYMBOL_SIMPLE_PATTERN = re.compile(rf"^{_SYMBOL_COMPONENT_RE}$")
+_KNOWN_QUOTE_SUFFIXES = (
+    "USDT",
+    "USDC",
+    "USD",
+    "USDD",
+    "BTC",
+    "ETH",
+    "EUR",
+    "GBP",
+    "JPY",
+    "DAI",
+)
+
 
 load_dotenv()
 
@@ -369,30 +385,6 @@ def _allow_legacy_symbol_format() -> bool:
     return allow_flag.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _normalize_symbol(symbol: str) -> str | None:
-    """Return a sanitized trading symbol or ``None`` when invalid."""
-
-    cleaned = symbol.strip().upper()
-    if not cleaned:
-        return None
-
-    if validate_symbol(cleaned):
-        return cleaned
-
-    if "/" in cleaned or not _SIMPLE_SYMBOL_PATTERN.fullmatch(cleaned):
-        return None
-
-    if not _allow_legacy_symbol_format():
-        return None
-
-    default_quote = os.getenv("DATA_HANDLER_DEFAULT_QUOTE", "USDT").strip().upper()
-    if not default_quote:
-        default_quote = "USDT"
-
-    candidate = f"{cleaned}/{default_quote}"
-    return candidate if validate_symbol(candidate) else None
-
-
 exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
 
 
@@ -456,26 +448,33 @@ if hasattr(app, "teardown_request"):
 CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 
-# Correct price endpoint without trailing whitespace
 @app.route('/price/<path:symbol>', methods=['GET'])
 def price(symbol: str) -> ResponseReturnValue:
+    """Return the latest price for ``symbol``."""
+
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = candidate
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
+
     try:
         ticker = exchange.fetch_ticker(normalised_symbol)
-        last_raw = ticker.get('last')
+        last_raw = ticker.get('last') if isinstance(ticker, dict) else None
         try:
-            last = float(last_raw)
+            last = float(last_raw) if last_raw is not None else None
         except (TypeError, ValueError):
             last = None
-        if not last or last <= 0:
+
+        if last is None or last <= 0:
             return jsonify({'error': 'invalid price'}), 502
+
         return jsonify({'price': last})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
@@ -499,8 +498,11 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+
+    normalised_symbol = _normalise_symbol(symbol)
+    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = normalized_symbol
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
