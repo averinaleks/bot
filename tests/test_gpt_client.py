@@ -439,6 +439,74 @@ async def test_invalid_url_no_host(monkeypatch, func, client_cls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_invalid_url_with_query(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1/api?token=abc")
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))
+        ],
+    )
+
+    with pytest.raises(GPTClientError, match="query"):
+        await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_invalid_url_with_fragment(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1/api#section")
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))
+        ],
+    )
+
+    with pytest.raises(GPTClientError, match="fragment"):
+        await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_invalid_url_path_traversal(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://localhost/api/../secret")
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))
+        ],
+    )
+
+    with pytest.raises(GPTClientError, match="relative segments"):
+        await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_invalid_url_percent_encoded_traversal(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "http://localhost/api/%2e%2e/secret")
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))
+        ],
+    )
+
+    with pytest.raises(GPTClientError, match="relative segments"):
+        await run_query(func, "hi")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
 async def test_no_env(monkeypatch, func, client_cls):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
     with pytest.raises(GPTClientNetworkError):
