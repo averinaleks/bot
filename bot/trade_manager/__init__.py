@@ -70,7 +70,7 @@ def __getattr__(name: str) -> Any:
     """Ленивая загрузка дополнительных атрибутов пакета."""
 
     if name == "service":
-        module = importlib.import_module(f"{__name__}.service")
+        module = importlib.import_module(".service", package=__name__)
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
