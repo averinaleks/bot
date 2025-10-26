@@ -18,7 +18,7 @@ from enum import Enum
 from ipaddress import ip_address
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Coroutine, Mapping
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 from bot import config as bot_config
 from bot.pydantic_compat import BaseModel, Field, ValidationError
@@ -449,6 +449,27 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
         raise GPTClientError(
             "GPT_OSS_API URL must not contain embedded credentials"
         )
+
+    if parsed.params:
+        raise GPTClientError("GPT_OSS_API URL must not include path parameters")
+    if parsed.query:
+        raise GPTClientError("GPT_OSS_API URL must not include a query string")
+    if parsed.fragment:
+        raise GPTClientError("GPT_OSS_API URL must not include a fragment")
+
+    raw_path = parsed.path or ""
+    for segment in raw_path.split("/"):
+        if not segment:
+            continue
+        decoded = unquote(segment)
+        if decoded in {".", ".."}:
+            raise GPTClientError(
+                "GPT_OSS_API path must not contain relative segments like '.' or '..'"
+            )
+        if "\\" in decoded:
+            raise GPTClientError(
+                "GPT_OSS_API path must not contain backslash characters"
+            )
 
     scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"}:
