@@ -133,6 +133,19 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
     assert "github.event.client_payload.previousOid" in workflow
     assert "github.event.client_payload.previous_commit_oid" in workflow
     assert "github.event.client_payload.previousCommitOid" in workflow
+    assert "github.event.previous_sha" in workflow
+    assert "github.event.previousSha" in workflow
+    assert "github.event.previous_oid" in workflow
+    assert "github.event.previousOid" in workflow
+    assert "github.event.previous_commit_oid" in workflow
+    assert "github.event.previousCommitOid" in workflow
+    assert "github.event.head_commit.before" in workflow
+    assert "github.event.head_commit.beforeSha" in workflow
+    assert "github.event.head_commit.beforeOid" in workflow
+    assert "github.event.head_commit.beforeCommitOid" in workflow
+    assert "github.event.head_commit.previousSha" in workflow
+    assert "github.event.head_commit.previousOid" in workflow
+    assert "github.event.head_commit.previousCommitOid" in workflow
     assert "github.event.client_payload.head_sha" in workflow
     assert "github.event.client_payload.headSha" in workflow
     assert "github.event.client_payload.after" in workflow
@@ -149,6 +162,21 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
     assert "github.event.commitOid" in workflow
     assert "github.event.commit_sha" in workflow
     assert "github.event.sha" in workflow
+    assert "github.event.head_sha" in workflow
+    assert "github.event.headSha" in workflow
+    assert "github.event.after" in workflow
+    assert "github.event.after_sha" in workflow
+    assert "github.event.afterSha" in workflow
+    assert "github.event.after_oid" in workflow
+    assert "github.event.afterOid" in workflow
+    assert "github.event.after_commit_oid" in workflow
+    assert "github.event.afterCommitOid" in workflow
+    assert "github.event.head_commit.id" in workflow
+    assert "github.event.head_commit.sha" in workflow
+    assert "github.event.head_commit.after" in workflow
+    assert "github.event.head_commit.afterSha" in workflow
+    assert "github.event.head_commit.afterOid" in workflow
+    assert "github.event.head_commit.afterCommitOid" in workflow
     assert "github.event.dependency_graph.commit_oid" in workflow
     assert "github.event.dependency_graph.commitOid" in workflow
     assert "github.event.dependency_graph.after_sha" in workflow
@@ -233,7 +261,12 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.refName" in workflow
     assert "github.event.branch" in workflow
     assert "github.event.branch_name" in workflow
+    assert "github.event.head_branch" in workflow
+    assert "github.event.headBranch" in workflow
+    assert "github.event.head_branch_name" in workflow
+    assert "github.event.headBranchName" in workflow
     assert "github.event.head_ref" in workflow
+    assert "github.head_ref" in workflow
     assert "github.event.client_payload.headRef" in workflow
     assert "github.event.base_ref" in workflow
     assert "github.event.dependency_graph.sha" in workflow

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import time
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ if len(_SYMBOL_PERSONALISATION) > _BLAKE2S_PERSON_SIZE:
     raise ValueError(
         "Offline data handler personalisation exceeds blake2s PERSON_SIZE"
     )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -115,8 +118,8 @@ class OfflineDataHandler:
             if callable(asdict):
                 try:
                     return dict(asdict())
-                except Exception:  # pragma: no cover - defensive
-                    pass
+                except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+                    logger.debug("Failed to serialise config via asdict(): %s", exc)
             return dict(vars(self.cfg))
 
         return SimpleNamespace(optimize=_return_config)

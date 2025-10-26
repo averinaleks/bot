@@ -19,8 +19,6 @@ from services.exchange_provider import ExchangeProvider
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
-_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._-]+$")
-_SIMPLE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+$")
 
 load_dotenv()
 
@@ -248,6 +246,7 @@ history_cache = _create_history_cache()
 if os.getenv("TEST_MODE") == "1":
     history_cache = None
 
+MIN_HISTORY_LIMIT = 1
 MAX_HISTORY_LIMIT = 1000
 
 
@@ -463,7 +462,15 @@ def history(symbol: str) -> ResponseReturnValue:
     except ValueError:
         limit = 200
     else:
-        if limit > MAX_HISTORY_LIMIT:
+        if limit <= 0:
+            requested_limit = limit
+            limit = MIN_HISTORY_LIMIT
+            warnings_payload['limit'] = {
+                'message': f'limit raised to minimum {MIN_HISTORY_LIMIT}',
+                'requested': requested_limit,
+                'applied': limit,
+            }
+        elif limit > MAX_HISTORY_LIMIT:
             requested_limit = limit
             limit = MAX_HISTORY_LIMIT
             warnings_payload['limit'] = {

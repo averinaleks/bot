@@ -318,12 +318,45 @@ jobs:
 
           detect_ghcr_outage() {
             local log_file="$1"
-            if [ -f "${log_file}" ] && grep -Fq "Our services aren't available right now" "${log_file}"; then
-              return 0
+            if [ ! -f "${log_file}" ]; then
+              return 1
             fi
-            if [ -f "${log_file}" ] && grep -Fq "invalid character '<' looking for beginning of value" "${log_file}"; then
-              return 0
+
+            # GHCR периодически отвечает HTML-страницами или ошибками 5xx.
+            # Распознаём такие ответы, чтобы включить fallback на Docker Hub
+            # или локальную сборку и избежать ложных падений workflow.
+            local -a generic_patterns=(
+              "Our services aren't available right now"
+              "invalid character '<' looking for beginning of value"
+              "<!DOCTYPE html>"
+              "502 Bad Gateway"
+              "503 Service"
+              "504 Gateway"
+              "500 Internal Server Error"
+              "unexpected status code 5"
+              "received unexpected HTTP status: 5"
+            )
+
+            for pattern in "${generic_patterns[@]}"; do
+              if grep -Fqi "${pattern}" "${log_file}"; then
+                return 0
+              fi
+            done
+
+            if grep -Fqi 'ghcr.io' "${log_file}"; then
+              local -a ghcr_network_patterns=(
+                "connection reset by peer"
+                "context deadline exceeded"
+                "i/o timeout"
+                "TLS handshake timeout"
+              )
+              for pattern in "${ghcr_network_patterns[@]}"; do
+                if grep -Fqi "${pattern}" "${log_file}"; then
+                  return 0
+                fi
+              done
             fi
+
             return 1
           }
 

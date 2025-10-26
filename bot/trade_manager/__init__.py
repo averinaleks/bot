@@ -6,6 +6,8 @@
 ``sys.path`` или ``noqa``.
 """
 
+import importlib
+import sys
 from typing import TYPE_CHECKING, Any, cast
 
 from bot import config as bot_config
@@ -23,7 +25,7 @@ if bot_config.OFFLINE_MODE:
     TradeManager = cast(type[TradeManagerType], OfflineTradeManager)
     TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
 
-    __all__ = ["TradeManager", "TelegramLogger"]
+    __all__ = ["TradeManager", "TelegramLogger", "service"]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
     from bot.utils_loader import require_utils
@@ -62,4 +64,14 @@ else:  # pragma: no cover - реальная инициализация
         "_ready_event",
         "get_http_client",
         "close_http_client",
+        "service",
     ]
+
+
+def __getattr__(name: str) -> Any:  # pragma: no cover - delegation helper
+    if name == "service":
+        module = importlib.import_module(f"{__name__}.service")
+        sys.modules[f"{__name__}.service"] = module
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
