@@ -6,6 +6,7 @@
 ``sys.path`` или ``noqa``.
 """
 
+import importlib
 from typing import TYPE_CHECKING, Any, cast
 
 from bot import config as bot_config
@@ -63,3 +64,11 @@ else:  # pragma: no cover - реальная инициализация
         "get_http_client",
         "close_http_client",
     ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "service":
+        module = importlib.import_module(f"{__name__}.service")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
