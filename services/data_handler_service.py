@@ -20,6 +20,24 @@ _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
 
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,20}/[A-Z0-9]{1,20}$")
+_SYMBOL_SIMPLE_PATTERN = re.compile(r"^[A-Z0-9]{1,20}$")
+_SIMPLE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,20}$")
+_KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
+    "USDT",
+    "USDC",
+    "BTC",
+    "ETH",
+    "BUSD",
+    "DAI",
+    "EUR",
+    "USD",
+    "TRY",
+    "GBP",
+    "JPY",
+)
+
+
 load_dotenv()
 
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"
@@ -462,13 +480,14 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    normalized_symbol = _normalize_symbol(symbol)
+    if normalized_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = candidate
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
     try:
-        ticker = exchange.fetch_ticker(normalised_symbol)
+        ticker = exchange.fetch_ticker(normalized_symbol)
         last_raw = ticker.get('last')
         try:
             last = float(last_raw)
@@ -480,14 +499,14 @@ def price(symbol: str) -> ResponseReturnValue:
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
             "Network error fetching price for %s: %s",
-            sanitize_log_value(normalised_symbol),
+            sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
         logging.exception(
             "Exchange error fetching price for %s: %s",
-            sanitize_log_value(normalised_symbol),
+            sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'exchange error fetching price'}), 502
@@ -499,8 +518,9 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    normalized_symbol = _normalize_symbol(symbol)
+    if normalized_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
-    symbol = normalized_symbol
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -532,7 +552,7 @@ def history(symbol: str) -> ResponseReturnValue:
         ohlcv = None
         if history_cache is not None and pd is not None:
             try:
-                cached = history_cache.load_cached_data(normalised_symbol, timeframe)
+                cached = history_cache.load_cached_data(normalized_symbol, timeframe)
             except Exception:
                 cached = None
             if cached is not None and hasattr(cached, 'values'):
@@ -543,7 +563,7 @@ def history(symbol: str) -> ResponseReturnValue:
                     .values.tolist()
                 )
         if ohlcv is None:
-            ohlcv = exchange.fetch_ohlcv(normalised_symbol, timeframe=timeframe, limit=limit)
+            ohlcv = exchange.fetch_ohlcv(normalized_symbol, timeframe=timeframe, limit=limit)
             if history_cache is not None and pd is not None:
                 try:
                     df = pd.DataFrame(
@@ -557,11 +577,11 @@ def history(symbol: str) -> ResponseReturnValue:
                             'volume',
                         ],
                     )
-                    history_cache.save_cached_data(normalised_symbol, timeframe, df)
+                    history_cache.save_cached_data(normalized_symbol, timeframe, df)
                 except Exception as exc:  # pragma: no cover - logging best effort
                     logging.exception(
                         "Failed to cache history for %s on %s: %s",
-                        sanitize_log_value(normalised_symbol),
+                        sanitize_log_value(normalized_symbol),
                         sanitize_log_value(timeframe),
                         exc,
                     )
@@ -572,14 +592,14 @@ def history(symbol: str) -> ResponseReturnValue:
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
             "Network error fetching history for %s: %s",
-            sanitize_log_value(normalised_symbol),
+            sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
         logging.exception(
             "Exchange error fetching history for %s: %s",
-            sanitize_log_value(normalised_symbol),
+            sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'exchange error fetching history'}), 502
