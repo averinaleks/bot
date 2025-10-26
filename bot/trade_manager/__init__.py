@@ -65,8 +65,27 @@ else:  # pragma: no cover - реальная инициализация
         "close_http_client",
         "service",
     ]
+def __getattr__(name: str) -> Any:  # pragma: no cover - thin forwarding logic
+    """Ленивая загрузка подмодулей ``bot.trade_manager``.
 
+    Функция используется для совместимости с существующим кодом, который
+    обращается к ``bot.trade_manager.service`` и другим подмодулям напрямую из
+    пакета.  В прежней версии файла определение функции оказалось случайно
+    удалено, из-за чего интерпретатор доходил до тела функции без заголовка и
+    выбрасывал :class:`IndentationError` ещё на этапе импорта.  Это ломало
+    запуск тестов и любое импортирование пакета.  Возвращаем корректное
+    определение и оставляем минимальную реализацию: сначала пытаемся найти
+    атрибут среди уже загруженных объектов, а при отсутствии — импортируем
+    одноимённый подмодуль.
+    """
 
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name in globals():
+        return globals()[name]
+
+    try:
+        module = importlib.import_module(f"{__name__}.{name}")
+    except ModuleNotFoundError as exc:  # pragma: no cover - исключительная ветка
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+    globals()[name] = module
+    return module
