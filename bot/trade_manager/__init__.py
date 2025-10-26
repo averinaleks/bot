@@ -67,6 +67,18 @@ else:  # pragma: no cover - реальная инициализация
     ]
 
 
+def __getattr__(name: str) -> Any:
+    """Ленивая загрузка модуля :mod:`bot.trade_manager.service`.
+
+    Код раньше определял ``__getattr__`` внутри блока ``else`` и из-за
+    неправильного отступа получился недопустимый Python-файл, что ломало
+    извлечение CodeQL. Выносим хук в верхний уровень, чтобы и офлайн-режим,
+    и основное приложение могли лениво импортировать модуль ``service`` без
+    синтаксических ошибок.
+    """
+
+    if name == "service":
+        module = importlib.import_module("bot.trade_manager.service")
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
