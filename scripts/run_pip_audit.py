@@ -121,7 +121,10 @@ def _run_audit(
             time.sleep(wait_for)
             delay *= 2
 
-    assert last_error is not None
+    if last_error is None:
+        raise RuntimeError(
+            "pip-audit retry loop exited without capturing the underlying error"
+        )
     raise last_error
 
 
