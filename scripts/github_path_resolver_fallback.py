@@ -1,10 +1,10 @@
-"""Fallback helpers for resolving GitHub-provided filesystem paths.
+"""Fallback helpers for resolving GitHub-provided file paths.
 
-These helpers intentionally avoid any optional dependencies so they can be
-imported even when the rest of the helper package is only partially
-available.  They mirror the logic that ships with
-``scripts.github_path_resolver`` but live in a standalone module so other
-scripts can gracefully degrade if the primary resolver cannot be imported.
+These utilities mirror :mod:`scripts.github_path_resolver` but live in a
+standalone module so other scripts can gracefully degrade if the primary
+resolver cannot be imported. They intentionally avoid optional dependencies
+so they remain usable even when the helper package is only partially
+available.
 """
 
 from __future__ import annotations
