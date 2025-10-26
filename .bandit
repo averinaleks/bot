@@ -1,9 +1,12 @@
-[bandit]
 # Exclude directories that contain test fixtures, helper scripts, or tooling
 # that intentionally use patterns flagged by Bandit (for example, assertions in
-# tests). Using the INI syntax ensures Bandit can parse the configuration and
+# tests). Using the YAML syntax ensures Bandit can parse the configuration and
 # respect the exclusions during analysis.
-exclude = tests, scripts, gptoss_check
+exclude_dirs:
+  - tests
+  - scripts
+  - gptoss_check
 # Skip rules that consistently produce false positives for the project.
 # B101 warns about ``assert`` statements, which are expected in pytest tests.
-skips = B101
+skips:
+  - B101
