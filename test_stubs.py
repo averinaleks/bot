@@ -100,7 +100,7 @@ IS_TEST_MODE = False
 
 def _create_module(name: str) -> ModuleType:
     module = types.ModuleType(name)
-    module.__spec__ = ModuleSpec(name, loader=None)  # type: ignore[attr-defined]
+    setattr(module, "__spec__", ModuleSpec(name, loader=None))
     return module
 
 
@@ -135,7 +135,8 @@ def apply() -> None:
         return
 
     # ------------------------------------------------------------------ Ray
-    ray_mod = cast(RayModule, _create_module("ray"))
+    ray_module = _create_module("ray")
+    ray_mod = cast(RayModule, ray_module)
 
     class _RayRemoteFunction:
         def __init__(self, func):
@@ -171,13 +172,14 @@ def apply() -> None:
     setattr(ray_mod, "init", _init)
     setattr(ray_mod, "is_initialized", _is_initialized)
     setattr(ray_mod, "shutdown", _shutdown)
-    sys.modules["ray"] = cast(ModuleType, ray_mod)
+    sys.modules["ray"] = ray_module
 
     # ----------------------------------------------------------------- HTTPX
     try:
         import httpx as _real_httpx  # noqa: F401
     except Exception:
-        httpx_mod = cast(HTTPXModule, _create_module("httpx"))
+        httpx_module = _create_module("httpx")
+        httpx_mod = cast(HTTPXModule, httpx_module)
 
         class _HTTPXResponse:
             def __init__(
@@ -388,10 +390,10 @@ def apply() -> None:
         setattr(httpx_mod, "Client", _HTTPXClient)
         setattr(httpx_mod, "BaseTransport", _HTTPXBaseTransport)
         setattr(httpx_mod, "_client", _client_mod)
-        sys.modules["httpx"] = cast(ModuleType, httpx_mod)
+        sys.modules["httpx"] = httpx_module
 
     # ---------------------------------------------------------------- websockets
-    ws_mod = cast(ModuleType, _create_module("websockets"))
+    ws_mod = _create_module("websockets")
 
     class _WSConnectionClosed(Exception):
         ...
@@ -414,23 +416,27 @@ def apply() -> None:
 
     setattr(ws_mod, "connect", _ws_connect)
     setattr(ws_mod, "exceptions", types.SimpleNamespace(ConnectionClosed=_WSConnectionClosed))
-    sys.modules["websockets"] = cast(ModuleType, ws_mod)
+    sys.modules["websockets"] = ws_mod
 
     # ------------------------------------------------------------------- PyBit
-    pybit_mod = cast(PyBitModule, _create_module("pybit"))
-    ut_mod = cast(PyBitUTModule, _create_module("pybit.unified_trading"))
+    pybit_module = _create_module("pybit")
+    pybit_mod = cast(PyBitModule, pybit_module)
+    ut_module = _create_module("pybit.unified_trading")
+    ut_mod = cast(PyBitUTModule, ut_module)
     setattr(ut_mod, "HTTP", object)
     setattr(pybit_mod, "unified_trading", ut_mod)
-    sys.modules["pybit"] = cast(ModuleType, pybit_mod)
-    sys.modules["pybit.unified_trading"] = cast(ModuleType, ut_mod)
+    sys.modules["pybit"] = pybit_module
+    sys.modules["pybit.unified_trading"] = ut_module
 
     # ------------------------------------------------------------------ a2wsgi
-    a2wsgi_mod = cast(A2WSGIModule, _create_module("a2wsgi"))
+    a2wsgi_module = _create_module("a2wsgi")
+    a2wsgi_mod = cast(A2WSGIModule, a2wsgi_module)
     setattr(a2wsgi_mod, "WSGIMiddleware", lambda app: app)
-    sys.modules["a2wsgi"] = cast(ModuleType, a2wsgi_mod)
+    sys.modules["a2wsgi"] = a2wsgi_module
 
     # ------------------------------------------------------------------ uvicorn
-    uvicorn_mod = cast(UvicornModule, _create_module("uvicorn"))
+    uvicorn_module = _create_module("uvicorn")
+    uvicorn_mod = cast(UvicornModule, uvicorn_module)
     setattr(
         uvicorn_mod,
         "middleware",
@@ -438,10 +444,10 @@ def apply() -> None:
             wsgi=types.SimpleNamespace(WSGIMiddleware=lambda app: app)
         ),
     )
-    sys.modules["uvicorn"] = cast(ModuleType, uvicorn_mod)
+    sys.modules["uvicorn"] = uvicorn_module
 
     # ------------------------------------------------ fastapi_csrf_protect
-    csrf_mod = cast(ModuleType, _create_module("fastapi_csrf_protect"))
+    csrf_mod = _create_module("fastapi_csrf_protect")
     setattr(csrf_mod, "CsrfProtect", CsrfProtect)
     setattr(csrf_mod, "CsrfProtectError", CsrfProtectError)
     sys.modules["fastapi_csrf_protect"] = csrf_mod
@@ -453,7 +459,7 @@ def apply() -> None:
     # ensures modules can safely call ``torch.cuda.is_available()`` without
     # pulling in heavy dependencies.
     if "torch" not in sys.modules:
-        torch = cast(ModuleType, _create_module("torch"))
+        torch = _create_module("torch")
         torch.Tensor = type("Tensor", (), {})  # type: ignore[attr-defined]
         torch.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
         torch.nn = types.SimpleNamespace(Module=type("Module", (), {}))  # type: ignore[attr-defined]

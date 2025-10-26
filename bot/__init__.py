@@ -1,6 +1,9 @@
-from pathlib import Path
 import os
+import importlib
 import sys
+from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING, cast
 
 # ``pytest`` imports this package before tests set ``TEST_MODE``.  Detect a
 # pytest run by checking for the module and enable lightweight stubs so tests
@@ -17,3 +20,13 @@ __path__ = [
     str(Path(__file__).resolve().parent),
     str(Path(__file__).resolve().parent.parent),
 ]
+
+if TYPE_CHECKING:
+    import config as config
+else:
+    _config_module: ModuleType | None
+    try:
+        _config_module = importlib.import_module("config")
+    except ModuleNotFoundError:
+        _config_module = None
+    config = cast(ModuleType | None, _config_module)
