@@ -493,9 +493,15 @@ def test_trade_manager_telegram_factory_from_config(monkeypatch):
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
 
     factory_path = cfg.service_factories["telegram_logger"]
-    module_name, attr_name = factory_path.split(":", 1)
-    factory_module = importlib.import_module(module_name)
-    factory = getattr(factory_module, attr_name)
+    from run_bot import _import_from_path
+
+    # ``BotConfig`` stores service factories as fully-qualified dotted paths.
+    # In production these paths are resolved via :func:`run_bot._import_from_path`
+    # which validates the module name against an allow-list and confines imports
+    # to the repository directory.  Reuse the same helper in tests to avoid the
+    # raw ``importlib.import_module`` call which Semgrep rightfully flags as a
+    # potential vector for loading arbitrary modules.
+    factory = _import_from_path(factory_path)
 
     dh = DummyDataHandler()
     tm = TradeManager(
