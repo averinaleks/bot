@@ -931,7 +931,7 @@ def test_serialise_openai_response_handles_mapping_entries():
 
 def test_query_gpt_openai_fallback(monkeypatch):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-api-key")
     recorder: dict[str, Any] = {}
     _install_dummy_openai(monkeypatch, recorder)
 
@@ -949,7 +949,7 @@ def test_query_gpt_openai_fallback(monkeypatch):
 
 def test_query_gpt_openai_scheme(monkeypatch):
     monkeypatch.setenv("GPT_OSS_API", "openai://api.openai.com/v1")
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-api-key")
     recorder: dict[str, Any] = {}
     _install_dummy_openai(monkeypatch, recorder)
 
@@ -961,7 +961,7 @@ def test_query_gpt_openai_scheme(monkeypatch):
 
 def test_query_gpt_openai_invalid_max_tokens(monkeypatch, caplog):
     monkeypatch.delenv("GPT_OSS_API", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-api-key")
     monkeypatch.setenv("OPENAI_MAX_TOKENS", "oops")
     recorder: dict[str, Any] = {}
     _install_dummy_openai(monkeypatch, recorder)
