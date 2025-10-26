@@ -79,9 +79,19 @@ jobs:
                   return ""
               if path.startswith("env."):
                   return _normalise(os.getenv(path.split(".", 1)[1]))
+
+              segments = path.split(".")
               current: Any = PAYLOAD
-              for segment in path.split("."):
-                  if segment == "payload":
+
+              if segments and segments[0] == "github":
+                  segments = segments[1:]
+                  if segments and segments[0] == "event":
+                      segments = segments[1:]
+              elif segments and segments[0] == "payload":
+                  segments = segments[1:]
+
+              for segment in segments:
+                  if not segment:
                       continue
                   if isinstance(current, dict):
                       current = current.get(segment)
@@ -168,13 +178,77 @@ jobs:
               payload.workflow_run.head_branch_name
               payload.workflow_run.headBranch
               payload.workflow_run.headBranchName
+              github.event.ref
+              github.event.ref_name
+              github.event.refName
+              github.event.branch
+              github.event.branch_name
+              github.event.branchName
+              github.event.head_branch
+              github.event.headBranch
+              github.event.head_branch_name
+              github.event.headBranchName
+              github.event.head_ref
+              github.event.headRef
+              github.event.head_ref_name
+              github.event.headRefName
+              github.head_ref
+              github.event.base_ref
+              github.event.dependency_graph.sha
+              github.event.dependency_graph.commit_oid
+              github.event.dependency_graph.commitOid
+              github.event.dependency_graph.ref
+              github.event.dependency_graph.ref_name
+              github.event.dependency_graph.refName
+              github.event.dependency_graph.branch
+              github.event.dependency_graph.branch_name
+              github.event.dependency_graph.branchName
+              github.event.client_payload.sha
+              github.event.client_payload.commit_sha
+              github.event.client_payload.commitSha
+              github.event.client_payload.commit_oid
+              github.event.client_payload.commitOid
+              github.event.client_payload.head_sha
+              github.event.client_payload.headSha
+              github.event.client_payload.after
+              github.event.client_payload.after_sha
+              github.event.client_payload.afterSha
+              github.event.client_payload.after_oid
+              github.event.client_payload.afterOid
+              github.event.client_payload.ref
+              github.event.client_payload.ref_name
+              github.event.client_payload.refName
+              github.event.client_payload.head_ref
+              github.event.client_payload.headRef
+              github.event.client_payload.head_ref_name
+              github.event.client_payload.headRefName
+              github.event.client_payload.branch
+              github.event.client_payload.branch_name
+              github.event.client_payload.branchName
+              github.event.workflow_run.head_sha
+              github.event.workflow_run.head_commit.id
+              github.event.workflow_run.head_commit.sha
+              github.event.workflow_run.head_commit.before
+              github.event.workflow_run.head_commit.beforeSha
+              github.event.workflow_run.head_ref
+              github.event.workflow_run.headRef
+              github.event.workflow_run.head_ref_name
+              github.event.workflow_run.headRefName
+              github.event.workflow_run.head_branch
+              github.event.workflow_run.head_branch_name
+              github.event.workflow_run.headBranch
+              github.event.workflow_run.headBranchName
               env.GITHUB_REF
               """
           )
 
           checkout_ref = _choose(REF_CANDIDATES)
           if not checkout_ref:
+              # Repository dispatch events may provide the default branch reference via
+              # ``format('refs/heads/{0}', github.event.repository.default_branch)``.
               default_branch = _lookup("payload.repository.default_branch")
+              if not default_branch:
+                  default_branch = _lookup("github.event.repository.default_branch")
               if default_branch:
                   checkout_ref = f"refs/heads/{default_branch}"
           if not checkout_ref:
@@ -233,6 +307,57 @@ jobs:
               payload.workflow_run.head_commit.previousSha
               payload.workflow_run.head_commit.previousOid
               payload.workflow_run.head_commit.previousCommitOid
+              github.event.before
+              github.event.base_sha
+              github.event.base_ref
+              github.event.dependency_graph.before_sha
+              github.event.dependency_graph.beforeSha
+              github.event.dependency_graph.before_oid
+              github.event.dependency_graph.beforeOid
+              github.event.dependency_graph.before_commit_oid
+              github.event.dependency_graph.beforeCommitOid
+              github.event.dependency_graph.base_ref
+              github.event.dependency_graph.base_sha
+              github.event.dependency_graph.baseRef
+              github.event.dependency_graph.baseRefName
+              github.event.dependency_graph.baseSha
+              github.event.client_payload.before
+              github.event.client_payload.base_sha
+              github.event.client_payload.before_sha
+              github.event.client_payload.baseSha
+              github.event.client_payload.beforeSha
+              github.event.client_payload.before_oid
+              github.event.client_payload.beforeOid
+              github.event.client_payload.before_commit_oid
+              github.event.client_payload.beforeCommitOid
+              github.event.client_payload.previous_sha
+              github.event.client_payload.previous_oid
+              github.event.client_payload.previousSha
+              github.event.client_payload.previousOid
+              github.event.client_payload.previous_commit_oid
+              github.event.client_payload.previousCommitOid
+              github.event.previous_sha
+              github.event.previousSha
+              github.event.previous_oid
+              github.event.previousOid
+              github.event.previous_commit_oid
+              github.event.previousCommitOid
+              github.event.head_commit.before
+              github.event.head_commit.beforeSha
+              github.event.head_commit.beforeOid
+              github.event.head_commit.beforeCommitOid
+              github.event.head_commit.previousSha
+              github.event.head_commit.previousOid
+              github.event.head_commit.previousCommitOid
+              github.event.workflow_run.before
+              github.event.workflow_run.previous_sha
+              github.event.workflow_run.head_commit.before
+              github.event.workflow_run.head_commit.beforeSha
+              github.event.workflow_run.head_commit.beforeOid
+              github.event.workflow_run.head_commit.beforeCommitOid
+              github.event.workflow_run.head_commit.previousSha
+              github.event.workflow_run.head_commit.previousOid
+              github.event.workflow_run.head_commit.previousCommitOid
               """
           )
 
@@ -290,6 +415,57 @@ jobs:
               payload.workflow_run.head_commit.afterSha
               payload.workflow_run.head_commit.afterOid
               payload.workflow_run.head_commit.afterCommitOid
+              github.event.commit_oid
+              github.event.commitOid
+              github.event.commit_sha
+              github.event.sha
+              github.event.dependency_graph.sha
+              github.event.dependency_graph.commit_oid
+              github.event.dependency_graph.commitOid
+              github.event.dependency_graph.after_sha
+              github.event.dependency_graph.afterSha
+              github.event.dependency_graph.after_oid
+              github.event.dependency_graph.afterOid
+              github.event.dependency_graph.after_commit_oid
+              github.event.dependency_graph.afterCommitOid
+              github.event.dependency_graph.after
+              github.event.head_sha
+              github.event.headSha
+              github.event.after
+              github.event.after_sha
+              github.event.afterSha
+              github.event.after_oid
+              github.event.afterOid
+              github.event.after_commit_oid
+              github.event.afterCommitOid
+              github.event.head_commit.id
+              github.event.head_commit.sha
+              github.event.head_commit.after
+              github.event.head_commit.afterSha
+              github.event.head_commit.afterOid
+              github.event.head_commit.afterCommitOid
+              github.event.dependency_graph.ref
+              github.event.ref
+              github.event.client_payload.after
+              github.event.client_payload.head_sha
+              github.event.client_payload.headSha
+              github.event.client_payload.commit_oid
+              github.event.client_payload.commitOid
+              github.event.client_payload.commit_sha
+              github.event.client_payload.after_sha
+              github.event.client_payload.afterSha
+              github.event.client_payload.after_oid
+              github.event.client_payload.afterOid
+              github.event.client_payload.after_commit_oid
+              github.event.client_payload.afterCommitOid
+              github.event.client_payload.sha
+              github.event.workflow_run.head_sha
+              github.event.workflow_run.head_commit.id
+              github.event.workflow_run.head_commit.sha
+              github.event.workflow_run.head_commit.after
+              github.event.workflow_run.head_commit.afterSha
+              github.event.workflow_run.head_commit.afterOid
+              github.event.workflow_run.head_commit.afterCommitOid
               """
           )
 
