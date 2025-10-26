@@ -244,6 +244,8 @@ history_cache = _create_history_cache()
 if os.getenv("TEST_MODE") == "1":
     history_cache = None
 
+MAX_HISTORY_LIMIT = 1000
+
 
 def _load_initial_history(exchange: Any) -> None:
     """Fetch and cache initial OHLCV history for configured symbols."""
@@ -403,10 +405,20 @@ def history(symbol: str) -> ResponseReturnValue:
         return jsonify({'error': 'exchange not initialized'}), 503
     timeframe = request.args.get('timeframe', '1m')
     limit_str = request.args.get('limit')
+    warnings_payload: dict[str, Any] = {}
     try:
         limit = int(limit_str) if limit_str is not None else 200
     except ValueError:
         limit = 200
+    else:
+        if limit > MAX_HISTORY_LIMIT:
+            requested_limit = limit
+            limit = MAX_HISTORY_LIMIT
+            warnings_payload['limit'] = {
+                'message': f'limit capped at {MAX_HISTORY_LIMIT}',
+                'requested': requested_limit,
+                'applied': limit,
+            }
     try:
         ohlcv = None
         if history_cache is not None and pd is not None:
@@ -444,7 +456,10 @@ def history(symbol: str) -> ResponseReturnValue:
                         sanitize_log_value(timeframe),
                         exc,
                     )
-        return jsonify({'history': ohlcv})
+        response_payload = {'history': ohlcv}
+        if warnings_payload:
+            response_payload['warnings'] = warnings_payload
+        return jsonify(response_payload)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
             "Network error fetching history for %s: %s",
