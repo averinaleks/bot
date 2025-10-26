@@ -21,8 +21,13 @@ try:  # pragma: no cover - import guard exercised in tests
 except ImportError as import_error:  # pragma: no cover - requests may be absent in CI
     requests = None  # type: ignore[assignment]
     _REQUESTS_IMPORT_ERROR = import_error
+    Retry = None  # type: ignore[assignment]
 else:
     _REQUESTS_IMPORT_ERROR = None
+    try:  # pragma: no cover - urllib3 may not be present if requests vendored differently
+        from urllib3.util.retry import Retry
+    except Exception:  # pragma: no cover - defensive guard for slimmed-down vendors
+        Retry = None  # type: ignore[assignment]
 
 
 # Ensure the repository root is on ``sys.path`` so that sibling modules can be
@@ -1042,12 +1047,24 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
         raise DependencySubmissionError(None, message, _REQUESTS_IMPORT_ERROR)
 
     last_error: Exception | None = None
+    retry_strategy = None
+    if Retry is not None:
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1.0,
+            status_forcelist=_RETRYABLE_STATUS_CODES,
+            allowed_methods=frozenset({"POST"}),
+        )
 
     for attempt in range(1, 4):
         try:
             with requests.Session() as session:  # type: ignore[union-attr]
                 session.trust_env = False
                 session.proxies = {}
+                if retry_strategy is not None:
+                    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
+                    session.mount("https://", adapter)
+                    session.mount("http://", adapter)
                 response = session.post(
                     url,
                     data=body,

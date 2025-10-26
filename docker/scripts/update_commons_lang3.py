@@ -11,6 +11,7 @@ from typing import Iterable
 from urllib.parse import SplitResult, urlsplit
 
 import requests
+from urllib3.util.retry import Retry
 
 
 COMMONS_LANG3_URL = (
@@ -120,7 +121,13 @@ def update_commons_lang3() -> None:
         temp_path = Path(tmp_dir) / destination.name
 
         with requests.Session() as session:
-            adapter = requests.adapters.HTTPAdapter()
+            retries = Retry(
+                total=5,
+                backoff_factor=1.5,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=("HEAD", "GET"),
+            )
+            adapter = requests.adapters.HTTPAdapter(max_retries=retries)
             session.mount("https://", adapter)
             session.trust_env = False
 
