@@ -76,14 +76,14 @@ def test_parallel_requests_receive_isolated_clients(monkeypatch):
     def request_price():
         with module.app.test_client() as client:
             barrier.wait()
-            resp = client.get("/price/BTCUSDT")
+            resp = client.get("/price/BTC/USDT")
             assert resp.status_code == 200
             assert resp.get_json() == {"price": 1.0}
 
     def request_history():
         with module.app.test_client() as client:
             barrier.wait()
-            resp = client.get("/history/BTCUSDT")
+            resp = client.get("/history/BTC/USDT")
             assert resp.status_code == 200
             data = resp.get_json()
             assert "history" in data

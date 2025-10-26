@@ -8,6 +8,7 @@ import math
 import os
 import statistics
 import time
+from urllib.parse import quote
 from collections import defaultdict, deque
 from contextlib import suppress
 from typing import Awaitable, Callable, TypeVar
@@ -143,6 +144,12 @@ def _http_client_timeout() -> float:
     """Return the default timeout for outbound HTTP requests."""
 
     return safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
+
+
+def _encode_symbol(symbol: str) -> str:
+    """Percent-encode a trading symbol for inclusion in URLs."""
+
+    return quote(symbol, safe="/")
 
 
 GPT_ADVICE_MAX_ATTEMPTS = safe_int("GPT_ADVICE_MAX_ATTEMPTS", 3)
@@ -516,9 +523,10 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
         return None
     timeout = _http_client_timeout()
     try:
+        encoded_symbol = _encode_symbol(symbol)
         async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
             resp = await client.get(
-                f"{env['data_handler_url']}/price/{symbol}", timeout=timeout
+                f"{env['data_handler_url']}/price/{encoded_symbol}", timeout=timeout
             )
         try:
             data = resp.json()
@@ -548,10 +556,11 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         logger.debug("Offline mode: initial history fetch skipped for %s", symbol)
         return
     timeout = _http_client_timeout()
+    encoded_symbol = _encode_symbol(symbol)
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             resp = await client.get(
-                f"{env['data_handler_url']}/history/{symbol}", timeout=timeout
+                f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
             )
             data = resp.json() if resp.status_code == 200 else {}
             candles = data.get("history", [])
@@ -1264,10 +1273,11 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
         return
     env = env or _load_env()
     timeout = _http_client_timeout()
+    encoded_symbol = _encode_symbol(symbol)
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             resp = await client.get(
-                f"{env['data_handler_url']}/price/{symbol}", timeout=timeout
+                f"{env['data_handler_url']}/price/{encoded_symbol}", timeout=timeout
             )
             if resp.status_code != 200:
                 logger.error("Failed to fetch price: HTTP %s", resp.status_code)
