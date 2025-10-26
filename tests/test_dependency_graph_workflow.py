@@ -3,6 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _load_dependency_graph_workflow() -> str:
+    return Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+
+
+def _load_dependency_graph_auto_submission_workflow() -> str:
+    return Path(
+        ".github/workflows/dependency-graph/auto-submission.yml"
+    ).read_text(encoding="utf-8")
+
+
 def _extract_permissions(text: str) -> dict[str, str]:
     permissions: dict[str, str] = {}
     inside_block = False
@@ -67,7 +77,7 @@ def _extract_events(text: str) -> list[str]:
 
 
 def test_dependency_graph_permissions_are_valid() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
     permissions = _extract_permissions(workflow)
 
     assert permissions, "permissions block must be present"
@@ -82,7 +92,7 @@ def test_dependency_graph_permissions_are_valid() -> None:
 
 
 def test_dependency_graph_events_exclude_dependency_graph_trigger() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
     events = _extract_events(workflow)
 
     assert {"push", "workflow_dispatch", "repository_dispatch"} <= set(events)
@@ -90,7 +100,7 @@ def test_dependency_graph_events_exclude_dependency_graph_trigger() -> None:
 
 
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "from pathlib import Path" in workflow
     assert "Path(file).name" in workflow
@@ -99,7 +109,7 @@ def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
 
 
 def test_dependency_graph_detect_step_normalises_null_strings() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert """_NULL_STRINGS = {"null", "none", "undefined", '""', "''"}""" in workflow
     assert "def _normalise_value" in workflow
@@ -107,7 +117,7 @@ def test_dependency_graph_detect_step_normalises_null_strings() -> None:
 
 
 def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "github.event.base_sha" in workflow
     assert "github.event.base_ref" in workflow
@@ -206,7 +216,7 @@ def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
 
 
 def test_dependency_graph_installs_requests_before_submission() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "Install dependency snapshot dependencies" in workflow
     assert "python -m pip install --upgrade pip" in workflow
@@ -214,7 +224,7 @@ def test_dependency_graph_installs_requests_before_submission() -> None:
 
 
 def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "Prepare requirements" in workflow
     assert "os.walk(root)" in workflow
@@ -225,7 +235,7 @@ def test_dependency_graph_filters_ccxtpro_lines_before_snapshot() -> None:
 
 
 def test_dependency_graph_prepare_step_handles_filesystem_errors() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "except OSError as exc" in workflow
     assert "due to filesystem error" in workflow
@@ -233,7 +243,7 @@ def test_dependency_graph_prepare_step_handles_filesystem_errors() -> None:
 
 
 def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "repository_dispatch" in workflow
     assert "dependency-graph-auto-submission" in workflow
@@ -243,7 +253,7 @@ def test_dependency_graph_supports_repository_dispatch_auto_submission() -> None
 
 
 def test_dependency_graph_notes_dependency_graph_event_limitations() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "repository_dispatch" in workflow
     assert "dependency-graph-auto-submission" in workflow
@@ -254,7 +264,7 @@ def test_dependency_graph_notes_dependency_graph_event_limitations() -> None:
 
 
 def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
-    workflow = Path(".github/workflows/dependency-graph.yml").read_text(encoding="utf-8")
+    workflow = _load_dependency_graph_workflow()
 
     assert "github.event.ref" in workflow
     assert "github.event.ref_name" in workflow
@@ -308,3 +318,39 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "github.event.workflow_run.head_branch" in workflow
     assert "github.event.repository.default_branch" in workflow
     assert "format('refs/heads/{0}', github.event.repository.default_branch)" in workflow
+
+
+def test_dependency_graph_auto_submission_permissions() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    permissions = _extract_permissions(workflow)
+    assert permissions.get("contents") == "write"
+    assert permissions.get("security-events") == "write"
+
+
+def test_dependency_graph_auto_submission_triggers_repository_dispatch() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert "repository_dispatch" in workflow
+    assert "dependency-graph-auto-submission" in workflow
+    assert "auto-submission" in workflow
+    assert "dependency_graph_auto_submission" in workflow
+
+
+def test_dependency_graph_auto_submission_checkout_fallbacks_cover_deleted_branches() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert "github.event.client_payload.sha" in workflow
+    assert "github.event.client_payload.head_sha" in workflow
+    assert "github.event.client_payload.after" in workflow
+    assert "github.event.workflow_run.head_sha" in workflow
+    assert "github.event.workflow_run.head_commit.id" in workflow
+    assert "github.event.workflow_run.head_commit.afterSha" in workflow
+    assert "github.sha" in workflow
+
+
+def test_dependency_graph_auto_submission_detect_step_handles_null_strings() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert """_NULL_STRINGS = {"null", "none", "undefined", '""', "''"}""" in workflow
+    assert "def _normalise_value" in workflow
