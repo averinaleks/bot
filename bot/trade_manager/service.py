@@ -231,6 +231,13 @@ async def create_trade_manager() -> TradeManager | None:
                     type(exc).__name__,
                     exc,
                 )
+        except ImportError as exc:
+            logger.warning(
+                "python-telegram-bot не установлен, Telegram будет отключен (%s): %s",
+                type(exc).__name__,
+                exc,
+            )
+            telegram_bot = None
         except (RuntimeError, httpx.HTTPError) as exc:  # pragma: no cover - import/runtime errors
             logger.exception(
                 "Не удалось создать Telegram Bot (%s): %s",
