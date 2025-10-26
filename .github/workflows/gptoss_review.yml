@@ -90,13 +90,14 @@ jobs:
               comment_author="${COMMENT_AUTHOR:-}"
               author_assoc="${COMMENT_AUTHOR_ASSOC:-}"
               comment_body="${COMMENT_BODY:-}"
+              comment_body_lower="${comment_body,,}"
               if [ -z "$pr_number" ]; then
                 skip_reason="Комментарий не относится к pull request"
               elif [ "$comment_author" = "github-actions[bot]" ]; then
                 skip_reason="Комментарий создан GitHub Actions – обзор не требуется"
               elif [[ ! "$author_assoc" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then
                 skip_reason="Комментарий создан пользователем с ролью ${author_assoc:-unknown}"
-              elif [[ "$comment_body" != *"/llm-review"* ]]; then
+              elif [[ "$comment_body_lower" != *"/llm-review"* ]]; then
                 skip_reason="Комментарий не содержит /llm-review"
               else
                 run_review=true
