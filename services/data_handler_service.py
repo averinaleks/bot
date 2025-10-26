@@ -19,7 +19,7 @@ from services.exchange_provider import ExchangeProvider
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
-_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._-]+$")
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._:-]+$")
 
 load_dotenv()
 
