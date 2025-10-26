@@ -113,3 +113,96 @@ def test_submit_with_headers_rejects_redirect(monkeypatch: pytest.MonkeyPatch) -
     assert session.trust_env is False
     assert session.proxies == {}
     assert session.captured_kwargs.get("allow_redirects") is False
+
+
+def test_submit_with_headers_uses_retry_after_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import submit_dependency_snapshot as snapshot
+
+    class DummyResponse:
+        def __init__(
+            self,
+            status_code: int,
+            *,
+            headers: dict[str, str] | None = None,
+            reason: str = "",
+        ) -> None:
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.reason = reason
+            self.text = ""
+
+        def close(self) -> None:
+            return None
+
+    responses = [
+        DummyResponse(429, headers={"Retry-After": "5"}, reason="Too Many Requests"),
+        DummyResponse(200, reason="OK"),
+    ]
+    calls: list[None] = []
+
+    class DummySession:
+        def __enter__(self) -> "DummySession":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, *_args: object, **_kwargs: object) -> DummyResponse:
+            calls.append(None)
+            return responses.pop(0)
+
+    waits: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(snapshot.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(snapshot.time, "sleep", fake_sleep)
+
+    snapshot._submit_with_headers("https://example.com/api", b"{}", {})
+
+    assert len(calls) == 2
+    assert waits == [pytest.approx(5.0)]
+
+
+def test_submit_with_headers_falls_back_without_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import submit_dependency_snapshot as snapshot
+
+    class DummyResponse:
+        def __init__(self, status_code: int, *, reason: str = "") -> None:
+            self.status_code = status_code
+            self.headers: dict[str, str] = {}
+            self.reason = reason
+            self.text = ""
+
+        def close(self) -> None:
+            return None
+
+    responses = [DummyResponse(429, reason="Too Many Requests"), DummyResponse(200, reason="OK")]
+    calls: list[None] = []
+
+    class DummySession:
+        def __enter__(self) -> "DummySession":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, *_args: object, **_kwargs: object) -> DummyResponse:
+            calls.append(None)
+            return responses.pop(0)
+
+    waits: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(snapshot.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(snapshot.time, "sleep", fake_sleep)
+
+    snapshot._submit_with_headers("https://example.com/api", b"{}", {})
+
+    assert len(calls) == 2
+    assert waits == [pytest.approx(1.0)]

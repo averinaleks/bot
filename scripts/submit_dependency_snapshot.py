@@ -10,6 +10,7 @@ import sys
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, TypedDict
 from urllib.parse import quote, urlparse
@@ -68,7 +69,7 @@ _EXCLUDED_DIR_NAMES = {
 _ALLOWED_HIDDEN_DIR_NAMES = {".github"}
 _REQUIREMENT_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==(?P<version>[^\s]+)")
 _DEFAULT_API_VERSION = "2022-11-28"
-_RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _TOKEN_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_")
 _TOKEN_PAYLOAD_KEYS = ("token", "github_token", "access_token")
 _NULL_STRINGS = {"null", "none", "undefined", '""', "''"}
@@ -984,6 +985,30 @@ def _log_unexpected_error(exc: Exception) -> None:
     print(message, file=sys.stderr)
 
 
+def _retry_after_seconds(retry_after_value: str | None, fallback: float) -> float:
+    if not retry_after_value:
+        return fallback
+
+    candidate = retry_after_value.strip()
+    if not candidate:
+        return fallback
+
+    try:
+        delay = float(candidate)
+    except ValueError:
+        try:
+            retry_datetime = parsedate_to_datetime(candidate)
+        except (TypeError, ValueError, IndexError):
+            return fallback
+        if retry_datetime.tzinfo is None:
+            retry_datetime = retry_datetime.replace(tzinfo=timezone.utc)
+        delay = (retry_datetime - datetime.now(timezone.utc)).total_seconds()
+
+    if delay <= 0:
+        return fallback
+    return delay
+
+
 def _normalise_run_attempt(raw_value: str | None) -> int:
     """Return a validated run attempt number suitable for submission."""
 
@@ -1054,10 +1079,15 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
 
             if status_code in _RETRYABLE_STATUS_CODES:
                 if attempt < 3:
-                    wait_time = 2 ** (attempt - 1)
+                    default_wait = float(2 ** (attempt - 1))
+                    wait_time = _retry_after_seconds(
+                        response.headers.get("Retry-After"),
+                        default_wait,
+                    )
+                    display_wait = int(wait_time) if float(wait_time).is_integer() else wait_time
                     print(
                         "GitHub вернул временную ошибку при отправке snapshot. "
-                        f"Повторяем попытку через {wait_time} с...",
+                        f"Повторяем попытку через {display_wait} с...",
                         file=sys.stderr,
                     )
                     time.sleep(wait_time)
