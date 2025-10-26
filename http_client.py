@@ -79,6 +79,22 @@ def _coerce_timeout(raw_value: float | str | int, *, fallback: float = 10.0) -> 
     return parsed
 
 
+def _normalise_timeout(value: Any, *, fallback: float) -> Any:
+    """Return a timeout compatible with :mod:`httpx` APIs.
+
+    ``httpx`` accepts numeric timeouts as floats, integers, or strings that can
+    be coerced to floats, alongside :class:`httpx.Timeout` instances. Semgrep
+    flags usages that allow disabling timeouts by passing ``0`` or negative
+    values.  This helper mirrors :func:`_coerce_timeout` for primitive inputs
+    while leaving richer timeout objects untouched, ensuring callers cannot
+    bypass the floor by injecting their own keyword arguments.
+    """
+
+    if isinstance(value, (int, float, str)):
+        return _coerce_timeout(value, fallback=fallback)
+    return value
+
+
 DEFAULT_TIMEOUT = _coerce_timeout(DEFAULT_TIMEOUT_STR)
 
 
@@ -134,7 +150,12 @@ def get_httpx_client(
     timeout: float = DEFAULT_TIMEOUT, **kwargs
 ) -> Generator[HTTPXClient, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
-    kwargs.setdefault("timeout", _coerce_timeout(timeout, fallback=DEFAULT_TIMEOUT))
+    if "timeout" in kwargs:
+        kwargs["timeout"] = _normalise_timeout(
+            kwargs["timeout"], fallback=DEFAULT_TIMEOUT
+        )
+    else:
+        kwargs["timeout"] = _normalise_timeout(timeout, fallback=DEFAULT_TIMEOUT)
     # For consistency with the asynchronous helpers, avoid inheriting proxy
     # settings from the environment unless explicitly requested.  This mirrors
     # the behaviour of :func:`get_async_http_client` and prevents surprising
@@ -166,9 +187,14 @@ async def get_async_http_client(
     global _ASYNC_CLIENT
     async with _ASYNC_CLIENT_LOCK:
         if _ASYNC_CLIENT is None:
-            kwargs.setdefault(
-                "timeout", _coerce_timeout(timeout, fallback=DEFAULT_TIMEOUT)
-            )
+            if "timeout" in kwargs:
+                kwargs["timeout"] = _normalise_timeout(
+                    kwargs["timeout"], fallback=DEFAULT_TIMEOUT
+                )
+            else:
+                kwargs["timeout"] = _normalise_timeout(
+                    timeout, fallback=DEFAULT_TIMEOUT
+                )
             kwargs.setdefault("trust_env", False)
             try:
                 _ASYNC_CLIENT = httpx.AsyncClient(**kwargs)
@@ -195,7 +221,12 @@ async def async_http_client(
     timeout: float = 10.0, **kwargs
 ) -> AsyncGenerator[HTTPXAsyncClient, None]:
     """Context manager providing a temporary :class:`httpx.AsyncClient`."""
-    kwargs.setdefault("timeout", timeout)
+    if "timeout" in kwargs:
+        kwargs["timeout"] = _normalise_timeout(
+            kwargs["timeout"], fallback=DEFAULT_TIMEOUT
+        )
+    else:
+        kwargs["timeout"] = _normalise_timeout(timeout, fallback=DEFAULT_TIMEOUT)
     kwargs.setdefault("trust_env", False)
     try:
         client = httpx.AsyncClient(**kwargs)
