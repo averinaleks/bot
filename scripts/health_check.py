@@ -213,7 +213,8 @@ def check_endpoints(
         return 1
 
     base = normalised.rstrip("/")
-    with get_requests_session(timeout=10.0, verify=True) as session:
+    session_timeout = 10.0
+    with get_requests_session(timeout=session_timeout, verify=True) as session:
         for endpoint in endpoints:
             suffix = endpoint if endpoint.startswith("/") else f"/{endpoint}"
             url = f"{base}{suffix}"
@@ -228,7 +229,7 @@ def check_endpoints(
             attempts_left = max(1, max_attempts)
             while attempts_left:
                 try:
-                    response = session.get(url)
+                    response = session.get(url, timeout=session_timeout)
                     if 300 <= response.status_code < 400:
                         location = response.headers.get("Location", "")
                         raise requests.HTTPError(
