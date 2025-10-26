@@ -242,6 +242,10 @@ def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
                         "name",
                         "username",
                         "slug",
+                        "display_login",
+                        "displayLogin",
+                        "login_name",
+                        "loginName",
                     )
             repo_name = _extract_mapping_string(
                 mapping,
@@ -265,11 +269,29 @@ def _extract_dependency_graph_repository(payload: Mapping[str, object]) -> str:
                     return combined
             if owner_login and repo_name:
                 return f"{owner_login}/{repo_name}"
-    owner = _normalise_optional_string(payload.get("repository_owner"))
-    repo = _normalise_optional_string(payload.get("repository_name"))
-    if owner and repo:
-        return f"{owner}/{repo}"
-    repo = _normalise_optional_string(payload.get("repo"))
+    owner = ""
+    for candidate in (
+        payload.get("repository_owner"),
+        payload.get("repositoryOwner"),
+        payload.get("owner_login"),
+        payload.get("ownerLogin"),
+        payload.get("owner"),
+    ):
+        owner = _normalise_optional_string(candidate)
+        if owner:
+            break
+
+    repo = ""
+    for candidate in (
+        payload.get("repository_name"),
+        payload.get("repositoryName"),
+        payload.get("repository"),
+        payload.get("repo"),
+    ):
+        repo = _normalise_optional_string(candidate)
+        if repo:
+            break
+
     if owner and repo:
         return f"{owner}/{repo}"
     return ""
@@ -298,13 +320,17 @@ def _extract_workflow_run_repository(payload: Mapping[str, object]) -> str:
                 else:
                     owner_mapping = _as_mapping(owner)
                     if owner_mapping:
-                        login = owner_mapping.get("login")
-                        if isinstance(login, str):
-                            owner_login = _normalise_optional_string(login)
-                        if not owner_login:
-                            owner_name = owner_mapping.get("name")
-                            if isinstance(owner_name, str):
-                                owner_login = _normalise_optional_string(owner_name)
+                        owner_login = _extract_mapping_string(
+                            owner_mapping,
+                            "login",
+                            "name",
+                            "username",
+                            "slug",
+                            "display_login",
+                            "displayLogin",
+                            "login_name",
+                            "loginName",
+                        )
                 if owner_login:
                     candidate = _normalise_optional_string(name)
                     if candidate:
