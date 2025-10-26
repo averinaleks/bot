@@ -38,7 +38,9 @@ def test_data_handler_service_price(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_dh, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
+        )
         assert resp.status_code == 200
         assert resp.json()['price'] == 42.0
 
@@ -49,7 +51,7 @@ def test_data_handler_service_history(ctx):
     p = ctx.Process(target=_run_dh, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
         resp = httpx.get(
-            f'http://127.0.0.1:{port}/history/BTCUSDT', timeout=5, trust_env=False
+            f'http://127.0.0.1:{port}/history/BTC/USDT', timeout=5, trust_env=False
         )
         assert resp.status_code == 200
         assert resp.json()['history'] == [[1, 1, 1, 1, 1, 1]]
@@ -96,7 +98,9 @@ def test_data_handler_service_price_error(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_dh_fail, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
+        )
         assert resp.status_code == 503
         assert 'error' in resp.json()
 
@@ -127,12 +131,14 @@ def test_data_handler_service_requires_api_key(ctx):
     port = get_free_port()
     p = ctx.Process(target=_run_dh_token, args=(port,))
     with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
-        resp = httpx.get(f'http://127.0.0.1:{port}/price/BTCUSDT', timeout=5, trust_env=False)
+        resp = httpx.get(
+            f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
+        )
         assert resp.status_code == 401
         assert resp.json()['error'] == 'unauthorized'
 
         resp = httpx.get(
-            f'http://127.0.0.1:{port}/price/BTCUSDT',
+            f'http://127.0.0.1:{port}/price/BTC/USDT',
             timeout=5,
             trust_env=False,
             headers={'X-API-KEY': 'secret'},
@@ -141,7 +147,7 @@ def test_data_handler_service_requires_api_key(ctx):
         assert resp.json()['price'] == 42.0
 
         resp = httpx.get(
-            f'http://127.0.0.1:{port}/history/BTCUSDT',
+            f'http://127.0.0.1:{port}/history/BTC/USDT',
             timeout=5,
             trust_env=False,
             headers={'X-API-KEY': 'secret'},

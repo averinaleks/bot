@@ -3,6 +3,7 @@
 import hmac
 import logging
 import os
+import re
 import tempfile
 from collections import deque
 from contextvars import ContextVar
@@ -17,6 +18,8 @@ from services.exchange_provider import ExchangeProvider
 
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
+
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._-]+$")
 
 load_dotenv()
 
@@ -296,6 +299,12 @@ def _create_exchange() -> Any:
     return exchange
 
 
+def validate_symbol(symbol: str) -> bool:
+    """Return ``True`` when *symbol* matches the allowed format."""
+
+    return bool(_SYMBOL_PATTERN.fullmatch(symbol))
+
+
 exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
 
 
@@ -360,11 +369,13 @@ CCXT_BASE_ERROR = getattr(ccxt, 'BaseError', Exception)
 CCXT_NETWORK_ERROR = getattr(ccxt, 'NetworkError', CCXT_BASE_ERROR)
 
 # Correct price endpoint without trailing whitespace
-@app.route('/price/<symbol>', methods=['GET'])
+@app.route('/price/<path:symbol>', methods=['GET'])
 def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    if not validate_symbol(symbol):
+        return jsonify({'error': 'invalid symbol format'}), 400
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -394,12 +405,14 @@ def price(symbol: str) -> ResponseReturnValue:
         return jsonify({'error': 'exchange error fetching price'}), 502
 
 
-@app.route('/history/<symbol>', methods=['GET'])
+@app.route('/history/<path:symbol>', methods=['GET'])
 def history(symbol: str) -> ResponseReturnValue:
     """Return OHLCV history for ``symbol``."""
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
+    if not validate_symbol(symbol):
+        return jsonify({'error': 'invalid symbol format'}), 400
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
