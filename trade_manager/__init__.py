@@ -20,7 +20,7 @@ import importlib
 import sys
 from importlib import import_module
 from types import ModuleType
-from typing import Any
+from typing import Any, List
 
 
 def _load_target() -> ModuleType:
@@ -39,7 +39,7 @@ def __getattr__(name: str) -> Any:  # pragma: no cover - thin forwarding logic
     return getattr(_TARGET, name)
 
 
-def __dir__() -> list[str]:  # pragma: no cover - mirrors target metadata
+def __dir__() -> List[str]:  # pragma: no cover - mirrors target metadata
     public = getattr(_TARGET, "__all__", None)
     if public:
         return sorted(set(public))
