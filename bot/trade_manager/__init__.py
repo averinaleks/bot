@@ -24,7 +24,7 @@ if bot_config.OFFLINE_MODE:
     TradeManager = cast(type[TradeManagerType], OfflineTradeManager)
     TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
 
-    __all__ = ["TradeManager", "TelegramLogger", "service"]
+    __all__ = ["TradeManager", "TelegramLogger", "service", "order_utils", "server_common"]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
     from bot.utils_loader import require_utils
@@ -43,6 +43,12 @@ else:  # pragma: no cover - реальная инициализация
         _resolve_host,
         _ready_event,
     )
+
+    # Удаляем подмодуль из пространства имён пакета, чтобы доступ к нему
+    # проходил через ``__getattr__``. Это гарантирует, что повторный импорт
+    # после манипуляций с ``sys.modules`` в тестах всегда создаёт корректную
+    # привязку и не вызывает ``ImportError`` при ``importlib.reload``.
+    globals().pop("service", None)
 
     TradeManager = cast(type[TradeManagerType], _TradeManager)
 
@@ -64,9 +70,24 @@ else:  # pragma: no cover - реальная инициализация
         "get_http_client",
         "close_http_client",
         "service",
+        "order_utils",
+        "server_common",
     ]
 
 
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+_LAZY_SUBMODULES: dict[str, str] = {
+    "service": "service",
+    "order_utils": "order_utils",
+    "server_common": "server_common",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Ленивая загрузка вспомогательных подмодулей пакета."""
+
+    target = _LAZY_SUBMODULES.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = importlib.import_module(f"{__name__}.{target}")
+    return module
