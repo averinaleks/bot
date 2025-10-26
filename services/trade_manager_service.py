@@ -341,19 +341,41 @@ def _open_position_error(
     return jsonify({'error': message, 'code': code.value}), status
 
 
+def _iter_path_ancestors(path: Path) -> Iterator[Path]:
+    """Yield *path* and its parents until the filesystem root."""
+
+    current = path
+    while True:
+        yield current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+
 def _positions_directory_is_safe(path: Path) -> bool:
     directory = path.parent
-    if directory.exists():
-        if directory.is_symlink():
+    for ancestor in _iter_path_ancestors(directory):
+        if not ancestor.exists():
+            continue
+        try:
+            if ancestor.is_symlink():
+                logger.warning(
+                    'Отказ записи позиций: каталог %s является символьной ссылкой',
+                    sanitize_log_value(str(ancestor)),
+                )
+                return False
+            if ancestor == directory and not ancestor.is_dir():
+                logger.warning(
+                    'Отказ записи позиций: путь %s не является каталогом',
+                    sanitize_log_value(str(directory)),
+                )
+                return False
+        except OSError as exc:
             logger.warning(
-                'Отказ записи позиций: каталог %s является символьной ссылкой',
-                sanitize_log_value(str(directory)),
-            )
-            return False
-        if not directory.is_dir():
-            logger.warning(
-                'Отказ записи позиций: путь %s не является каталогом',
-                sanitize_log_value(str(directory)),
+                'Отказ записи позиций: не удалось проверить каталог %s: %s',
+                sanitize_log_value(str(ancestor)),
+                exc,
             )
             return False
     return True
