@@ -125,7 +125,7 @@ jobs:
 
   skip:
     needs: evaluate
-    if: ${{ needs.evaluate.outputs.skip_reason != '' || github.event_name == 'pull_request_target' }}
+    if: ${{ needs.evaluate.outputs.skip_reason != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip unsupported event
@@ -138,7 +138,7 @@ jobs:
 
   review:
     needs: evaluate
-    if: ${{ needs.evaluate.outputs.run_review == 'true' && github.event_name != 'pull_request_target' }}
+    if: ${{ needs.evaluate.outputs.skip_reason == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
