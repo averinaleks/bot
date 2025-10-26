@@ -22,6 +22,20 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 logger = logging.getLogger("TradingBot")
 
 
+def _ensure_data_handler_package() -> None:
+    """Prevent lingering test stubs from breaking ``data_handler`` imports."""
+
+    module = sys.modules.get("data_handler")
+    if module is None:
+        return
+    if isinstance(module, ModuleType) and getattr(module, "__path__", None):
+        return
+    sys.modules.pop("data_handler", None)
+
+
+_ensure_data_handler_package()
+
+
 def parse_symbols(raw: str | None) -> list[str] | None:
     """Convert a comma-separated string of *raw* symbols to a list."""
 

@@ -40,7 +40,12 @@ jobs:
               github.event.refName ||
               github.event.branch ||
               github.event.branch_name ||
+              github.event.head_branch ||
+              github.event.headBranch ||
+              github.event.head_branch_name ||
+              github.event.headBranchName ||
               github.event.head_ref ||
+              github.head_ref ||
               github.event.base_ref ||
               github.event.dependency_graph.sha ||
               github.event.dependency_graph.commit_oid ||
@@ -130,6 +135,19 @@ jobs:
               github.event.client_payload.previousOid ||
               github.event.client_payload.previous_commit_oid ||
               github.event.client_payload.previousCommitOid ||
+              github.event.previous_sha ||
+              github.event.previousSha ||
+              github.event.previous_oid ||
+              github.event.previousOid ||
+              github.event.previous_commit_oid ||
+              github.event.previousCommitOid ||
+              github.event.head_commit.before ||
+              github.event.head_commit.beforeSha ||
+              github.event.head_commit.beforeOid ||
+              github.event.head_commit.beforeCommitOid ||
+              github.event.head_commit.previousSha ||
+              github.event.head_commit.previousOid ||
+              github.event.head_commit.previousCommitOid ||
               github.event.workflow_run.before ||
               github.event.workflow_run.previous_sha ||
               github.event.workflow_run.head_commit.before ||
@@ -158,6 +176,21 @@ jobs:
               github.event.dependency_graph.after_commit_oid ||
               github.event.dependency_graph.afterCommitOid ||
               github.event.dependency_graph.after ||
+              github.event.head_sha ||
+              github.event.headSha ||
+              github.event.after ||
+              github.event.after_sha ||
+              github.event.afterSha ||
+              github.event.after_oid ||
+              github.event.afterOid ||
+              github.event.after_commit_oid ||
+              github.event.afterCommitOid ||
+              github.event.head_commit.id ||
+              github.event.head_commit.sha ||
+              github.event.head_commit.after ||
+              github.event.head_commit.afterSha ||
+              github.event.head_commit.afterOid ||
+              github.event.head_commit.afterCommitOid ||
               github.event.dependency_graph.ref ||
               github.event.ref ||
               github.event.client_payload.after ||

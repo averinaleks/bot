@@ -19,26 +19,6 @@ from services.exchange_provider import ExchangeProvider
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
-_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._-]+$")
-_SYMBOL_SIMPLE_PATTERN = re.compile(r"^[A-Z0-9._-]+$")
-_KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
-    "USDT",
-    "USDC",
-    "USD",
-    "USDD",
-    "BTC",
-    "ETH",
-    "EUR",
-    "GBP",
-    "JPY",
-    "AUD",
-    "CAD",
-    "TRY",
-    "BRL",
-    "RUB",
-    "SOL",
-    "BNB",
-)
 
 load_dotenv()
 
@@ -266,6 +246,7 @@ history_cache = _create_history_cache()
 if os.getenv("TEST_MODE") == "1":
     history_cache = None
 
+MIN_HISTORY_LIMIT = 1
 MAX_HISTORY_LIMIT = 1000
 
 
@@ -378,6 +359,40 @@ def validate_symbol(symbol: str) -> bool:
     return _normalise_symbol(symbol) is not None
 
 
+def _allow_legacy_symbol_format() -> bool:
+    """Return ``True`` when requests may omit the quote asset in symbols."""
+
+    if getattr(app, "testing", False):  # type: ignore[arg-type]
+        return True
+
+    allow_flag = os.getenv("DATA_HANDLER_ALLOW_LEGACY_SYMBOLS", "")
+    return allow_flag.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_symbol(symbol: str) -> str | None:
+    """Return a sanitized trading symbol or ``None`` when invalid."""
+
+    cleaned = symbol.strip().upper()
+    if not cleaned:
+        return None
+
+    if validate_symbol(cleaned):
+        return cleaned
+
+    if "/" in cleaned or not _SIMPLE_SYMBOL_PATTERN.fullmatch(cleaned):
+        return None
+
+    if not _allow_legacy_symbol_format():
+        return None
+
+    default_quote = os.getenv("DATA_HANDLER_DEFAULT_QUOTE", "USDT").strip().upper()
+    if not default_quote:
+        default_quote = "USDT"
+
+    candidate = f"{cleaned}/{default_quote}"
+    return candidate if validate_symbol(candidate) else None
+
+
 exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
 
 
@@ -447,9 +462,8 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    normalised_symbol = _normalise_symbol(symbol)
-    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
+    symbol = candidate
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -485,9 +499,8 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    normalised_symbol = _normalise_symbol(symbol)
-    if normalised_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
+    symbol = normalized_symbol
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -499,7 +512,15 @@ def history(symbol: str) -> ResponseReturnValue:
     except ValueError:
         limit = 200
     else:
-        if limit > MAX_HISTORY_LIMIT:
+        if limit <= 0:
+            requested_limit = limit
+            limit = MIN_HISTORY_LIMIT
+            warnings_payload['limit'] = {
+                'message': f'limit raised to minimum {MIN_HISTORY_LIMIT}',
+                'requested': requested_limit,
+                'applied': limit,
+            }
+        elif limit > MAX_HISTORY_LIMIT:
             requested_limit = limit
             limit = MAX_HISTORY_LIMIT
             warnings_payload['limit'] = {

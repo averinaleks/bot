@@ -11,6 +11,9 @@ def _import_service(monkeypatch):
         def fetch_ticker(self, symbol):
             return {'last': 1.0}
 
+        def fetch_ohlcv(self, symbol, timeframe='1m', limit=200):
+            return [[0, 1.0, 1.0, 1.0, 1.0, 1.0]]
+
     ccxt = types.ModuleType("ccxt")
     ccxt.bybit = lambda *args, **kwargs: DummyExchange()
     ccxt.BaseError = Exception
@@ -53,6 +56,19 @@ def test_price_allows_anonymous_when_flag(monkeypatch, caplog):
     assert 'DATA_HANDLER_ALLOW_ANONYMOUS' in caplog.text
 
 
+def test_price_accepts_symbol_with_colon(monkeypatch):
+    monkeypatch.delenv('DATA_HANDLER_API_KEY', raising=False)
+    monkeypatch.setenv('DATA_HANDLER_ALLOW_ANONYMOUS', '1')
+
+    module = _import_service(monkeypatch)
+
+    client = module.app.test_client()
+    response = client.get('/price/BTC/USDT:USDT')
+
+    assert response.status_code == 200
+    assert response.get_json() == {'price': 1.0}
+
+
 def test_price_rejects_invalid_symbol_format(monkeypatch):
     monkeypatch.delenv('DATA_HANDLER_API_KEY', raising=False)
     monkeypatch.setenv('DATA_HANDLER_ALLOW_ANONYMOUS', '1')
@@ -72,6 +88,20 @@ def test_price_rejects_invalid_symbol_format(monkeypatch):
 
     assert resp.status_code == 400
     assert resp.get_json() == {'error': 'invalid symbol format'}
+
+
+def test_history_accepts_symbol_with_colon(monkeypatch):
+    monkeypatch.delenv('DATA_HANDLER_API_KEY', raising=False)
+    monkeypatch.setenv('DATA_HANDLER_ALLOW_ANONYMOUS', '1')
+
+    module = _import_service(monkeypatch)
+
+    client = module.app.test_client()
+    response = client.get('/history/BTC/USDT:USDT')
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload == {'history': [[0, 1.0, 1.0, 1.0, 1.0, 1.0]]}
 
 
 def test_history_rejects_invalid_symbol_format(monkeypatch):

@@ -9,6 +9,7 @@ import os
 import statistics
 import sys
 import time
+from types import ModuleType
 from urllib.parse import quote
 from collections import defaultdict, deque
 from contextlib import suppress
@@ -1479,40 +1480,54 @@ def _should_use_live_data_handler() -> bool:
     return True
 
 
+def _restore_data_handler_package() -> None:
+    """Ensure test stubs for :mod:`data_handler` don't leak into other modules."""
+
+    module = sys.modules.get("data_handler")
+    if module is None:
+        return
+    if isinstance(module, ModuleType) and getattr(module, "__path__", None):
+        return
+    sys.modules.pop("data_handler", None)
+
+
 def main() -> None:
     load_dotenv()
     suppress_tf_logs()
 
-    if not _should_use_live_data_handler():
-        logger.info("OFFLINE_MODE=1: skipping data handler initialisation")
-        asyncio.run(run_once_async())
-        return
-
     try:
-        from data_handler import get_settings  # local import to avoid circular dependency
-    except ImportError as exc:
-        if bot_config.OFFLINE_MODE:
-            logger.warning(
-                "OFFLINE_MODE=1: data_handler unavailable (%s); running single offline cycle",
-                sanitize_log_value(str(exc)),
-            )
+        if not _should_use_live_data_handler():
+            logger.info("OFFLINE_MODE=1: skipping data handler initialisation")
             asyncio.run(run_once_async())
             return
-        logger.error("Failed to import data_handler: %s", exc)
-        raise SystemExit(1) from exc
 
-    try:
-        cfg = get_settings()
-    except ValidationError as exc:  # pragma: no cover - config errors
-        logger.error("Invalid environment configuration: %s", exc)
-        raise SystemExit(1)
-    global SYMBOLS
-    SYMBOLS = cfg.symbols
-    if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
-        logger.warning(
-            "Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"
-        )
-    asyncio.run(main_async())
+        try:
+            from data_handler import get_settings  # local import to avoid circular dependency
+        except ImportError as exc:
+            if bot_config.OFFLINE_MODE:
+                logger.warning(
+                    "OFFLINE_MODE=1: data_handler unavailable (%s); running single offline cycle",
+                    sanitize_log_value(str(exc)),
+                )
+                asyncio.run(run_once_async())
+                return
+            logger.error("Failed to import data_handler: %s", exc)
+            raise SystemExit(1) from exc
+
+        try:
+            cfg = get_settings()
+        except ValidationError as exc:  # pragma: no cover - config errors
+            logger.error("Invalid environment configuration: %s", exc)
+            raise SystemExit(1)
+        global SYMBOLS
+        SYMBOLS = cfg.symbols
+        if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID"):
+            logger.warning(
+                "Telegram inactive: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"
+            )
+        asyncio.run(main_async())
+    finally:
+        _restore_data_handler_package()
 
 
 if __name__ == '__main__':

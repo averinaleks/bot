@@ -44,6 +44,7 @@ jobs:
         continue-on-error: true
         with:
           scan-type: fs
+          scanners: vuln,secret  # disable misconfig scans that crash on AWS policy bundle
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           format: sarif
