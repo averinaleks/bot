@@ -13,3 +13,11 @@ CVE-2024-37057
 CVE-2024-37058
 CVE-2024-37059
 CVE-2024-37060
+# The standard library HTML parser DoS (CVE-2025-6069) is mitigated by the
+# SafeHTMLParser wrapper in safe_html_parser.py, which enforces a strict input
+# size limit and is covered by unit tests.
+CVE-2025-6069
+# CVE-2025-45582 targets GNU tar extraction. All Docker images invoke
+# docker/scripts/harden_gnutar.sh to enable the restrictive flags recommended in
+# the upstream advisory, preventing exploitation during archive handling.
+CVE-2025-45582
