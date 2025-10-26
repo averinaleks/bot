@@ -71,8 +71,6 @@ def _create_stub() -> tuple[ModuleType, bool]:
     class _RemoteHandle:
         """Обёртка, предоставляющая ``.remote`` и ``.options``."""
 
-        __slots__ = ("_func",)
-
         def __init__(self, func):
             self._func = func
 
