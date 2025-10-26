@@ -256,7 +256,7 @@ try:  # pragma: no cover - optional dependency
     from sklearn.calibration import calibration_curve
     from sklearn.pipeline import Pipeline
 except Exception as exc:  # pragma: no cover - missing sklearn
-    logger.warning("Не удалось импортировать sklearn: %s", exc)
+    logger.warning("Failed to import sklearn: %s", exc)
 
     class StandardScaler:  # type: ignore
         def fit(self, X, y=None):
@@ -285,7 +285,7 @@ try:
     import mlflow
 except ImportError as e:  # pragma: no cover - optional dependency
     mlflow = None  # type: ignore
-    logger.warning("Не удалось импортировать mlflow: %s", e)
+    logger.warning("Failed to import mlflow: %s", e)
 else:
     harden_mlflow(mlflow)
 
@@ -305,7 +305,7 @@ try:
 except ImportError as e:  # pragma: no cover - optional dependency
     PPO = DQN = DummyVecEnv = None  # type: ignore
     SB3_AVAILABLE = False
-    logger.warning("Не удалось импортировать stable_baselines3: %s", e)
+    logger.warning("Failed to import stable_baselines3: %s", e)
 
 if TYPE_CHECKING:
     from stable_baselines3.common.base_class import BaseAlgorithm as SB3BaseAlgorithm
@@ -934,7 +934,7 @@ class ModelBuilder:
                     return None, path
                 except Exception:
                     logger.exception(
-                        "Не удалось подготовить каталог кэша ModelBuilder %s", path
+                        "Failed to prepare ModelBuilder cache directory %s", path
                     )
             return None, fallback_dir
 
@@ -948,7 +948,7 @@ class ModelBuilder:
                 )
             except Exception:
                 logger.exception(
-                    "Не удалось инициализировать кэш ModelBuilder в %s",
+                    "Failed to initialize ModelBuilder cache in %s",
                     path,
                 )
             else:
@@ -959,7 +959,7 @@ class ModelBuilder:
             os.makedirs(chosen, exist_ok=True)
         except Exception:
             logger.exception(
-                "Не удалось создать резервный каталог кэша ModelBuilder %s",
+                "Failed to create a fallback ModelBuilder cache directory %s",
                 chosen,
             )
         return None, chosen
@@ -1032,7 +1032,7 @@ class ModelBuilder:
                 write_model_state_signature(self.state_file_path)
             except OSError as exc:
                 logger.warning(
-                    "Не удалось записать подпись для состояния модели: %s",
+                    "Failed to write signature for the model state: %s",
                     exc,
                 )
             self.last_save_time = time.time()
@@ -1044,7 +1044,7 @@ class ModelBuilder:
                     tmp_path.unlink()
             except OSError as cleanup_err:
                 logger.exception(
-                    "Не удалось удалить временный файл %s: %s",
+                    "Failed to remove temporary file %s: %s",
                     sanitize_log_value(tmp_path),
                     cleanup_err,
                 )
@@ -1092,7 +1092,7 @@ class ModelBuilder:
                 return
             except Exception as exc:
                 logger.exception(
-                    "Не удалось десериализовать состояние модели из %s: %s",
+                    "Failed to deserialize model state from %s: %s",
                     sanitize_log_value(state_path),
                     exc,
                 )
@@ -1669,7 +1669,7 @@ class ModelBuilder:
                 try:
                     import shap  # type: ignore
                 except ImportError as e:  # pragma: no cover - optional dependency
-                    logger.warning("Не удалось импортировать shap: %s", e)
+                    logger.warning("Failed to import shap: %s", e)
                     return
             if self.nn_framework != "pytorch":
                 return
@@ -1686,7 +1686,7 @@ class ModelBuilder:
                 resolved_cache_file = cache_file.resolve(strict=False)
             except OSError as exc:
                 logger.warning(
-                    "Не удалось вычислить путь к SHAP кэшу %s: %s",
+                    "Failed to resolve the SHAP cache path %s: %s",
                     cache_file,
                     exc,
                 )
@@ -1709,7 +1709,7 @@ class ModelBuilder:
                         return
                 except OSError as exc:
                     logger.warning(
-                        "Не удалось проверить SHAP файл %s: %s",
+                        "Failed to inspect SHAP file %s: %s",
                         cache_file,
                         exc,
                     )

@@ -373,7 +373,7 @@ def _positions_directory_is_safe(path: Path) -> bool:
                 return False
         except OSError as exc:
             logger.warning(
-                'Отказ записи позиций: не удалось проверить каталог %s: %s',
+                'Positions cache write denied: failed to inspect directory %s: %s',
                 sanitize_log_value(str(ancestor)),
                 exc,
             )
@@ -901,7 +901,7 @@ def open_position() -> ResponseReturnValue:
                     )
                 if order_utils.order_needs_retry(stop_order):
                     safe_symbol = sanitize_log_value(symbol)
-                    warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
+                    warn_msg = f"failed to create stop loss order for {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'stop_loss', 'message': warn_msg})
@@ -919,7 +919,7 @@ def open_position() -> ResponseReturnValue:
                 )
                 if order_utils.order_needs_retry(tp_order):
                     safe_symbol = sanitize_log_value(symbol)
-                    warn_msg = f"не удалось создать take profit ордер для {safe_symbol}"
+                    warn_msg = f"failed to create take profit order for {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'take_profit', 'message': warn_msg})
@@ -949,7 +949,7 @@ def open_position() -> ResponseReturnValue:
                     )
                 if order_utils.order_needs_retry(trailing_order):
                     safe_symbol = sanitize_log_value(symbol)
-                    warn_msg = f"не удалось создать trailing stop ордер для {safe_symbol}"
+                    warn_msg = f"failed to create trailing stop order for {safe_symbol}"
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     protective_failures.append({'type': 'trailing_stop', 'message': warn_msg})
@@ -972,11 +972,11 @@ def open_position() -> ResponseReturnValue:
         except OSError as exc:
             safe_symbol = sanitize_log_value(symbol or 'unknown')
             safe_exc = sanitize_log_value(str(exc))
-            warn_msg = f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
+            warn_msg = f'failed to update positions cache for {safe_symbol}: {safe_exc}'
             app.logger.warning(warn_msg)
             logger.warning(warn_msg)
             cache_warning = {
-                'message': 'не удалось обновить кэш позиций',
+                'message': 'failed to update positions cache',
                 'details': safe_exc,
             }
         response: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}
@@ -1164,12 +1164,12 @@ def close_position() -> ResponseReturnValue:
                     safe_symbol = sanitize_log_value(symbol or 'unknown')
                     safe_exc = sanitize_log_value(str(exc))
                     warn_msg = (
-                        f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
+                        f'failed to update positions cache for {safe_symbol}: {safe_exc}'
                     )
                     app.logger.warning(warn_msg)
                     logger.warning(warn_msg)
                     cache_warning = {
-                        'message': 'не удалось обновить кэш позиций',
+                        'message': 'failed to update positions cache',
                         'details': safe_exc,
                     }
         response_payload: dict[str, Any] = {'status': 'ok', 'order_id': order.get('id')}

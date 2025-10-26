@@ -89,7 +89,7 @@ try:
 except Exception as exc:  # pragma: no cover - joblib is optional in tests
     JOBLIB_AVAILABLE = False
     LOGGER.warning(
-        "Не удалось импортировать joblib: %s. Сохранение моделей отключено.", exc
+        "Failed to import joblib: %s. Model persistence has been disabled.", exc
     )
     joblib = create_joblib_stub(
         "joblib недоступен: установите зависимость для работы с артефактами"
@@ -100,9 +100,8 @@ try:
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - critical dependency missing
     LOGGER.critical(
-        "Не удалось импортировать `pandas`. Установите пакет "
-        "(`pip install pandas`) или переключитесь на обработку данных через "
-        "стандартные структуры/CSV до подключения `pandas`."
+        "Failed to import `pandas`. Install the package (`pip install pandas`) "
+        "or use standard data structures/CSV processing until `pandas` is available."
     )
     raise ImportError(
         "Сервис требует установленный `pandas` для подготовки данных."
@@ -314,7 +313,7 @@ else:  # scikit-learn fallback used by tests
     try:
         from sklearn.linear_model import LogisticRegression
     except Exception as exc:  # pragma: no cover - missing sklearn in tests
-        LOGGER.warning("Не удалось импортировать sklearn.linear_model: %s", exc)
+        LOGGER.warning("Failed to import sklearn.linear_model: %s", exc)
 
         class LogisticRegression:  # type: ignore
             """Упрощённая замена LogisticRegression для тестового режима."""
@@ -362,7 +361,7 @@ else:  # scikit-learn fallback used by tests
     try:  # optional dependency
         from sklearn.preprocessing import StandardScaler
     except Exception as exc:  # pragma: no cover - fallback when sklearn missing
-        LOGGER.warning("Не удалось импортировать sklearn.preprocessing: %s", exc)
+        LOGGER.warning("Failed to import sklearn.preprocessing: %s", exc)
 
         class StandardScaler:  # type: ignore
             def fit(self, X):

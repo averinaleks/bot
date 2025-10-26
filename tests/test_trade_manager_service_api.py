@@ -216,10 +216,10 @@ def test_open_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     payload = response.get_json()
     assert payload['status'] == 'ok'
     warning = payload['warnings']['positions_cache_failed']
-    assert warning['message'] == 'не удалось обновить кэш позиций'
+    assert warning['message'] == 'failed to update positions cache'
     assert 'details' in warning
     assert len(state.snapshot_positions()) == 1
-    assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
+    assert any('failed to update positions cache' in record.getMessage() for record in caplog.records)
 
 
 def test_open_position_returns_timeout(monkeypatch):
@@ -337,10 +337,10 @@ def test_close_position_warns_when_positions_cache_fails(monkeypatch, caplog):
     payload = response.get_json()
     assert payload['status'] == 'ok'
     warning = payload['warnings']['positions_cache_failed']
-    assert warning['message'] == 'не удалось обновить кэш позиций'
+    assert warning['message'] == 'failed to update positions cache'
     assert 'details' in warning
     assert not state.snapshot_positions()
-    assert any('не удалось обновить кэш позиций' in record.getMessage() for record in caplog.records)
+    assert any('failed to update positions cache' in record.getMessage() for record in caplog.records)
 
 
 def test_exchange_calls_are_serialized(monkeypatch):

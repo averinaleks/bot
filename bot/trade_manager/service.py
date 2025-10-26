@@ -66,7 +66,7 @@ except AttributeError:  # pragma: no cover - older Flask versions
     try:
         from a2wsgi import WSGIMiddleware as A2WSGIMiddleware  # type: ignore
     except ImportError as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
-        logger.exception("Не удалось импортировать a2wsgi (%s): %s", type(exc).__name__, exc)
+        logger.exception("Failed to import a2wsgi (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware as UvicornWSGIMiddleware
 
         asgi_app = UvicornWSGIMiddleware(api_app)  # type: ignore[arg-type]
@@ -240,7 +240,7 @@ async def create_trade_manager() -> TradeManager | None:
             telegram_bot = None
         except (RuntimeError, httpx.HTTPError) as exc:  # pragma: no cover - import/runtime errors
             logger.exception(
-                "Не удалось создать Telegram Bot (%s): %s",
+                "Failed to create Telegram Bot (%s): %s",
                 type(exc).__name__,
                 exc,
             )
@@ -254,7 +254,7 @@ async def create_trade_manager() -> TradeManager | None:
         logger.info("DataHandler успешно создан")
     except RuntimeError as exc:
         logger.exception(
-            "Не удалось создать DataHandler (%s): %s",
+            "Failed to create DataHandler (%s): %s",
             type(exc).__name__,
             exc,
         )
@@ -270,12 +270,12 @@ async def create_trade_manager() -> TradeManager | None:
         await dh.load_initial()
         asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
     except RuntimeError as exc:
-        logger.error("Не удалось загрузить исходные данные: %s", exc)
+        logger.error("Failed to load initial data: %s", exc)
         await dh.stop()
         return None
     except (ValueError, ImportError) as exc:
         logger.exception(
-            "Не удалось создать ModelBuilder (%s): %s",
+            "Failed to create ModelBuilder (%s): %s",
             type(exc).__name__,
             exc,
         )
@@ -303,7 +303,7 @@ async def create_trade_manager() -> TradeManager | None:
                         chat_id=msg.chat_id, text="Trading enabled"
                     )
                 except Exception as exc:
-                    logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
+                    logger.error("Failed to send message to Telegram: %s", exc)
             elif text.startswith("/stop"):
                 await tb.set_trading_enabled(False)
                 try:
@@ -311,7 +311,7 @@ async def create_trade_manager() -> TradeManager | None:
                         chat_id=msg.chat_id, text="Trading disabled"
                     )
                 except Exception as exc:
-                    logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
+                    logger.error("Failed to send message to Telegram: %s", exc)
             elif text.startswith("/status"):
                 status = "enabled" if await tb.get_trading_enabled() else "disabled"
                 positions = []
@@ -323,14 +323,14 @@ async def create_trade_manager() -> TradeManager | None:
                             await res if inspect.isawaitable(res) else res
                         ) or []
                     except Exception as exc:  # pragma: no cover - log and ignore
-                        logger.error("Не удалось получить открытые позиции: %s", exc)
+                        logger.error("Failed to fetch open positions: %s", exc)
                 message = f"Trading {status}"
                 if positions:
                     message += "\n" + "\n".join(str(p) for p in positions)
                 try:
                     await telegram_bot.send_message(chat_id=msg.chat_id, text=message)
                 except Exception as exc:
-                    logger.error("Не удалось отправить сообщение в Telegram: %s", exc)
+                    logger.error("Failed to send message to Telegram: %s", exc)
 
         threading.Thread(
             target=lambda: asyncio.run(listener.listen(handle_command)),
@@ -513,7 +513,7 @@ def positions_route():
     try:
         positions = _await_manager_result(loop, manager.get_positions_snapshot())
     except Exception:
-        logger.exception("Не удалось получить позиции")
+        logger.exception("Failed to fetch positions")
         return jsonify({"error": "internal error"}), 500
     return jsonify({"positions": positions})
 

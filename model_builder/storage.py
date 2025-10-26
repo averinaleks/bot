@@ -39,7 +39,7 @@ try:  # pragma: no cover - optional dependency
 except Exception as exc:  # pragma: no cover - stub for tests
     JOBLIB_AVAILABLE = False
     logger.warning(
-        "Не удалось импортировать joblib: %s. Сериализация моделей будет отключена.",
+        "Failed to import joblib: %s. Model serialization will be disabled.",
         exc,
     )
     joblib = create_joblib_stub(

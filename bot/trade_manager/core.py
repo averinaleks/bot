@@ -732,7 +732,7 @@ class TradeManager:
                     if path and os.path.exists(path):
                         os.remove(path)
                 except OSError as cleanup_err:
-                    logger.exception("Не удалось удалить временный файл %s: %s", path, cleanup_err)
+                    logger.exception("Failed to remove temporary file %s: %s", path, cleanup_err)
             raise
 
     def load_state(self):
@@ -838,7 +838,7 @@ class TradeManager:
                 shutil.move(path, quarantine_name)
             except OSError as move_err:
                 logger.debug(
-                    "Не удалось переместить поврежденный файл %s: %s",
+                    "Failed to move corrupted file %s: %s",
                     sanitized_path,
                     move_err,
                 )
@@ -846,7 +846,7 @@ class TradeManager:
                     os.remove(path)
                 except OSError as remove_err:
                     logger.warning(
-                        "Не удалось удалить поврежденный файл %s: %s",
+                        "Failed to delete corrupted file %s: %s",
                         sanitized_path,
                         remove_err,
                     )
@@ -875,7 +875,7 @@ class TradeManager:
             result = sender(message, urgent=True)
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
-                "Не удалось инициировать уведомление Telegram об очистке состояния: %s",
+                "Failed to initiate Telegram notification about state reset: %s",
                 exc,
             )
             return
@@ -892,7 +892,7 @@ class TradeManager:
                     asyncio.run(_consume(awaitable))
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.debug(
-                        "Не удалось отправить уведомление Telegram об очистке состояния: %s",
+                        "Failed to send Telegram notification about state reset: %s",
                         exc,
                     )
             else:
@@ -903,7 +903,7 @@ class TradeManager:
                     loop.create_task(coroutine)
                 except RuntimeError as exc:  # pragma: no cover - defensive
                     logger.debug(
-                        "Не удалось запланировать уведомление Telegram об очистке состояния: %s",
+                        "Failed to schedule Telegram notification about state reset: %s",
                         exc,
                     )
 
@@ -985,7 +985,7 @@ class TradeManager:
                 return order
             except (httpx.HTTPError, RuntimeError) as e:
                 logger.exception(
-                    "Не удалось разместить ордер для %s (%s): %s",
+                    "Failed to place order for %s (%s): %s",
                     symbol,
                     type(e).__name__,
                     e,
@@ -1096,7 +1096,7 @@ class TradeManager:
             return position_size
         except (httpx.HTTPError, KeyError, ValueError, RuntimeError) as e:
             logger.exception(
-                "Не удалось вычислить размер позиции для %s (%s): %s",
+                "Failed to calculate position size for %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1234,7 +1234,7 @@ class TradeManager:
             )
         except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
             logger.exception(
-                "Не удалось открыть позицию для %s (%s): %s",
+                "Failed to open position for %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1281,7 +1281,7 @@ class TradeManager:
             )
         except (httpx.HTTPError, RuntimeError) as e:  # pragma: no cover - network issues
             logger.exception(
-                "Не удалось закрыть позицию для %s (%s): %s",
+                "Failed to close position for %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1587,7 +1587,7 @@ class TradeManager:
                     )
                 except (RuntimeError, ValueError) as exc:
                     logger.debug(
-                        "Не удалось подготовить признаки для %s (%s): %s",
+                        "Failed to prepare features for %s (%s): %s",
                         symbol,
                         type(exc).__name__,
                         exc,
@@ -1681,7 +1681,7 @@ class TradeManager:
                             await self.open_position(symbol, opposite, current_price, params)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
             logger.exception(
-                "Не удалось проверить сигнал модели для %s (%s): %s",
+                "Failed to evaluate model signal for %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1911,7 +1911,7 @@ class TradeManager:
             return True
         except (KeyError, ValueError) as e:
             logger.exception(
-                "Не удалось проверить условия EMA для %s (%s): %s",
+                "Failed to evaluate EMA conditions for %s (%s): %s",
                 symbol,
                 type(e).__name__,
                 e,
@@ -1936,7 +1936,7 @@ class TradeManager:
                 )
             except (RuntimeError, ValueError) as exc:
                 logger.debug(
-                    "Не удалось подготовить признаки для %s (%s): %s",
+                    "Failed to prepare features for %s (%s): %s",
                     symbol,
                     type(exc).__name__,
                     exc,
@@ -2019,7 +2019,7 @@ class TradeManager:
                     )
                 except (RuntimeError, ValueError) as exc:
                     logger.debug(
-                        "Не удалось подготовить признаки для %s (%s): %s",
+                        "Failed to prepare features for %s (%s): %s",
                         symbol,
                         type(exc).__name__,
                         exc,
@@ -2224,7 +2224,7 @@ class TradeManager:
             await self.telegram_logger.send_telegram_message(message)
         except Exception as send_exc:  # pragma: no cover - defensive logging
             logger.debug(
-                "Не удалось отправить уведомление Telegram о сбое задачи %s: %s",
+                "Failed to send Telegram notification about task failure %s: %s",
                 spec.name,
                 send_exc,
             )
@@ -2392,7 +2392,7 @@ class TradeManager:
             if should_shutdown and callable(getattr(ray, "shutdown", None)):
                 ray.shutdown()
         except (RuntimeError, ValueError) as exc:  # pragma: no cover - cleanup errors
-            logger.exception("Не удалось завершить Ray (%s): %s", type(exc).__name__, exc)
+            logger.exception("Failed to shut down Ray (%s): %s", type(exc).__name__, exc)
 
 
 # Keep package-level re-exports in sync after reloads so that ``from bot.trade_manager``

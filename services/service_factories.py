@@ -74,7 +74,7 @@ def build_exchange(
         exchange = ccxt.bybit(params)
     except Exception as exc:  # pragma: no cover - unexpected ccxt failures
         logger.error(
-            "Не удалось создать клиент ccxt.bybit: %s",
+            "Failed to create ccxt.bybit client: %s",
             sanitize_log_value(str(exc)),
         )
         from services.offline import OfflineBybit

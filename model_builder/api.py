@@ -69,7 +69,7 @@ def _load_model() -> None:
         )
         _model = None
     except (OSError, ValueError) as exc:  # pragma: no cover - model may be corrupted
-        logger.exception("Не удалось загрузить модель: %s", exc)
+        logger.exception("Failed to load model: %s", exc)
         _model = None
     except Exception as exc:  # pragma: no cover - unexpected joblib failure
         logger.exception(
@@ -117,7 +117,7 @@ def train_route():
         model_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:  # pragma: no cover - filesystem errors are rare
         logger.exception(
-            "Не удалось подготовить каталог модели %s: %s",
+            "Failed to prepare model directory %s: %s",
             sanitize_log_value(model_path),
             exc,
         )
@@ -130,13 +130,13 @@ def train_route():
             write_model_state_signature(model_path)
         except OSError as exc:  # pragma: no cover - проблемы с ФС крайне редки
             logger.warning(
-                "Не удалось сохранить подпись модели %s: %s",
+                "Failed to persist model signature for %s: %s",
                 sanitize_log_value(model_path),
                 exc,
             )
     except Exception as exc:  # pragma: no cover - dump failures are rare
         logger.exception(
-            "Не удалось сохранить модель в %s: %s",
+            "Failed to save model to %s: %s",
             sanitize_log_value(model_path),
             exc,
         )
@@ -145,7 +145,7 @@ def train_route():
                 tmp_path.unlink()
         except OSError:
             logger.debug(
-                "Не удалось удалить временный файл %s",
+                "Failed to remove temporary file %s",
                 sanitize_log_value(tmp_path),
             )
         return jsonify({"error": "model save failed"}), 500

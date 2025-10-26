@@ -97,7 +97,7 @@ except ImportError as exc:  # pragma: no cover - optional in offline mode
             "или активируйте офлайн-режим (OFFLINE_MODE=1)."
         )
         raise ImportError(
-            "Не удалось импортировать `ccxt`, необходимый для работы с биржей."
+            "Failed to import `ccxt`, which is required for exchange access."
         ) from exc
 
 try:  # optional dependency
@@ -254,7 +254,7 @@ def _create_history_cache() -> "HistoricalDataCache | None":
             )
         except Exception:
             logger.exception(
-                "Не удалось инициализировать кэш исторических данных в %s",
+                "Failed to initialize historical data cache in %s",
                 path,
             )
     return None
