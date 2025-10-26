@@ -23,6 +23,10 @@ from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
 from telegram_logger import TelegramLogger, resolve_unsent_path
+
+_stub_data_handler = sys.modules.get("data_handler")
+if _stub_data_handler is not None and not getattr(_stub_data_handler, "__path__", None):
+    sys.modules.pop("data_handler", None)
 _utils_module = require_utils("retry", "suppress_tf_logs")
 retry = _utils_module.retry  # type: ignore[attr-defined]
 suppress_tf_logs = getattr(_utils_module, "suppress_tf_logs", lambda: None)

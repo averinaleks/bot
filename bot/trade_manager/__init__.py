@@ -7,7 +7,6 @@
 """
 
 import importlib
-import sys
 from typing import TYPE_CHECKING, Any, cast
 
 from bot import config as bot_config
@@ -68,10 +67,6 @@ else:  # pragma: no cover - реальная инициализация
     ]
 
 
-def __getattr__(name: str) -> Any:  # pragma: no cover - delegation helper
-    if name == "service":
-        module = importlib.import_module(f"{__name__}.service")
-        sys.modules[f"{__name__}.service"] = module
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
