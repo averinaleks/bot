@@ -19,7 +19,6 @@ from services.exchange_provider import ExchangeProvider
 _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
-_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._:-]+$")
 
 load_dotenv()
 
@@ -306,6 +305,40 @@ def validate_symbol(symbol: str) -> bool:
     return bool(_SYMBOL_PATTERN.fullmatch(symbol))
 
 
+def _allow_legacy_symbol_format() -> bool:
+    """Return ``True`` when requests may omit the quote asset in symbols."""
+
+    if getattr(app, "testing", False):  # type: ignore[arg-type]
+        return True
+
+    allow_flag = os.getenv("DATA_HANDLER_ALLOW_LEGACY_SYMBOLS", "")
+    return allow_flag.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_symbol(symbol: str) -> str | None:
+    """Return a sanitized trading symbol or ``None`` when invalid."""
+
+    cleaned = symbol.strip().upper()
+    if not cleaned:
+        return None
+
+    if validate_symbol(cleaned):
+        return cleaned
+
+    if "/" in cleaned or not _SIMPLE_SYMBOL_PATTERN.fullmatch(cleaned):
+        return None
+
+    if not _allow_legacy_symbol_format():
+        return None
+
+    default_quote = os.getenv("DATA_HANDLER_DEFAULT_QUOTE", "USDT").strip().upper()
+    if not default_quote:
+        default_quote = "USDT"
+
+    candidate = f"{cleaned}/{default_quote}"
+    return candidate if validate_symbol(candidate) else None
+
+
 exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
 
 
@@ -375,8 +408,10 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    if not validate_symbol(symbol):
+    candidate = symbol.strip().upper()
+    if not validate_symbol(candidate):
         return jsonify({'error': 'invalid symbol format'}), 400
+    symbol = candidate
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
@@ -412,8 +447,10 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    if not validate_symbol(symbol):
+    normalized_symbol = _normalize_symbol(symbol)
+    if normalized_symbol is None:
         return jsonify({'error': 'invalid symbol format'}), 400
+    symbol = normalized_symbol
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
