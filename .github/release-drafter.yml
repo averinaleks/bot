@@ -19,7 +19,7 @@ template: |
   ## Changes
   $CHANGES
 replacers:
-  - search: '/^([\s\S]{120000})([\s\S]+)/'
+  - search: '/^([\s\S]{90000})([\s\S]+)/'
     replace: |
       $1
 
