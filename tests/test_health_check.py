@@ -77,7 +77,7 @@ def test_check_endpoints_sanitises_logs(monkeypatch: pytest.MonkeyPatch, caplog:
         pass
 
     class DummySession:
-        def get(self, url: str) -> DummyResponse:
+        def get(self, url: str, **_kwargs: Any) -> DummyResponse:
             raise DummyError("boom\nfail")
 
         def close(self) -> None:
@@ -102,7 +102,7 @@ def test_check_endpoints_rejects_redirect(monkeypatch: pytest.MonkeyPatch, caplo
         def __init__(self) -> None:
             self.calls = 0
 
-        def get(self, url: str) -> DummyResponse:
+        def get(self, url: str, **_kwargs: Any) -> DummyResponse:
             self.calls += 1
             return DummyResponse(302, {"Location": "https://example.com/next"})
 
