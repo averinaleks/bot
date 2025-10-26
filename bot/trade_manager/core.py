@@ -403,20 +403,45 @@ class TradeManager:
                         exc,
                     )
                     unsent_path = None
-            logger_cls = telegram_logger_factory or TelegramLogger
-            try:
-                self.telegram_logger = cast(
-                    TelegramLoggerType,
-                    logger_cls(
-                        telegram_bot,
-                        chat_id,
-                        max_queue_size=config.get("telegram_queue_size"),
-                        unsent_path=unsent_path,
-                    ),
-                )
-            except TypeError:  # pragma: no cover - stub without args
-                stub_factory = cast(Callable[[], TelegramLoggerType], logger_cls)
-                self.telegram_logger = stub_factory()
+            logger_candidate: TelegramLoggerType | type[TelegramLoggerType] | Callable[
+                ..., TelegramLoggerType
+            ]
+            if telegram_logger_factory is None:
+                logger_candidate = TelegramLogger
+            else:
+                factory_obj: Any = telegram_logger_factory
+                if callable(factory_obj):
+                    resolved = None
+                    for resolver in (
+                        lambda: factory_obj(config),
+                        lambda: factory_obj(config=config),
+                    ):
+                        try:
+                            resolved = resolver()
+                            break
+                        except TypeError:
+                            continue
+                    logger_candidate = cast(Any, resolved if resolved is not None else factory_obj)
+                else:
+                    logger_candidate = cast(Any, factory_obj)
+
+            candidate = logger_candidate or TelegramLogger
+            if callable(candidate):
+                try:
+                    self.telegram_logger = cast(
+                        TelegramLoggerType,
+                        candidate(
+                            telegram_bot,
+                            chat_id,
+                            max_queue_size=config.get("telegram_queue_size"),
+                            unsent_path=unsent_path,
+                        ),
+                    )
+                except TypeError:  # pragma: no cover - stub without args
+                    stub_factory = cast(Callable[[], TelegramLoggerType], candidate)
+                    self.telegram_logger = stub_factory()
+            else:
+                self.telegram_logger = cast(TelegramLoggerType, candidate)
             if not hasattr(self.telegram_logger, "send_telegram_message"):
                 async def _noop(*a, **k):
                     pass

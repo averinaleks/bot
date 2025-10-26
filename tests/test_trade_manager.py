@@ -482,6 +482,37 @@ def test_open_position_places_tp_sl_orders():
     assert order['sl'] == pytest.approx(99.0)
 
 
+def test_trade_manager_telegram_factory_from_config(monkeypatch):
+    cfg = make_config()
+    cfg.service_factories["telegram_logger"] = (
+        "services.service_factories:build_telegram_logger"
+    )
+    cfg.use_offline_services = True
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+
+    factory_path = cfg.service_factories["telegram_logger"]
+    module_name, attr_name = factory_path.split(":", 1)
+    factory_module = importlib.import_module(module_name)
+    factory = getattr(factory_module, attr_name)
+
+    dh = DummyDataHandler()
+    tm = TradeManager(
+        cfg,
+        dh,
+        None,
+        None,
+        "chat",
+        telegram_logger_factory=factory,
+    )
+
+    async def _send():
+        await tm.telegram_logger.send_telegram_message("ok")
+
+    asyncio.run(_send())
+
+
 def test_trailing_stop_to_breakeven():
     dh = DummyDataHandler(pairs=['BTCUSDT', 'ETHUSDT'])
     cfg = make_config()
