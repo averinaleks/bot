@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import errno
 import functools
 import logging
@@ -324,9 +325,18 @@ class TelegramLogger(logging.Handler):
                     )
 
                 data = payload.encode("utf-8")
-                written = os.write(fd, data)
-                if written != len(data):
-                    raise OSError(errno.EIO, "failed to persist Telegram message")
+                total = 0
+                length = len(data)
+                while total < length:
+                    chunk = data[total:]
+                    written = os.write(fd, chunk)
+                    if written == 0:
+                        raise OSError(
+                            errno.EIO, "failed to persist Telegram message"
+                        )
+                    total += written
+                with contextlib.suppress(OSError):
+                    os.fsync(fd)
             finally:
                 os.close(fd)
 
