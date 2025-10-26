@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Mapping, TypeVar, cast
 from bot.ray_compat import ray
 from flask import Flask, Response, jsonify, request
 
-from services.stubs import create_httpx_stub
+from services.stubs import create_httpx_stub, is_offline_env
 
 from . import server_common
 from .core import (
@@ -157,10 +157,19 @@ def _load_env() -> None:
     global TRADE_MANAGER_TOKEN
     server_common.load_environment()
     TRADE_MANAGER_TOKEN = server_common.get_api_token()
-    if not TRADE_MANAGER_TOKEN:
+    if TRADE_MANAGER_TOKEN:
+        return
+    offline_requested = is_offline_env()
+    test_requested = os.getenv("TEST_MODE") == "1" or IS_TEST_MODE
+    if offline_requested or test_requested:
         logger.warning(
             "TRADE_MANAGER_TOKEN пуст, все торговые запросы будут отвергнуты"
         )
+        return
+    raise RuntimeError(
+        "TRADE_MANAGER_TOKEN обязателен для запуска TradeManager. "
+        "Задайте переменную или включите OFFLINE_MODE=1 / TEST_MODE=1."
+    )
 
 
 def _require_token() -> tuple[Any, int] | None:
@@ -588,7 +597,12 @@ def main() -> None:
     """Entry point for running the service as a script."""
     configure_logging()
     setup_multiprocessing()
-    _load_env()
+    try:
+        _load_env()
+    except RuntimeError as exc:
+        logger.critical("Ошибка инициализации окружения: %s", exc)
+        print(f"TradeManager service startup failed: {exc}", file=sys.stderr)
+        sys.exit(1)
     try:
         host = _resolve_host()
     except InvalidHostError as exc:  # pragma: no cover - configuration errors
