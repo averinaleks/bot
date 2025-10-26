@@ -29,7 +29,7 @@ ccxt==4.5.12
 # pinned numpy; keep everything aligned with the Docker images.
 scikit-learn==1.7.2; python_version<'3.12'
 joblib==1.5.2
-setuptools>=80.9.0
+setuptools>=80.9.0,<81
 types-requests
 mypy==1.18.2
 hypothesis>=6.90.0
