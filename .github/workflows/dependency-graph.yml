@@ -100,12 +100,26 @@ jobs:
               return _normalise(current)
 
 
+          def _expand_aliases(candidate: str) -> Iterable[str]:
+              yield candidate
+              if candidate.startswith("payload."):
+                  suffix = candidate.split(".", 1)[1]
+                  if suffix:
+                      yield f"github.event.{suffix}"
+
+
           def _lines(block: str) -> Tuple[str, ...]:
-              return tuple(
-                  line.strip()
-                  for line in block.splitlines()
-                  if line.strip()
-              )
+              seen: set[str] = set()
+              expanded: list[str] = []
+              for raw in block.splitlines():
+                  candidate = raw.strip()
+                  if not candidate:
+                      continue
+                  for alias in _expand_aliases(candidate):
+                      if alias and alias not in seen:
+                          seen.add(alias)
+                          expanded.append(alias)
+              return tuple(expanded)
 
 
           def _choose(candidates: Iterable[str]) -> str:
