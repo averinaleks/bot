@@ -6,6 +6,7 @@
 ``sys.path`` или ``noqa``.
 """
 
+import importlib
 from typing import TYPE_CHECKING, Any, cast
 
 from bot import config as bot_config
@@ -63,3 +64,7 @@ else:  # pragma: no cover - реальная инициализация
         "get_http_client",
         "close_http_client",
     ]
+
+
+# Expose the service module to simplify reloads in tests.
+service = importlib.import_module(f"{__name__}.service")

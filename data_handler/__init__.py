@@ -8,6 +8,11 @@ import os
 from typing import Any
 
 from .storage import DEFAULT_PRICE
+from pathlib import Path
+
+__all__ = []  # populated below when DataHandler is resolved
+__path__ = [str(Path(__file__).resolve().parent)]
+
 
 try:  # Optional dependency
     import numpy as _NUMPY  # type: ignore[import-not-found]

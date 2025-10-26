@@ -8,8 +8,15 @@ import types
 import pytest
 
 
+import bot.config as bot_config
+
 @pytest.mark.asyncio
 async def test_create_trade_manager_uses_shared_config(monkeypatch):
+    monkeypatch.setenv("OFFLINE_MODE", "0")
+    monkeypatch.setattr(bot_config, "OFFLINE_MODE", False, raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager", raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager.service", raising=False)
+
     import bot.trade_manager
 
     module = importlib.reload(bot.trade_manager.service)
@@ -83,6 +90,11 @@ async def test_create_trade_manager_uses_shared_config(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_trade_manager_without_telegram_dependency(monkeypatch, caplog):
+    monkeypatch.setenv("OFFLINE_MODE", "0")
+    monkeypatch.setattr(bot_config, "OFFLINE_MODE", False, raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager", raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager.service", raising=False)
+
     import bot.trade_manager
 
     module = importlib.reload(bot.trade_manager.service)
@@ -174,6 +186,11 @@ async def test_create_trade_manager_without_telegram_dependency(monkeypatch, cap
 
 
 def test_package_service_uses_common_token_validator(monkeypatch):
+    monkeypatch.setenv("OFFLINE_MODE", "0")
+    monkeypatch.setattr(bot_config, "OFFLINE_MODE", False, raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager", raising=False)
+    monkeypatch.delitem(sys.modules, "bot.trade_manager.service", raising=False)
+
     import bot.trade_manager
 
     module = importlib.reload(bot.trade_manager.service)

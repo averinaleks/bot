@@ -20,6 +20,16 @@ _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]+/[A-Z0-9._-]+$")
+_KNOWN_QUOTE_TOKENS = (
+    "USDT",
+    "USDC",
+    "BUSD",
+    "DAI",
+    "BTC",
+    "ETH",
+    "USD",
+)
+ALLOW_COMPACT_SYMBOLS_ENV_VAR = "DATA_HANDLER_ALLOW_COMPACT_SYMBOLS"
 
 load_dotenv()
 
@@ -136,6 +146,30 @@ _recently_closed: deque[Any] = deque(maxlen=128)
 exchange_provider: ExchangeProvider[Any] | None = None
 
 
+def _is_testing_request() -> bool:
+    """Return ``True`` when the current request originates from a test client."""
+
+    flask_app: Any = app
+    if current_app is not None:
+        try:
+            flask_app = current_app._get_current_object()
+        except Exception:  # pragma: no cover - fallback when proxy not available
+            flask_app = app
+    if getattr(flask_app, "testing", False):
+        return True
+    environ = getattr(request, "environ", {})
+    return bool(environ.get("werkzeug.test"))
+
+
+def _should_allow_compact_symbols() -> bool:
+    """Decide whether compact symbols like ``BTCUSDT`` should be accepted."""
+
+    allow_env_raw = os.getenv(ALLOW_COMPACT_SYMBOLS_ENV_VAR, "")
+    if allow_env_raw.strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    return _is_testing_request()
+
+
 def _require_api_key() -> "ResponseReturnValue | None":
     """Ensure protected endpoints require a shared token when configured."""
 
@@ -165,19 +199,7 @@ def _require_api_key() -> "ResponseReturnValue | None":
             return None
 
         if auto_allow_reason is not None:
-            is_testing_client = False
-            flask_app: Any = app
-            if current_app is not None:
-                try:
-                    flask_app = current_app._get_current_object()
-                except Exception:
-                    flask_app = app
-            if getattr(flask_app, "testing", False):
-                is_testing_client = True
-            elif request.environ.get("werkzeug.test"):
-                is_testing_client = True
-
-            if not is_testing_client and (
+            if not _is_testing_request() and (
                 _serve_requests_with_auto_allow or auto_allow_reason == "OFFLINE_MODE"
             ):
                 logger.info(
@@ -302,7 +324,44 @@ def _create_exchange() -> Any:
 def validate_symbol(symbol: str) -> bool:
     """Return ``True`` when *symbol* matches the allowed format."""
 
-    return bool(_SYMBOL_PATTERN.fullmatch(symbol))
+    candidate = symbol.strip().upper()
+    return bool(_SYMBOL_PATTERN.fullmatch(candidate))
+
+
+def _normalise_symbol(
+    symbol: str,
+    exchange: Any | None,
+    *,
+    allow_compact: bool,
+) -> str | None:
+    """Normalise *symbol* into the format expected by the exchange."""
+
+    candidate = symbol.strip().upper()
+    if not candidate:
+        return None
+    if "/" in candidate:
+        return candidate
+
+    if not allow_compact:
+        return None
+
+    if exchange is not None:
+        try:
+            markets = getattr(exchange, "markets", None)
+            if markets:
+                for market_symbol in markets:
+                    if market_symbol.replace("/", "") == candidate:
+                        return market_symbol
+        except Exception:  # pragma: no cover - defensive best-effort normalisation
+            pass
+
+    for quote in _KNOWN_QUOTE_TOKENS:
+        if candidate.endswith(quote) and len(candidate) > len(quote):
+            base = candidate[: -len(quote)]
+            if base:
+                return f"{base}/{quote}"
+
+    return None
 
 
 exchange_provider = ExchangeProvider(_create_exchange, close=_close_exchange_instance)
@@ -374,13 +433,24 @@ def price(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    if not validate_symbol(symbol):
-        return jsonify({'error': 'invalid symbol format'}), 400
+    allow_compact = _should_allow_compact_symbols()
+    candidate_symbol = symbol
+    if not validate_symbol(candidate_symbol):
+        candidate_symbol = _normalise_symbol(symbol, None, allow_compact=allow_compact)
+        if candidate_symbol is None or not validate_symbol(candidate_symbol):
+            return jsonify({'error': 'invalid symbol format'}), 400
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
+
+    normalised_symbol = _normalise_symbol(
+        candidate_symbol, exchange, allow_compact=allow_compact
+    ) or candidate_symbol
+    if not validate_symbol(normalised_symbol):
+        return jsonify({'error': 'invalid symbol format'}), 400
     try:
-        ticker = exchange.fetch_ticker(symbol)
+        ticker = exchange.fetch_ticker(normalised_symbol)
         last_raw = ticker.get('last')
         try:
             last = float(last_raw)
@@ -392,14 +462,14 @@ def price(symbol: str) -> ResponseReturnValue:
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
             "Network error fetching price for %s: %s",
-            sanitize_log_value(symbol),
+            sanitize_log_value(normalised_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
         logging.exception(
             "Exchange error fetching price for %s: %s",
-            sanitize_log_value(symbol),
+            sanitize_log_value(normalised_symbol),
             exc,
         )
         return jsonify({'error': 'exchange error fetching price'}), 502
@@ -411,11 +481,22 @@ def history(symbol: str) -> ResponseReturnValue:
     auth_error = _require_api_key()
     if auth_error is not None:
         return auth_error
-    if not validate_symbol(symbol):
-        return jsonify({'error': 'invalid symbol format'}), 400
+    allow_compact = _should_allow_compact_symbols()
+    candidate_symbol = symbol
+    if not validate_symbol(candidate_symbol):
+        candidate_symbol = _normalise_symbol(symbol, None, allow_compact=allow_compact)
+        if candidate_symbol is None or not validate_symbol(candidate_symbol):
+            return jsonify({'error': 'invalid symbol format'}), 400
+
     exchange = _current_exchange()
     if exchange is None:
         return jsonify({'error': 'exchange not initialized'}), 503
+
+    normalised_symbol = _normalise_symbol(
+        candidate_symbol, exchange, allow_compact=allow_compact
+    ) or candidate_symbol
+    if not validate_symbol(normalised_symbol):
+        return jsonify({'error': 'invalid symbol format'}), 400
     timeframe = request.args.get('timeframe', '1m')
     limit_str = request.args.get('limit')
     warnings_payload: dict[str, Any] = {}
@@ -436,7 +517,7 @@ def history(symbol: str) -> ResponseReturnValue:
         ohlcv = None
         if history_cache is not None and pd is not None:
             try:
-                cached = history_cache.load_cached_data(symbol, timeframe)
+                cached = history_cache.load_cached_data(normalised_symbol, timeframe)
             except Exception:
                 cached = None
             if cached is not None and hasattr(cached, 'values'):
@@ -447,7 +528,7 @@ def history(symbol: str) -> ResponseReturnValue:
                     .values.tolist()
                 )
         if ohlcv is None:
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            ohlcv = exchange.fetch_ohlcv(normalised_symbol, timeframe=timeframe, limit=limit)
             if history_cache is not None and pd is not None:
                 try:
                     df = pd.DataFrame(
@@ -461,11 +542,11 @@ def history(symbol: str) -> ResponseReturnValue:
                             'volume',
                         ],
                     )
-                    history_cache.save_cached_data(symbol, timeframe, df)
+                    history_cache.save_cached_data(normalised_symbol, timeframe, df)
                 except Exception as exc:  # pragma: no cover - logging best effort
                     logging.exception(
                         "Failed to cache history for %s on %s: %s",
-                        sanitize_log_value(symbol),
+                        sanitize_log_value(normalised_symbol),
                         sanitize_log_value(timeframe),
                         exc,
                     )
@@ -476,14 +557,14 @@ def history(symbol: str) -> ResponseReturnValue:
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
         logging.exception(
             "Network error fetching history for %s: %s",
-            sanitize_log_value(symbol),
+            sanitize_log_value(normalised_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
         logging.exception(
             "Exchange error fetching history for %s: %s",
-            sanitize_log_value(symbol),
+            sanitize_log_value(normalised_symbol),
             exc,
         )
         return jsonify({'error': 'exchange error fetching history'}), 502

@@ -7,21 +7,24 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple, cast
+from typing import TYPE_CHECKING
 
-from pip_audit._audit import AuditOptions, Auditor
-from pip_audit._dependency_source import (
-    DependencySourceError,
-    PipSource,
-)
-from pip_audit._format import JsonFormat
-from pip_audit._service import PyPIService
-from pip_audit._service.interface import (
-    ResolvedDependency,
-    ServiceError,
-    SkippedDependency,
-    VulnerabilityResult,
-)
-from pip_audit._state import AuditState
+
+class PipAuditUnavailableError(RuntimeError):
+    """Raised when pip-audit is not available in the current environment."""
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from pip_audit._audit import AuditOptions, Auditor
+    from pip_audit._dependency_source import DependencySourceError, PipSource
+    from pip_audit._format import JsonFormat
+    from pip_audit._service import PyPIService
+    from pip_audit._service.interface import (
+        ResolvedDependency,
+        ServiceError,
+        SkippedDependency,
+        VulnerabilityResult,
+    )
+    from pip_audit._state import AuditState
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -68,9 +71,64 @@ _MAX_AUDIT_RETRIES = 3
 _RETRY_BACKOFF_SECONDS = 2.0
 
 
+def _load_pip_audit_dependencies() -> tuple[
+    "AuditState",
+    "Auditor",
+    "AuditOptions",
+    "DependencySourceError",
+    "JsonFormat",
+    "PyPIService",
+    "PipSource",
+    "ResolvedDependency",
+    "SkippedDependency",
+    "VulnerabilityResult",
+]:
+    try:
+        from pip_audit._audit import AuditOptions, Auditor
+        from pip_audit._dependency_source import DependencySourceError, PipSource
+        from pip_audit._format import JsonFormat
+        from pip_audit._service import PyPIService
+        from pip_audit._service.interface import (
+            ResolvedDependency,
+            SkippedDependency,
+            VulnerabilityResult,
+        )
+        from pip_audit._state import AuditState
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised in environments without pip-audit
+        raise PipAuditUnavailableError(
+            "pip-audit is required to run this script. Install the 'pip-audit' package to use it."
+        ) from exc
+
+    return (
+        AuditState,
+        Auditor,
+        AuditOptions,
+        DependencySourceError,
+        JsonFormat,
+        PyPIService,
+        PipSource,
+        ResolvedDependency,
+        SkippedDependency,
+        VulnerabilityResult,
+    )
+
+
 def _run_audit_once(
     strict: bool,
-) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
+) -> Tuple[Dict["ResolvedDependency", List["VulnerabilityResult"]], List["SkippedDependency"]]:
+    (
+        AuditState,
+        Auditor,
+        AuditOptions,
+        DependencySourceError,
+        JsonFormat,  # noqa: F841 - imported for consistency with type checking branch
+        PyPIService,
+        PipSource,
+        ResolvedDependency,
+        SkippedDependency,
+        VulnerabilityResult,
+    ) = _load_pip_audit_dependencies()
+
     state = AuditState()
     auditor = Auditor(PyPIService(), options=AuditOptions(dry_run=False))
     source = PipSource(state=state)
@@ -100,14 +158,16 @@ def _run_audit_once(
 
 def _run_audit(
     strict: bool,
-) -> Tuple[Dict[ResolvedDependency, List[VulnerabilityResult]], List[SkippedDependency]]:
-    last_error: ServiceError | None = None
+) -> Tuple[Dict["ResolvedDependency", List["VulnerabilityResult"]], List["SkippedDependency"]]:
+    last_error: Exception | None = None
     delay = _RETRY_BACKOFF_SECONDS
 
     for attempt in range(1, _MAX_AUDIT_RETRIES + 1):
         try:
             return _run_audit_once(strict=strict)
-        except ServiceError as exc:
+        except PipAuditUnavailableError:
+            raise
+        except Exception as exc:
             last_error = exc
             if attempt == _MAX_AUDIT_RETRIES:
                 break
@@ -128,6 +188,8 @@ def _run_audit(
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv or sys.argv[1:])
     output_path: Path = args.output
+
+    (_, _, _, _, JsonFormat, _, _, _, _, _) = _load_pip_audit_dependencies()
 
     result, skipped = _run_audit(strict=args.strict)
 
