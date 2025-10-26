@@ -5,6 +5,7 @@ import inspect
 import logging
 import os
 import re
+import importlib
 import shutil
 import sys
 import tempfile
@@ -14,8 +15,9 @@ import weakref
 from functools import wraps
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
+httpx: Any
 try:  # pragma: no cover - optional dependency for HTTP error handling
     import httpx
 except Exception as exc:  # pragma: no cover - gracefully degrade when missing
@@ -26,7 +28,7 @@ except Exception as exc:  # pragma: no cover - gracefully degrade when missing
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args)
 
-    httpx = _HttpxStub()  # type: ignore[assignment]
+    httpx = cast(Any, _HttpxStub())
     _HTTPX_IMPORT_ERROR: Exception | None = exc
 else:  # pragma: no cover - executed in environments with httpx installed
     _HTTPX_IMPORT_ERROR = None
@@ -42,17 +44,23 @@ logger = logging.getLogger("TradingBot")
 
 
 _STATE_MODULE_NAME = "bot._utils_state"
-_state_module = sys.modules.get(_STATE_MODULE_NAME)
-if _state_module is None:
-    _state_module = ModuleType(_STATE_MODULE_NAME)
-    _state_module.numba_aliases = []  # type: ignore[attr-defined]
-    sys.modules[_STATE_MODULE_NAME] = _state_module
-elif not hasattr(_state_module, "numba_aliases"):
-    _state_module.numba_aliases = []  # type: ignore[attr-defined]
+class _UtilsStateModule(ModuleType):
+    """Private module wrapper storing shared state for utils helpers."""
 
-_NUMBA_MODULE_ALIASES: List[weakref.ReferenceType[ModuleType]] = (
-    _state_module.numba_aliases  # type: ignore[attr-defined]
-)
+    numba_aliases: List[weakref.ReferenceType[ModuleType]]
+
+
+_existing_state = sys.modules.get(_STATE_MODULE_NAME)
+if isinstance(_existing_state, _UtilsStateModule):
+    _state_module = _existing_state
+    if not hasattr(_state_module, "numba_aliases"):
+        _state_module.numba_aliases = []
+else:
+    _state_module = _UtilsStateModule(_STATE_MODULE_NAME)
+    _state_module.numba_aliases = []
+    sys.modules[_STATE_MODULE_NAME] = _state_module
+
+_NUMBA_MODULE_ALIASES: List[weakref.ReferenceType[ModuleType]] = _state_module.numba_aliases
 
 
 def _numba_reset_requested() -> bool:
@@ -103,7 +111,7 @@ class _TelegramLoggerStub:
         logger.debug("TelegramLogger stub shutdown invoked")
 
 
-T = TypeVar("T")
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def _wrap_tempfile_mkdtemp() -> None:
@@ -112,7 +120,7 @@ def _wrap_tempfile_mkdtemp() -> None:
         return
 
     original = tempfile.mkdtemp
-    tempfile._bot_original_mkdtemp = original  # type: ignore[attr-defined]
+    setattr(tempfile, "_bot_original_mkdtemp", original)
 
     def _safe_mkdtemp(*args, **kwargs):
         target_dir = kwargs.get("dir")
@@ -157,7 +165,7 @@ def reset_tempdir_cache() -> None:
     """
 
     try:
-        tempfile.tempdir = None  # type: ignore[assignment]
+        tempfile.tempdir = None
     except (AttributeError, TypeError, PermissionError) as exc:
         # ``tempfile`` guarantees the attribute exists, but guard against
         # environments that restrict attribute assignment on the module.
@@ -233,7 +241,7 @@ def ensure_writable_directory(
     raise last_error
 
 
-def retry(max_attempts: int, delay_fn: Callable[[float], float]):
+def retry(max_attempts: int, delay_fn: Callable[[float], float]) -> Callable[[FuncT], FuncT]:
     """Декоратор повторного выполнения функции с экспоненциальной задержкой.
 
     ``delay_fn`` получает базовую задержку ``2 ** (attempt - 1)`` и может
@@ -241,11 +249,11 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]):
     джиттер). Поддерживаются как обычные, так и асинхронные функции.
     """
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: FuncT) -> FuncT:
         if inspect.iscoroutinefunction(func):
 
             @wraps(func)
-            async def async_wrapper(*args, **kwargs):
+            async def async_wrapper(*args: Any, **kwargs: Any):
                 attempt = 1
                 while True:
                     try:
@@ -259,10 +267,10 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]):
                         await asyncio.sleep(delay)
                         attempt += 1
 
-            return async_wrapper  # type: ignore[return-value]
+            return cast(FuncT, async_wrapper)
 
         @wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args: Any, **kwargs: Any):
             attempt = 1
             while True:
                 try:
@@ -276,7 +284,7 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]):
                     time.sleep(delay)
                     attempt += 1
 
-        return sync_wrapper
+        return cast(FuncT, sync_wrapper)
 
     return decorator
 
@@ -336,7 +344,7 @@ def configure_logging() -> None:
 
 # Hide Numba performance warnings
 try:
-    from numba import jit, prange, NumbaPerformanceWarning  # type: ignore
+    from numba import jit, prange, NumbaPerformanceWarning
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
@@ -356,16 +364,17 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
 
         return decorator
 
-    def prange(*args, **kwargs):  # type: ignore
+    def prange(*args: int, **kwargs: int) -> range:
         return range(*args, **kwargs)
 
+np: ModuleType | None
 try:
     import numpy as np
 except ImportError:
     np = None
 
 try:  # pragma: no cover - prefer package import to avoid shadowing
-    from bot.telegram_logger import TelegramLogger as _TelegramLoggerImpl  # type: ignore  # noqa: F401
+    from bot.telegram_logger import TelegramLogger as _TelegramLoggerImpl  # noqa: F401
 except Exception as exc:  # pragma: no cover - fallback when package import fails
     if not _TELEGRAMLOGGER_IMPORT_WARNED:
         logger.warning(
@@ -374,7 +383,7 @@ except Exception as exc:  # pragma: no cover - fallback when package import fail
         )
         _TELEGRAMLOGGER_IMPORT_WARNED = True
     try:
-        from telegram_logger import TelegramLogger as _TelegramLoggerImpl  # type: ignore  # noqa: F401
+        from telegram_logger import TelegramLogger as _TelegramLoggerImpl  # noqa: F401
     except Exception:
         _TelegramLoggerImpl = _TelegramLoggerStub
 
@@ -423,28 +432,52 @@ def _make_safe_telegram_logger(logger_cls: Any) -> Any:
 TelegramLogger = _make_safe_telegram_logger(_TelegramLoggerImpl)
 
 
+RetryAfter: type[Exception]
+BadRequest: type[Exception]
+Forbidden: type[Exception]
+
 try:
-    from telegram.error import RetryAfter, BadRequest, Forbidden
+    from telegram.error import (
+        BadRequest as _TelegramBadRequest,
+        Forbidden as _TelegramForbidden,
+        RetryAfter as _TelegramRetryAfter,
+    )
 except ImportError as exc:  # pragma: no cover - allow missing telegram package
     logging.getLogger("TradingBot").error(
         "Telegram package not available: %s",
         sanitize_log_value(str(exc)),
     )
 
-    class _TelegramError(Exception):
-        pass
+    class _RetryAfterFallback(Exception):
+        """Fallback RetryAfter error when python-telegram-bot is unavailable."""
 
-    RetryAfter = BadRequest = Forbidden = _TelegramError
+    class _BadRequestFallback(Exception):
+        """Fallback BadRequest error when python-telegram-bot is unavailable."""
+
+    class _ForbiddenFallback(Exception):
+        """Fallback Forbidden error when python-telegram-bot is unavailable."""
+
+    RetryAfter = _RetryAfterFallback
+    BadRequest = _BadRequestFallback
+    Forbidden = _ForbiddenFallback
+else:
+    RetryAfter = _TelegramRetryAfter
+    BadRequest = _TelegramBadRequest
+    Forbidden = _TelegramForbidden
 
 
+HTTP: type
 try:
-    from pybit.unified_trading import HTTP
+    from pybit.unified_trading import HTTP as _PybitHTTP
 except ImportError:  # pragma: no cover - pybit is optional in CI
-    class HTTP:  # type: ignore
+    class _HTTPFallback:
         """Fallback HTTP stub when pybit is unavailable."""
 
         def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
             raise ImportError("pybit is required for HTTP operations")
+    HTTP = _HTTPFallback
+else:
+    HTTP = _PybitHTTP
 
 # Mapping from ccxt/ccxtpro style timeframes to Bybit interval strings
 _BYBIT_INTERVALS = {
@@ -497,6 +530,15 @@ def safe_int(
         return default
 
 
+def _call_bool(func: Callable[[], Any] | None) -> bool:
+    """Call ``func`` if callable and coerce the result to ``bool``."""
+
+    if func is None:
+        return False
+    result = func()
+    return bool(result)
+
+
 def is_cuda_available() -> bool:
     """Safely check whether CUDA is available via PyTorch."""
 
@@ -515,12 +557,15 @@ def is_cuda_available() -> bool:
     if shutil.which("nvidia-smi") is None:
         return False
 
-    try:  # Lazy import to avoid heavy initialization when unused
-        import torch  # type: ignore
-
-        if not torch.backends.cuda.is_built():
+    try:
+        torch_mod = importlib.import_module("torch")
+        backends = getattr(torch_mod, "backends", None)
+        cuda_backend = getattr(backends, "cuda", None)
+        if not _call_bool(getattr(cuda_backend, "is_built", None)):
             return False
-        return torch.cuda.is_available()
+
+        cuda_module = getattr(torch_mod, "cuda", None)
+        return _call_bool(getattr(cuda_module, "is_available", None))
     except ImportError as exc:  # pragma: no cover - optional dependency
         logging.getLogger("TradingBot").warning(
             "CUDA availability check failed: %s", exc
@@ -620,7 +665,7 @@ class BybitSDKAsync:
         self.last_http_status = 200
         self.last_response_headers: Dict = {}
         # Clear credentials after initializing the client to avoid lingering secrets
-        api_key = api_secret = None
+        del api_key, api_secret
 
     def _call_client(self, method: str, *args, **kwargs):
         res = None
@@ -1059,7 +1104,9 @@ def calculate_volume_profile(prices, volumes, bins=50):
 
 
 try:  # pragma: no cover - allow importing without package
-    from bot.cache import HistoricalDataCache  # noqa: E402
+    from bot.cache import HistoricalDataCache as _HistoricalDataCache  # noqa: E402
 except ImportError as exc:  # pragma: no cover - fallback when package missing
     logger.warning("HistoricalDataCache import failed: %s", exc)
-    HistoricalDataCache = None  # type: ignore
+    HistoricalDataCache: Any | None = None
+else:
+    HistoricalDataCache = cast(Any, _HistoricalDataCache)
