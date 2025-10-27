@@ -30,7 +30,7 @@ else:  # pragma: no cover - реальная инициализация
     from bot.utils_loader import require_utils
 
     _utils = require_utils("TelegramLogger")
-    TelegramLogger = cast(type[TelegramLoggerType], _utils.TelegramLogger)
+    TelegramLogger: type[TelegramLoggerType] = _utils.TelegramLogger
 
     from .core import TradeManager as _TradeManager
     from .service import (
@@ -44,7 +44,7 @@ else:  # pragma: no cover - реальная инициализация
         _ready_event,
     )
 
-    TradeManager = cast(type[TradeManagerType], _TradeManager)
+    TradeManager: type[TradeManagerType] = _TradeManager
 
     # Псевдонимы синхронных помощников оставлены для обратной совместимости
     get_http_client = get_async_http_client

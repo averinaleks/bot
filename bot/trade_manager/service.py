@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import inspect
 import ipaddress
 import json
@@ -34,11 +35,9 @@ from .core import (
 httpx: Any
 
 try:  # pragma: no cover - exercised in environments without httpx
-    import httpx as _httpx  # type: ignore
+    httpx = importlib.import_module("httpx")
 except Exception:  # noqa: BLE001 - ensure service works without httpx installed
     httpx = create_httpx_stub()
-else:
-    httpx = _httpx
 
 __all__ = [
     "api_app",
@@ -58,20 +57,23 @@ __all__ = [
 
 api_app = Flask(__name__)
 
+asgi_app: Any
+
 # Expose an ASGI-compatible application so Gunicorn's UvicornWorker can run
 # this Flask app without raising "Flask.__call__() missing start_response".
-try:  # Flask 2.2+ provides ``asgi_app`` for native ASGI support
-    asgi_app = api_app.asgi_app  # type: ignore[attr-defined]
-except AttributeError:  # pragma: no cover - older Flask versions
+asgi_app_attr = getattr(api_app, "asgi_app", None)
+if asgi_app_attr is not None:
+    asgi_app = asgi_app_attr
+else:  # pragma: no cover - older Flask versions
     try:
-        from a2wsgi import WSGIMiddleware as A2WSGIMiddleware  # type: ignore
+        from a2wsgi import WSGIMiddleware as A2WSGIMiddleware
     except ImportError as exc:  # pragma: no cover - fallback if a2wsgi isn't installed
         logger.exception("Не удалось импортировать a2wsgi (%s): %s", type(exc).__name__, exc)
         from uvicorn.middleware.wsgi import WSGIMiddleware as UvicornWSGIMiddleware
 
-        asgi_app = UvicornWSGIMiddleware(api_app)  # type: ignore[arg-type]
+        asgi_app = UvicornWSGIMiddleware(cast(Any, api_app))
     else:
-        asgi_app = A2WSGIMiddleware(api_app)  # type: ignore[arg-type]
+        asgi_app = A2WSGIMiddleware(cast(Any, api_app))
 
 # Track when the TradeManager initialization finishes
 _ready_event = threading.Event()

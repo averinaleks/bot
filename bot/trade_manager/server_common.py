@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import hmac
 import logging
 import os
@@ -114,10 +115,10 @@ class ExchangeRuntime:
 
         return self._ccxt
 
-    def _ensure_ccxt(self, service_name: str):
+    def _ensure_ccxt(self, service_name: str) -> Any:
         try:  # optional dependency
-            import ccxt  # type: ignore
-        except ImportError as exc:  # pragma: no cover - optional in offline mode
+            ccxt = importlib.import_module("ccxt")
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional in offline mode
             if _allow_offline_mode():
                 self._logger.warning(
                     "`ccxt` не найден: %s использует OfflineBybit. "
@@ -126,7 +127,7 @@ class ExchangeRuntime:
                 )
                 from services.offline import OfflineBybit
 
-                return SimpleNamespace(  # type: ignore[return-value]
+                return SimpleNamespace(
                     bybit=OfflineBybit,
                     BaseError=Exception,
                     NetworkError=Exception,

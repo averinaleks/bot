@@ -13,6 +13,7 @@ import sys
 import types
 import json
 import logging
+import importlib
 import re
 import threading
 import time
@@ -197,7 +198,7 @@ if _offline_intent:
     _httpx = service_stubs.create_httpx_stub()
 else:
     try:  # pragma: no cover - optional dependency
-        import httpx as _imported_httpx  # type: ignore  # noqa: E402
+        _imported_httpx = importlib.import_module("httpx")  # noqa: E402
     except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - dependency missing
         _module_logger.warning("httpx import failed: %s", exc)
         _httpx = service_stubs.create_httpx_stub()
@@ -205,7 +206,7 @@ else:
         _module_logger.exception("Unexpected error importing httpx: %s", exc)
         _httpx = service_stubs.create_httpx_stub()
     else:
-        _httpx = cast(Any, _imported_httpx)
+        _httpx = _imported_httpx
 
 httpx = cast(Any, _httpx)
 HTTPError = httpx.HTTPError
@@ -880,7 +881,7 @@ class TradeManager:
             )
             return
         if inspect.isawaitable(result):
-            awaitable = cast(Awaitable[Any], result)
+            awaitable: Awaitable[Any] = result
 
             async def _consume(value: Awaitable[Any]) -> Any:
                 return await value

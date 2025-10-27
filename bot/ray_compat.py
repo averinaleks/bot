@@ -171,7 +171,7 @@ def _load_ray() -> tuple[Any, bool]:
         return _register_stub()
 
     try:
-        import ray  # type: ignore
+        import ray
     except ImportError:
         return _register_stub()
 

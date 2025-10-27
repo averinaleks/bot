@@ -206,11 +206,14 @@ def execute_with_retries_sync(
     """Синхронная обёртка над :func:`execute_with_retries`."""
 
     async def _runner() -> Any:
+        async def _async_sleep(delay_seconds: float) -> None:
+            sleep(delay_seconds)
+
         return await execute_with_retries(
             call,
             attempts=attempts,
             delay=delay,
-            sleep=sleep,  # type: ignore[arg-type]
+            sleep=_async_sleep,
             logger=logger,
             description=description,
             exceptions=exceptions,

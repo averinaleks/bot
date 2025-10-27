@@ -41,18 +41,24 @@ def set_model_dir(path: Path | str) -> None:
     MODEL_DIR = Path(path).resolve(strict=False)
 
 
+joblib: ModuleType | None = None
+_joblib_numpy_pickle: Any | None = None
+_joblib_numpy_pickle_compat: Any | None = None
+
 try:  # joblib is optional in some environments
-    import joblib  # type: ignore
-    from joblib import numpy_pickle as _joblib_numpy_pickle  # type: ignore
+    import joblib as _joblib_module
+    from joblib import numpy_pickle as _joblib_numpy_pickle_module
 except Exception:  # pragma: no cover - joblib not available
-    joblib = None  # type: ignore[assignment]
-    _joblib_numpy_pickle = None  # type: ignore[assignment]
-    _joblib_numpy_pickle_compat = None  # type: ignore[assignment]
+    pass
 else:  # pragma: no cover - exercised in integration tests
+    joblib = _joblib_module
+    _joblib_numpy_pickle = _joblib_numpy_pickle_module
     try:
-        from joblib import numpy_pickle_compat as _joblib_numpy_pickle_compat  # type: ignore
+        from joblib import numpy_pickle_compat as _joblib_numpy_pickle_compat_module
     except Exception:  # pragma: no cover - optional compatibility helpers
-        _joblib_numpy_pickle_compat = None  # type: ignore[assignment]
+        pass
+    else:
+        _joblib_numpy_pickle_compat = _joblib_numpy_pickle_compat_module
 
 
 _DEFAULT_SAFE_JOBLIB_MODULES: Tuple[str, ...] = (
@@ -143,19 +149,21 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             "joblib недоступен: установите зависимость для работы с артефактами"
         )
 
+    assert _joblib_numpy_pickle is not None
     original_unpickler: type[Any] = _joblib_numpy_pickle.NumpyUnpickler
     compat_unpickler: type[Any] | None = None
     if _joblib_numpy_pickle_compat is not None:
+        assert _joblib_numpy_pickle_compat is not None
         compat_unpickler = getattr(
             _joblib_numpy_pickle_compat, "NumpyUnpickler", None
         )
 
-    class _RestrictedUnpickler(original_unpickler):  # type: ignore[misc]
+    class _RestrictedUnpickler(original_unpickler):
         def __init__(self, *args, **kwargs):
             self._allowed_modules = allowed
             super().__init__(*args, **kwargs)
 
-        def find_class(self, module, name):  # type: ignore[override]
+        def find_class(self, module, name):
             if not _module_is_allowed(module, self._allowed_modules):
                 logger.error(
                     "Отказ от десериализации: модуль %s.%s не входит в список доверенных",
@@ -168,14 +176,14 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             return super().find_class(module, name)
 
     if compat_unpickler is not None:
-        compat_unpickler_cls = cast(type[Any], compat_unpickler)
+        compat_unpickler_cls: type[Any] = compat_unpickler
 
-        class _RestrictedCompatUnpickler(compat_unpickler_cls):  # type: ignore[misc, valid-type]
+        class _RestrictedCompatUnpickler(compat_unpickler_cls):
             def __init__(self, *args, **kwargs):
                 self._allowed_modules = allowed
                 super().__init__(*args, **kwargs)
 
-            def find_class(self, module, name):  # type: ignore[override]
+            def find_class(self, module, name):
                 if not _module_is_allowed(module, self._allowed_modules):
                     logger.error(
                         "Отказ от десериализации (compat): модуль %s.%s не доверен",
@@ -187,15 +195,19 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
                     )
                 return super().find_class(module, name)
 
+    assert _joblib_numpy_pickle is not None
     _joblib_numpy_pickle.NumpyUnpickler = _RestrictedUnpickler
     if compat_unpickler is not None:
-        _joblib_numpy_pickle_compat.NumpyUnpickler = _RestrictedCompatUnpickler  # type: ignore[attr-defined]
+        assert _joblib_numpy_pickle_compat is not None
+        _joblib_numpy_pickle_compat.NumpyUnpickler = _RestrictedCompatUnpickler
     try:
         yield
     finally:  # pragma: no cover - ensure restoration even on failure
+        assert _joblib_numpy_pickle is not None
         _joblib_numpy_pickle.NumpyUnpickler = original_unpickler
         if compat_unpickler is not None:
-            _joblib_numpy_pickle_compat.NumpyUnpickler = compat_unpickler  # type: ignore[attr-defined]
+            assert _joblib_numpy_pickle_compat is not None
+            _joblib_numpy_pickle_compat.NumpyUnpickler = compat_unpickler
 
 
 def safe_joblib_load(
@@ -205,7 +217,10 @@ def safe_joblib_load(
 ) -> Any:
     """Load a joblib artifact with module-level deserialization restrictions."""
 
-    module = joblib or cast(ModuleType | None, sys.modules.get("joblib"))
+    module: ModuleType | None = joblib
+    if module is None:
+        module_obj = sys.modules.get("joblib")
+        module = module_obj if isinstance(module_obj, ModuleType) else None
     if module is None:  # pragma: no cover - handled in optional dependency tests
         raise RuntimeError(
             "joblib недоступен: установите зависимость для работы с артефактами"

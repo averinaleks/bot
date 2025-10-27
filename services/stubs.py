@@ -236,6 +236,7 @@ def create_pydantic_stub():
         """Pydantic validation error placeholder."""
 
     class BaseModel:
+        __offline_stub__: bool = True
         """Simplified Pydantic ``BaseModel`` replacement."""
 
         model_config: dict[str, Any] = {}
@@ -263,5 +264,4 @@ def create_pydantic_stub():
     def ConfigDict(**kwargs: Any) -> dict[str, Any]:
         return dict(**kwargs)
 
-    BaseModel.__offline_stub__ = True  # type: ignore[attr-defined]
     return BaseModel, ConfigDict, ValidationError
