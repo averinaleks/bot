@@ -1065,7 +1065,9 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                     adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
                     if hasattr(session, "mount"):
                         session.mount("https://", adapter)
-                        session.mount("http://", adapter)
+                        # ``_https_components`` выше гарантирует, что конечная точка
+                        # использует HTTPS, поэтому намеренно не монтируем адаптер
+                        # для ``http://`` и избегаем незащищённых соединений.
                 response = session.post(
                     url,
                     data=body,
