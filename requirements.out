@@ -81,7 +81,7 @@ contourpy==1.3.2
     # via
     #   -r requirements.txt
     #   matplotlib
-cryptography==46.0.2
+cryptography==46.0.3
     # via
     #   -r requirements.txt
     #   ccxt
@@ -232,7 +232,7 @@ numba==0.62.1
     # via
     #   -r requirements.txt
     #   shap
-numpy==2.1.3
+numpy==2.3.3
     # via
     #   -r requirements.txt
     #   contourpy
@@ -265,7 +265,7 @@ packaging==25.0
     #   statsmodels
     #   torchmetrics
     #   transformers
-pandas==2.2.3
+pandas==2.3.3
     # via
     #   -r requirements.txt
     #   shap
@@ -295,9 +295,9 @@ propcache==0.3.2
     #   -r requirements.txt
     #   aiohttp
     #   yarl
-psutil==7.1.0
+psutil==7.1.2
     # via -r requirements.txt
-pyarrow==21.0.0
+pyarrow==22.0.0
     # via -r requirements.txt
 pybit==5.12.0
     # via -r requirements.txt
