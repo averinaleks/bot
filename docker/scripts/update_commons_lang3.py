@@ -7,7 +7,7 @@ import hashlib
 import socket
 from ipaddress import ip_address
 from tempfile import TemporaryDirectory
-from typing import Iterable
+from typing import Iterable, Tuple
 from urllib.parse import SplitResult, urlsplit
 
 import requests
@@ -54,7 +54,7 @@ def _iter_resolved_ips(hostname: str) -> Iterable[str]:
         yield str(candidate)
 
 
-def _validate_download_url(url: str) -> SplitResult:
+def _validate_download_url(url: str) -> Tuple[SplitResult, set[str]]:
     """Validate *url* for commons-lang3 downloads and return the parse result."""
 
     parsed = urlsplit(url)
@@ -71,6 +71,7 @@ def _validate_download_url(url: str) -> SplitResult:
         )
 
     unsafe_ips: set[str] = set()
+    safe_ips: set[str] = set()
     for ip_text in _iter_resolved_ips(hostname):
         normalised = ip_text.split("%", 1)[0]
         try:
@@ -87,6 +88,9 @@ def _validate_download_url(url: str) -> SplitResult:
             or ip_obj.is_unspecified
         ):
             unsafe_ips.add(ip_text)
+            continue
+
+        safe_ips.add(ip_obj.compressed)
 
     if unsafe_ips:
         raise RuntimeError(
@@ -94,7 +98,12 @@ def _validate_download_url(url: str) -> SplitResult:
             + ", ".join(sorted(unsafe_ips))
         )
 
-    return parsed
+    if not safe_ips:
+        raise RuntimeError(
+            "Хост commons-lang3 не разрешился в допустимые публичные адреса"
+        )
+
+    return parsed, safe_ips
 
 
 def update_commons_lang3() -> None:
@@ -115,7 +124,7 @@ def update_commons_lang3() -> None:
     destination = jars_dir / "commons-lang3-3.18.0.jar"
     hasher = hashlib.sha256()
 
-    _validate_download_url(COMMONS_LANG3_URL)
+    _, allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
 
     with TemporaryDirectory(dir=jars_dir) as tmp_dir:
         temp_path = Path(tmp_dir) / destination.name
@@ -144,6 +153,31 @@ def update_commons_lang3() -> None:
                         + (f" to {location}" if location else "")
                     )
                 response.raise_for_status()
+
+                connection = getattr(response.raw, "_connection", None)
+                peer_ip = None
+                if connection is not None:
+                    sock = getattr(connection, "sock", None)
+                    if sock is not None and hasattr(sock, "getpeername"):
+                        try:
+                            peer_ip = sock.getpeername()[0]
+                        except OSError:
+                            peer_ip = None
+
+                if peer_ip:
+                    normalised_peer = peer_ip.split("%", 1)[0]
+                    try:
+                        peer_obj = ip_address(normalised_peer)
+                    except ValueError:
+                        raise RuntimeError(
+                            "commons-lang3 download connected to malformed address "
+                            f"{peer_ip}"
+                        ) from None
+                    if peer_obj.compressed not in allowed_ips:
+                        raise RuntimeError(
+                            "commons-lang3 download connected to unexpected address "
+                            f"{peer_obj.compressed}"
+                        )
                 with temp_path.open("wb") as temp_file:
                     for chunk in response.iter_content(chunk_size=8192):
                         if not chunk:
