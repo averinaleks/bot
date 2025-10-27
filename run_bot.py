@@ -364,7 +364,13 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
     if offline:
         from services.offline import OFFLINE_SERVICE_FACTORIES
 
-        forced_offline_keys = {"exchange", "telegram_logger", "gpt_client", "model_builder"}
+        forced_offline_keys = {
+            "exchange",
+            "telegram_logger",
+            "gpt_client",
+            "model_builder",
+            "trade_manager",
+        }
         for key, value in OFFLINE_SERVICE_FACTORIES.items():
             if key in forced_offline_keys:
                 current = service_factories.get(key)
