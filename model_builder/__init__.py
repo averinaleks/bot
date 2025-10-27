@@ -16,6 +16,7 @@ _CORE_AVAILABLE = False
 _CORE_IMPORT_ERROR: ImportError | None = None
 _CORE_IMPORT_TRACEBACK = ""
 _core_module: types.ModuleType | None = None
+_model: object | None = None
 
 _OFFLINE_REQUESTED = bool(getattr(bot_config, "OFFLINE_MODE", False))
 
@@ -219,6 +220,7 @@ def _load_model() -> None:
         return
 
     _api._load_model()
+    globals()["_model"] = _api._model
 
 
 class _ModelBuilderModule(types.ModuleType):
@@ -232,11 +234,12 @@ class _ModelBuilderModule(types.ModuleType):
         except AttributeError:
             if _CORE_AVAILABLE and _core_module and hasattr(_core_module, name):
                 return getattr(_core_module, name)
-            raise
+            raise AttributeError(name) from None
 
     def __setattr__(self, name: str, value) -> None:  # type: ignore[override]
         if name == "_model":
             _api._model = value
+            globals()["_model"] = value
         else:
             super().__setattr__(name, value)
             if _CORE_AVAILABLE and _core_module and hasattr(_core_module, name):
