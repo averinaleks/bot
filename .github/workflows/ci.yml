@@ -45,7 +45,7 @@ jobs:
             --strict --output pip-audit.json
       - name: Upload pip-audit report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
         with:
           name: pip-audit-report-${{ matrix.python-version }}
           path: /mnt/pip-audit.json
@@ -57,7 +57,7 @@ jobs:
           exit $code
       - name: Upload flake8 log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
         with:
           name: flake8-log-${{ matrix.python-version }}
           path: flake8.log
@@ -71,7 +71,7 @@ jobs:
           timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload unit test log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
         with:
           name: unit-test-log-${{ matrix.python-version }}
           path: pytest.log
@@ -104,7 +104,7 @@ jobs:
           timeout 15m pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload integration test log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
         with:
           name: integration-test-log-${{ matrix.python-version }}
           path: pytest.log
