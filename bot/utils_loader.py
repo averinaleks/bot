@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.abc
 import importlib.util
 import stat
 import sys
@@ -87,9 +89,11 @@ def _load_from_source() -> ModuleType:
     loader = spec.loader
     if loader is None:
         raise ImportError(f"Unable to load utils module from {utils_path!s}")
+    if not isinstance(loader, importlib.abc.Loader):
+        raise ImportError(f"Unsupported loader for utils module: {loader!r}")
 
     module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)  # type: ignore[arg-type]
+    loader.exec_module(module)
     sys.modules.setdefault("_bot_real_utils", module)
     _UTILS_CACHE = module
     return module
@@ -104,16 +108,12 @@ def _get_candidate(name: str) -> ModuleType | None:
 
     try:
         if name == "utils":
-            import utils as utils_module  # type: ignore[import-not-found]
-
-            module = utils_module
+            module = importlib.import_module("utils")
         elif name == "bot.utils":
-            from bot import utils as bot_utils  # type: ignore[import-not-found]
-
-            module = bot_utils
+            module = importlib.import_module("bot.utils")
         else:  # pragma: no cover - defensive guard
             raise ValueError(f"Refusing to import unexpected utils module {name!r}")
-    except Exception:
+    except (ModuleNotFoundError, ImportError):
         return None
 
     sys.modules.setdefault(name, module)

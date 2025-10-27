@@ -47,7 +47,7 @@ else:
     ) -> None:
         if hasattr(_runtime_base_model, name):
             return
-        setattr(_runtime_base_model, name, factory(_runtime_base_model))  # type: ignore[attr-defined]
+        setattr(_runtime_base_model, name, factory(_runtime_base_model))
 
     def _make_model_validate(_: type[Any]) -> object:
         def _model_validate(
