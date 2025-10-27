@@ -5,17 +5,21 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
+import sys
 import types
 from typing import Optional
 
 import httpx
 
 try:  # pragma: no cover - optional dependency in minimal environments
-    import aiohttp  # type: ignore
+    import aiohttp
 except Exception:  # pragma: no cover - fallback when aiohttp unavailable
     aiohttp = types.SimpleNamespace(ClientError=Exception)  # type: ignore[assignment]
 
 from bot.utils import check_dataframe_empty_async as _check_df_async, logger
+
+sys.modules.setdefault("position_manager", sys.modules[__name__])
+sys.modules.setdefault("bot.position_manager", sys.modules[__name__])
 
 
 class PositionManager:

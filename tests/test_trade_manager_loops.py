@@ -384,7 +384,7 @@ async def test_ranked_signal_loop_http_error_retry(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exc_type", [httpx.HTTPError, aiohttp.ClientError])
 async def test_position_manager_http_error_retry(monkeypatch, exc_type):
-    import position_manager
+    from bot.portfolio import position_manager
 
     dh = DummyDataHandler()
     tm = TradeManager(make_config(), dh, DummyModelBuilder(), None, None)

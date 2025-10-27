@@ -1063,8 +1063,9 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
                 session.proxies = {}
                 if retry_strategy is not None:
                     adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
-                    session.mount("https://", adapter)
-                    session.mount("http://", adapter)
+                    if hasattr(session, "mount"):
+                        session.mount("https://", adapter)
+                        session.mount("http://", adapter)
                 response = session.post(
                     url,
                     data=body,

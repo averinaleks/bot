@@ -55,7 +55,8 @@ sys.modules.setdefault('joblib', joblib_mod)
 def trade_manager_classes(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     sys.modules.pop('trade_manager', None)
-    sys.modules.pop('simulation', None)
+    sys.modules.pop('bot.simulation', None)
+    sys.modules.pop('bot.simulation.simulation', None)
     from bot.trade_manager import TradeManager
     from bot.simulation import HistoricalSimulator, SimulationDataError
     yield TradeManager, HistoricalSimulator, SimulationDataError
