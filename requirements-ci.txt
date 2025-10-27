@@ -33,8 +33,12 @@ setuptools>=80.9.0,<81
 types-requests
 mypy==1.18.2
 hypothesis>=6.90.0
-# Keep numpy aligned with requirements-core.txt and Docker builds
-numpy==2.3.3
+# Keep numpy aligned with requirements-core.txt and Docker builds.
+# Python 3.10 is still part of the CI matrix; NumPy 2.3 dropped support
+# for it, so gate the newer wheel behind a version marker to keep both
+# interpreters green.
+numpy==2.2.6; python_version < "3.11"
+numpy==2.3.3; python_version >= "3.11"
 pip-audit==2.9.0
 pybit==5.12.0
 
