@@ -45,18 +45,47 @@ joblib: ModuleType | None = None
 _joblib_numpy_pickle: Any | None = None
 _joblib_numpy_pickle_compat: Any | None = None
 
+
+def create_joblib_stub(message: str) -> ModuleType:
+    """Return a ``joblib``-like module that refuses to serialise artefacts."""
+
+    def _unavailable(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError(message)
+
+    stub = ModuleType("joblib")
+    stub.dump = _unavailable  # type: ignore[attr-defined]
+    stub.load = _unavailable  # type: ignore[attr-defined]
+    return stub
+
+
+def _create_joblib_unavailable_stub() -> ModuleType:
+    """Return a stub that mimics :mod:`joblib` when the dependency is missing."""
+
+    message = (
+        "joblib недоступен: установите зависимость, чтобы работать с артефактами"
+    )
+    logger = logging.getLogger(__name__)
+    logger.debug("Создаём заглушку joblib: %s", message)
+    return create_joblib_stub(message)
+
+
 try:  # joblib is optional in some environments
     import joblib as _joblib_module
     from joblib import numpy_pickle as _joblib_numpy_pickle_module
-except Exception:  # pragma: no cover - joblib not available
-    pass
+except Exception as exc:  # pragma: no cover - joblib not available
+    logging.getLogger(__name__).warning(
+        "Не удалось импортировать joblib: %s", exc, exc_info=True
+    )
+    joblib = _create_joblib_unavailable_stub()
 else:  # pragma: no cover - exercised in integration tests
     joblib = _joblib_module
     _joblib_numpy_pickle = _joblib_numpy_pickle_module
     try:
         from joblib import numpy_pickle_compat as _joblib_numpy_pickle_compat_module
-    except Exception:  # pragma: no cover - optional compatibility helpers
-        pass
+    except Exception as exc:  # pragma: no cover - optional compatibility helpers
+        logging.getLogger(__name__).debug(
+            "Модуль joblib.numpy_pickle_compat недоступен: %s", exc, exc_info=True
+        )
     else:
         _joblib_numpy_pickle_compat = _joblib_numpy_pickle_compat_module
 
@@ -100,18 +129,6 @@ _DEFAULT_SAFE_JOBLIB_MODULES: Tuple[str, ...] = (
 
 class ArtifactDeserializationError(RuntimeError):
     """Raised when a joblib artefact cannot be safely deserialised."""
-
-
-def create_joblib_stub(message: str) -> ModuleType:
-    """Return a ``joblib``-like module that refuses to serialise artefacts."""
-
-    def _unavailable(*_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError(message)
-
-    stub = ModuleType("joblib")
-    stub.dump = _unavailable  # type: ignore[attr-defined]
-    stub.load = _unavailable  # type: ignore[attr-defined]
-    return stub
 
 
 def _normalise_allowed_modules(allowed: Iterable[str] | None) -> Tuple[str, ...]:
