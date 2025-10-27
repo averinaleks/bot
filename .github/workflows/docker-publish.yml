@@ -301,7 +301,7 @@ jobs:
 
             if [ "${use_cache}" = "true" ]; then
               args+=(--cache-from "type=gha,scope=${CACHE_SCOPE},ignore-error=true")
-              args+=(--cache-to "type=gha,scope=${CACHE_SCOPE},mode=max,oci-mediatypes=true,ignore-error=true")
+              args+=(--cache-to "type=gha,scope=${CACHE_SCOPE},mode=max,ignore-error=true")
             else
               args+=(--no-cache)
             fi
