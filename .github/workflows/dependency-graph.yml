@@ -29,6 +29,8 @@ permissions:
 jobs:
   submit:
     runs-on: ubuntu-latest
+    env:
+      BOT_AUTO_INSTALL_DISABLED: "1"
     steps:
       - name: Resolve event metadata
         id: event-metadata

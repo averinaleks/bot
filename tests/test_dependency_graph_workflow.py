@@ -320,6 +320,18 @@ def test_dependency_graph_checkout_resolves_dispatch_ref() -> None:
     assert "format('refs/heads/{0}', github.event.repository.default_branch)" in workflow
 
 
+def test_dependency_graph_workflow_disables_auto_install() -> None:
+    workflow = _load_dependency_graph_workflow()
+
+    assert 'BOT_AUTO_INSTALL_DISABLED: "1"' in workflow
+
+
+def test_dependency_graph_auto_submission_disables_auto_install() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert 'BOT_AUTO_INSTALL_DISABLED: "1"' in workflow
+
+
 def test_dependency_graph_auto_submission_permissions() -> None:
     workflow = _load_dependency_graph_auto_submission_workflow()
 
