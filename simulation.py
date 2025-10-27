@@ -47,7 +47,22 @@ class HistoricalSimulator:
         self.history.clear()
         loaded_symbols: List[str] = []
         missing_symbols: List[str] = []
-        timeframe = self.data_handler.config.get("timeframe", "1m")
+        timeframe = "1m"
+        config_obj = getattr(self.data_handler, "cfg", None)
+        if config_obj is None:
+            config_obj = getattr(self.data_handler, "config", None)
+        try:
+            if config_obj is not None:
+                if hasattr(config_obj, "get"):
+                    timeframe = config_obj.get("timeframe", timeframe)
+                else:
+                    timeframe = getattr(config_obj, "timeframe", timeframe)
+        except Exception:  # pragma: no cover - defensive
+            pass
+        if not timeframe:
+            timeframe = getattr(self.data_handler, "timeframe", None)
+        if not timeframe:
+            timeframe = "1m"
         for symbol in self.data_handler.usdt_pairs:
             df = None
             if hasattr(self.data_handler, "history"):
