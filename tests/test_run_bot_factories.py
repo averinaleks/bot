@@ -18,6 +18,11 @@ class DummyConfig(SimpleNamespace):
     pass
 
 
+class FakeTradeManager:
+    def __init__(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - test stub
+        raise AssertionError("FakeTradeManager should not be instantiated")
+
+
 def _base_config(**overrides):
     cfg = BotConfig(**{"service_factories": {}, **overrides})
     return cfg
@@ -90,6 +95,7 @@ def test_build_components_offline_overrides_factories(monkeypatch):
             "telegram_logger": "services.telegram:RealTelegram",
             "gpt_client": "services.gpt:RealGPT",
             "model_builder": "model_builder.core:ModelBuilder",
+            "trade_manager": "tests.test_run_bot_factories:FakeTradeManager",
         }
     )
 
@@ -128,7 +134,12 @@ def test_build_components_offline_overrides_factories(monkeypatch):
             if module is not None:
                 sys.modules[module_name] = module
 
-    from services.offline import OfflineBybit, OfflineGPT, OfflineTelegram
+    from services.offline import (
+        OfflineBybit,
+        OfflineGPT,
+        OfflineTelegram,
+        OfflineTradeManager,
+    )
 
     assert isinstance(data_handler.exchange, OfflineBybit)
     assert model_builder.__class__.__module__.endswith("model_builder.offline")
@@ -136,6 +147,8 @@ def test_build_components_offline_overrides_factories(monkeypatch):
     assert getattr(model_builder, "__offline_stub__", False)
     assert trade_manager.gpt_client_factory is OfflineGPT
     assert isinstance(trade_manager.telegram_logger, OfflineTelegram)
+    assert isinstance(trade_manager, OfflineTradeManager)
+    assert cfg.service_factories["trade_manager"] == "services.offline:OfflineTradeManager"
 
 
 def test_build_exchange_uses_offline_stub_when_config_requests(monkeypatch):
