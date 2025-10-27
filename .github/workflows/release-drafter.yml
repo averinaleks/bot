@@ -23,6 +23,25 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: >-
+    ${{
+      (github.event_name == 'pull_request_target' &&
+        github.event.pull_request != null &&
+        github.event.pull_request.number != null &&
+        format(
+          'release-drafter-pr-{0}',
+          github.event.pull_request.number
+        )) ||
+      format(
+        'release-drafter-ref-{0}',
+        github.ref_name ||
+        github.event.repository.default_branch ||
+        github.run_id
+      )
+    }}
+  cancel-in-progress: true
+
 jobs:
   update_release_draft:
     if: github.event_name != 'pull_request_target'
@@ -32,15 +51,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-    concurrency:
-      group: >-
-        ${{ format(
-          'release-drafter-{0}',
-          github.ref_name ||
-          github.event.repository.default_branch ||
-          github.run_id
-        ) }}
-      cancel-in-progress: true
     steps:
       - name: Update release draft
         id: release_drafter_initial
@@ -84,22 +94,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    concurrency:
-      group: >-
-        ${{
-          (github.event.pull_request.number != null &&
-            format(
-              'release-drafter-pr-{0}',
-              github.event.pull_request.number
-            )) ||
-          format(
-            'release-drafter-ref-{0}',
-            github.ref_name ||
-            github.event.repository.default_branch ||
-            github.run_id
-          )
-        }}
-      cancel-in-progress: true
     steps:
       - name: Update pull request metadata
         id: release_drafter_pr_initial
