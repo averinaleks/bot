@@ -25,25 +25,30 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["bot", "services", "data_handler"]
+packages = { find = { include = [
+    "bot*",
+    "data_handler*",
+    "model_builder*",
+    "models*",
+    "pip_audit*",
+    "services*",
+    "trade_manager*",
+    "transformers*",
+    "gptoss_check*",
+] } }
 py-modules = [
   "cache",
   "config",
   "gpt_client",
   "http_client",
-  "model_builder",
   "model_builder_client",
   "optimizer",
   "password_utils",
-  "portfolio_backtest",
-  "position_manager",
   "safe_html_parser",
   "server",
-  "simulation",
   "security",
   "strategy_optimizer",
   "telegram_logger",
-  "trade_manager",
   "trading_bot",
   "test_stubs",
   "utils"

@@ -7,7 +7,7 @@ import pytest
 def _reload_module(monkeypatch):
     monkeypatch.setenv("NUMBA_DISABLE_JIT", "1")
     monkeypatch.setitem(sys.modules, "numba", None)
-    import bot.portfolio_backtest as pb
+    import bot.portfolio.portfolio_backtest as pb
     importlib.reload(pb)
     return pb
 

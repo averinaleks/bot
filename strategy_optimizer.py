@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from bot.utils import logger
 from bot.config import BotConfig
-from bot.portfolio_backtest import portfolio_backtest
+from bot.portfolio.portfolio_backtest import portfolio_backtest
 
 
 def walk_forward_splits(n: int, n_splits: int, min_train: int, horizon: int):

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from bot.portfolio_backtest import portfolio_backtest
+from bot.portfolio.portfolio_backtest import portfolio_backtest
 
 
 def make_df(symbol: str, direction: str, prob: float) -> pd.DataFrame:

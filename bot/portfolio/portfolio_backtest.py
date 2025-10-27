@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 import pandas as pd
 try:  # pragma: no cover - optional dependency
@@ -13,6 +15,11 @@ except ImportError:  # pragma: no cover - fallback if numba unavailable
         return decorator
 
 from bot.utils import logger
+
+# Maintain backwards compatibility with legacy import paths used across the
+# project and in external integrations.
+sys.modules.setdefault("portfolio_backtest", sys.modules[__name__])
+sys.modules.setdefault("bot.portfolio_backtest", sys.modules[__name__])
 
 
 @njit(cache=True)

@@ -1,11 +1,11 @@
 """Miscellaneous helper utilities for the trading bot."""
 
 import asyncio
+import importlib
 import inspect
 import logging
 import os
 import re
-import importlib
 import shutil
 import sys
 import tempfile
@@ -16,6 +16,9 @@ from functools import wraps
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+
+from bot.host_utils import validate_host as _validate_host
+from services.logging_utils import sanitize_log_value
 
 httpx: Any
 try:  # pragma: no cover - optional dependency for HTTP error handling
@@ -32,10 +35,6 @@ except Exception as exc:  # pragma: no cover - gracefully degrade when missing
     _HTTPX_IMPORT_ERROR: Exception | None = exc
 else:  # pragma: no cover - executed in environments with httpx installed
     _HTTPX_IMPORT_ERROR = None
-
-from bot.host_utils import validate_host as _validate_host
-from services.logging_utils import sanitize_log_value
-
 
 validate_host = _validate_host
 

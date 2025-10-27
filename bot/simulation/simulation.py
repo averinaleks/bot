@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import pandas as pd
+import sys
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+import pandas as pd
+
 from bot.utils import logger
+
+sys.modules.setdefault("simulation", sys.modules[__name__])
+sys.modules.setdefault("bot.simulation", sys.modules[__name__])
 
 
 @dataclass(frozen=True)
