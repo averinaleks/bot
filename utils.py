@@ -47,13 +47,21 @@ class _UtilsStateModule(ModuleType):
     """Private module wrapper storing shared state for utils helpers."""
 
     numba_aliases: List[weakref.ReferenceType[ModuleType]]
+    numba_warning_seen: bool
+
+
+class _UtilsModule(ModuleType):
+    """Custom module that syncs local flags with shared state."""
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_NUMBA_IMPORT_WARNED":
+            _state_module.numba_warning_seen = bool(value)
+        super().__setattr__(name, value)
 
 
 _existing_state = sys.modules.get(_STATE_MODULE_NAME)
-if isinstance(_existing_state, _UtilsStateModule):
-    _state_module = _existing_state
-    if not hasattr(_state_module, "numba_aliases"):
-        _state_module.numba_aliases = []
+if isinstance(_existing_state, ModuleType) and hasattr(_existing_state, "numba_aliases"):
+    _state_module = cast(_UtilsStateModule, _existing_state)
 else:
     _state_module = _UtilsStateModule(_STATE_MODULE_NAME)
     _state_module.numba_aliases = []
@@ -61,28 +69,20 @@ else:
 
 _NUMBA_MODULE_ALIASES: List[weakref.ReferenceType[ModuleType]] = _state_module.numba_aliases
 
-
-def _numba_reset_requested() -> bool:
-    reset = False
-    alive: List[weakref.ReferenceType[ModuleType]] = []
-    for ref in _NUMBA_MODULE_ALIASES:
-        module = ref()
-        if module is None:
-            continue
-        alive.append(ref)
-        if getattr(module, "_NUMBA_IMPORT_WARNED", None) is False:
-            reset = True
-            setattr(module, "_NUMBA_IMPORT_WARNED", True)
-    _NUMBA_MODULE_ALIASES[:] = alive
-    return reset
-
-
-if "_NUMBA_IMPORT_WARNED" not in globals() or _numba_reset_requested():
-    _NUMBA_IMPORT_WARNED = False
+if not hasattr(_state_module, "numba_warning_seen"):
+    _state_module.numba_warning_seen = False
 
 _current_module = sys.modules.get(__name__)
 if _current_module is not None:
-    _NUMBA_MODULE_ALIASES.append(weakref.ref(_current_module))
+    if not isinstance(_current_module, _UtilsModule):
+        _current_module.__class__ = _UtilsModule
+    for ref in list(_NUMBA_MODULE_ALIASES):
+        if ref() is _current_module:
+            break
+    else:
+        _NUMBA_MODULE_ALIASES.append(weakref.ref(_current_module))
+
+_NUMBA_IMPORT_WARNED = _state_module.numba_warning_seen
 
 if "_TELEGRAMLOGGER_IMPORT_WARNED" not in globals():
     _TELEGRAMLOGGER_IMPORT_WARNED = False
@@ -347,11 +347,12 @@ try:
 
     warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 except ImportError as exc:  # pragma: no cover - allow missing numba package
-    if not _NUMBA_IMPORT_WARNED:
+    if not _state_module.numba_warning_seen:
         logger.warning("Numba import failed: %s", exc)
         logger.warning(
             "Running without Numba JIT acceleration; performance may be degraded."
         )
+        _state_module.numba_warning_seen = True
         _NUMBA_IMPORT_WARNED = True
 
     def jit(*jit_args, **jit_kwargs):
