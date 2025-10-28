@@ -1,2 +1,7 @@
 [bandit]
-exclude = tests,scripts,gptoss_check
+# Exclude directories that intentionally contain test helpers or scripts
+# using plain ``assert`` statements or other patterns Bandit would normally
+# flag. Bandit's ``exclude`` option relies on fnmatch semantics, so we use
+# glob patterns that explicitly match paths rooted at the repository base as
+# well as any subdirectories.
+exclude = tests,*/tests/*,scripts,*/scripts/*,gptoss_check,*/gptoss_check/*
