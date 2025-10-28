@@ -28,6 +28,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
+from scripts._filesystem import write_secure_text
+
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
 _RESPONSE_LIMIT = 4000  # characters
 
@@ -327,7 +329,7 @@ def _write_port_file(path: Path | None, port: int) -> None:
         # workflow reads the file with ``cat`` and a trailing newline keeps the
         # subsequent shell prompt tidy while remaining backwards compatible
         # with previous behaviour.
-        path.write_text(f"{port}\n", encoding="utf-8")
+        write_secure_text(path, f"{port}\n")
     except OSError as exc:  # pragma: no cover - best-effort logging
         print(
             f"::warning::Не удалось записать номер порта в {path}: {exc}",

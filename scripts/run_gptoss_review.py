@@ -62,6 +62,8 @@ except Exception:  # pragma: no cover - executed when helper module is missing
 
 resolve_github_path = _resolve_github_path
 
+from scripts._filesystem import write_secure_text
+
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
 
@@ -452,8 +454,11 @@ def _write_github_output(has_content: bool) -> None:
     if path is None:
         return
     try:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(f"has_content={'true' if has_content else 'false'}\n")
+        write_secure_text(
+            path,
+            f"has_content={'true' if has_content else 'false'}\n",
+            append=True,
+        )
     except OSError as exc:  # pragma: no cover - extremely rare on GH runners
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 
@@ -526,7 +531,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        output_path.write_text(result.review, encoding="utf-8")
+        write_secure_text(output_path, result.review)
     except OSError as exc:
         print(f"::warning::Не удалось записать отзыв: {exc}", file=sys.stderr)
         _write_github_output(False)
