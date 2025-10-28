@@ -14,9 +14,10 @@ import requests
 from urllib3.util.retry import Retry
 
 
+COMMONS_LANG3_FILENAME = "commons-lang3-3.18.0.jar"
 COMMONS_LANG3_URL = (
     "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/"
-    "commons-lang3-3.18.0.jar"
+    f"{COMMONS_LANG3_FILENAME}"
 )
 COMMONS_LANG3_SHA256 = "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
 COMMONS_LANG3_ALLOWED_HOST = "repo1.maven.org"
@@ -80,6 +81,27 @@ def _validate_download_url(url: str, *, return_ips: bool = False) -> SplitResult
             f"{parsed.netloc}"
         )
 
+    if parsed.username or parsed.password:
+        raise RuntimeError("URL скачивания commons-lang3 не должен содержать учетные данные")
+
+    if parsed.port not in (None, 443):
+        raise RuntimeError(
+            "Получен неожиданный порт при скачивании commons-lang3: "
+            f"{parsed.port}"
+        )
+
+    if parsed.query or parsed.fragment:
+        raise RuntimeError(
+            "URL скачивания commons-lang3 не должен содержать параметры запроса или фрагменты"
+        )
+
+    expected_suffix = f"/{COMMONS_LANG3_FILENAME}"
+    if not parsed.path.endswith(expected_suffix):
+        raise RuntimeError(
+            "Получен неожиданный путь при скачивании commons-lang3: "
+            f"{parsed.path}"
+        )
+
     unsafe_ips: set[str] = set()
     safe_ips: set[str] = set()
     for ip_text in _iter_resolved_ips(hostname):
@@ -133,7 +155,7 @@ def update_commons_lang3() -> None:
     for jar in jars_dir.glob("commons-lang3-*.jar"):
         jar.unlink()
 
-    destination = jars_dir / "commons-lang3-3.18.0.jar"
+    destination = jars_dir / COMMONS_LANG3_FILENAME
     hasher = hashlib.sha256()
 
     _, allowed_ips = _validate_download_url(COMMONS_LANG3_URL, return_ips=True)
