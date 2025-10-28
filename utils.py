@@ -20,9 +20,8 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 from bot.host_utils import validate_host as _validate_host
 from services.logging_utils import sanitize_log_value
 
-httpx: Any
 try:  # pragma: no cover - optional dependency for HTTP error handling
-    import httpx
+    import httpx as _httpx_module
 except Exception as exc:  # pragma: no cover - gracefully degrade when missing
     class _HttpxStub:
         class HTTPError(Exception):
@@ -34,6 +33,7 @@ except Exception as exc:  # pragma: no cover - gracefully degrade when missing
     httpx = cast(Any, _HttpxStub())
     _HTTPX_IMPORT_ERROR: Exception | None = exc
 else:  # pragma: no cover - executed in environments with httpx installed
+    httpx = cast(Any, _httpx_module)
     _HTTPX_IMPORT_ERROR = None
 
 validate_host = _validate_host
@@ -367,11 +367,10 @@ except ImportError as exc:  # pragma: no cover - allow missing numba package
     def prange(*args: int, **kwargs: int) -> range:
         return range(*args, **kwargs)
 
-np: ModuleType | None
 try:
     import numpy as np
 except ImportError:
-    np = None
+    np = cast(Any, None)
 
 try:  # pragma: no cover - prefer package import to avoid shadowing
     from bot.telegram_logger import TelegramLogger as _TelegramLoggerImpl  # noqa: F401
