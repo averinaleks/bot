@@ -161,7 +161,14 @@ def get_httpx_client(
     # the behaviour of :func:`get_async_http_client` and prevents surprising
     # proxy usage in environments where variables like ``HTTP_PROXY`` are set.
     kwargs.setdefault("trust_env", False)
-    client = httpx.Client(**kwargs)
+    try:
+        client = httpx.Client(**kwargs)
+    except TypeError:  # pragma: no cover - stubbed client
+        simplified_kwargs = {"timeout": kwargs["timeout"]}
+        try:
+            client = httpx.Client(**simplified_kwargs)
+        except TypeError:  # pragma: no cover - extremely minimal stub
+            client = httpx.Client(timeout=kwargs["timeout"])
     try:
         yield client
     finally:
@@ -212,7 +219,11 @@ async def get_async_http_client(
             try:
                 _ASYNC_CLIENT = httpx.AsyncClient(**kwargs)
             except TypeError:  # pragma: no cover - stubbed client
-                _ASYNC_CLIENT = httpx.AsyncClient()
+                simplified_kwargs = {"timeout": kwargs["timeout"]}
+                try:
+                    _ASYNC_CLIENT = httpx.AsyncClient(**simplified_kwargs)
+                except TypeError:  # pragma: no cover - extremely minimal stub
+                    _ASYNC_CLIENT = httpx.AsyncClient(timeout=kwargs["timeout"])
     return _ASYNC_CLIENT
 
 
@@ -246,7 +257,11 @@ async def async_http_client(
     try:
         client = httpx.AsyncClient(**kwargs)
     except TypeError:  # pragma: no cover - stubbed client
-        client = httpx.AsyncClient()
+        simplified_kwargs = {"timeout": kwargs["timeout"]}
+        try:
+            client = httpx.AsyncClient(**simplified_kwargs)
+        except TypeError:  # pragma: no cover - extremely minimal stub
+            client = httpx.AsyncClient(timeout=kwargs["timeout"])
     try:
         yield client
     finally:
