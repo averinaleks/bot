@@ -172,18 +172,60 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+
+          ensure_jq() {
+            if command -v jq >/dev/null 2>&1; then
+              return 0
+            fi
+
+            if ! command -v apt-get >/dev/null 2>&1; then
+              echo "::warning::jq is unavailable and cannot be installed; skipping cache purge"
+              return 1
+            fi
+
+            echo "jq not found on runner, installing"
+            sudo apt-get update -y >/dev/null
+            sudo apt-get install -y jq >/dev/null
+          }
+
+          if ! ensure_jq; then
+            exit 0
+          fi
+
           api_url="https://api.github.com/repos/${{ github.repository }}/actions/caches?key=${CACHE_SCOPE}"
-          response=$(curl -sS -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "${api_url}")
-          total=$(echo "${response}" | jq -r '.total_count // 0')
-          if [ "${total}" -gt 0 ]; then
-            echo "Found ${total} stale cache entr(ies) for scope ${CACHE_SCOPE}, deleting"
-            curl -fsS -X DELETE \
-              -H 'Accept: application/vnd.github+json' \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              "${api_url}" \
-              >/dev/null
-          else
+          response_file=$(mktemp -t cache-response.XXXXXX)
+          trap 'rm -f "${response_file}"' EXIT
+
+          status_code=$(curl -sS -w '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -o "${response_file}" \
+            "${api_url}")
+
+          if [ "${status_code}" -ne 200 ]; then
+            echo "::warning::Unable to query GitHub Actions cache API (status ${status_code})"
+            cat "${response_file}" || true
+            exit 0
+          fi
+
+          total=$(jq -r '.total_count // 0' "${response_file}" 2>/dev/null || echo 0)
+          if [ "${total}" -le 0 ]; then
             echo "No cache entries found for scope ${CACHE_SCOPE}"
+            exit 0
+          fi
+
+          echo "Found ${total} stale cache entr(ies) for scope ${CACHE_SCOPE}, deleting"
+          delete_code=$(curl -sS -w '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -o /dev/null \
+            -X DELETE \
+            "${api_url}")
+
+          if [ "${delete_code}" -ge 200 ] && [ "${delete_code}" -lt 300 ]; then
+            echo "Cache scope ${CACHE_SCOPE} successfully purged"
+          else
+            echo "::warning::Failed to delete cache scope ${CACHE_SCOPE} (status ${delete_code})"
           fi
 
       - name: Login to Docker Hub
