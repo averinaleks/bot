@@ -507,7 +507,11 @@ def _compute_diff(
 
     content = result.stdout or ""
     if truncate and len(content) > truncate:
-        content = content[: truncate - 3] + "..."
+        ellipsis = "..."
+        if truncate <= len(ellipsis):
+            content = ellipsis[:truncate]
+        else:
+            content = content[: truncate - len(ellipsis)] + ellipsis
 
     has_diff = bool(content.strip())
     return DiffComputation(content=content, has_diff=has_diff)
