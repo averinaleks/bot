@@ -114,8 +114,13 @@ def _run_pip_install(requirement: str) -> None:
         )
 
 
+if sys.version_info < (3, 11):
+    _numpy_requirement = "numpy==2.2.6"
+else:
+    _numpy_requirement = "numpy==2.3.3"
+
 _required_packages: list[tuple[str, str]] = [
-    ("numpy", "numpy==2.3.3"),
+    ("numpy", _numpy_requirement),
     ("pandas", "pandas==2.3.3"),
     ("pydantic", "pydantic==2.12.0"),
     ("flask", "flask>=3.0.3,<4"),
