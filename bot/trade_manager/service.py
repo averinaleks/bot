@@ -35,9 +35,14 @@ from .core import (
 httpx: Any
 
 try:  # pragma: no cover - exercised in environments without httpx
-    httpx = importlib.import_module("httpx")
+    _imported_httpx = importlib.import_module("httpx")
 except Exception:  # noqa: BLE001 - ensure service works without httpx installed
     httpx = create_httpx_stub()
+else:
+    if is_offline_env() and not getattr(_imported_httpx, "__offline_stub__", False):
+        httpx = create_httpx_stub()
+    else:
+        httpx = _imported_httpx
 
 __all__ = [
     "api_app",

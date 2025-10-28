@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
 import socket
+from dataclasses import dataclass
 from ipaddress import ip_address
+from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterable, Tuple
+from typing import Iterable, FrozenSet
 from urllib.parse import SplitResult, urlsplit
 
 import requests
@@ -54,7 +55,23 @@ def _iter_resolved_ips(hostname: str) -> Iterable[str]:
         yield str(candidate)
 
 
-def _validate_download_url(url: str) -> Tuple[SplitResult, set[str]]:
+@dataclass(frozen=True)
+class DownloadURLInfo:
+    """Details describing a validated commons-lang3 download URL."""
+
+    parsed: SplitResult
+    allowed_ips: FrozenSet[str]
+
+    @property
+    def scheme(self) -> str:
+        return self.parsed.scheme
+
+    @property
+    def hostname(self) -> str | None:
+        return self.parsed.hostname
+
+
+def _validate_download_url(url: str) -> DownloadURLInfo:
     """Validate *url* for commons-lang3 downloads and return the parse result."""
 
     parsed = urlsplit(url)
@@ -103,7 +120,7 @@ def _validate_download_url(url: str) -> Tuple[SplitResult, set[str]]:
             "Хост commons-lang3 не разрешился в допустимые публичные адреса"
         )
 
-    return parsed, safe_ips
+    return DownloadURLInfo(parsed=parsed, allowed_ips=frozenset(safe_ips))
 
 
 def update_commons_lang3() -> None:
@@ -124,7 +141,8 @@ def update_commons_lang3() -> None:
     destination = jars_dir / "commons-lang3-3.18.0.jar"
     hasher = hashlib.sha256()
 
-    _, allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
+    download_info = _validate_download_url(COMMONS_LANG3_URL)
+    allowed_ips = set(download_info.allowed_ips)
 
     with TemporaryDirectory(dir=jars_dir) as tmp_dir:
         temp_path = Path(tmp_dir) / destination.name
