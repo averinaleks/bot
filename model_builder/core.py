@@ -49,7 +49,7 @@ from security import (
     _is_within_directory,
 )
 from services.logging_utils import sanitize_log_value
-from .storage import JOBLIB_AVAILABLE, joblib
+from .storage import JOBLIB_AVAILABLE, joblib, _open_secure_artifact
 _utils = require_utils(
     "check_dataframe_empty",
     "ensure_writable_directory",
@@ -1025,8 +1025,8 @@ class ModelBuilder:
                 "calibrators": self.calibrators,
             }
             self.state_file_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(tmp_path, "wb") as f:
-                joblib.dump(state, f)
+            with _open_secure_artifact(tmp_path, "wb") as handle:
+                joblib.dump(state, handle)
             os.replace(tmp_path, self.state_file_path)
             try:
                 write_model_state_signature(self.state_file_path)
