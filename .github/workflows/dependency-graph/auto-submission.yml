@@ -432,6 +432,7 @@ jobs:
               github.event.commitOid
               github.event.commit_sha
               github.event.sha
+              github.sha
               github.event.dependency_graph.sha
               github.event.dependency_graph.commit_oid
               github.event.dependency_graph.commitOid
