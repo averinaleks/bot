@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 import concurrent.futures
+from types import ModuleType
 from typing import Any, Awaitable, Mapping, TypeVar, cast
 
 from bot.ray_compat import ray
@@ -34,10 +35,34 @@ from .core import (
 
 httpx: Any
 
-try:  # pragma: no cover - exercised in environments without httpx
-    httpx = importlib.import_module("httpx")
-except Exception:  # noqa: BLE001 - ensure service works without httpx installed
-    httpx = create_httpx_stub()
+
+def _create_httpx_module() -> ModuleType:
+    """Create a module-like wrapper around the HTTPX stub."""
+
+    stub_namespace = create_httpx_stub()
+    module = ModuleType("httpx")
+    module.__dict__.update(stub_namespace.__dict__)
+    module.__dict__["__offline_stub__"] = True
+    return module
+
+
+def _load_httpx() -> Any:
+    """Import :mod:`httpx`, falling back to the stub in offline environments."""
+
+    try:  # pragma: no cover - exercised in environments without httpx
+        module: Any = importlib.import_module("httpx")
+    except Exception:  # noqa: BLE001 - ensure service works without httpx installed
+        stub_module = _create_httpx_module()
+        sys.modules["httpx"] = stub_module
+        return stub_module
+
+    if is_offline_env() and not getattr(module, "__offline_stub__", False):
+        return _create_httpx_module()
+
+    return module
+
+
+httpx = _load_httpx()
 
 __all__ = [
     "api_app",

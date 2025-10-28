@@ -7,11 +7,14 @@ import hashlib
 import socket
 from ipaddress import ip_address
 from tempfile import TemporaryDirectory
-from typing import Iterable, Tuple
+from typing import Iterable
 from urllib.parse import SplitResult, urlsplit
 
 import requests
 from urllib3.util.retry import Retry
+
+
+_SAFE_IP_CACHE: dict[str, set[str]] = {}
 
 
 COMMONS_LANG3_URL = (
@@ -54,21 +57,8 @@ def _iter_resolved_ips(hostname: str) -> Iterable[str]:
         yield str(candidate)
 
 
-def _validate_download_url(url: str) -> Tuple[SplitResult, set[str]]:
-    """Validate *url* for commons-lang3 downloads and return the parse result."""
-
-    parsed = urlsplit(url)
-    if parsed.scheme != "https":
-        raise RuntimeError(
-            "Ожидалась схема https при скачивании commons-lang3, "
-            f"получено: {parsed.scheme}"
-        )
-    hostname = parsed.hostname or parsed.netloc
-    if hostname != COMMONS_LANG3_ALLOWED_HOST:
-        raise RuntimeError(
-            "Получен неожиданный хост при скачивании commons-lang3: "
-            f"{parsed.netloc}"
-        )
+def _resolve_public_ips(hostname: str) -> set[str]:
+    """Resolve *hostname* and return a set of allowed public IPs."""
 
     unsafe_ips: set[str] = set()
     safe_ips: set[str] = set()
@@ -103,7 +93,37 @@ def _validate_download_url(url: str) -> Tuple[SplitResult, set[str]]:
             "Хост commons-lang3 не разрешился в допустимые публичные адреса"
         )
 
-    return parsed, safe_ips
+    _SAFE_IP_CACHE[hostname] = safe_ips
+    return safe_ips
+
+
+def _get_allowed_ips(hostname: str) -> set[str]:
+    """Return cached allowed IPs for *hostname* or resolve them."""
+
+    cached = _SAFE_IP_CACHE.get(hostname)
+    if cached is not None:
+        return set(cached)
+    return _resolve_public_ips(hostname)
+
+
+def _validate_download_url(url: str) -> SplitResult:
+    """Validate *url* for commons-lang3 downloads and return the parse result."""
+
+    parsed = urlsplit(url)
+    if parsed.scheme != "https":
+        raise RuntimeError(
+            "Ожидалась схема https при скачивании commons-lang3, "
+            f"получено: {parsed.scheme}"
+        )
+    hostname = parsed.hostname or parsed.netloc
+    if hostname != COMMONS_LANG3_ALLOWED_HOST:
+        raise RuntimeError(
+            "Получен неожиданный хост при скачивании commons-lang3: "
+            f"{parsed.netloc}"
+        )
+
+    _resolve_public_ips(hostname)
+    return parsed
 
 
 def update_commons_lang3() -> None:
@@ -124,7 +144,9 @@ def update_commons_lang3() -> None:
     destination = jars_dir / "commons-lang3-3.18.0.jar"
     hasher = hashlib.sha256()
 
-    _, allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
+    parsed = _validate_download_url(COMMONS_LANG3_URL)
+    hostname = parsed.hostname or parsed.netloc
+    allowed_ips = _get_allowed_ips(hostname)
 
     with TemporaryDirectory(dir=jars_dir) as tmp_dir:
         temp_path = Path(tmp_dir) / destination.name
