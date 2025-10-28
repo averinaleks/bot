@@ -80,7 +80,9 @@ import textwrap
 exec(textwrap.dedent("""
     import hashlib
     import pathlib
+    import socket
     import sys
+    from ipaddress import ip_address
     from tempfile import NamedTemporaryFile
     from urllib.parse import urlsplit
 
@@ -98,6 +100,103 @@ exec(textwrap.dedent("""
     )
     COMMONS_LANG3_ALLOWED_HOST = "repo1.maven.org"
 
+    def _iter_resolved_ips(hostname: str) -> list[str]:
+        try:
+            addr_info = socket.getaddrinfo(
+                hostname,
+                None,
+                family=socket.AF_UNSPEC,
+                type=socket.SOCK_STREAM,
+            )
+        except socket.gaierror as exc:
+            raise RuntimeError(
+                "Не удалось разрешить хост скачивания commons-lang3: "
+                f"{hostname}"
+            ) from exc
+
+        resolved: list[str] = []
+        for entry in addr_info:
+            sockaddr = entry[4]
+            if not sockaddr:
+                continue
+            candidate = sockaddr[0]
+            if isinstance(candidate, bytes):
+                try:
+                    candidate = candidate.decode("ascii")
+                except UnicodeDecodeError:
+                    continue
+            resolved.append(str(candidate))
+        return resolved
+
+    def _validate_download_url(url: str) -> set[str]:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https":
+            raise RuntimeError(
+                "Ожидалась схема https при скачивании commons-lang3, "
+                f"получено: {parsed.scheme}"
+            )
+        if parsed.hostname != COMMONS_LANG3_ALLOWED_HOST:
+            raise RuntimeError(
+                "Получен неожиданный хост при скачивании commons-lang3: "
+                f"{parsed.netloc}"
+            )
+        if parsed.username or parsed.password:
+            raise RuntimeError(
+                "URL скачивания commons-lang3 не должен содержать учетные данные"
+            )
+        if parsed.port not in (None, 443):
+            raise RuntimeError(
+                "Получен неожиданный порт при скачивании commons-lang3: "
+                f"{parsed.port}"
+            )
+        if parsed.query or parsed.fragment:
+            raise RuntimeError(
+                "URL скачивания commons-lang3 не должен содержать параметры "
+                "запроса или фрагменты"
+            )
+
+        expected_suffix = f"/{COMMONS_LANG3_FILENAME}"
+        if not parsed.path.endswith(expected_suffix):
+            raise RuntimeError(
+                "Получен неожиданный путь при скачивании commons-lang3: "
+                f"{parsed.path}"
+            )
+
+        unsafe_ips: set[str] = set()
+        safe_ips: set[str] = set()
+        hostname = parsed.hostname or parsed.netloc
+        for ip_text in _iter_resolved_ips(hostname):
+            normalised = ip_text.split("%", 1)[0]
+            try:
+                ip_obj = ip_address(normalised)
+            except ValueError:
+                unsafe_ips.add(ip_text)
+                continue
+            if (
+                ip_obj.is_loopback
+                or ip_obj.is_private
+                or ip_obj.is_link_local
+                or ip_obj.is_reserved
+                or ip_obj.is_multicast
+                or ip_obj.is_unspecified
+            ):
+                unsafe_ips.add(ip_text)
+                continue
+            safe_ips.add(ip_obj.compressed)
+
+        if unsafe_ips:
+            raise RuntimeError(
+                "Хост commons-lang3 разрешился в небезопасные адреса: "
+                + ", ".join(sorted(unsafe_ips))
+            )
+
+        if not safe_ips:
+            raise RuntimeError(
+                "Хост commons-lang3 не разрешился в допустимые публичные адреса"
+            )
+
+        return safe_ips
+
     def update_commons_lang3() -> None:
         try:
             import ray  # type: ignore
@@ -110,17 +209,7 @@ exec(textwrap.dedent("""
         destination = jars_dir / "commons-lang3-3.18.0.jar"
         existing_jars = list(jars_dir.glob("commons-lang3-*.jar"))
 
-        parsed_url = urlsplit(COMMONS_LANG3_URL)
-        if parsed_url.scheme != "https":
-            raise RuntimeError(
-                "Ожидалась схема https при скачивании commons-lang3, "
-                f"получено: {parsed_url.scheme}"
-            )
-        if parsed_url.netloc != COMMONS_LANG3_ALLOWED_HOST:
-            raise RuntimeError(
-                "Получен неожиданный хост при скачивании commons-lang3: "
-                f"{parsed_url.netloc}"
-            )
+        allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
 
         hasher = hashlib.sha256()
         retries = Retry(
@@ -148,6 +237,29 @@ exec(textwrap.dedent("""
                             + (f" to {location}" if location else "")
                         )
                     response.raise_for_status()
+                    connection = getattr(response.raw, "_connection", None)
+                    peer_ip = None
+                    if connection is not None:
+                        sock = getattr(connection, "sock", None)
+                        if sock is not None and hasattr(sock, "getpeername"):
+                            try:
+                                peer_ip = sock.getpeername()[0]
+                            except OSError:
+                                peer_ip = None
+                    if peer_ip:
+                        normalised_peer = peer_ip.split("%", 1)[0]
+                        try:
+                            peer_obj = ip_address(normalised_peer)
+                        except ValueError:
+                            raise RuntimeError(
+                                "commons-lang3 download connected to malformed "
+                                f"address {peer_ip}"
+                            ) from None
+                        if peer_obj.compressed not in allowed_ips:
+                            raise RuntimeError(
+                                "commons-lang3 download connected to unexpected "
+                                f"address {peer_obj.compressed}"
+                            )
                     with NamedTemporaryFile(
                         "wb", delete=False, dir=jars_dir
                     ) as temp_file:
