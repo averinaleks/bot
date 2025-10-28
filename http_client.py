@@ -8,6 +8,7 @@ import os
 import math
 import random
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
@@ -89,19 +90,58 @@ def _coerce_timeout(raw_value: float | str | int, *, fallback: float = 10.0) -> 
 
 
 def _normalise_timeout(value: Any, *, fallback: float) -> Any:
-    """Return a timeout compatible with :mod:`httpx` APIs.
+    """Return a timeout compatible with :mod:`httpx` APIs."""
 
-    ``httpx`` accepts numeric timeouts as floats, integers, or strings that can
-    be coerced to floats, alongside :class:`httpx.Timeout` instances. Semgrep
-    flags usages that allow disabling timeouts by passing ``0`` or negative
-    values.  This helper mirrors :func:`_coerce_timeout` for primitive inputs
-    while leaving richer timeout objects untouched, ensuring callers cannot
-    bypass the floor by injecting their own keyword arguments.
-    """
+    TimeoutType = getattr(httpx, "Timeout", None)
+    if TimeoutType is not None and isinstance(value, TimeoutType):
+        return value
 
-    if isinstance(value, (int, float, str)):
-        return _coerce_timeout(value, fallback=fallback)
-    return value
+    if isinstance(value, Mapping):
+        return {
+            key: _normalise_timeout(component, fallback=fallback)
+            for key, component in value.items()
+        }
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        normalised = [
+            _normalise_timeout(component, fallback=fallback) for component in value
+        ]
+        if isinstance(value, tuple):
+            return tuple(normalised)
+        if isinstance(value, list):
+            return normalised
+        try:
+            return type(value)(normalised)
+        except Exception:  # pragma: no cover - defensive fallback
+            return normalised
+
+    return _coerce_timeout(value, fallback=fallback)
+
+
+def _normalise_requests_timeout(value: Any, *, fallback: float) -> Any:
+    """Return a timeout compatible with :mod:`requests` APIs."""
+
+    if isinstance(value, Mapping):
+        return {
+            key: _normalise_requests_timeout(component, fallback=fallback)
+            for key, component in value.items()
+        }
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        normalised = [
+            _normalise_requests_timeout(component, fallback=fallback)
+            for component in value
+        ]
+        if isinstance(value, tuple):
+            return tuple(normalised)
+        if isinstance(value, list):
+            return normalised
+        try:
+            return type(value)(normalised)
+        except Exception:  # pragma: no cover - defensive fallback
+            return normalised
+
+    return _coerce_timeout(value, fallback=fallback)
 
 
 DEFAULT_TIMEOUT = _coerce_timeout(DEFAULT_TIMEOUT_STR)
@@ -143,7 +183,12 @@ def get_requests_session(
 
     @wraps(original)
     def request(method: str, url: str, **kwargs):
-        kwargs.setdefault("timeout", timeout)
+        if "timeout" in kwargs:
+            kwargs["timeout"] = _normalise_requests_timeout(
+                kwargs["timeout"], fallback=timeout
+            )
+        else:
+            kwargs["timeout"] = timeout
         kwargs.setdefault("allow_redirects", False)
         return original(method, url, **kwargs)
 
@@ -283,6 +328,10 @@ async def async_http_client(
 async def _send_request(
     method: str, url: str, *, client: HTTPXAsyncClient, **kwargs: Any
 ) -> HTTPXResponse:
+    if "timeout" in kwargs:
+        kwargs["timeout"] = _normalise_timeout(
+            kwargs["timeout"], fallback=DEFAULT_TIMEOUT
+        )
     try:
         resp = await client.request(method, url, **kwargs)
         if resp.status_code in (429,) or resp.status_code >= 500:
