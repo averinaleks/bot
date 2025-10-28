@@ -150,15 +150,18 @@ jobs:
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3
         with:
           driver: docker-container
-          # Buildx v0.16.2, опубликованный 2025-09-26, запрашивает образ
-          # ``moby/buildkit:v0.16.2``. Этот тег отсутствует на Docker Hub и
-          # приводит к "manifest unknown" ещё до запуска сборки. Явно откатываемся
-          # на предыдущую стабильную версию Buildx и жёстко фиксируем рабочий
-          # образ BuildKit, который умеет OCI media types и уже применялся в
-          # репозитории без регрессий.
-          version: v0.16.1
+          # Обновляем buildx до актуальной версии, поддерживающей экспериментальный
+          # фронтенд Dockerfile ``docker/dockerfile:1.7-labs`` и исправляющей
+          # парсер, который ранее падал с "dockerfile parse error" на первом
+          # шаге сборки. Одновременно обновляем buildkit до последнего стабильного
+          # образа, чтобы сохранить совместимость с OCI-манифестами и кэшированием
+          # через GitHub Actions.
+          version: v0.29.1
           driver-opts: |
-            image=moby/buildkit:v0.25.0
+            image=moby/buildkit:v0.25.1
+
+      - name: Show Buildx version
+        run: docker buildx version
 
       - name: Verify /mnt mount
         run: |
