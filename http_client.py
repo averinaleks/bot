@@ -13,6 +13,11 @@ from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, Tuple
 
+try:  # pragma: no cover - SSL module should be available on CPython but guard defensively
+    import ssl
+except ImportError:  # pragma: no cover - extremely rare environments without SSL support
+    ssl = None  # type: ignore[assignment]
+
 from bot.utils import retry
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, is_offline_env
@@ -147,11 +152,39 @@ def _normalise_requests_timeout(value: Any, *, fallback: float) -> Any:
 DEFAULT_TIMEOUT = _coerce_timeout(DEFAULT_TIMEOUT_STR)
 
 
+def _normalise_requests_verify(value: object) -> object | None:
+    """Return a ``requests``-compatible ``verify`` argument without disabling TLS."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        if not value:
+            raise ValueError(
+                "TLS certificate verification cannot be disabled; "
+                "provide a certificate bundle instead."
+            )
+        return True
+
+    if isinstance(value, (str, os.PathLike)):
+        path = os.fspath(value)
+        if not path.strip():
+            raise ValueError("TLS verification path must not be empty")
+        return path
+
+    if ssl is not None and isinstance(value, ssl.SSLContext):
+        return value
+
+    raise TypeError(
+        "verify must be True, None, an SSLContext, or a non-empty path-like object"
+    )
+
+
 @contextmanager
 def get_requests_session(
     timeout: float = DEFAULT_TIMEOUT,
     *,
-    verify: bool | None = True,
+    verify: bool | str | os.PathLike[str] | "ssl.SSLContext" | None = True,
 ) -> Generator["requests.Session", None, None]:
     """Return a :class:`requests.Session` with a default timeout.
 
@@ -163,9 +196,11 @@ def get_requests_session(
     timeout:
         Default timeout in seconds applied to requests made via the session.
     verify:
-        Optional SSL verification flag mirroring :mod:`requests` semantics.
-        ``None`` leaves the library default untouched, whereas ``True`` and
-        ``False`` explicitly enable or disable certificate checks.
+        TLS verification configuration passed to :mod:`requests`. ``None`` keeps
+        the library default, ``True`` enforces certificate checks explicitly and
+        providing a path-like object or :class:`ssl.SSLContext` allows custom
+        trust stores. Disabling verification is rejected to prevent
+        man-in-the-middle attacks.
     """
     import requests  # type: ignore[import-untyped]
 
@@ -177,8 +212,9 @@ def get_requests_session(
     # a non-existent proxy and hang until a network timeout occurs.
     session.trust_env = False
     session.proxies = {}
-    if verify is not None:
-        session.verify = verify
+    normalised_verify = _normalise_requests_verify(verify)
+    if normalised_verify is not None:
+        session.verify = normalised_verify
     original = session.request
 
     @wraps(original)

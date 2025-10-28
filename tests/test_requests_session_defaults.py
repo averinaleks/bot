@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -23,6 +24,7 @@ class DummySession:
         self.requests: list[dict] = []
         self.trust_env = True
         self.proxies = {"http": "proxy"}
+        self.verify = True
         self._closed = False
 
     def request(self, method: str, url: str, **kwargs):
@@ -78,6 +80,39 @@ def test_get_requests_session_timeout_floor(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert session.requests[0]["timeout"] == http_client.DEFAULT_TIMEOUT
 
+
+def test_get_requests_session_rejects_verify_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = DummySession()
+
+    def factory() -> DummySession:
+        return session
+
+    fake_requests = SimpleNamespace(Session=factory)
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    with pytest.raises(ValueError):
+        with http_client.get_requests_session(verify=False):
+            pass
+
+
+def test_get_requests_session_accepts_custom_ca(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    session = DummySession()
+
+    def factory() -> DummySession:
+        return session
+
+    fake_requests = SimpleNamespace(Session=factory)
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    ca_file = tmp_path / "custom-ca.pem"
+    ca_file.write_text("dummy", encoding="utf-8")
+
+    with http_client.get_requests_session(verify=ca_file) as wrapped:
+        wrapped.get("https://example.test")
+
+    assert session.verify == str(ca_file)
 
 @pytest.mark.parametrize(
     "raw, expected",
