@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 FROM python:3.11-slim AS builder
-# PyTorch 2.8.0, зафиксированный в requirements-core.txt, пока не выпускает
+# PyTorch 2.9.0, зафиксированный в requirements-core.txt, пока не выпускает
 # колёса для Python 3.12 (см. pip download --python-version 3.12). Поэтому
 # используем Python 3.11, где колёса доступны и сборка Docker-образа не
 # прерывается на установке torch.
