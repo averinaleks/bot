@@ -16,6 +16,7 @@ def write_secure_text(
     append: bool = False,
     permissions: int = _DEFAULT_PERMISSIONS,
     encoding: str = "utf-8",
+    dir_permissions: int | None = 0o700,
 ) -> None:
     """Write ``content`` to ``path`` using restrictive file permissions.
 
@@ -38,7 +39,15 @@ def write_secure_text(
         which keeps the file private to the current user.
     encoding:
         Text encoding used when converting ``content`` to bytes.
+    dir_permissions:
+        Optional mode applied when creating parent directories.  ``None`` skips
+        directory creation and leaves existing permissions untouched.
     """
+
+    if dir_permissions is not None:
+        parent = path.parent
+        if parent and parent != Path(".") and not parent.exists():
+            parent.mkdir(parents=True, exist_ok=True, mode=dir_permissions)
 
     flags = os.O_WRONLY | os.O_CREAT
     flags |= os.O_APPEND if append else os.O_TRUNC
