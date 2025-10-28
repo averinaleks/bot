@@ -18,13 +18,14 @@ import stat
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 if "_TELEGRAM_IMPORT_LOGGED" not in globals():
     _TELEGRAM_IMPORT_LOGGED = False
 
+httpx: Any
 try:  # pragma: no cover - optional dependency in lightweight environments
-    import httpx
+    import httpx as _httpx_module
 except Exception as exc:  # pragma: no cover - fallback when httpx absent
     class _HttpxStub:
         """Minimal stub providing :class:`HTTPError` when httpx is missing."""
@@ -35,9 +36,10 @@ except Exception as exc:  # pragma: no cover - fallback when httpx absent
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args)
 
-    httpx = _HttpxStub()  # type: ignore[assignment]
+    httpx = cast(Any, _HttpxStub())
     _HTTPX_IMPORT_ERROR: Exception | None = exc
 else:  # pragma: no cover - executed when httpx installed
+    httpx = cast(Any, _httpx_module)
     _HTTPX_IMPORT_ERROR = None
 
 import hashlib
@@ -48,7 +50,11 @@ from services.logging_utils import sanitize_log_value
 from services.offline import OfflineTelegram
 
 try:  # pragma: no cover - optional dependency
-    from telegram.error import BadRequest, Forbidden, RetryAfter
+    from telegram.error import (
+        BadRequest as _TelegramBadRequest,
+        Forbidden as _TelegramForbidden,
+        RetryAfter as _TelegramRetryAfter,
+    )
 except Exception as exc:  # pragma: no cover - missing telegram
     logger_ref = logging.getLogger("TradingBot")
     if not _TELEGRAM_IMPORT_LOGGED:
@@ -71,9 +77,13 @@ except Exception as exc:  # pragma: no cover - missing telegram
             super().__init__(*args)
             self.retry_after = retry_after
 
-    BadRequest = _BadRequest  # type: ignore
-    Forbidden = _Forbidden  # type: ignore
-    RetryAfter = _RetryAfter  # type: ignore
+    BadRequest = cast(Any, _BadRequest)
+    Forbidden = cast(Any, _Forbidden)
+    RetryAfter = cast(Any, _RetryAfter)
+else:
+    BadRequest = cast(Any, _TelegramBadRequest)
+    Forbidden = cast(Any, _TelegramForbidden)
+    RetryAfter = cast(Any, _TelegramRetryAfter)
 
 
 logger = logging.getLogger("TradingBot")
