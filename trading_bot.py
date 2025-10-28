@@ -128,7 +128,7 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
                 "Invalid %s value '%s' (non-finite), using default %s",
                 sanitize_log_value(env_var),
                 sanitize_log_value(value),
-                default,
+                sanitize_log_value(default),
             )
             return default
         comparator = numeric
