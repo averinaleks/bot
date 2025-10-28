@@ -531,6 +531,32 @@ jobs:
                   return ""
               return candidate
 
+
+          def _resolve_commit(reference: str) -> str:
+              if not reference:
+                  return ""
+              try:
+                  result = subprocess.run(
+                      ["git", "rev-parse", reference],
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      text=True,
+                  )
+              except subprocess.CalledProcessError as exc:
+                  print(
+                      f"::warning::Unable to resolve commit {reference!r}: {exc}",
+                      flush=True,
+                  )
+                  return ""
+              except Exception as exc:  # pragma: no cover - defensive guard for CI
+                  print(
+                      f"::warning::Unexpected error while resolving commit {reference!r}:",
+                      exc,
+                      flush=True,
+                  )
+                  return ""
+              return result.stdout.strip()
+
           patterns: Sequence[str] = (
               "requirements*.txt",
               "requirements*.in",
@@ -543,6 +569,9 @@ jobs:
           changed: list[str]
 
           if not after:
+              after = _resolve_commit("HEAD")
+
+          if not after:
               print(
                   "::warning::Missing GITHUB_SHA value; assuming dependency manifests changed.",
                   flush=True,
@@ -550,16 +579,36 @@ jobs:
               diff_failed = True
               changed = []
           else:
+              use_diff_tree = False
               if not before or set(before) == {"0"}:
-                  before = f"{after}^"
+                  parent = _resolve_commit(f"{after}^")
+                  if parent:
+                      before = parent
+                  else:
+                      use_diff_tree = True
 
               try:
-                  completed = subprocess.run(
-                      ["git", "diff", "--name-only", before, after],
-                      check=True,
-                      stdout=subprocess.PIPE,
-                      text=True,
-                  )
+                  if use_diff_tree:
+                      completed = subprocess.run(
+                          [
+                              "git",
+                              "diff-tree",
+                              "--no-commit-id",
+                              "--name-only",
+                              "-r",
+                              after,
+                          ],
+                          check=True,
+                          stdout=subprocess.PIPE,
+                          text=True,
+                      )
+                  else:
+                      completed = subprocess.run(
+                          ["git", "diff", "--name-only", before, after],
+                          check=True,
+                          stdout=subprocess.PIPE,
+                          text=True,
+                      )
               except subprocess.CalledProcessError as exc:
                   print(f"::warning::Unable to determine diff: {exc}", flush=True)
                   diff_failed = True

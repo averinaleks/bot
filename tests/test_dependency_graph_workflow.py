@@ -116,6 +116,14 @@ def test_dependency_graph_detect_step_normalises_null_strings() -> None:
     assert "candidate.lower() in _NULL_STRINGS" in workflow
 
 
+def test_dependency_graph_detect_step_resolves_missing_commits() -> None:
+    workflow = _load_dependency_graph_workflow()
+
+    assert '"git", "rev-parse"' in workflow
+    assert '"diff-tree"' in workflow
+    assert '"--no-commit-id"' in workflow
+
+
 def test_dependency_graph_detect_step_uses_dispatch_commit_fallbacks() -> None:
     workflow = _load_dependency_graph_workflow()
 
@@ -366,3 +374,11 @@ def test_dependency_graph_auto_submission_detect_step_handles_null_strings() -> 
 
     assert """_NULL_STRINGS = {"null", "none", "undefined", '""', "''"}""" in workflow
     assert "def _normalise_value" in workflow
+
+
+def test_dependency_graph_auto_submission_detect_step_resolves_missing_commits() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert '"git", "rev-parse"' in workflow
+    assert '"diff-tree"' in workflow
+    assert '"--no-commit-id"' in workflow
