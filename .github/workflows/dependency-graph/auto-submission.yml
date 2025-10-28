@@ -4,11 +4,22 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types:
+      # Custom type used by auto-submission hooks. GitHub restricts repository
+      # dispatch event names to alphanumeric characters plus '-' and '_', so we
+      # cannot include a '/' separator here.
       - "dependency-graph-auto-submission"
+      # Backwards compatibility with older hooks that still emit the original
+      # "auto-submission" event type directly.
       - "auto-submission"
+      # Some integrations use underscores instead of hyphens.
       - "dependency_graph_auto_submission"
+# NOTE: GitHub does not yet accept the experimental ``dependency_graph`` event
+# key in workflow files for public repositories. Auto-submission payloads should
+# therefore be forwarded via the repository dispatch hook declared above.
 
 permissions:
+  # Only the supported scopes for dependency snapshot submission; GitHub rejects
+  # the legacy "dependency-graph" permission.
   contents: write
   security-events: write
 
@@ -67,6 +78,7 @@ jobs:
                   return ""
               if path.startswith("env."):
                   return _normalise(os.getenv(path.split(".", 1)[1]))
+
               segments = path.split(".")
               current: Any = PAYLOAD
 
@@ -87,12 +99,26 @@ jobs:
               return _normalise(current)
 
 
+          def _expand_aliases(candidate: str) -> Iterable[str]:
+              yield candidate
+              if candidate.startswith("payload."):
+                  suffix = candidate.split(".", 1)[1]
+                  if suffix:
+                      yield f"github.event.{suffix}"
+
+
           def _lines(block: str) -> Tuple[str, ...]:
-              return tuple(
-                  line.strip()
-                  for line in block.splitlines()
-                  if line.strip()
-              )
+              seen: set[str] = set()
+              expanded: list[str] = []
+              for raw in block.splitlines():
+                  candidate = raw.strip()
+                  if not candidate:
+                      continue
+                  for alias in _expand_aliases(candidate):
+                      if alias and alias not in seen:
+                          seen.add(alias)
+                          expanded.append(alias)
+              return tuple(expanded)
 
 
           def _choose(candidates: Iterable[str]) -> str:
@@ -120,6 +146,7 @@ jobs:
               payload.head_ref_name
               payload.headRefName
               env.GITHUB_HEAD_REF
+              payload.base_ref
               payload.dependency_graph.sha
               payload.dependency_graph.commit_oid
               payload.dependency_graph.commitOid
@@ -154,10 +181,8 @@ jobs:
               payload.workflow_run.head_sha
               payload.workflow_run.head_commit.id
               payload.workflow_run.head_commit.sha
-              payload.workflow_run.head_commit.after
-              payload.workflow_run.head_commit.afterSha
-              payload.workflow_run.head_commit.afterOid
-              payload.workflow_run.head_commit.afterCommitOid
+              payload.workflow_run.head_commit.before
+              payload.workflow_run.head_commit.beforeSha
               payload.workflow_run.head_ref
               payload.workflow_run.headRef
               payload.workflow_run.head_ref_name
@@ -181,6 +206,7 @@ jobs:
               github.event.head_ref_name
               github.event.headRefName
               github.head_ref
+              github.event.base_ref
               github.event.dependency_graph.sha
               github.event.dependency_graph.commit_oid
               github.event.dependency_graph.commitOid
@@ -215,10 +241,8 @@ jobs:
               github.event.workflow_run.head_sha
               github.event.workflow_run.head_commit.id
               github.event.workflow_run.head_commit.sha
-              github.event.workflow_run.head_commit.after
-              github.event.workflow_run.head_commit.afterSha
-              github.event.workflow_run.head_commit.afterOid
-              github.event.workflow_run.head_commit.afterCommitOid
+              github.event.workflow_run.head_commit.before
+              github.event.workflow_run.head_commit.beforeSha
               github.event.workflow_run.head_ref
               github.event.workflow_run.headRef
               github.event.workflow_run.head_ref_name
@@ -228,13 +252,16 @@ jobs:
               github.event.workflow_run.headBranch
               github.event.workflow_run.headBranchName
               env.GITHUB_REF
-              env.GITHUB_SHA
               """
           )
 
           checkout_ref = _choose(REF_CANDIDATES)
           if not checkout_ref:
+              # Repository dispatch events may provide the default branch reference via
+              # ``format('refs/heads/{0}', github.event.repository.default_branch)``.
               default_branch = _lookup("payload.repository.default_branch")
+              if not default_branch:
+                  default_branch = _lookup("github.event.repository.default_branch")
               if default_branch:
                   checkout_ref = f"refs/heads/{default_branch}"
           if not checkout_ref:
@@ -243,6 +270,8 @@ jobs:
           BEFORE_CANDIDATES = _lines(
               """
               payload.before
+              payload.base_sha
+              payload.base_ref
               payload.dependency_graph.before_sha
               payload.dependency_graph.beforeSha
               payload.dependency_graph.before_oid
@@ -255,18 +284,33 @@ jobs:
               payload.dependency_graph.baseRefName
               payload.dependency_graph.baseSha
               payload.client_payload.before
+              payload.client_payload.base_sha
               payload.client_payload.before_sha
+              payload.client_payload.baseSha
               payload.client_payload.beforeSha
               payload.client_payload.before_oid
               payload.client_payload.beforeOid
               payload.client_payload.before_commit_oid
               payload.client_payload.beforeCommitOid
               payload.client_payload.previous_sha
-              payload.client_payload.previousSha
               payload.client_payload.previous_oid
+              payload.client_payload.previousSha
               payload.client_payload.previousOid
               payload.client_payload.previous_commit_oid
               payload.client_payload.previousCommitOid
+              payload.previous_sha
+              payload.previousSha
+              payload.previous_oid
+              payload.previousOid
+              payload.previous_commit_oid
+              payload.previousCommitOid
+              payload.head_commit.before
+              payload.head_commit.beforeSha
+              payload.head_commit.beforeOid
+              payload.head_commit.beforeCommitOid
+              payload.head_commit.previousSha
+              payload.head_commit.previousOid
+              payload.head_commit.previousCommitOid
               payload.workflow_run.before
               payload.workflow_run.previous_sha
               payload.workflow_run.head_commit.before
@@ -277,6 +321,8 @@ jobs:
               payload.workflow_run.head_commit.previousOid
               payload.workflow_run.head_commit.previousCommitOid
               github.event.before
+              github.event.base_sha
+              github.event.base_ref
               github.event.dependency_graph.before_sha
               github.event.dependency_graph.beforeSha
               github.event.dependency_graph.before_oid
@@ -289,18 +335,33 @@ jobs:
               github.event.dependency_graph.baseRefName
               github.event.dependency_graph.baseSha
               github.event.client_payload.before
+              github.event.client_payload.base_sha
               github.event.client_payload.before_sha
+              github.event.client_payload.baseSha
               github.event.client_payload.beforeSha
               github.event.client_payload.before_oid
               github.event.client_payload.beforeOid
               github.event.client_payload.before_commit_oid
               github.event.client_payload.beforeCommitOid
               github.event.client_payload.previous_sha
-              github.event.client_payload.previousSha
               github.event.client_payload.previous_oid
+              github.event.client_payload.previousSha
               github.event.client_payload.previousOid
               github.event.client_payload.previous_commit_oid
               github.event.client_payload.previousCommitOid
+              github.event.previous_sha
+              github.event.previousSha
+              github.event.previous_oid
+              github.event.previousOid
+              github.event.previous_commit_oid
+              github.event.previousCommitOid
+              github.event.head_commit.before
+              github.event.head_commit.beforeSha
+              github.event.head_commit.beforeOid
+              github.event.head_commit.beforeCommitOid
+              github.event.head_commit.previousSha
+              github.event.head_commit.previousOid
+              github.event.head_commit.previousCommitOid
               github.event.workflow_run.before
               github.event.workflow_run.previous_sha
               github.event.workflow_run.head_commit.before
@@ -316,7 +377,6 @@ jobs:
           AFTER_CANDIDATES = _lines(
               """
               env.GITHUB_SHA
-              github.sha
               payload.commit_oid
               payload.commitOid
               payload.commit_sha
@@ -331,6 +391,23 @@ jobs:
               payload.dependency_graph.after_commit_oid
               payload.dependency_graph.afterCommitOid
               payload.dependency_graph.after
+              payload.head_sha
+              payload.headSha
+              payload.after
+              payload.after_sha
+              payload.afterSha
+              payload.after_oid
+              payload.afterOid
+              payload.after_commit_oid
+              payload.afterCommitOid
+              payload.head_commit.id
+              payload.head_commit.sha
+              payload.head_commit.after
+              payload.head_commit.afterSha
+              payload.head_commit.afterOid
+              payload.head_commit.afterCommitOid
+              payload.dependency_graph.ref
+              payload.ref
               payload.client_payload.after
               payload.client_payload.head_sha
               payload.client_payload.headSha
@@ -365,6 +442,23 @@ jobs:
               github.event.dependency_graph.after_commit_oid
               github.event.dependency_graph.afterCommitOid
               github.event.dependency_graph.after
+              github.event.head_sha
+              github.event.headSha
+              github.event.after
+              github.event.after_sha
+              github.event.afterSha
+              github.event.after_oid
+              github.event.afterOid
+              github.event.after_commit_oid
+              github.event.afterCommitOid
+              github.event.head_commit.id
+              github.event.head_commit.sha
+              github.event.head_commit.after
+              github.event.head_commit.afterSha
+              github.event.head_commit.afterOid
+              github.event.head_commit.afterCommitOid
+              github.event.dependency_graph.ref
+              github.event.ref
               github.event.client_payload.after
               github.event.client_payload.head_sha
               github.event.client_payload.headSha
