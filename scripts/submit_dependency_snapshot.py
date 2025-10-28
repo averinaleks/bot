@@ -1567,4 +1567,7 @@ def submit_dependency_snapshot() -> None:
 
 
 if __name__ == "__main__":
-    submit_dependency_snapshot()
+    try:
+        submit_dependency_snapshot()
+    except Exception as exc:  # pragma: no cover - defensive fallback for CI
+        _log_unexpected_error(exc)
