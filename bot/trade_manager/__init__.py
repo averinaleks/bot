@@ -19,10 +19,10 @@ else:
     TelegramLoggerType = Any
 
 if bot_config.OFFLINE_MODE:
-    from services.offline import OfflineTradeManager, OfflineTelegram
+    from services.offline import OfflineTelegram, OfflineTradeManager
 
-    TradeManager = cast(type[TradeManagerType], OfflineTradeManager)
-    TelegramLogger = cast(type[TelegramLoggerType], OfflineTelegram)
+    _trade_manager_impl = cast(type[TradeManagerType], OfflineTradeManager)
+    _telegram_logger_impl = cast(type[TelegramLoggerType], OfflineTelegram)
 
     __all__ = ["TradeManager", "TelegramLogger", "service"]
 else:  # pragma: no cover - реальная инициализация
@@ -30,7 +30,7 @@ else:  # pragma: no cover - реальная инициализация
     from bot.utils_loader import require_utils
 
     _utils = require_utils("TelegramLogger")
-    TelegramLogger: type[TelegramLoggerType] = _utils.TelegramLogger
+    _telegram_logger_impl = cast(type[TelegramLoggerType], _utils.TelegramLogger)
 
     from .core import TradeManager as _TradeManager
     from .service import (
@@ -44,7 +44,7 @@ else:  # pragma: no cover - реальная инициализация
         _ready_event,
     )
 
-    TradeManager: type[TradeManagerType] = _TradeManager
+    _trade_manager_impl = _TradeManager
 
     # Псевдонимы синхронных помощников оставлены для обратной совместимости
     get_http_client = get_async_http_client
@@ -65,6 +65,9 @@ else:  # pragma: no cover - реальная инициализация
         "close_http_client",
         "service",
     ]
+
+TradeManager: type[TradeManagerType] = _trade_manager_impl
+TelegramLogger: type[TelegramLoggerType] = _telegram_logger_impl
 
 def __getattr__(name: str) -> Any:
     """Ленивая загрузка дополнительных атрибутов пакета."""
