@@ -22,9 +22,13 @@ import json
 import os
 import signal
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
+
+from scripts._filesystem import write_secure_text
 
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
