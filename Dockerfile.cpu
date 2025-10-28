@@ -54,19 +54,19 @@ PY
 # виртуальное окружение, чтобы Trivy не находил high/critical уязвимости
 # прямо в базовом образе.
 RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=24.0' \
+        'pip>=25.3' \
         'setuptools>=80.9.0,<81' \
         wheel \
     && python -m pip cache purge
 
-# pip>=24.0 устраняет CVE-2023-32681, setuptools>=80.9.0 закрывает известные
+# pip>=25.3 устраняет CVE-2025-8869 и CVE-2023-32681, setuptools>=80.9.0 закрывает известные
 # уязвимости и совместимы с зависимостями проекта.
 RUN python -m venv "$VIRTUAL_ENV"
 
 RUN "$VIRTUAL_ENV"/bin/python -m ensurepip --upgrade
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
-        'pip>=24.0' \
+        'pip>=25.3' \
         'setuptools>=80.9.0,<81' \
         wheel
 
@@ -249,7 +249,7 @@ PY
 # Аналогично стадии сборки обновляем системный pip/setuptools, чтобы в
 # рантайме не оставалось уязвимых версий из базового образа.
 RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=24.0' \
+        'pip>=25.3' \
         'setuptools>=80.9.0,<81' \
         wheel \
     && python -m pip cache purge

@@ -9,7 +9,7 @@ ENV VLLM_DEVICE=cpu VLLM_LOGGING_LEVEL=DEBUG
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && python -m ensurepip --upgrade \
-    && python -m pip install --no-cache-dir 'pip>=24.0' 'setuptools>=80.9.0,<81' wheel \
+    && python -m pip install --no-cache-dir 'pip>=25.3' 'setuptools>=80.9.0,<81' wheel \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system bot \
     && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
