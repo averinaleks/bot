@@ -368,7 +368,11 @@ async def get_http_client() -> httpx.AsyncClient:
             try:
                 HTTP_CLIENT = httpx.AsyncClient(**kwargs)
             except TypeError:  # pragma: no cover - stub may ignore kwargs
-                HTTP_CLIENT = httpx.AsyncClient()
+                simplified_kwargs = {"timeout": timeout}
+                try:
+                    HTTP_CLIENT = httpx.AsyncClient(**simplified_kwargs)
+                except TypeError:  # pragma: no cover - extremely minimal stub
+                    HTTP_CLIENT = httpx.AsyncClient(timeout=timeout)
     return HTTP_CLIENT
 
 
