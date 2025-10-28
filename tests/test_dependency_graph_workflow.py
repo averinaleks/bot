@@ -99,6 +99,14 @@ def test_dependency_graph_events_exclude_dependency_graph_trigger() -> None:
     assert "dependency_graph" not in events
 
 
+def test_dependency_graph_auto_submission_events_exclude_dependency_graph_trigger() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+    events = _extract_events(workflow)
+
+    assert {"workflow_dispatch", "repository_dispatch"} <= set(events)
+    assert "dependency_graph" not in events
+
+
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
     workflow = _load_dependency_graph_workflow()
 
