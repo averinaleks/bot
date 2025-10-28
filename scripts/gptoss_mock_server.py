@@ -22,9 +22,19 @@ import json
 import os
 import signal
 import sys
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+try:
+    from scripts._filesystem import write_secure_text
+except ModuleNotFoundError:  # pragma: no cover - fallback when executed as a script
+    # When ``gptoss_mock_server.py`` is executed as ``python path/to/script.py`` the
+    # ``scripts`` package may be unavailable on ``sys.path``.  Falling back to a
+    # relative import keeps the command-line entry point functional in that mode.
+    from _filesystem import write_secure_text
 
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
