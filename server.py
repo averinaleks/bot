@@ -3,6 +3,7 @@ import asyncio
 import hmac
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from collections.abc import Mapping
 from pathlib import Path

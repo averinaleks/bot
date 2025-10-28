@@ -28,6 +28,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
+if __package__ in {None, ""}:
+    # Allow running the module as a script without installing the project.
+    package_root = Path(__file__).resolve().parent.parent
+    if str(package_root) not in sys.path:
+        sys.path.insert(0, str(package_root))
+
 from scripts._filesystem import write_secure_text
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
