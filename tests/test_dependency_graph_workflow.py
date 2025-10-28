@@ -367,6 +367,10 @@ def test_dependency_graph_auto_submission_checkout_fallbacks_cover_deleted_branc
     assert "github.event.workflow_run.head_commit.id" in workflow
     assert "github.event.workflow_run.head_commit.afterSha" in workflow
     assert "github.sha" in workflow
+    assert "git checkout --force --detach FETCH_HEAD" in workflow
+    assert (
+        "Authenticated fetch for ${target} failed; retrying without GITHUB_TOKEN." in workflow
+    )
 
 
 def test_dependency_graph_auto_submission_checkout_masks_token() -> None:

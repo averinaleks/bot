@@ -527,24 +527,40 @@ jobs:
               REPO="https://github.com/${GITHUB_REPOSITORY}.git"
           fi
 
+          AUTH_FALLBACK_ATTEMPTED=0
+
           fetch_target() {
               local target="$1"
               if [ -z "$target" ]; then
                   return 1
               fi
               if git fetch --no-tags --depth=1 origin "$target"; then
-                  git checkout --detach FETCH_HEAD
+                  git checkout --force --detach FETCH_HEAD
                   return 0
               fi
               if git fetch --no-tags origin "$target"; then
-                  git checkout --detach FETCH_HEAD
+                  git checkout --force --detach FETCH_HEAD
                   return 0
+              fi
+              if [ -n "${GITHUB_TOKEN:-}" ] && [ "${AUTH_FALLBACK_ATTEMPTED:-0}" = "0" ]; then
+                  echo "::warning::Authenticated fetch for ${target} failed; retrying without GITHUB_TOKEN." >&2
+                  AUTH_FALLBACK_ATTEMPTED=1
+                  git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+                  if git fetch --no-tags --depth=1 origin "$target"; then
+                      git checkout --force --detach FETCH_HEAD
+                      return 0
+                  fi
+                  if git fetch --no-tags origin "$target"; then
+                      git checkout --force --detach FETCH_HEAD
+                      return 0
+                  fi
               fi
               return 1
           }
 
           rm -rf .git
           git init .
+          git config --global --add safe.directory "$(pwd)"
           git remote add origin "$REPO"
 
           if [ -n "${CHECKOUT_BEFORE}" ]; then
