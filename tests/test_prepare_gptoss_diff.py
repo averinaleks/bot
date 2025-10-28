@@ -336,6 +336,23 @@ def test_compute_diff_rejects_negative_truncate(monkeypatch: pytest.MonkeyPatch)
         prepare_gptoss_diff._compute_diff("a" * 40, [":(glob)**/*.py"], truncate=-1)
 
 
+def test_compute_diff_truncate_shorter_than_ellipsis(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run_git(_args, *, capture_output: bool = False):
+        _ = capture_output
+        return prepare_gptoss_diff.GitCompletedProcess(
+            tuple(_args),
+            0,
+            stdout="abcdef",
+        )
+
+    monkeypatch.setattr(prepare_gptoss_diff, "_run_git", _fake_run_git)
+
+    result = prepare_gptoss_diff._compute_diff("a" * 40, ["*.py"], truncate=2)
+
+    assert result.content == ".."
+    assert result.has_diff is True
+
+
 def test_prepare_diff_validates_compute_result(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         prepare_gptoss_diff,
