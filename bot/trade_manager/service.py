@@ -19,6 +19,7 @@ from bot.ray_compat import ray
 from flask import Flask, Response, jsonify, request
 
 from services.stubs import create_httpx_stub, is_offline_env
+from bot import config as bot_config
 
 from . import server_common
 from .core import (
@@ -34,10 +35,19 @@ from .core import (
 
 httpx: Any
 
-try:  # pragma: no cover - exercised in environments without httpx
-    httpx = importlib.import_module("httpx")
-except Exception:  # noqa: BLE001 - ensure service works without httpx installed
+_offline_intent = False
+try:
+    _offline_intent = bool(getattr(bot_config, "OFFLINE_MODE", False))
+except Exception:  # pragma: no cover - defensive guard in unusual setups
+    _offline_intent = False
+
+if _offline_intent or is_offline_env():
     httpx = create_httpx_stub()
+else:
+    try:  # pragma: no cover - exercised in environments without httpx
+        httpx = importlib.import_module("httpx")
+    except Exception:  # noqa: BLE001 - ensure service works without httpx installed
+        httpx = create_httpx_stub()
 
 __all__ = [
     "api_app",
