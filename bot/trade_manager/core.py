@@ -56,6 +56,28 @@ TelegramLogger = _utils.TelegramLogger
 test_stubs.apply()
 
 
+def _open_secure_json(path: str):
+    """Return a text file handle with restrictive permissions for JSON dumps."""
+
+    filesystem_path = os.fspath(path)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow and os.path.exists(filesystem_path) and os.path.islink(filesystem_path):
+        raise RuntimeError(
+            f"Refusing to write trade manager state through symlink: {filesystem_path}"
+        )
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if nofollow:
+        flags |= nofollow
+
+    fd = os.open(filesystem_path, flags, 0o600)
+    try:
+        return os.fdopen(fd, "w", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def _ensure_minimal_ray_api(ray_module: Any) -> Any:
     """Patch *ray_module* to expose the attributes used by the trade manager."""
 
@@ -717,8 +739,8 @@ class TradeManager:
                 self.positions.drop(columns="symbol", errors="ignore").reset_index().to_json(
                     tmp_state, orient="records", date_format="iso"
                 )
-            with open(tmp_returns, "w", encoding="utf-8") as f:
-                json.dump(self.returns_by_symbol, f)
+            with _open_secure_json(tmp_returns) as handle:
+                json.dump(self.returns_by_symbol, handle)
             os.replace(tmp_state, self.state_file)
             os.replace(tmp_returns, self.returns_file)
             self.last_save_time = time.time()
