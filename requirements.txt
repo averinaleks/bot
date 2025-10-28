@@ -339,7 +339,7 @@ tokenizers==0.22.0
     # via transformers
 tomli==2.3.0
     # via pytest
-torch==2.8.0+cpu
+torch==2.9.0+cpu
     # via
     #   pytorch-lightning
     #   stable-baselines3

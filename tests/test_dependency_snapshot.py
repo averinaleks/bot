@@ -61,11 +61,11 @@ def test_parse_requirements_skips_blocklisted_packages(tmp_path: Path) -> None:
 
 def test_parse_requirements_encodes_versions_for_purl(tmp_path: Path) -> None:
     requirement_file = tmp_path / "requirements.txt"
-    requirement_file.write_text("torch==2.8.0+cpu\n")
+    requirement_file.write_text("torch==2.9.0+cpu\n")
 
     resolved = snapshot._parse_requirements(requirement_file)
 
-    assert resolved["torch"]["package_url"] == "pkg:pypi/torch@2.8.0%2Bcpu"
+    assert resolved["torch"]["package_url"] == "pkg:pypi/torch@2.9.0%2Bcpu"
 
 
 def test_parse_requirements_handles_decode_errors(
