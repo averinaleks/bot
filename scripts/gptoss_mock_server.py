@@ -28,7 +28,17 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
-from scripts._filesystem import write_secure_text
+try:
+    from scripts._filesystem import write_secure_text
+except ModuleNotFoundError:  # pragma: no cover - executed when run as a script
+    # When invoked as ``python gptoss_mock_server.py`` Python inserts the
+    # ``scripts`` directory (rather than the repository root) into ``sys.path``.
+    # Importing ``scripts._filesystem`` therefore fails because the parent
+    # package is missing.  Adding the repository root restores the regular
+    # package layout so the helper can be imported without requiring callers to
+    # manage ``PYTHONPATH`` manually.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from scripts._filesystem import write_secure_text
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
 _RESPONSE_LIMIT = 4000  # characters
