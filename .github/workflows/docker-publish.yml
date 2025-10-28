@@ -614,6 +614,8 @@ jobs:
           HEALTH_CHECK_BASE_URL: "http://127.0.0.1:8000"
           HEALTH_CHECK_ALLOWED_HOSTS: "localhost,127.0.0.1,::1"
           DATA_HANDLER_USE_STUB: "1"
+          TRADE_MANAGER_TOKEN: "dummy-token"
+          TRADE_RISK_USD: "0"
         run: python scripts/health_check.py
       - name: Cleanup
         if: ${{ always() && steps.start_service.outputs.service_running == 'true' }}
