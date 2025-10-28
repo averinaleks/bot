@@ -369,6 +369,16 @@ def test_dependency_graph_auto_submission_checkout_fallbacks_cover_deleted_branc
     assert "github.sha" in workflow
 
 
+def test_dependency_graph_auto_submission_checkout_masks_token() -> None:
+    workflow = _load_dependency_graph_auto_submission_workflow()
+
+    assert "::add-mask::${GITHUB_TOKEN}" in workflow
+    assert "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" in workflow
+    assert (
+        "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." in workflow
+    )
+
+
 def test_dependency_graph_auto_submission_detect_step_handles_null_strings() -> None:
     workflow = _load_dependency_graph_auto_submission_workflow()
 

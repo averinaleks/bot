@@ -515,7 +515,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          REPO="https://github.com/${GITHUB_REPOSITORY}.git"
+          if [ -z "${GITHUB_REPOSITORY:-}" ]; then
+              echo "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
+              exit 1
+          fi
+
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+              echo "::add-mask::${GITHUB_TOKEN}"
+              REPO="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          else
+              REPO="https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
 
           fetch_target() {
               local target="$1"
