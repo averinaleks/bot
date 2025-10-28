@@ -452,24 +452,24 @@ async def enforce_csrf(request: Request, call_next):
             header_token = request.headers.get(header_name)
         cookie_token = cookies.get(cookie_name) if isinstance(cookies, Mapping) else None
         tokens_present = bool(header_token) and bool(cookie_token)
-        token_status = _describe_csrf_tokens(header_token, cookie_token)
+        csrf_state = _describe_csrf_tokens(header_token, cookie_token)
         try:
             await csrf_protect.validate_csrf(request)
         except CsrfProtectError as exc:
             logging.warning(
-                "CSRF validation failed: method=%s url=%s tokens=%s error=%s",
+                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s",
                 safe_method,
                 safe_url,
-                token_status,
+                sanitize_log_value(csrf_state),
                 sanitize_log_value(str(exc)),
             )
             return _csrf_error_response()
         except Exception as exc:  # pragma: no cover - unexpected library failure
             logging.exception(
-                "Unexpected CSRF error: method=%s url=%s tokens=%s error=%s",
+                "Unexpected CSRF error: method=%s url=%s csrf_state=%s error=%s",
                 safe_method,
                 safe_url,
-                token_status,
+                sanitize_log_value(csrf_state),
                 sanitize_log_value(str(exc)),
             )
             error_payload = json.dumps({"detail": "Internal Server Error"})
@@ -486,10 +486,10 @@ async def enforce_csrf(request: Request, call_next):
             if not header_token:
                 missing_parts.append("header")
             logging.warning(
-                "CSRF validation failed: method=%s url=%s tokens=%s error=%s",
+                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s",
                 safe_method,
                 safe_url,
-                token_status,
+                sanitize_log_value(csrf_state),
                 sanitize_log_value(
                     f"missing csrf {' and '.join(missing_parts)}"
                 ),
