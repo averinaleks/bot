@@ -8,20 +8,40 @@ import time
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple, cast
 
-from pip_audit._audit import AuditOptions, Auditor
-from pip_audit._dependency_source import (
-    DependencySourceError,
-    PipSource,
-)
-from pip_audit._format import JsonFormat
-from pip_audit._service import PyPIService
-from pip_audit._service.interface import (
-    ResolvedDependency,
-    ServiceError,
-    SkippedDependency,
-    VulnerabilityResult,
-)
-from pip_audit._state import AuditState
+try:
+    from pip_audit._audit import AuditOptions, Auditor
+    from pip_audit._dependency_source import (
+        DependencySourceError,
+        PipSource,
+    )
+    from pip_audit._format import JsonFormat
+    from pip_audit._service import PyPIService
+    from pip_audit._service.interface import (
+        ResolvedDependency,
+        ServiceError,
+        SkippedDependency,
+        VulnerabilityResult,
+    )
+    from pip_audit._state import AuditState
+except ModuleNotFoundError:  # pragma: no cover - fallback for local invocation
+    ROOT_DIR = Path(__file__).resolve().parents[1]
+    if str(ROOT_DIR) not in sys.path:
+        sys.path.insert(0, str(ROOT_DIR))
+
+    from pip_audit._audit import AuditOptions, Auditor
+    from pip_audit._dependency_source import (
+        DependencySourceError,
+        PipSource,
+    )
+    from pip_audit._format import JsonFormat
+    from pip_audit._service import PyPIService
+    from pip_audit._service.interface import (
+        ResolvedDependency,
+        ServiceError,
+        SkippedDependency,
+        VulnerabilityResult,
+    )
+    from pip_audit._state import AuditState
 
 from scripts._filesystem import write_secure_text
 
