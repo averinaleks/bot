@@ -22,9 +22,19 @@ import json
 import os
 import signal
 import sys
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
+
+from scripts._filesystem import write_secure_text
 
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
