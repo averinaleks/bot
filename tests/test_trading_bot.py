@@ -1,12 +1,23 @@
-from bot import trading_bot
 import asyncio
+import logging
+import sys
 import time
 import types
-import pytest
-import logging
+
 import httpx
+import pytest
+
 import run_bot
-import sys
+from bot import trading_bot
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    ["nan", "NaN", "inf", "-inf", "1e309"],
+)
+def test_safe_float_rejects_non_finite(monkeypatch: pytest.MonkeyPatch, raw_value: str) -> None:
+    monkeypatch.setenv("SAFE_FLOAT_TEST", raw_value)
+    assert trading_bot.safe_float("SAFE_FLOAT_TEST", 3.5) == 3.5
 
 
 @pytest.mark.asyncio

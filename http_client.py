@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import math
 import random
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
@@ -63,6 +64,14 @@ def _coerce_timeout(raw_value: float | str | int, *, fallback: float = 10.0) -> 
     except (TypeError, ValueError):
         logging.warning(
             "Invalid MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout %.1fs",
+            sanitize_log_value(str(raw_value)),
+            fallback,
+        )
+        return fallback
+
+    if not math.isfinite(parsed):
+        logging.warning(
+            "Non-finite MODEL_DOWNLOAD_TIMEOUT '%s'; using default timeout %.1fs",
             sanitize_log_value(str(raw_value)),
             fallback,
         )

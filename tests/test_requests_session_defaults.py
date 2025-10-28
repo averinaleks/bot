@@ -85,6 +85,8 @@ def test_get_requests_session_timeout_floor(monkeypatch: pytest.MonkeyPatch) -> 
         ("invalid", http_client.DEFAULT_TIMEOUT),
         (-5, http_client.DEFAULT_TIMEOUT),
         (0.05, http_client.DEFAULT_TIMEOUT),
+        ("nan", http_client.DEFAULT_TIMEOUT),
+        ("inf", http_client.DEFAULT_TIMEOUT),
         (2, 2.0),
     ],
 )

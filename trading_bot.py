@@ -117,15 +117,22 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
             default,
         )
         return default
-    if isinstance(result, float) and not math.isfinite(result):
-        logger.warning(
-            "Invalid %s value '%s', using default %s",
-            sanitize_log_value(env_var),
-            sanitize_log_value(value),
-            default,
-        )
-        return default
-    if result <= 0:
+    comparator: float | T
+    try:
+        numeric = float(result)
+    except (TypeError, ValueError):
+        comparator = result
+    else:
+        if not math.isfinite(numeric):
+            logger.warning(
+                "Non-finite %s value '%s', using default %s",
+                sanitize_log_value(env_var),
+                sanitize_log_value(value),
+                default,
+            )
+            return default
+        comparator = numeric
+    if comparator <= 0:  # type: ignore[operator]
         logger.warning(
             "Non-positive %s value '%s', using default %s",
             sanitize_log_value(env_var),
