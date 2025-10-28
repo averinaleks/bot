@@ -166,14 +166,17 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
             "joblib недоступен: установите зависимость для работы с артефактами"
         )
 
-    assert _joblib_numpy_pickle is not None
-    original_unpickler: type[Any] = _joblib_numpy_pickle.NumpyUnpickler
-    compat_unpickler: type[Any] | None = None
-    if _joblib_numpy_pickle_compat is not None:
-        assert _joblib_numpy_pickle_compat is not None
-        compat_unpickler = getattr(
-            _joblib_numpy_pickle_compat, "NumpyUnpickler", None
+    numpy_pickle = _joblib_numpy_pickle
+    if numpy_pickle is None:  # pragma: no cover - defensive fallback
+        raise RuntimeError(
+            "joblib.numpy_pickle недоступен: установите зависимость для работы с артефактами"
         )
+
+    original_unpickler: type[Any] = numpy_pickle.NumpyUnpickler
+    compat_module = _joblib_numpy_pickle_compat
+    compat_unpickler: type[Any] | None = None
+    if compat_module is not None:
+        compat_unpickler = getattr(compat_module, "NumpyUnpickler", None)
 
     class _RestrictedUnpickler(original_unpickler):
         def __init__(self, *args, **kwargs):
@@ -212,19 +215,15 @@ def _restricted_joblib_unpicklers(allowed: Tuple[str, ...]):
                     )
                 return super().find_class(module, name)
 
-    assert _joblib_numpy_pickle is not None
-    _joblib_numpy_pickle.NumpyUnpickler = _RestrictedUnpickler
-    if compat_unpickler is not None:
-        assert _joblib_numpy_pickle_compat is not None
-        _joblib_numpy_pickle_compat.NumpyUnpickler = _RestrictedCompatUnpickler
+    numpy_pickle.NumpyUnpickler = _RestrictedUnpickler
+    if compat_module is not None and compat_unpickler is not None:
+        compat_module.NumpyUnpickler = _RestrictedCompatUnpickler
     try:
         yield
     finally:  # pragma: no cover - ensure restoration even on failure
-        assert _joblib_numpy_pickle is not None
-        _joblib_numpy_pickle.NumpyUnpickler = original_unpickler
-        if compat_unpickler is not None:
-            assert _joblib_numpy_pickle_compat is not None
-            _joblib_numpy_pickle_compat.NumpyUnpickler = compat_unpickler
+        numpy_pickle.NumpyUnpickler = original_unpickler
+        if compat_module is not None and compat_unpickler is not None:
+            compat_module.NumpyUnpickler = compat_unpickler
 
 
 def safe_joblib_load(
