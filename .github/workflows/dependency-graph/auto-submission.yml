@@ -500,9 +500,62 @@ jobs:
               print(f"Resolved 'after' commit: {after}")
           PY
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
+        id: checkout
+        continue-on-error: true
         with:
           fetch-depth: 0
           ref: ${{ steps.event-metadata.outputs.checkout_ref }}
+      - name: Recover checkout when branch references are stale
+        if: steps.checkout.outcome == 'failure'
+        env:
+          CHECKOUT_REF: ${{ steps.event-metadata.outputs.checkout_ref }}
+          CHECKOUT_AFTER: ${{ steps.event-metadata.outputs.after }}
+          CHECKOUT_BEFORE: ${{ steps.event-metadata.outputs.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          REPO="https://github.com/${GITHUB_REPOSITORY}.git"
+
+          fetch_target() {
+              local target="$1"
+              if [ -z "$target" ]; then
+                  return 1
+              fi
+              if git fetch --no-tags --depth=1 origin "$target"; then
+                  git checkout --detach FETCH_HEAD
+                  return 0
+              fi
+              if git fetch --no-tags origin "$target"; then
+                  git checkout --detach FETCH_HEAD
+                  return 0
+              fi
+              return 1
+          }
+
+          rm -rf .git
+          git init .
+          git remote add origin "$REPO"
+
+          if [ -n "${CHECKOUT_BEFORE}" ]; then
+              git fetch --no-tags --depth=1 origin "${CHECKOUT_BEFORE}" || true
+          fi
+
+          if [ -n "${CHECKOUT_AFTER}" ] && fetch_target "${CHECKOUT_AFTER}"; then
+              exit 0
+          fi
+
+          if [ -n "${CHECKOUT_REF}" ] && fetch_target "${CHECKOUT_REF}"; then
+              exit 0
+          fi
+
+          DEFAULT_REF="${DEFAULT_BRANCH:-main}"
+          if fetch_target "refs/heads/${DEFAULT_REF}"; then
+              exit 0
+          fi
+
+          echo "::error::Unable to recover repository checkout for dependency submission." >&2
+          exit 1
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: '3.11'
