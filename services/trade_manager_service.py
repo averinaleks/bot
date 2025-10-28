@@ -167,9 +167,15 @@ def _current_exchange(state: TradeManagerState | None = None) -> Any | None:
     return state.get_exchange()
 
 
+def _in_test_mode() -> bool:
+    return os.getenv("TEST_MODE") == "1"
+
+
 def _exchange_call_timeout() -> float | None:
     raw = os.getenv(_EXCHANGE_TIMEOUT_ENV)
     if raw is None:
+        if _in_test_mode():
+            return 0.5
         return _EXCHANGE_TIMEOUT_DEFAULT
     try:
         value = float(raw)
@@ -847,7 +853,8 @@ def open_position() -> ResponseReturnValue:
                 trailing_offset=trailing_stop,
             )
             opp_side = plan.opposite_side
-            base_delay = 0.1 if os.getenv("TEST_MODE") == "1" else 1.0
+            max_attempts = 1 if _in_test_mode() else 3
+            base_delay = 0.1 if _in_test_mode() else 1.0
 
             def _delay(attempt: int) -> float:
                 return base_delay * (2 ** attempt)
@@ -878,7 +885,7 @@ def open_position() -> ResponseReturnValue:
             if plan.stop_loss_price is not None:
                 stop_order = order_utils.execute_with_retries_sync(
                     lambda: _submit_protective('stop', plan.stop_loss_price),
-                    attempts=3,
+                    attempts=max_attempts,
                     delay=_delay,
                     logger=app.logger,
                     description=f'{symbol} stop_loss order',
@@ -890,7 +897,7 @@ def open_position() -> ResponseReturnValue:
                 if order_utils.order_needs_retry(stop_order):
                     stop_order = order_utils.execute_with_retries_sync(
                         lambda: _submit_protective('stop_market', plan.stop_loss_price),
-                        attempts=3,
+                        attempts=max_attempts,
                         delay=_delay,
                         logger=app.logger,
                         description=f'{symbol} stop_loss fallback',
@@ -908,7 +915,7 @@ def open_position() -> ResponseReturnValue:
             if plan.take_profit_price is not None:
                 tp_order = order_utils.execute_with_retries_sync(
                     lambda: _submit_protective('limit', plan.take_profit_price),
-                    attempts=3,
+                    attempts=max_attempts,
                     delay=_delay,
                     logger=app.logger,
                     description=f'{symbol} take_profit order',
@@ -926,7 +933,7 @@ def open_position() -> ResponseReturnValue:
             if plan.trailing_stop_price is not None:
                 trailing_order = order_utils.execute_with_retries_sync(
                     lambda: _submit_protective('stop', plan.trailing_stop_price),
-                    attempts=3,
+                    attempts=max_attempts,
                     delay=_delay,
                     logger=app.logger,
                     description=f'{symbol} trailing_stop order',
@@ -938,7 +945,7 @@ def open_position() -> ResponseReturnValue:
                 if order_utils.order_needs_retry(trailing_order):
                     trailing_order = order_utils.execute_with_retries_sync(
                         lambda: _submit_protective('stop_market', plan.trailing_stop_price),
-                        attempts=3,
+                        attempts=max_attempts,
                         delay=_delay,
                         logger=app.logger,
                         description=f'{symbol} trailing_stop fallback',
