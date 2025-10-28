@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from scripts._filesystem import write_secure_text
+
 SARIF_PATH = Path("semgrep.sarif")
 
 _EMPTY_SARIF: dict[str, Any] = {
@@ -47,7 +49,7 @@ def ensure_semgrep_sarif(path: Path = SARIF_PATH) -> Path:
     if path.exists() and path.stat().st_size > 0:
         return path
 
-    path.write_text(json.dumps(_EMPTY_SARIF, indent=2), encoding="utf-8")
+    write_secure_text(path, json.dumps(_EMPTY_SARIF, indent=2))
     return path
 
 
@@ -68,10 +70,15 @@ def sarif_result_count(path: Path = SARIF_PATH) -> int:
 def write_github_output(path: Path, *, upload: bool, findings: int, sarif_path: Path) -> None:
     """Append outputs consumed by subsequent workflow steps."""
 
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"upload={'true' if upload else 'false'}\n")
-        handle.write(f"result_count={findings}\n")
-        handle.write(f"sarif_path={sarif_path}\n")
+    write_secure_text(
+        path,
+        (
+            f"upload={'true' if upload else 'false'}\n"
+            f"result_count={findings}\n"
+            f"sarif_path={sarif_path}\n"
+        ),
+        append=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

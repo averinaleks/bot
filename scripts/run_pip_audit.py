@@ -23,6 +23,8 @@ from pip_audit._service.interface import (
 )
 from pip_audit._state import AuditState
 
+from scripts._filesystem import write_secure_text
+
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run pip-audit with project defaults.")
@@ -143,7 +145,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     pkg_count = sum(1 for vulns in result.values() if vulns)
 
     formatter = JsonFormat(output_desc=True, output_aliases=True)
-    output_path.write_text(json.dumps(json.loads(formatter.format(result, [])), indent=2))
+    write_secure_text(
+        output_path,
+        json.dumps(json.loads(formatter.format(result, [])), indent=2),
+    )
 
     if vuln_count:
         print(

@@ -56,6 +56,8 @@ except Exception:  # pragma: no cover - executed only when helpers missing
 
 resolve_github_path = _resolve_github_path
 
+from scripts._filesystem import write_secure_text
+
 
 _DEFAULT_TIMEOUT = 10.0
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -82,9 +84,11 @@ def _write_github_output(skip: bool, head_sha: str) -> None:
         return
 
     try:
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(f"skip={'true' if skip else 'false'}\n")
-            handle.write(f"head_sha={head_sha}\n")
+        write_secure_text(
+            path,
+            f"skip={'true' if skip else 'false'}\nhead_sha={head_sha}\n",
+            append=True,
+        )
     except OSError as exc:  # pragma: no cover - extremely rare on GitHub runners
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 

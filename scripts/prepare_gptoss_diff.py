@@ -41,6 +41,7 @@ if __package__ in {None, ""}:
         sys.path.insert(0, package_root_str)
 
 from scripts.github_path_resolver import resolve_github_path
+from scripts._filesystem import write_secure_text
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -172,11 +173,14 @@ def _write_github_output(**outputs: str | bool) -> None:
         return
 
     try:
-        with path.open("a", encoding="utf-8") as handle:
-            for key, value in outputs.items():
-                if isinstance(value, bool):
-                    value = "true" if value else "false"
-                handle.write(f"{key}={value}\n")
+        lines: list[str] = []
+        for key, value in outputs.items():
+            if isinstance(value, bool):
+                value = "true" if value else "false"
+            lines.append(f"{key}={value}\n")
+        if not lines:
+            return
+        write_secure_text(path, "".join(lines), append=True)
     except OSError as exc:  # pragma: no cover - extremely unlikely on CI
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 
@@ -627,7 +631,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     try:
-        output_path.write_text(result.content, encoding="utf-8")
+        write_secure_text(output_path, result.content)
     except OSError as exc:
         print(f"::warning::Не удалось записать diff: {exc}", file=sys.stderr)
         _write_github_output(has_diff=False)
