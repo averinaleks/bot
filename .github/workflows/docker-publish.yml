@@ -297,12 +297,39 @@ jobs:
             exit 1
           fi
 
+          CURRENT_IMAGE_TAGS=("${ALL_IMAGE_TAGS[@]}")
           DOCKERHUB_TAGS=()
+          GHCR_TAGS=()
+          NON_GHCR_TAGS=()
           for tag in "${ALL_IMAGE_TAGS[@]}"; do
+            if [[ "${tag}" == ghcr.io/* ]]; then
+              GHCR_TAGS+=("${tag}")
+            else
+              NON_GHCR_TAGS+=("${tag}")
+            fi
+
             if [[ "${tag}" == docker.io/* ]]; then
               DOCKERHUB_TAGS+=("${tag}")
             fi
           done
+          ORIGINAL_GHCR_TAGS=("${GHCR_TAGS[@]}")
+
+          disable_ghcr_tags() {
+            if [ "${#ORIGINAL_GHCR_TAGS[@]}" -eq 0 ]; then
+              return 1
+            fi
+
+            if [ "${#NON_GHCR_TAGS[@]}" -eq 0 ]; then
+              local fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
+              NON_GHCR_TAGS=("${fallback_tag}")
+              ghcr_local_only="true"
+            else
+              ghcr_local_only="false"
+            fi
+
+            CURRENT_IMAGE_TAGS=("${NON_GHCR_TAGS[@]}")
+            return 0
+          }
 
           run_build() {
             local use_cache="$1"
@@ -432,9 +459,11 @@ jobs:
           }
 
           ghcr_outage="false"
+          ghcr_tags_disabled="false"
+          ghcr_local_only="false"
 
           set +e
-          run_build true auto "${ALL_IMAGE_TAGS[@]}"
+          run_build true auto "${CURRENT_IMAGE_TAGS[@]}"
           status=$?
           first_log="${BUILD_LOG}"
           set -e
@@ -448,18 +477,40 @@ jobs:
           if detect_ghcr_outage "${first_log}"; then
             ghcr_outage="true"
             echo "::warning::GHCR responded with an HTML error during docker build (cache enabled)"
+            if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
+              ghcr_tags_disabled="true"
+              if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
+                printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
+                skipped_tags=${skipped_tags%, }
+                echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
+              fi
+            fi
           else
             echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
           fi
 
           set +e
-          run_build false auto "${ALL_IMAGE_TAGS[@]}"
+          retry_push_mode="auto"
+          if [ "${ghcr_local_only}" = "true" ]; then
+            retry_push_mode="local"
+          fi
+
+          run_build false "${retry_push_mode}" "${CURRENT_IMAGE_TAGS[@]}"
           retry_status=$?
           second_log="${BUILD_LOG}"
           set -e
 
           if [ "${retry_status}" -eq 0 ]; then
             rm -f "${first_log}" "${second_log}"
+            if [ "${ghcr_tags_disabled}" = "true" ]; then
+              if [ "${#CURRENT_IMAGE_TAGS[@]}" -gt 0 ]; then
+                printf -v kept_tags '%s, ' "${CURRENT_IMAGE_TAGS[@]}"
+                kept_tags=${kept_tags%, }
+              else
+                kept_tags="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
+              fi
+              echo "::notice::Docker image built without GHCR push due to outage; tag(s): ${kept_tags}"
+            fi
             echo "status=success" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
@@ -467,6 +518,14 @@ jobs:
           if detect_ghcr_outage "${second_log}"; then
             ghcr_outage="true"
             echo "::warning::GHCR responded with an HTML error during docker build (cache disabled)"
+            if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
+              ghcr_tags_disabled="true"
+              if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
+                printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
+                skipped_tags=${skipped_tags%, }
+                echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
+              fi
+            fi
           fi
 
           if [ "${ghcr_outage}" = "true" ] && [ "${SHOULD_PUSH}" = "true" ]; then
@@ -489,13 +548,7 @@ jobs:
             echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification"
             set +e
             local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
-            local_tags=()
-            for image_tag in "${ALL_IMAGE_TAGS[@]}"; do
-              if [[ "${image_tag}" == ghcr.io/* ]]; then
-                continue
-              fi
-              local_tags+=("${image_tag}")
-            done
+            local_tags=("${NON_GHCR_TAGS[@]}")
 
             if [ "${#local_tags[@]}" -eq 0 ]; then
               local_tags=("${local_fallback_tag}")
