@@ -232,7 +232,8 @@ numba==0.62.1
     # via
     #   -r requirements.txt
     #   shap
-numpy==2.3.3
+numpy==2.2.6 ; python_version < "3.11"
+numpy==2.3.3 ; python_version >= "3.11"
     # via
     #   -r requirements.txt
     #   contourpy
