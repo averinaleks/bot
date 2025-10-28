@@ -28,6 +28,9 @@ permissions:
 
 jobs:
   submit:
+    if: >-
+      github.repository == 'averinaleks/bot' &&
+      (github.event_name != 'push' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       BOT_AUTO_INSTALL_DISABLED: "1"
