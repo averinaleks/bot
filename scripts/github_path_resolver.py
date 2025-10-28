@@ -4,15 +4,27 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
+from importlib.abc import Loader
 from pathlib import Path
-from typing import Callable
+from typing import Protocol
 
 from scripts.github_path_resolver_fallback import (
     resolve_github_path as _fallback_resolve_github_path,
 )
 
 
-def _load_resolver() -> Callable[[str | None], Path | None]:
+class _Resolver(Protocol):
+    def __call__(
+        self,
+        raw_path: str | None,
+        *,
+        allow_missing: bool = False,
+        description: str = "GitHub provided path",
+    ) -> Path | None:
+        ...
+
+
+def _load_resolver() -> _Resolver:
     existing = sys.modules.get("scripts.github_paths")
     if existing is not None:
         candidate = getattr(existing, "resolve_github_path", None)
@@ -24,7 +36,11 @@ def _load_resolver() -> Callable[[str | None], Path | None]:
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
         try:
-            spec.loader.exec_module(module)  # type: ignore[arg-type]
+            loader = spec.loader
+            if isinstance(loader, Loader):
+                loader.exec_module(module)
+            else:
+                raise TypeError("spec.loader does not implement exec_module")
         except Exception as exc:
             sys.modules.pop(spec.name, None)
             print(
@@ -39,7 +55,7 @@ def _load_resolver() -> Callable[[str | None], Path | None]:
     return _fallback_resolve_github_path
 
 
-_RESOLVER: Callable[[str | None], Path | None] = _load_resolver()
+_RESOLVER: _Resolver = _load_resolver()
 
 
 def resolve_github_path(

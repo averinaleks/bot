@@ -49,9 +49,9 @@ def write_secure_text(
     # settings.
     fd = os.open(path, flags, permissions)
     try:
-        try:
-            os.fchmod(fd, permissions)  # type: ignore[attr-defined]
-        except AttributeError:  # pragma: no cover - Windows compatibility
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, permissions)
+        else:  # pragma: no cover - Windows compatibility
             os.chmod(path, permissions)
         with os.fdopen(fd, "a" if append else "w", encoding=encoding, closefd=False) as handle:
             handle.write(content)
