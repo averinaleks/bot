@@ -72,6 +72,12 @@ _TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
 # additional configuration.  Loopback addresses remain permitted out of the
 # box for single-host deployments.
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "gptoss"})
+# Restrict additional allow-listed host entries to safe hostname characters.
+# The set mirrors common DNS label characters plus IPv6 notation (``[]`` and
+# ``:``). Entries containing whitespace or other characters are rejected before
+# ``socket.getaddrinfo`` is invoked to avoid passing attacker-controlled input
+# to DNS resolution APIs.
+_ALLOWED_HOST_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-.:[]")
 
 
 def _normalise_ip(value: str) -> str:
@@ -438,8 +444,27 @@ def _load_allowed_hosts() -> set[str]:
         return hosts
 
     for part in raw.split(","):
-        normalised = _normalise_allowed_host(part)
+        trimmed = part.strip()
+        if not trimmed:
+            continue
+        if not trimmed.isprintable():
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_HOSTS entry %s: contains control characters",
+                sanitize_log_value(trimmed),
+            )
+            continue
+
+        normalised = _normalise_allowed_host(trimmed)
         if not normalised:
+            continue
+
+        invalid_chars = {ch for ch in normalised if ch not in _ALLOWED_HOST_CHARS}
+        if invalid_chars:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_HOSTS entry %s: contains unsafe characters %s",
+                sanitize_log_value(trimmed),
+                "".join(sorted(invalid_chars)),
+            )
             continue
 
         if _is_local_hostname(normalised):

@@ -91,6 +91,29 @@ def test_load_allowed_hosts_filters_public(monkeypatch, caplog):
     assert "non-private IPs" in caplog.text
 
 
+def test_load_allowed_hosts_rejects_unsafe_characters(monkeypatch, caplog):
+    monkeypatch.setenv(
+        "GPT_OSS_ALLOWED_HOSTS",
+        "trusted.local,bad host,bad%host,bad\nvalue",
+    )
+
+    def fake_getaddrinfo(host, *_args, **_kwargs):
+        if host == "trusted.local":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+        raise AssertionError(host)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    with caplog.at_level(logging.WARNING):
+        hosts = _load_allowed_hosts()
+
+    assert "trusted.local" in hosts
+    assert "bad host" not in hosts
+    assert "bad%host" not in hosts
+    assert "bad\nvalue" not in hosts
+    assert "unsafe characters" in caplog.text
+    assert "control characters" in caplog.text
+
+
 async def run_query(func, prompt):
     if asyncio.iscoroutinefunction(func):
         return await func(prompt)
