@@ -15,8 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
       actions: write
+    outputs:
+      sarif: ${{ steps.summarize.outputs.sarif }}
+      count: ${{ steps.summarize.outputs.count }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -66,13 +68,6 @@ jobs:
           printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
           echo "count=$count" >>"$GITHUB_OUTPUT"
 
-      - name: Upload Trivy SARIF to GitHub Security tab
-        if: ${{ github.event_name != 'pull_request' && always() && steps.summarize.outputs.sarif == 'true' }}
-        uses: github/codeql-action/upload-sarif@17783bfb99b07f70fae080b654aed0c514057477 # codeql-bundle-v2.23.3
-        with:
-          category: trivy-fs
-          sarif_file: trivy-results.sarif
-
       - name: Upload Trivy report artifact
         if: ${{ always() && steps.summarize.outputs.sarif == 'true' }}
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -93,3 +88,24 @@ jobs:
         run: |
           echo "Обнаружено high/critical уязвимостей: ${{ steps.summarize.outputs.count }}" >&2
           exit 1
+
+  upload-sarif:
+    name: Publish Trivy SARIF to Security tab
+    needs: scan
+    if: ${{ github.event_name != 'pull_request' && needs.scan.outputs.sarif == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Download Trivy report artifact
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: trivy-results
+          path: .
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@17783bfb99b07f70fae080b654aed0c514057477 # codeql-bundle-v2.23.3
+        with:
+          category: trivy-fs
+          sarif_file: trivy-results.sarif
