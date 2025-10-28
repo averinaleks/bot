@@ -125,7 +125,7 @@ def safe_number(env_var: str, default: T, cast: Callable[[str], T]) -> T:
     else:
         if not math.isfinite(numeric):
             logger.warning(
-                "Non-finite %s value '%s', using default %s",
+                "Invalid %s value '%s' (non-finite), using default %s",
                 sanitize_log_value(env_var),
                 sanitize_log_value(value),
                 default,
