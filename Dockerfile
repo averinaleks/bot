@@ -46,7 +46,7 @@ else
     equivs
   /bin/bash /tmp/security/harden_gnutar.sh
   python3 -m pip install --no-compile --no-cache-dir --break-system-packages \
-    'pip>=24.0' \
+    'pip>=25.3' \
     'setuptools>=80.9.0,<81' \
     wheel
   if command -v python3.11 >/dev/null 2>&1; then
@@ -104,9 +104,9 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY docker/scripts/update_commons_lang3.py /tmp/security/update_commons_lang3.py
 
-# Install dependencies (pip >=24.0 mitigates CVE-2023-32681; setuptools>=80.9.0
+# Install dependencies (pip >=25.3 mitigates CVE-2025-8869 and CVE-2023-32681; setuptools>=80.9.0
 # addresses recent vulnerabilities)
-RUN pip install --no-compile --no-cache-dir 'pip>=24.0' 'setuptools>=80.9.0,<81' wheel && \
+RUN pip install --no-compile --no-cache-dir 'pip>=25.3' 'setuptools>=80.9.0,<81' wheel && \
     pip install --no-compile --no-cache-dir -r requirements-core.txt -r requirements-gpu.txt && \
     $VIRTUAL_ENV/bin/python /tmp/security/update_commons_lang3.py
 
