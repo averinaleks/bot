@@ -28,7 +28,17 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
-from scripts._filesystem import write_secure_text
+try:
+    from scripts._filesystem import write_secure_text
+except ModuleNotFoundError:  # pragma: no cover - executed when running as a script
+    # When the file is executed via ``python path/to/script.py`` the parent
+    # directory of the repository is not automatically added to ``sys.path``.
+    # Importing the helper via ``scripts._filesystem`` would therefore fail.
+    # Adding the repository root keeps the script functional when launched as a
+    # stand-alone process while remaining a no-op inside the test suite where
+    # the package is already importable.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from scripts._filesystem import write_secure_text
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
 _RESPONSE_LIMIT = 4000  # characters
