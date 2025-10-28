@@ -16,13 +16,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-if __package__ in {None, ""}:
+try:
+    from ._filesystem import write_secure_text
+except ImportError:  # pragma: no cover - executed when run as a script
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from scripts._filesystem import write_secure_text  # type: ignore[import-not-found]
-else:
-    from ._filesystem import write_secure_text
 
 SARIF_PATH = Path("semgrep.sarif")
 
