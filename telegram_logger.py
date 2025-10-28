@@ -18,7 +18,8 @@ import stat
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from types import SimpleNamespace
+from typing import Any, Optional, cast
 
 if "_TELEGRAM_IMPORT_LOGGED" not in globals():
     _TELEGRAM_IMPORT_LOGGED = False
@@ -35,7 +36,7 @@ except Exception as exc:  # pragma: no cover - fallback when httpx absent
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args)
 
-    httpx = _HttpxStub()  # type: ignore[assignment]
+    httpx = cast(Any, _HttpxStub())
     _HTTPX_IMPORT_ERROR: Exception | None = exc
 else:  # pragma: no cover - executed when httpx installed
     _HTTPX_IMPORT_ERROR = None
@@ -48,7 +49,7 @@ from services.logging_utils import sanitize_log_value
 from services.offline import OfflineTelegram
 
 try:  # pragma: no cover - optional dependency
-    from telegram.error import BadRequest, Forbidden, RetryAfter
+    from telegram import error as _telegram_error_module
 except Exception as exc:  # pragma: no cover - missing telegram
     logger_ref = logging.getLogger("TradingBot")
     if not _TELEGRAM_IMPORT_LOGGED:
@@ -71,9 +72,17 @@ except Exception as exc:  # pragma: no cover - missing telegram
             super().__init__(*args)
             self.retry_after = retry_after
 
-    BadRequest = _BadRequest  # type: ignore
-    Forbidden = _Forbidden  # type: ignore
-    RetryAfter = _RetryAfter  # type: ignore
+    telegram_error: Any = SimpleNamespace(
+        BadRequest=_BadRequest,
+        Forbidden=_Forbidden,
+        RetryAfter=_RetryAfter,
+    )
+else:
+    telegram_error = cast(Any, _telegram_error_module)
+
+BadRequest: type[BaseException] = cast(type[BaseException], telegram_error.BadRequest)
+Forbidden: type[BaseException] = cast(type[BaseException], telegram_error.Forbidden)
+RetryAfter: type[BaseException] = cast(type[BaseException], telegram_error.RetryAfter)
 
 
 logger = logging.getLogger("TradingBot")
