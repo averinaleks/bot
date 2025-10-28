@@ -37,7 +37,7 @@ def test_pr_status_step_has_missing_script_guard() -> None:
 def test_helpers_are_preserved_outside_workspace() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    assert 'RUNNER_TEMP%/}/gptoss_helpers' in workflow_text
+    assert 'runner_temp%/}/gptoss_helpers' in workflow_text
     assert "printf 'HELPERS_DIR=%s\\n' \"$safe_dir\" >> \"$GITHUB_ENV\"" in workflow_text
 
 
