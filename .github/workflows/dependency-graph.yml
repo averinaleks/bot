@@ -17,7 +17,8 @@ on:
       # Some integrations use underscores instead of hyphens.
       - "dependency_graph_auto_submission"
 # NOTE: GitHub does not yet accept the experimental ``dependency_graph`` event
-# key in workflow files for public repositories. Auto-submission payloads should
+# key in workflow files for public repositories. Adding it here currently causes
+# the run to be rejected before any jobs start. Auto-submission payloads should
 # therefore be forwarded via the repository dispatch hook declared above.
 
 permissions:
