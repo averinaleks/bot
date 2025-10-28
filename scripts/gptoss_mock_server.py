@@ -28,6 +28,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
+
+if __package__ in {None, ""}:
+    # Ensure the repository root is available on ``sys.path`` when the script
+    # is executed as ``python scripts/gptoss_mock_server.py``.  Without this
+    # adjustment the ``scripts`` package cannot be imported because Python
+    # only adds the script directory (``scripts/``) to ``sys.path``.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts._filesystem import write_secure_text
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
