@@ -20,15 +20,22 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from dataclasses import dataclass
-from pathlib import Path
 import signal
 import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Sequence
 
-from scripts._filesystem import write_secure_text
+from dataclasses import dataclass
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
+
+from scripts._filesystem import write_secure_text  # noqa: E402
 
 _MODEL_NAME = os.getenv("MODEL_NAME", "gptoss-mock")
 _RESPONSE_LIMIT = 4000  # characters

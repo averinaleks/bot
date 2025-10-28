@@ -56,7 +56,7 @@ except Exception:  # pragma: no cover - executed only when helpers missing
 
 resolve_github_path = _resolve_github_path
 
-from scripts._filesystem import write_secure_text
+from scripts._filesystem import write_secure_text  # noqa: E402
 
 
 _DEFAULT_TIMEOUT = 10.0

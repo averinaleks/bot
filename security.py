@@ -18,7 +18,7 @@ import sys
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable, Tuple, cast
+from typing import Any, Iterable, Tuple
 
 from packaging.version import InvalidVersion, Version
 

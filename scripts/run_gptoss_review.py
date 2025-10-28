@@ -62,7 +62,7 @@ except Exception:  # pragma: no cover - executed when helper module is missing
 
 resolve_github_path = _resolve_github_path
 
-from scripts._filesystem import write_secure_text
+from scripts._filesystem import write_secure_text  # noqa: E402
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
