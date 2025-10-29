@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import sys
+
 try:
     from ._filesystem import write_secure_text
 except ImportError:  # pragma: no cover - executed when run as a script
@@ -87,6 +89,25 @@ def write_github_output(path: Path, *, upload: bool, findings: int, sarif_path: 
     )
 
 
+def _normalize_github_output(path: Path | None) -> Path | None:
+    """Return ``None`` when *path* is unset, empty, or refers to a directory."""
+
+    if path is None:
+        return None
+
+    # ``Path("")`` normalizes to ``Path(".")`` which is not a real file target and
+    # causes ``os.open`` to raise ``IsADirectoryError``.  Treat it as missing so the
+    # script can run outside of GitHub Actions where ``GITHUB_OUTPUT`` is unset.
+    if path == Path("."):
+        return None
+
+    if path.exists() and path.is_dir():
+        return None
+
+    text = str(path).strip()
+    return path if text else None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -107,9 +128,17 @@ def main(argv: list[str] | None = None) -> int:
     findings = sarif_result_count(sarif_path)
     has_findings = findings > 0
 
-    if args.github_output is not None:
+    github_output = _normalize_github_output(args.github_output)
+
+    if github_output is None and args.github_output is not None:
+        print(
+            "GitHub output path was empty or a directory; skipping output export.",
+            file=sys.stderr,
+        )
+
+    if github_output is not None:
         write_github_output(
-            args.github_output,
+            github_output,
             upload=has_findings,
             findings=findings,
             sarif_path=sarif_path,
