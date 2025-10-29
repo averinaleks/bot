@@ -327,11 +327,24 @@ class TelegramLogger(logging.Handler):
 
             fd = os.open(path, flags, 0o600)
             try:
+                if hasattr(os, "fchmod"):
+                    os.fchmod(fd, 0o600)
                 info = os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode):
                     raise OSError(
                         errno.EPERM, "unsent message path must be a regular file"
                     )
+
+                if not nofollow:
+                    try:
+                        link_info = os.lstat(path)
+                    except OSError:
+                        link_info = None
+                    if link_info is not None and stat.S_ISLNK(link_info.st_mode):
+                        raise OSError(
+                            errno.EPERM,
+                            "unsent message path must not be a symlink",
+                        )
 
                 data = payload.encode("utf-8")
                 total = 0
