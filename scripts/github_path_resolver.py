@@ -8,6 +8,12 @@ from importlib.abc import Loader
 from pathlib import Path
 from typing import Protocol
 
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
+
 from scripts.github_path_resolver_fallback import (
     resolve_github_path as _fallback_resolve_github_path,
 )
