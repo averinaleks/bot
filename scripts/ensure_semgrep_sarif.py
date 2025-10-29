@@ -96,6 +96,7 @@ def write_github_output(path: Path, *, upload: bool, findings: int, sarif_path: 
             f"sarif_path={sarif_path}\n"
         ),
         append=True,
+        allow_special_files=True,
     )
 
 

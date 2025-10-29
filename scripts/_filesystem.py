@@ -19,6 +19,7 @@ def write_secure_text(
     permissions: int = _DEFAULT_PERMISSIONS,
     encoding: str = "utf-8",
     dir_permissions: int | None = 0o700,
+    allow_special_files: bool = False,
 ) -> None:
     """Write ``content`` to ``path`` using restrictive file permissions.
 
@@ -44,6 +45,12 @@ def write_secure_text(
     dir_permissions:
         Optional mode applied when creating parent directories.  ``None`` skips
         directory creation and leaves existing permissions untouched.
+    allow_special_files:
+        When ``True`` the helper tolerates writing to special files such as
+        FIFOs.  This is primarily intended for GitHub Actions command files
+        (e.g. ``GITHUB_OUTPUT``) which are provided as named pipes on hosted
+        runners.  The safeguard against symlinks remains in place to avoid
+        TOCTOU attacks.
     """
 
     if dir_permissions is not None:
@@ -66,7 +73,10 @@ def write_secure_text(
             os.chmod(path, permissions)
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
-            raise OSError(errno.EPERM, "target file must be a regular file")
+            if allow_special_files and stat.S_ISFIFO(info.st_mode):
+                pass
+            else:
+                raise OSError(errno.EPERM, "target file must be a regular file")
         try:
             link_info = os.lstat(path)
         except OSError:
