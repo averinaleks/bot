@@ -76,8 +76,7 @@ namex==0.1.0
     # via keras
 networkx==3.4.2
     # via torch
-numpy==2.2.6 ; python_version < "3.11"
-numpy==2.3.3 ; python_version >= "3.11"
+numpy==2.2.6
     # via
     #   cupy-cuda12x
     #   h5py
@@ -96,7 +95,7 @@ packaging==25.0
     #   tensorflow
 pillow==11.3.0
     # via tensorboard
-protobuf==6.32.1
+protobuf==6.33.0
     # via
     #   -r requirements-gpu.in
     #   tensorboard
