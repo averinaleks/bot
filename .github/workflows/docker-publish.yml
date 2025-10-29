@@ -284,6 +284,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Защищаемся от history expansion (``!DOCTYPE`` и т.п.) в bash.
+          set +H
 
           if [ -z "${IMAGE_TAGS}" ]; then
             echo "::error::Не удалось подготовить теги Docker-образа"
@@ -400,6 +402,7 @@ jobs:
             # или локальную сборку и избежать ложных падений workflow.
             local -a generic_patterns=(
               "Our services aren't available right now"
+              "failed to parse error response 400"
               "invalid character '<' looking for beginning of value"
               "<!DOCTYPE html>"
               "502 Bad Gateway"
@@ -453,14 +456,81 @@ jobs:
                   return 0
                 fi
               done
-            fi
+              fi
 
-            return 1
-          }
+              return 1
+            }
 
-          ghcr_outage="false"
-          ghcr_tags_disabled="false"
-          ghcr_local_only="false"
+            handle_ghcr_outage() {
+              local log_file="$1"
+              local stage="$2"
+
+              if ! detect_ghcr_outage "${log_file}"; then
+                return 1
+              fi
+
+              echo "::warning::GHCR responded with an HTML error during docker build (${stage})"
+
+              if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
+                ghcr_tags_disabled="true"
+                if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
+                  printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
+                  skipped_tags=${skipped_tags%, }
+                  echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
+                fi
+              fi
+
+              if [ "${SHOULD_PUSH}" = "true" ] && [ "${#DOCKERHUB_TAGS[@]}" -gt 0 ]; then
+                echo "::warning::Retrying docker build with Docker Hub tags only due to GHCR outage (${stage})"
+                set +e
+                run_build false auto "${DOCKERHUB_TAGS[@]}"
+                dockerhub_status=$?
+                dockerhub_log="${BUILD_LOG}"
+                set -e
+                if [ "${dockerhub_status}" -eq 0 ]; then
+                  rm -f "${log_file}" "${dockerhub_log}"
+                  echo "::notice::GHCR push skipped; Docker Hub image updated successfully"
+                  echo "status=success" >> "${GITHUB_OUTPUT}"
+                  return 0
+                fi
+                rm -f "${dockerhub_log}" || true
+              fi
+
+              echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification (${stage})"
+              set +e
+              local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
+              local_tags=("${NON_GHCR_TAGS[@]}")
+              if [ "${#local_tags[@]}" -eq 0 ]; then
+                local_tags=("${local_fallback_tag}")
+              fi
+              primary_local_tag="${local_tags[0]}"
+              local_log=$(mktemp -t docker-build-log.XXXXXX)
+              docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
+              local_status=${PIPESTATUS[0]}
+
+              if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
+                for extra_tag in "${local_tags[@]:1}"; do
+                  docker tag "${primary_local_tag}" "${extra_tag}" || local_status=$?
+                done
+              fi
+
+              local_log_path="${local_log}"
+              set -e
+              if [ "${local_status}" -eq 0 ]; then
+                rm -f "${log_file}" "${local_log_path}"
+                printf -v rendered_tags '%s, ' "${local_tags[@]}"
+                rendered_tags=${rendered_tags%, }
+                echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
+                echo "status=success" >> "${GITHUB_OUTPUT}"
+                return 0
+              fi
+
+              rm -f "${local_log_path}" || true
+              return 1
+            }
+
+            ghcr_tags_disabled="false"
+            ghcr_local_only="false"
 
           set +e
           run_build true auto "${CURRENT_IMAGE_TAGS[@]}"
@@ -474,20 +544,11 @@ jobs:
             exit 0
           fi
 
-          if detect_ghcr_outage "${first_log}"; then
-            ghcr_outage="true"
-            echo "::warning::GHCR responded with an HTML error during docker build (cache enabled)"
-            if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
-              ghcr_tags_disabled="true"
-              if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
-                printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
-                skipped_tags=${skipped_tags%, }
-                echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
-              fi
-            fi
-          else
-            echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
+          if handle_ghcr_outage "${first_log}" "cache enabled"; then
+            exit 0
           fi
+
+          echo "::warning::docker buildx with GitHub Actions cache failed (exit code ${status}), retrying without cache"
 
           set +e
           retry_push_mode="auto"
@@ -515,67 +576,8 @@ jobs:
             exit 0
           fi
 
-          if detect_ghcr_outage "${second_log}"; then
-            ghcr_outage="true"
-            echo "::warning::GHCR responded with an HTML error during docker build (cache disabled)"
-            if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
-              ghcr_tags_disabled="true"
-              if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
-                printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
-                skipped_tags=${skipped_tags%, }
-                echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
-              fi
-            fi
-          fi
-
-          if [ "${ghcr_outage}" = "true" ] && [ "${SHOULD_PUSH}" = "true" ]; then
-            if [ "${#DOCKERHUB_TAGS[@]}" -gt 0 ]; then
-              echo "::warning::Retrying docker build with Docker Hub tags only due to GHCR outage"
-              set +e
-              run_build false auto "${DOCKERHUB_TAGS[@]}"
-              dockerhub_status=$?
-              dockerhub_log="${BUILD_LOG}"
-              set -e
-              if [ "${dockerhub_status}" -eq 0 ]; then
-                rm -f "${first_log}" "${second_log}" "${dockerhub_log}"
-                echo "::notice::GHCR push skipped; Docker Hub image updated successfully"
-                echo "status=success" >> "${GITHUB_OUTPUT}"
-                exit 0
-              fi
-              rm -f "${dockerhub_log}"
-            fi
-
-            echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification"
-            set +e
-            local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
-            local_tags=("${NON_GHCR_TAGS[@]}")
-
-            if [ "${#local_tags[@]}" -eq 0 ]; then
-              local_tags=("${local_fallback_tag}")
-            fi
-
-            primary_local_tag="${local_tags[0]}"
-            local_log=$(mktemp -t docker-build-log.XXXXXX)
-            docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
-            local_status=${PIPESTATUS[0]}
-
-            if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
-              for extra_tag in "${local_tags[@]:1}"; do
-                docker tag "${primary_local_tag}" "${extra_tag}" || local_status=$?
-              done
-            fi
-
-            local_log_path="${local_log}"
-            set -e
-            if [ "${local_status}" -eq 0 ]; then
-              rm -f "${first_log}" "${second_log}" "${local_log_path}"
-              printf -v rendered_tags '%s, ' "${local_tags[@]}"
-              rendered_tags=${rendered_tags%, }
-              echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
-              echo "status=success" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-            rm -f "${local_log_path}"
+          if handle_ghcr_outage "${second_log}" "cache disabled"; then
+            exit 0
           fi
 
           echo "::error::Docker build failed even after retry without cache (exit code ${retry_status})"
