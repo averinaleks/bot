@@ -65,7 +65,9 @@ resolve_github_path = _resolve_github_path
 try:  # pragma: no cover - exercised when helpers ship without the module
     from scripts._filesystem import write_secure_text  # noqa: E402
 except Exception:  # pragma: no cover - fallback for legacy commits
+    import errno as _errno
     import os as _os
+    import stat as _stat
 
     def write_secure_text(
         path: Path,
@@ -75,6 +77,7 @@ except Exception:  # pragma: no cover - fallback for legacy commits
         permissions: int = 0o600,
         encoding: str = "utf-8",
         dir_permissions: int | None = 0o700,
+        allow_special_files: bool = False,
     ) -> None:
         if dir_permissions is not None:
             parent = path.parent
@@ -90,6 +93,18 @@ except Exception:  # pragma: no cover - fallback for legacy commits
                 _os.fchmod(fd, permissions)
             else:  # pragma: no cover - Windows compatibility
                 _os.chmod(path, permissions)
+            info = _os.fstat(fd)
+            if not _stat.S_ISREG(info.st_mode):
+                if allow_special_files and _stat.S_ISFIFO(info.st_mode):
+                    pass
+                else:
+                    raise OSError(_errno.EPERM, "target file must be a regular file")
+            try:
+                link_info = _os.lstat(path)
+            except OSError:
+                link_info = None
+            if link_info is not None and _stat.S_ISLNK(link_info.st_mode):
+                raise OSError(_errno.EPERM, "refusing to write through symlink")
             mode = "a" if append else "w"
             with _os.fdopen(fd, mode, encoding=encoding, closefd=False) as handle:
                 handle.write(content)

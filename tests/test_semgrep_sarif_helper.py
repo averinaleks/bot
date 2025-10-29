@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from scripts import ensure_semgrep_sarif as semgrep_helper
@@ -46,6 +48,35 @@ def test_write_github_output_appends_expected_values(tmp_path: Path) -> None:
     assert content[2] == "sarif_path=semgrep.sarif"
     assert content[3] == "upload=false"
     assert content[4] == "result_count=0"
+
+
+def test_write_github_output_supports_named_pipes(tmp_path: Path) -> None:
+    fifo_path = tmp_path / "github_output_fifo"
+    os.mkfifo(fifo_path)
+
+    received: list[str] = []
+
+    def _reader() -> None:
+        with fifo_path.open("r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    try:
+        semgrep_helper.write_github_output(
+            fifo_path,
+            upload=True,
+            findings=3,
+            sarif_path=Path("semgrep.sarif"),
+        )
+    finally:
+        reader.join(timeout=5)
+    assert not reader.is_alive()
+
+    assert received
+    assert "upload=true" in received[0]
+    assert "result_count=3" in received[0]
 
 
 def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
