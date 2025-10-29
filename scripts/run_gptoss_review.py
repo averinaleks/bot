@@ -62,7 +62,39 @@ except Exception:  # pragma: no cover - executed when helper module is missing
 
 resolve_github_path = _resolve_github_path
 
-from scripts._filesystem import write_secure_text  # noqa: E402
+try:  # pragma: no cover - exercised when helpers ship without the module
+    from scripts._filesystem import write_secure_text  # noqa: E402
+except Exception:  # pragma: no cover - fallback for legacy commits
+    import os as _os
+
+    def write_secure_text(
+        path: Path,
+        content: str,
+        *,
+        append: bool = False,
+        permissions: int = 0o600,
+        encoding: str = "utf-8",
+        dir_permissions: int | None = 0o700,
+    ) -> None:
+        if dir_permissions is not None:
+            parent = path.parent
+            if parent and parent != Path("."):
+                parent.mkdir(parents=True, exist_ok=True, mode=dir_permissions)
+
+        flags = _os.O_WRONLY | _os.O_CREAT
+        flags |= _os.O_APPEND if append else _os.O_TRUNC
+
+        fd = _os.open(path, flags, permissions)
+        try:
+            if hasattr(_os, "fchmod"):
+                _os.fchmod(fd, permissions)
+            else:  # pragma: no cover - Windows compatibility
+                _os.chmod(path, permissions)
+            mode = "a" if append else "w"
+            with _os.fdopen(fd, mode, encoding=encoding, closefd=False) as handle:
+                handle.write(content)
+        finally:
+            _os.close(fd)
 
 _PROMPT_PREFIX = "Review the following diff and provide feedback:\n"
 _ALLOWED_HOSTS_ENV = "GPT_OSS_ALLOWED_HOSTS"
