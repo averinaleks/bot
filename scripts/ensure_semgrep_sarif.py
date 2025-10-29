@@ -19,10 +19,20 @@ from typing import Any
 try:
     from ._filesystem import write_secure_text
 except ImportError:  # pragma: no cover - executed when run as a script
+    import importlib.util
     import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from scripts._filesystem import write_secure_text  # type: ignore[import-not-found]
+    _FS_RELATIVE_PATH = Path(__file__).resolve().parent / "_filesystem.py"
+
+    module_name = "scripts._filesystem"
+    spec = importlib.util.spec_from_file_location(module_name, _FS_RELATIVE_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive branch
+        raise ImportError("Unable to load scripts._filesystem helper")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    write_secure_text = module.write_secure_text  # type: ignore[attr-defined]
 
 SARIF_PATH = Path("semgrep.sarif")
 
