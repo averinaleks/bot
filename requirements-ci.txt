@@ -15,7 +15,7 @@ pydantic==2.12.3
 # gymnasium and scikit-learn are unavailable on some Python versions
 gymnasium==1.2.0; python_version<'3.12'
 # Pin pandas to stay compatible with the numpy version used across builds
-pandas==2.2.3; python_version < "3.11"
+pandas==2.3.3; python_version < "3.11"
 pandas==2.3.3; python_version >= "3.11"
 polars==1.34.0
 pyarrow==22.0.0
