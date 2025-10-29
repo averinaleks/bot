@@ -200,7 +200,8 @@ packaging==25.0
     #   statsmodels
     #   torchmetrics
     #   transformers
-pandas==2.3.3
+pandas==2.2.3; python_version < "3.11"
+pandas==2.3.3; python_version >= "3.11"
     # via
     #   -r requirements-core.in
     #   shap
