@@ -37,7 +37,7 @@ hypothesis>=6.90.0
 # NumPy 2.3 dropped support for Python 3.10, so we keep the 3.10 builds on
 # the latest compatible 2.2.x release and allow newer interpreters to use
 # the 2.3 series.
-numpy==2.2.6; python_version < "3.11"
+numpy==2.3.3; python_version < "3.11"
 numpy==2.3.3; python_version >= "3.11"
 pip-audit==2.9.0
 pybit==5.12.0
