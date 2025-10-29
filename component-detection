@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -165,13 +166,33 @@ def _write_manifest(base: Path, output_path: Path, serialized: str) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_manifest_parents_safe(base, output_path)
 
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW  # type: ignore[attr-defined]
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_TRUNC
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags |= nofollow
 
     fd: int | None = None
     try:
         fd = os.open(os.fspath(output_path), flags, 0o600)
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("ManifestFile must be a regular file")
+
+        try:
+            link_info = os.lstat(output_path)
+        except OSError:
+            link_info = None
+        if link_info is not None and stat.S_ISLNK(link_info.st_mode):
+            raise ValueError("ManifestFile must not be a symlink")
+
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             fd = None  # ``fdopen`` now owns the descriptor.
             handle.write(serialized)

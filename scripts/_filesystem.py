@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import os
+import stat
 from pathlib import Path
 from typing import Final
 
@@ -62,6 +64,15 @@ def write_secure_text(
             os.fchmod(fd, permissions)
         else:  # pragma: no cover - Windows compatibility
             os.chmod(path, permissions)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError(errno.EPERM, "target file must be a regular file")
+        try:
+            link_info = os.lstat(path)
+        except OSError:
+            link_info = None
+        if link_info is not None and stat.S_ISLNK(link_info.st_mode):
+            raise OSError(errno.EPERM, "refusing to write through symlink")
         with os.fdopen(fd, "a" if append else "w", encoding=encoding, closefd=False) as handle:
             handle.write(content)
     finally:

@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import re
+import stat
 import sys
 import time
 from pathlib import Path
@@ -207,12 +208,14 @@ def _open_secure_artifact(
         raise ValueError("binary mode cannot be combined with text encoding")
 
     nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if not nofollow and path.exists() and path.is_symlink():
-        raise RuntimeError(
-            f"Отказ сохранения артефакта модели через символьную ссылку: {path}"
-        )
 
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_TRUNC
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     if nofollow:
         flags |= nofollow
 
@@ -226,6 +229,23 @@ def _open_secure_artifact(
         raise
 
     try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError(
+                "Артефакт модели должен сохраняться в обычный файл"
+            )
+
+        try:
+            link_info = os.lstat(path)
+        except OSError:
+            link_info = None
+        if link_info is not None and stat.S_ISLNK(link_info.st_mode):
+            raise RuntimeError(
+                f"Отказ сохранения артефакта модели через символьную ссылку: {path}"
+            )
+
         return os.fdopen(fd, mode, encoding=encoding)
     except Exception:
         os.close(fd)

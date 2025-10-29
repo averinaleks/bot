@@ -7,16 +7,18 @@ notifications while interacting with the :class:`ModelBuilder` and exchange.
 
 import asyncio
 import atexit
-import signal
-import os
-import sys
-import types
+import errno
+import importlib
 import json
 import logging
-import importlib
+import os
 import re
+import signal
+import stat
+import sys
 import threading
 import time
+import types
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
@@ -61,17 +63,43 @@ def _open_secure_json(path: str):
 
     filesystem_path = os.fspath(path)
     nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if not nofollow and os.path.exists(filesystem_path) and os.path.islink(filesystem_path):
-        raise RuntimeError(
-            f"Refusing to write trade manager state through symlink: {filesystem_path}"
-        )
-
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_TRUNC
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     if nofollow:
         flags |= nofollow
 
-    fd = os.open(filesystem_path, flags, 0o600)
     try:
+        fd = os.open(filesystem_path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.EPERM}:
+            raise RuntimeError(
+                f"Refusing to write trade manager state through symlink: {filesystem_path}"
+            ) from exc
+        raise
+
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError(
+                "Trade manager state must be written to a regular file",
+            )
+
+        try:
+            link_info = os.lstat(filesystem_path)
+        except OSError:
+            link_info = None
+        if link_info is not None and stat.S_ISLNK(link_info.st_mode):
+            raise RuntimeError(
+                f"Refusing to write trade manager state through symlink: {filesystem_path}"
+            )
+
         return os.fdopen(fd, "w", encoding="utf-8")
     except Exception:
         os.close(fd)
