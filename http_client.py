@@ -180,6 +180,34 @@ def _normalise_requests_verify(value: object) -> object | None:
     )
 
 
+def _normalise_httpx_verify(value: object) -> object:
+    """Return an ``httpx``-compatible ``verify`` argument without disabling TLS."""
+
+    if isinstance(value, bool):
+        if not value:
+            raise ValueError(
+                "TLS certificate verification cannot be disabled; "
+                "provide a certificate bundle instead."
+            )
+        return True
+
+    if value is None:
+        return True
+
+    if isinstance(value, (str, os.PathLike)):
+        path = os.fspath(value)
+        if not path.strip():
+            raise ValueError("TLS verification path must not be empty")
+        return path
+
+    if ssl is not None and isinstance(value, ssl.SSLContext):
+        return value
+
+    raise TypeError(
+        "verify must be True, None, an SSLContext, or a non-empty path-like object"
+    )
+
+
 @contextmanager
 def get_requests_session(
     timeout: float = DEFAULT_TIMEOUT,
@@ -240,6 +268,8 @@ def get_httpx_client(
     timeout: float = DEFAULT_TIMEOUT, **kwargs
 ) -> Generator[HTTPXClient, None, None]:
     """Return an :class:`httpx.Client` with a default timeout."""
+    verify_value = kwargs.pop("verify", True)
+    kwargs["verify"] = _normalise_httpx_verify(verify_value)
     if "timeout" in kwargs:
         kwargs["timeout"] = _normalise_timeout(
             kwargs["timeout"], fallback=DEFAULT_TIMEOUT
@@ -254,11 +284,16 @@ def get_httpx_client(
     try:
         client = httpx.Client(**kwargs)
     except TypeError:  # pragma: no cover - stubbed client
-        simplified_kwargs = {"timeout": kwargs["timeout"]}
+        simplified_kwargs = {
+            "timeout": kwargs["timeout"],
+            "verify": kwargs["verify"],
+        }
         try:
             client = httpx.Client(**simplified_kwargs)
         except TypeError:  # pragma: no cover - extremely minimal stub
-            client = httpx.Client(timeout=kwargs["timeout"])
+            client = httpx.Client(
+                timeout=kwargs["timeout"], verify=kwargs["verify"]
+            )
     try:
         yield client
     finally:
@@ -272,6 +307,8 @@ def get_httpx_client(
 _ASYNC_CLIENT: HTTPXAsyncClient | None = None
 _ASYNC_CLIENT_LOCK: asyncio.Lock | None = None
 _ASYNC_CLIENT_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
+_ASYNC_CLIENT_VERIFY_SENTINEL = object()
+_ASYNC_CLIENT_VERIFY: object = _ASYNC_CLIENT_VERIFY_SENTINEL
 
 
 def _get_async_client_lock() -> asyncio.Lock:
@@ -293,7 +330,9 @@ async def get_async_http_client(
     timeout: float = 10.0, **kwargs
 ) -> HTTPXAsyncClient:
     """Return a shared :class:`httpx.AsyncClient` instance."""
-    global _ASYNC_CLIENT
+    global _ASYNC_CLIENT, _ASYNC_CLIENT_VERIFY
+    verify_value = kwargs.pop("verify", True)
+    normalised_verify = _normalise_httpx_verify(verify_value)
     lock = _get_async_client_lock()
     async with lock:
         if _ASYNC_CLIENT is None:
@@ -306,20 +345,35 @@ async def get_async_http_client(
                     timeout, fallback=DEFAULT_TIMEOUT
                 )
             kwargs.setdefault("trust_env", False)
+            kwargs["verify"] = normalised_verify
             try:
                 _ASYNC_CLIENT = httpx.AsyncClient(**kwargs)
             except TypeError:  # pragma: no cover - stubbed client
-                simplified_kwargs = {"timeout": kwargs["timeout"]}
+                simplified_kwargs = {
+                    "timeout": kwargs["timeout"],
+                    "verify": kwargs["verify"],
+                }
                 try:
                     _ASYNC_CLIENT = httpx.AsyncClient(**simplified_kwargs)
                 except TypeError:  # pragma: no cover - extremely minimal stub
-                    _ASYNC_CLIENT = httpx.AsyncClient(timeout=kwargs["timeout"])
+                    _ASYNC_CLIENT = httpx.AsyncClient(
+                        timeout=kwargs["timeout"], verify=kwargs["verify"]
+                    )
+            _ASYNC_CLIENT_VERIFY = normalised_verify
+        else:
+            if _ASYNC_CLIENT_VERIFY is _ASYNC_CLIENT_VERIFY_SENTINEL:
+                _ASYNC_CLIENT_VERIFY = normalised_verify
+            elif normalised_verify != _ASYNC_CLIENT_VERIFY:
+                raise ValueError(
+                    "Async HTTP client already initialised with different TLS "
+                    "verification settings"
+                )
     return _ASYNC_CLIENT
 
 
 async def close_async_http_client() -> None:
     """Close the shared asynchronous HTTP client if it exists."""
-    global _ASYNC_CLIENT
+    global _ASYNC_CLIENT, _ASYNC_CLIENT_VERIFY
     lock = _get_async_client_lock()
     async with lock:
         if _ASYNC_CLIENT is not None:
@@ -330,6 +384,7 @@ async def close_async_http_client() -> None:
                 except Exception:
                     logging.exception("Failed to close async HTTP client")
             _ASYNC_CLIENT = None
+            _ASYNC_CLIENT_VERIFY = _ASYNC_CLIENT_VERIFY_SENTINEL
 
 
 @asynccontextmanager
@@ -337,6 +392,8 @@ async def async_http_client(
     timeout: float = 10.0, **kwargs
 ) -> AsyncGenerator[HTTPXAsyncClient, None]:
     """Context manager providing a temporary :class:`httpx.AsyncClient`."""
+    verify_value = kwargs.pop("verify", True)
+    kwargs["verify"] = _normalise_httpx_verify(verify_value)
     if "timeout" in kwargs:
         kwargs["timeout"] = _normalise_timeout(
             kwargs["timeout"], fallback=DEFAULT_TIMEOUT
@@ -347,11 +404,16 @@ async def async_http_client(
     try:
         client = httpx.AsyncClient(**kwargs)
     except TypeError:  # pragma: no cover - stubbed client
-        simplified_kwargs = {"timeout": kwargs["timeout"]}
+        simplified_kwargs = {
+            "timeout": kwargs["timeout"],
+            "verify": kwargs["verify"],
+        }
         try:
             client = httpx.AsyncClient(**simplified_kwargs)
         except TypeError:  # pragma: no cover - extremely minimal stub
-            client = httpx.AsyncClient(timeout=kwargs["timeout"])
+            client = httpx.AsyncClient(
+                timeout=kwargs["timeout"], verify=kwargs["verify"]
+            )
     try:
         yield client
     finally:
