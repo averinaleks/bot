@@ -16,6 +16,12 @@ def test_get_httpx_client_trust_env_false():
         assert client.trust_env is False
 
 
+def test_get_httpx_client_rejects_verify_false():
+    with pytest.raises(ValueError):
+        with get_httpx_client(verify=False):
+            pass
+
+
 def test_get_httpx_client_enforces_timeout_floor():
     with get_httpx_client(timeout=0) as client:
         assert isinstance(client.timeout, httpx.Timeout)
@@ -39,6 +45,13 @@ async def test_async_http_client_normalises_timeout_argument():
 
 
 @pytest.mark.asyncio
+async def test_async_http_client_rejects_verify_false():
+    with pytest.raises(ValueError):
+        async with async_http_client(verify=False):
+            pass
+
+
+@pytest.mark.asyncio
 async def test_async_http_client_preserves_timeout_object():
     custom = httpx.Timeout(2.5)
     async with async_http_client(timeout=custom) as client:
@@ -55,6 +68,13 @@ async def test_get_async_http_client_normalises_timeout_argument():
         assert client.timeout.connect == pytest.approx(DEFAULT_TIMEOUT)
     finally:
         await close_async_http_client()
+
+
+@pytest.mark.asyncio
+async def test_get_async_http_client_rejects_verify_false():
+    await close_async_http_client()
+    with pytest.raises(ValueError):
+        await get_async_http_client(verify=False)
 
 
 @pytest.mark.asyncio
