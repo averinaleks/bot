@@ -91,9 +91,10 @@ exec(textwrap.dedent("""
     from requests.exceptions import RequestException
     from urllib3.util.retry import Retry
 
+    COMMONS_LANG3_FILENAME = "commons-lang3-3.18.0.jar"
     COMMONS_LANG3_URL = (
         "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/"
-        "commons-lang3-3.18.0.jar"
+        f"{COMMONS_LANG3_FILENAME}"
     )
     COMMONS_LANG3_SHA256 = (
         "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
@@ -206,7 +207,7 @@ exec(textwrap.dedent("""
 
         jars_dir = pathlib.Path(ray.__file__).resolve().parent / "jars"
         jars_dir.mkdir(parents=True, exist_ok=True)
-        destination = jars_dir / "commons-lang3-3.18.0.jar"
+        destination = jars_dir / COMMONS_LANG3_FILENAME
         existing_jars = list(jars_dir.glob("commons-lang3-*.jar"))
 
         allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
