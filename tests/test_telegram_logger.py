@@ -321,6 +321,44 @@ def test_save_unsent_handles_symlink_race(tmp_path, monkeypatch, caplog):
     asyncio.run(TelegramLogger.shutdown())
 
 
+def test_save_unsent_detects_path_swap(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("TEST_MODE", "1")
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    monkeypatch.setattr(
+        telegram_logger_module, "_get_log_dir", lambda: log_dir.resolve(strict=False)
+    )
+
+    resolved = resolve_unsent_path(log_dir, "unsent.log")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text("", encoding="utf-8")
+
+    tl = TelegramLogger(DummyBot(), chat_id=1, unsent_path=resolved)
+
+    original_fstat = telegram_logger_module.os.fstat
+
+    def fake_fstat(fd):
+        stat_result = original_fstat(fd)
+        return types.SimpleNamespace(
+            st_mode=stat_result.st_mode,
+            st_dev=stat_result.st_dev + 1,
+            st_ino=stat_result.st_ino + 1,
+        )
+
+    monkeypatch.setattr(telegram_logger_module.os, "fstat", fake_fstat)
+    caplog.set_level(logging.WARNING)
+
+    tl._save_unsent(5, "payload")
+
+    assert resolved.read_text(encoding="utf-8") == ""
+    assert any(
+        "Refusing to write Telegram fallback message" in rec.message
+        for rec in caplog.records
+    )
+
+    asyncio.run(TelegramLogger.shutdown())
+
+
 def test_save_unsent_sets_strict_file_permissions(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"

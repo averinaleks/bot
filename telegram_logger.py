@@ -322,16 +322,63 @@ class TelegramLogger(logging.Handler):
             flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
             flags |= getattr(os, "O_CLOEXEC", 0)
             nofollow = getattr(os, "O_NOFOLLOW", 0)
-            if nofollow:
-                flags |= nofollow
 
-            fd = os.open(path, flags, 0o600)
+            try:
+                fd = os.open(path, flags | nofollow, 0o600)
+            except OSError as exc:
+                # Some platforms (e.g. macOS) raise ``EINVAL`` when combining
+                # ``O_NOFOLLOW`` with ``O_CREAT``.  Fall back to opening
+                # without the flag—post-open integrity checks below still guard
+                # against symlink swaps.
+                if nofollow and exc.errno in {errno.EINVAL, errno.ENOTSUP}:
+                    fd = os.open(path, flags, 0o600)
+                else:
+                    raise
+
             try:
                 info = os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode):
                     raise OSError(
                         errno.EPERM, "unsent message path must be a regular file"
                     )
+
+                try:
+                    path_stat = path.lstat()
+                except (OSError, AttributeError, NotImplementedError) as stat_exc:
+                    # ``lstat`` is not available or the path vanished between
+                    # ``open`` and inspection.  Treat disappearance as a hard
+                    # failure so the caller can log a warning and avoid writing
+                    # to an unexpected location.
+                    if isinstance(stat_exc, OSError) and stat_exc.errno in {
+                        errno.ENOENT,
+                        errno.ENOTDIR,
+                    }:
+                        raise OSError(
+                            errno.EPERM,
+                            "unsent message path disappeared before writing",
+                        ) from stat_exc
+                    # AttributeError/NotImplementedError mean the platform
+                    # lacks ``lstat`` (e.g. some alternative implementations).
+                    # In that case we skip the inode comparison—``O_NOFOLLOW``
+                    # or the ``is_symlink`` pre-check still protect us.
+                    path_stat = None
+                else:
+                    if stat.S_ISLNK(path_stat.st_mode):
+                        raise OSError(
+                            errno.EPERM, "unsent message path must not be a symlink"
+                        )
+                    if not stat.S_ISREG(path_stat.st_mode):
+                        raise OSError(
+                            errno.EPERM, "unsent message path must be a regular file"
+                        )
+                    if (path_stat.st_dev, path_stat.st_ino) != (
+                        info.st_dev,
+                        info.st_ino,
+                    ):
+                        raise OSError(
+                            errno.EPERM,
+                            "unsent message path changed between open and write",
+                        )
 
                 data = payload.encode("utf-8")
                 total = 0
