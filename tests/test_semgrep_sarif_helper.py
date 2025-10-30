@@ -366,3 +366,26 @@ def test_cli_skips_directory_github_output(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "skipping output export" in result.stderr.lower()
     assert "No Semgrep findings detected" in result.stdout
+
+
+@pytest.mark.skipif(
+    not Path("/dev/null").exists(),
+    reason="Character devices are not available on this platform",
+)
+def test_cli_supports_character_device_output(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--github-output", "/dev/null"],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "No Semgrep findings detected" in result.stdout

@@ -67,22 +67,45 @@ def write_secure_text(
     # settings.
     fd = os.open(path, flags, permissions)
     try:
-        if hasattr(os, "fchmod"):
-            os.fchmod(fd, permissions)
-        else:  # pragma: no cover - Windows compatibility
-            os.chmod(path, permissions)
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            if allow_special_files and stat.S_ISFIFO(info.st_mode):
-                pass
-            else:
-                raise OSError(errno.EPERM, "target file must be a regular file")
+
+        # GitHub Actions exposes ``GITHUB_OUTPUT`` as either a FIFO, UNIX socket,
+        # or character device depending on the runner version.  The caller can
+        # opt-in to writing to these special files by setting
+        # ``allow_special_files`` which we use for workflow command files.  Keep
+        # treating every other special file as an error to avoid accidentally
+        # writing sensitive information to unexpected locations.
+        is_regular_file = stat.S_ISREG(info.st_mode)
+        is_allowed_special = False
+        if allow_special_files and not is_regular_file:
+            is_allowed_special = any(
+                checker(info.st_mode)
+                for checker in (
+                    stat.S_ISFIFO,
+                    getattr(stat, "S_ISSOCK", lambda mode: False),
+                    getattr(stat, "S_ISCHR", lambda mode: False),
+                )
+            )
+
+        if not is_regular_file and not is_allowed_special:
+            raise OSError(errno.EPERM, "target file must be a regular file")
+
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, permissions)
+            else:  # pragma: no cover - Windows compatibility
+                os.chmod(path, permissions)
+        except OSError:
+            if not is_allowed_special:
+                raise
+
         try:
             link_info = os.lstat(path)
         except OSError:
             link_info = None
         if link_info is not None and stat.S_ISLNK(link_info.st_mode):
             raise OSError(errno.EPERM, "refusing to write through symlink")
+
         with os.fdopen(fd, "a" if append else "w", encoding=encoding, closefd=False) as handle:
             handle.write(content)
     finally:
