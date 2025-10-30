@@ -1,5 +1,7 @@
 import pytest
 
+import ssl
+
 import httpx
 
 from http_client import (
@@ -19,6 +21,23 @@ def test_get_httpx_client_trust_env_false():
 def test_get_httpx_client_rejects_verify_false():
     with pytest.raises(ValueError):
         with get_httpx_client(verify=False):
+            pass
+
+
+def test_get_httpx_client_rejects_insecure_ssl_context():
+    hostname_context = ssl.create_default_context()
+    hostname_context.check_hostname = False
+
+    with pytest.raises(ValueError):
+        with get_httpx_client(verify=hostname_context):
+            pass
+
+    verify_context = ssl.create_default_context()
+    verify_context.check_hostname = False
+    verify_context.verify_mode = ssl.CERT_NONE
+
+    with pytest.raises(ValueError):
+        with get_httpx_client(verify=verify_context):
             pass
 
 
@@ -52,6 +71,24 @@ async def test_async_http_client_rejects_verify_false():
 
 
 @pytest.mark.asyncio
+async def test_async_http_client_rejects_insecure_ssl_context():
+    hostname_context = ssl.create_default_context()
+    hostname_context.check_hostname = False
+
+    with pytest.raises(ValueError):
+        async with async_http_client(verify=hostname_context):
+            pass
+
+    verify_context = ssl.create_default_context()
+    verify_context.check_hostname = False
+    verify_context.verify_mode = ssl.CERT_NONE
+
+    with pytest.raises(ValueError):
+        async with async_http_client(verify=verify_context):
+            pass
+
+
+@pytest.mark.asyncio
 async def test_async_http_client_preserves_timeout_object():
     custom = httpx.Timeout(2.5)
     async with async_http_client(timeout=custom) as client:
@@ -76,6 +113,23 @@ async def test_get_async_http_client_rejects_verify_false():
     with pytest.raises(ValueError):
         await get_async_http_client(verify=False)
 
+
+@pytest.mark.asyncio
+async def test_get_async_http_client_rejects_insecure_ssl_context():
+    await close_async_http_client()
+
+    hostname_context = ssl.create_default_context()
+    hostname_context.check_hostname = False
+
+    with pytest.raises(ValueError):
+        await get_async_http_client(verify=hostname_context)
+
+    verify_context = ssl.create_default_context()
+    verify_context.check_hostname = False
+    verify_context.verify_mode = ssl.CERT_NONE
+
+    with pytest.raises(ValueError):
+        await get_async_http_client(verify=verify_context)
 
 @pytest.mark.asyncio
 async def test_get_async_http_client_respects_timeout_object():

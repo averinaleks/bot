@@ -45,6 +45,34 @@ except Exception:  # noqa: BLE001 - guarantee stub availability
 else:
     httpx = _httpx
 
+if ssl is not None:  # pragma: no cover - executed on platforms with SSL support
+    _SSLContextType = ssl.SSLContext
+else:  # pragma: no cover - extremely rare environments without SSL
+    _SSLContextType = Any  # type: ignore[misc,assignment]
+
+
+def _ensure_secure_ssl_context(context: _SSLContextType) -> _SSLContextType:
+    """Ensure *context* enforces certificate and hostname verification."""
+
+    if ssl is None:
+        return context
+
+    if context.verify_mode == ssl.CERT_NONE:
+        raise ValueError(
+            "TLS certificate verification cannot be disabled via SSLContext"
+        )
+
+    # ``SSLContext.check_hostname`` may be absent on some alternative
+    # implementations.  ``getattr`` preserves compatibility while ensuring we
+    # reject contexts that explicitly disable hostname checking.
+    check_hostname = getattr(context, "check_hostname", True)
+    if check_hostname is False:
+        raise ValueError(
+            "TLS hostname verification must remain enabled on SSLContext"
+        )
+
+    return context
+
 # Use system-level randomness for jitter to avoid predictable retry delays
 _RNG = random.SystemRandom()
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
@@ -173,7 +201,7 @@ def _normalise_requests_verify(value: object) -> object | None:
         return path
 
     if ssl is not None and isinstance(value, ssl.SSLContext):
-        return value
+        return _ensure_secure_ssl_context(value)
 
     raise TypeError(
         "verify must be True, None, an SSLContext, or a non-empty path-like object"
@@ -201,7 +229,7 @@ def _normalise_httpx_verify(value: object) -> object:
         return path
 
     if ssl is not None and isinstance(value, ssl.SSLContext):
-        return value
+        return _ensure_secure_ssl_context(value)
 
     raise TypeError(
         "verify must be True, None, an SSLContext, or a non-empty path-like object"
