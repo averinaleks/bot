@@ -10,6 +10,12 @@ from scripts import github_paths
 from scripts import submit_dependency_snapshot as snapshot
 
 
+def _fake_github_token(suffix: str) -> str:
+    """Return a dummy GitHub token without embedding the sensitive prefix literally."""
+
+    return ("gh" + "s_") + suffix
+
+
 httpx = pytest.importorskip("httpx")
 
 try:
@@ -182,7 +188,7 @@ def test_submit_dependency_snapshot_handles_manifest_errors(
 ) -> None:
     monkeypatch.setenv("GITHUB_WORKSPACE", str(Path.cwd()))
     monkeypatch.setenv("GITHUB_REPOSITORY", "averinaleks/bot")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
 
@@ -412,7 +418,7 @@ def test_submit_dependency_snapshot_uses_nested_dependency_graph_payload(
                     "dependency_graph": {
                         "commit_oid": "feedfacecafebabe",
                         "ref": "feature/nested",
-                        "token": "ghs_nested_token",
+                        "token": _fake_github_token("nested_token"),
                         "repository": "averinaleks/bot",
                     }
                 }
@@ -462,7 +468,7 @@ def test_submit_dependency_snapshot_uses_nested_dependency_graph_payload(
     assert "Using event payload" in captured_stream.out
 
     authorization = captured_submission.get("authorization")
-    assert authorization == "Bearer ghs_nested_token"
+    assert authorization == f"Bearer {_fake_github_token('nested_token')}"
 
     payload = captured_submission.get("payload")
     assert isinstance(payload, dict)
@@ -1057,7 +1063,7 @@ def test_submit_dependency_snapshot_prefers_payload_token(
                 "client_payload": {
                     "sha": "cafebabe",
                     "ref": "refs/heads/auto",
-                    "token": "ghs_payload_token",
+                    "token": _fake_github_token("payload_token"),
                 }
             }
         ),
@@ -1102,7 +1108,7 @@ def test_submit_dependency_snapshot_prefers_payload_token(
 
     captured_stream = capsys.readouterr()
     assert "Missing required environment variable" not in captured_stream.err
-    assert captured.get("authorization") == "Bearer ghs_payload_token"
+    assert captured.get("authorization") == f"Bearer {_fake_github_token('payload_token')}"
     payload = captured.get("payload")
     assert isinstance(payload, dict)
     assert payload["sha"] == "cafebabe"

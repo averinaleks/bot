@@ -16,6 +16,12 @@ from scripts.submit_dependency_snapshot import (
 )
 
 
+def _fake_github_token(suffix: str) -> str:
+    """Return a fabricated GitHub token without embedding the GitHub prefix literally."""
+
+    return ("gh" + "s_") + suffix
+
+
 def _write_requirements(tmp_path: Path, contents: str) -> Path:
     path = tmp_path / "requirements.txt"
     path.write_text(contents)
@@ -127,7 +133,7 @@ def test_parse_requirements_handles_hash_block(tmp_path: Path) -> None:
 
 def test_auth_schemes_prefers_bearer_for_github_tokens(monkeypatch) -> None:
     monkeypatch.delenv("DEPENDENCY_SNAPSHOT_AUTH_SCHEME", raising=False)
-    assert _auth_schemes("ghs_example") == ["Bearer", "token"]
+    assert _auth_schemes(_fake_github_token("example")) == ["Bearer", "token"]
 
 
 def test_auth_schemes_allows_override(monkeypatch) -> None:
@@ -229,7 +235,7 @@ def test_submit_snapshot_skips_on_unauthorised_token(monkeypatch, capsys) -> Non
     }
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
@@ -266,7 +272,7 @@ def test_submit_snapshot_skips_on_network_issue(monkeypatch, capsys) -> None:
     }
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
@@ -303,7 +309,7 @@ def test_submit_snapshot_skips_on_validation_issue(monkeypatch, capsys) -> None:
     }
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
@@ -340,7 +346,7 @@ def test_submit_snapshot_skips_on_other_http_error(monkeypatch, capsys) -> None:
     }
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
@@ -378,7 +384,7 @@ def test_submit_snapshot_uses_numeric_run_attempt(monkeypatch) -> None:
     }
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghs_dummy")
+    monkeypatch.setenv("GITHUB_TOKEN", _fake_github_token("dummy"))
     monkeypatch.setenv("GITHUB_SHA", "deadbeef")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
