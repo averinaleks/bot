@@ -607,6 +607,7 @@ def _write_positions_locked() -> None:
                 tmp_path,
                 cleanup_exc,
             )
+        logging.warning('Failed to serialise positions cache: %s', exc)
         raise
 
     try:
