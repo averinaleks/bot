@@ -9,6 +9,8 @@ import sys
 import threading
 from pathlib import Path
 
+import pytest
+
 from scripts import ensure_semgrep_sarif as semgrep_helper
 
 
@@ -79,6 +81,34 @@ def test_write_github_output_supports_named_pipes(tmp_path: Path) -> None:
     assert "result_count=3" in received[0]
 
 
+def test_write_github_output_supports_file_descriptors(tmp_path: Path) -> None:
+    read_fd, write_fd = os.pipe()
+    received: list[str] = []
+
+    def _reader() -> None:
+        with os.fdopen(read_fd, "r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    try:
+        semgrep_helper.write_github_output(
+            write_fd,
+            upload=True,
+            findings=5,
+            sarif_path=Path("semgrep.sarif"),
+        )
+    finally:
+        os.close(write_fd)
+        reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    assert received
+    assert "upload=true" in received[0]
+    assert "result_count=5" in received[0]
+
+
 def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     workspace = tmp_path / "workspace"
@@ -101,6 +131,46 @@ def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert target_output.exists()
     assert "upload=false" in target_output.read_text(encoding="utf-8")
+
+
+def test_cli_supports_fd_github_output(tmp_path: Path) -> None:
+    if sys.platform == "win32":  # pragma: no cover - Windows lacks pass_fds support
+        pytest.skip("File descriptor propagation is not supported on Windows runners")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    read_fd, write_fd = os.pipe()
+    received: list[str] = []
+
+    def _reader() -> None:
+        with os.fdopen(read_fd, "r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script_path), "--github-output", f"fd:{write_fd}"],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            text=True,
+            pass_fds=(write_fd,),
+        )
+    finally:
+        os.close(write_fd)
+        reader.join(timeout=5)
+
+    assert result.returncode == 0
+    assert not reader.is_alive()
+    assert received
+    assert "upload=false" in received[0]
+    assert (workspace / "semgrep.sarif").exists()
 
 
 def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
