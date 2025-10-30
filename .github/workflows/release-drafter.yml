@@ -78,7 +78,9 @@ jobs:
       - name: Verify Release Drafter action ref exists upstream
         run: |
           set -euo pipefail
-          if ! git ls-remote --exit-code https://github.com/release-drafter/release-drafter.git "${RELEASE_DRAFTER_ACTION_REF}" >/dev/null; then
+          if ! git ls-remote https://github.com/release-drafter/release-drafter.git \
+            | cut -f1 \
+            | grep -Fxq "${RELEASE_DRAFTER_ACTION_REF}"; then
             echo "Release Drafter ref ${RELEASE_DRAFTER_ACTION_REF} not found upstream." >&2
             exit 1
           fi
