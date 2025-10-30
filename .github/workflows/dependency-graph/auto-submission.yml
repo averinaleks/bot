@@ -532,6 +532,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.event-metadata.outputs.checkout_ref }}
       - name: Recover checkout when branch references are stale
+        id: recover
         env:
           CHECKOUT_REF: ${{ steps.event-metadata.outputs.checkout_ref }}
           CHECKOUT_AFTER: ${{ steps.event-metadata.outputs.after }}
@@ -824,7 +825,6 @@ jobs:
             steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
             github.event_name == 'repository_dispatch'
-          )
         run: |
           python -m pip install --upgrade pip \
             || python -m pip install --upgrade pip --break-system-packages \
@@ -837,7 +837,6 @@ jobs:
             steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
             github.event_name == 'repository_dispatch'
-          )
         run: |
           python <<'PY'
           from __future__ import annotations
@@ -925,7 +924,6 @@ jobs:
             steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
             github.event_name == 'repository_dispatch'
-          )
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/submit_dependency_snapshot.py
