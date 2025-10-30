@@ -110,7 +110,12 @@ def test_main_writes_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     ])
 
     assert result == 0
-    assert output_file.read_text(encoding="utf-8") == "skip=false\nhead_sha={}\n".format("deadbeef" * 5)
+    assert (
+        output_file.read_text(encoding="utf-8")
+        == "skip=false\nhead_sha={}\ntrusted_repo=true\nhead_repo=owner/repo\n".format(
+            "deadbeef" * 5
+        )
+    )
 
 
 def test_write_output_survives_missing_resolver(
@@ -137,10 +142,10 @@ def test_write_output_survives_missing_resolver(
     try:
         output_file = tmp_path / "output.txt"
         monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
-        module._write_github_output(True, "abc123")
+        module._write_github_output(True, "abc123", False, "")
         assert (
             output_file.read_text(encoding="utf-8")
-            == "skip=true\nhead_sha=abc123\n"
+            == "skip=true\nhead_sha=abc123\ntrusted_repo=false\nhead_repo=\n"
         )
     finally:
         sys.modules.pop(module_name, None)

@@ -50,7 +50,7 @@ def test_pr_status_step_sets_outputs_on_failure() -> None:
     ]
     marker = next((candidate for candidate in marker_options if candidate in workflow_text), None)
     assert marker is not None, 'missing PR status failure handler'
-    next_step = '      - name: Checkout PR head'
+    next_step = '      - name: Checkout trusted baseline'
 
     start = workflow_text.index(marker)
     end = workflow_text.index(next_step, start)
@@ -59,6 +59,8 @@ def test_pr_status_step_sets_outputs_on_failure() -> None:
     assert '::warning::Проверка статуса PR завершилась с ошибкой' in failure_block
     assert 'echo "skip=true"' in failure_block
     assert 'echo "head_sha="' in failure_block
+    assert 'echo "trusted_repo=false"' in failure_block
+    assert 'echo "head_repo="' in failure_block
     assert failure_block.count('exit 0') >= 1
 
 
