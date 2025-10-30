@@ -593,7 +593,24 @@ def _write_positions_locked() -> None:
             tmp_file.close()
             tmp_path.unlink(missing_ok=True)
             return
-        tmp_file.write(payload)
+    except Exception as exc:  # pragma: no cover - serialisation failures
+        if tmp_file is not None:
+            try:
+                tmp_file.close()
+            except OSError:
+                pass
+        try:
+            tmp_path.unlink()
+        except OSError as cleanup_exc:
+            logging.debug(
+                'Failed to remove temporary positions cache %s: %s',
+                tmp_path,
+                cleanup_exc,
+            )
+        raise
+
+    try:
+        json.dump(snapshot, tmp_file)
         tmp_file.flush()
         os.fsync(tmp_file.fileno())
     except Exception as exc:  # pragma: no cover - write/fsync failures
