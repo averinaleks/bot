@@ -50,8 +50,18 @@ def _running_under_codeql() -> bool:
     return any(name.startswith("CODEQL_") for name in os.environ)
 
 
+def _running_in_github_actions() -> bool:
+    """Return ``True`` when executing inside GitHub Actions."""
+
+    return os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+
+
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
-    if os.environ.get("BOT_AUTO_INSTALL_DISABLED") == "1" or _running_under_codeql():
+    if (
+        os.environ.get("BOT_AUTO_INSTALL_DISABLED") == "1"
+        or _running_under_codeql()
+        or _running_in_github_actions()
+    ):
         return
 
     for module_name, requirement in packages:
