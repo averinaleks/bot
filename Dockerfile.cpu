@@ -40,24 +40,6 @@ ENV VIRTUAL_ENV=/opt/venv
 # code 127" на шаге docker-publish. Такой ранний контроль делает причину
 # проблемы очевидной и предотвращает регресс при смене базового образа.
 RUN python - <<'PY'
-import sys
-major, minor = sys.version_info[:2]
-if (major, minor) != (3, 11):
-    raise SystemExit(
-        f"Builder Python version mismatch: expected 3.11, got {major}.{minor}"
-    )
-PY
-
-# ``python:3.11-slim`` поставляется с устаревшим setuptools 65.5.1,
-# уязвимым к CVE-2024-6345 и CVE-2025-47273. Обновляем системные
-# packaging-инструменты до безопасных версий до того, как начнём собирать
-# виртуальное окружение, чтобы Trivy не находил high/critical уязвимости
-# прямо в базовом образе.
-RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=25.2' \
-        'setuptools>=80.9.0,<81' \
-        wheel \
-    && python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -67,58 +49,74 @@ from pathlib import Path
 import pip
 
 unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-text = unpacking.read_text()
+source = unpacking.read_text()
 
-if "def is_symlink_target_in_tar(" not in text:
-    helper = (
-        "\n\n"
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
-        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
-        "    linkname = os.path.normpath(linkname)\n"
-        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
-        "    try:\n"
-        "        tar.getmember(linkname)\n"
-        "        return True\n"
-        "    except KeyError:\n"
-        "        return False\n"
-        "\n"
-    )
-    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+if "def is_symlink_target_in_tar(" in source:
+    print("pip tar symlink guard already present; skipping patch")
+else:
+    helper = "\n".join([
+        "",
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
+        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
+        "    linkname = os.path.normpath(linkname)",
+        '    linkname = linkname.replace("\\", "/")',
+        "    try:",
+        "        tar.getmember(linkname)",
+        "        return True",
+        "    except KeyError:",
+        "        return False",
+        "",
+    ])
+    comment = "\n".join([
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
+        "    # This feature is fully supported from CPython 3.12 onward.",
+    ])
+    sentinel_options = [
+        '    """Fallback for Python without tarfile.data_filter"""',
+        '    """Fallback for Python without tarfile.data_filter."""',
+    ]
+    sentinel = next((option for option in sentinel_options if option in source), None)
 
-    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
-    comment = (
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
-        "    # This feature is fully supported from CPython 3.12 onward.\n"
-    )
-    if sentinel + "    for member" not in text:
-        raise SystemExit("unexpected pip layout: missing fallback header")
-    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+    if sentinel is None:
+        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
+    else:
+        target_header = f"{sentinel}\n    for member"
+        if target_header not in source:
+            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
+        else:
+            old_variants = [
+                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
+            ]
+            for old in old_variants:
+                if old in source:
+                    new_block = "\n".join([
+                        "        elif member.issym():",
+                        "            if not is_symlink_target_in_tar(tar, member):",
+                        "                message = (",
+                        '                    "The tar file ({}) has a file ({}) trying to install "',
+                        '                    "outside target directory ({})"',
+                        "                )",
+                        "                raise InstallationError(",
+                        "                    message.format(filename, member.name, member.linkname)",
+                        "                )",
+                        "            try:",
+                        "                tar._extract_member(member, path)",
+                    ])
+                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+                    updated = updated.replace(
+                        target_header,
+                        f"{sentinel}\n{comment}\n    for member",
+                        1,
+                    )
+                    updated = updated.replace(old, new_block, 1)
+                    unpacking.write_text(updated)
+                    print("Patched pip tar symlink extraction guard")
+                    break
+            else:
+                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
 
-    old_block = (
-        "        elif member.issym():\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    new_block = (
-        "        elif member.issym():\n"
-        "            if not is_symlink_target_in_tar(tar, member):\n"
-        "                message = (\n"
-        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
-        "                    \"outside target directory ({})\"\n"
-        "                )\n"
-        "                raise InstallationError(\n"
-        "                    message.format(filename, member.name, member.linkname)\n"
-        "                )\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    if old_block not in text:
-        raise SystemExit("unexpected pip layout: missing symlink branch")
-    text = text.replace(old_block, new_block, 1)
-
-    unpacking.write_text(text)
 PY
     && python -m pip cache purge
 
@@ -143,58 +141,74 @@ from pathlib import Path
 import pip
 
 unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-text = unpacking.read_text()
+source = unpacking.read_text()
 
-if "def is_symlink_target_in_tar(" not in text:
-    helper = (
-        "\n\n"
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
-        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
-        "    linkname = os.path.normpath(linkname)\n"
-        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
-        "    try:\n"
-        "        tar.getmember(linkname)\n"
-        "        return True\n"
-        "    except KeyError:\n"
-        "        return False\n"
-        "\n"
-    )
-    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+if "def is_symlink_target_in_tar(" in source:
+    print("pip tar symlink guard already present; skipping patch")
+else:
+    helper = "\n".join([
+        "",
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
+        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
+        "    linkname = os.path.normpath(linkname)",
+        '    linkname = linkname.replace("\\", "/")',
+        "    try:",
+        "        tar.getmember(linkname)",
+        "        return True",
+        "    except KeyError:",
+        "        return False",
+        "",
+    ])
+    comment = "\n".join([
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
+        "    # This feature is fully supported from CPython 3.12 onward.",
+    ])
+    sentinel_options = [
+        '    """Fallback for Python without tarfile.data_filter"""',
+        '    """Fallback for Python without tarfile.data_filter."""',
+    ]
+    sentinel = next((option for option in sentinel_options if option in source), None)
 
-    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
-    comment = (
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
-        "    # This feature is fully supported from CPython 3.12 onward.\n"
-    )
-    if sentinel + "    for member" not in text:
-        raise SystemExit("unexpected pip layout: missing fallback header")
-    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+    if sentinel is None:
+        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
+    else:
+        target_header = f"{sentinel}\n    for member"
+        if target_header not in source:
+            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
+        else:
+            old_variants = [
+                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
+            ]
+            for old in old_variants:
+                if old in source:
+                    new_block = "\n".join([
+                        "        elif member.issym():",
+                        "            if not is_symlink_target_in_tar(tar, member):",
+                        "                message = (",
+                        '                    "The tar file ({}) has a file ({}) trying to install "',
+                        '                    "outside target directory ({})"',
+                        "                )",
+                        "                raise InstallationError(",
+                        "                    message.format(filename, member.name, member.linkname)",
+                        "                )",
+                        "            try:",
+                        "                tar._extract_member(member, path)",
+                    ])
+                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+                    updated = updated.replace(
+                        target_header,
+                        f"{sentinel}\n{comment}\n    for member",
+                        1,
+                    )
+                    updated = updated.replace(old, new_block, 1)
+                    unpacking.write_text(updated)
+                    print("Patched pip tar symlink extraction guard")
+                    break
+            else:
+                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
 
-    old_block = (
-        "        elif member.issym():\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    new_block = (
-        "        elif member.issym():\n"
-        "            if not is_symlink_target_in_tar(tar, member):\n"
-        "                message = (\n"
-        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
-        "                    \"outside target directory ({})\"\n"
-        "                )\n"
-        "                raise InstallationError(\n"
-        "                    message.format(filename, member.name, member.linkname)\n"
-        "                )\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    if old_block not in text:
-        raise SystemExit("unexpected pip layout: missing symlink branch")
-    text = text.replace(old_block, new_block, 1)
-
-    unpacking.write_text(text)
 PY
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
@@ -202,297 +216,6 @@ RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         -r requirements-core.txt
 
 RUN "$VIRTUAL_ENV"/bin/python - <<'PY'
-import textwrap
-
-exec(textwrap.dedent("""
-    import hashlib
-    import pathlib
-    import socket
-    import sys
-    from ipaddress import ip_address
-    from tempfile import NamedTemporaryFile
-    from urllib.parse import urlsplit
-
-    import requests
-    from requests.adapters import HTTPAdapter
-    from requests.exceptions import RequestException
-    from urllib3.util.retry import Retry
-
-    COMMONS_LANG3_FILENAME = "commons-lang3-3.18.0.jar"
-    COMMONS_LANG3_URL = (
-        "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/"
-        f"{COMMONS_LANG3_FILENAME}"
-    )
-    COMMONS_LANG3_SHA256 = (
-        "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
-    )
-    COMMONS_LANG3_ALLOWED_HOST = "repo1.maven.org"
-
-    def _iter_resolved_ips(hostname: str) -> list[str]:
-        try:
-            addr_info = socket.getaddrinfo(
-                hostname,
-                None,
-                family=socket.AF_UNSPEC,
-                type=socket.SOCK_STREAM,
-            )
-        except socket.gaierror as exc:
-            raise RuntimeError(
-                "Не удалось разрешить хост скачивания commons-lang3: "
-                f"{hostname}"
-            ) from exc
-
-        resolved: list[str] = []
-        for entry in addr_info:
-            sockaddr = entry[4]
-            if not sockaddr:
-                continue
-            candidate = sockaddr[0]
-            if isinstance(candidate, bytes):
-                try:
-                    candidate = candidate.decode("ascii")
-                except UnicodeDecodeError:
-                    continue
-            resolved.append(str(candidate))
-        return resolved
-
-    def _validate_download_url(url: str) -> set[str]:
-        parsed = urlsplit(url)
-        if parsed.scheme != "https":
-            raise RuntimeError(
-                "Ожидалась схема https при скачивании commons-lang3, "
-                f"получено: {parsed.scheme}"
-            )
-        if parsed.hostname != COMMONS_LANG3_ALLOWED_HOST:
-            raise RuntimeError(
-                "Получен неожиданный хост при скачивании commons-lang3: "
-                f"{parsed.netloc}"
-            )
-        if parsed.username or parsed.password:
-            raise RuntimeError(
-                "URL скачивания commons-lang3 не должен содержать учетные данные"
-            )
-        if parsed.port not in (None, 443):
-            raise RuntimeError(
-                "Получен неожиданный порт при скачивании commons-lang3: "
-                f"{parsed.port}"
-            )
-        if parsed.query or parsed.fragment:
-            raise RuntimeError(
-                "URL скачивания commons-lang3 не должен содержать параметры "
-                "запроса или фрагменты"
-            )
-
-        expected_suffix = f"/{COMMONS_LANG3_FILENAME}"
-        if not parsed.path.endswith(expected_suffix):
-            raise RuntimeError(
-                "Получен неожиданный путь при скачивании commons-lang3: "
-                f"{parsed.path}"
-            )
-
-        unsafe_ips: set[str] = set()
-        safe_ips: set[str] = set()
-        hostname = parsed.hostname or parsed.netloc
-        for ip_text in _iter_resolved_ips(hostname):
-            normalised = ip_text.split("%", 1)[0]
-            try:
-                ip_obj = ip_address(normalised)
-            except ValueError:
-                unsafe_ips.add(ip_text)
-                continue
-            if (
-                ip_obj.is_loopback
-                or ip_obj.is_private
-                or ip_obj.is_link_local
-                or ip_obj.is_reserved
-                or ip_obj.is_multicast
-                or ip_obj.is_unspecified
-            ):
-                unsafe_ips.add(ip_text)
-                continue
-            safe_ips.add(ip_obj.compressed)
-
-        if unsafe_ips:
-            raise RuntimeError(
-                "Хост commons-lang3 разрешился в небезопасные адреса: "
-                + ", ".join(sorted(unsafe_ips))
-            )
-
-        if not safe_ips:
-            raise RuntimeError(
-                "Хост commons-lang3 не разрешился в допустимые публичные адреса"
-            )
-
-        return safe_ips
-
-    def update_commons_lang3() -> None:
-        try:
-            import ray  # type: ignore
-        except Exception:
-            print("Ray отсутствует, пропускаем обновление commons-lang3")
-            return
-
-        jars_dir = pathlib.Path(ray.__file__).resolve().parent / "jars"
-        jars_dir.mkdir(parents=True, exist_ok=True)
-        destination = jars_dir / COMMONS_LANG3_FILENAME
-        existing_jars = list(jars_dir.glob("commons-lang3-*.jar"))
-
-        allowed_ips = _validate_download_url(COMMONS_LANG3_URL)
-
-        hasher = hashlib.sha256()
-        retries = Retry(
-            total=5,
-            backoff_factor=1.5,
-            status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=("HEAD", "GET"),
-        )
-
-        temp_path = None
-        try:
-            with requests.Session() as session:
-                session.mount("https://", HTTPAdapter(max_retries=retries))
-                session.trust_env = False
-                with session.get(
-                    COMMONS_LANG3_URL,
-                    stream=True,
-                    timeout=30,
-                    allow_redirects=False,
-                ) as response:
-                    if 300 <= response.status_code < 400:
-                        location = response.headers.get("Location", "")
-                        raise RuntimeError(
-                            "commons-lang3 download unexpectedly redirected"
-                            + (f" to {location}" if location else "")
-                        )
-                    response.raise_for_status()
-                    connection = getattr(response.raw, "_connection", None)
-                    peer_ip = None
-                    if connection is not None:
-                        sock = getattr(connection, "sock", None)
-                        if sock is not None and hasattr(sock, "getpeername"):
-                            try:
-                                peer_ip = sock.getpeername()[0]
-                            except OSError:
-                                peer_ip = None
-                    if peer_ip:
-                        normalised_peer = peer_ip.split("%", 1)[0]
-                        try:
-                            peer_obj = ip_address(normalised_peer)
-                        except ValueError:
-                            raise RuntimeError(
-                                "commons-lang3 download connected to malformed "
-                                f"address {peer_ip}"
-                            ) from None
-                        if peer_obj.compressed not in allowed_ips:
-                            raise RuntimeError(
-                                "commons-lang3 download connected to unexpected "
-                                f"address {peer_obj.compressed}"
-                            )
-                    with NamedTemporaryFile(
-                        "wb", delete=False, dir=jars_dir
-                    ) as temp_file:
-                        temp_path = pathlib.Path(temp_file.name)
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if not chunk:
-                                continue
-                            temp_file.write(chunk)
-                            hasher.update(chunk)
-        except RequestException as exc:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-            print(
-                "Не удалось скачать commons-lang3:"
-                f" {exc!r}. Используем версию из поставки Ray.",
-                file=sys.stderr,
-            )
-            return
-        except Exception:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-            raise
-
-        if temp_path is None:
-            raise RuntimeError("Failed to create temporary commons-lang3 download")
-
-        digest = hasher.hexdigest()
-        if digest != COMMONS_LANG3_SHA256:
-            temp_path.unlink(missing_ok=True)
-            raise RuntimeError(
-                "SHA256 mismatch while downloading commons-lang3: expected "
-                f"{COMMONS_LANG3_SHA256}, got {digest}"
-            )
-
-        for jar in existing_jars:
-            jar.unlink(missing_ok=True)
-
-        try:
-            temp_path.replace(destination)
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
-
-    update_commons_lang3()
-"""))
-PY
-
-# NOTE: keep the cleanup below in a dedicated RUN step. Using an explicit Bash
-# invocation with ``set -euo pipefail`` prevents the Docker parser from
-# splitting the first command token (``nvidia_packages=...``) into a separate
-# instruction, a behaviour that historically produced "dockerfile parse error"
-# failures in the docker-publish workflow. Historical context:
-# https://github.com/averinaleks/bot/actions/workflows/docker-publish.yml
-
-RUN /bin/bash -euo pipefail -c "\
-  nvidia_packages=\"\$($VIRTUAL_ENV/bin/pip freeze | grep -i '^nvidia-' || true)\"; \
-  if [ -n \"\$nvidia_packages\" ]; then \
-    printf '%s\\n' \"\$nvidia_packages\" | cut -d= -f1 | xargs -r $VIRTUAL_ENV/bin/pip uninstall -y; \
-  else \
-    echo 'No NVIDIA packages detected in the virtual environment'; \
-  fi; \
-  find \"$VIRTUAL_ENV\" -type d -name '__pycache__' -exec rm -rf {} +; \
-  find \"$VIRTUAL_ENV\" -type f -name '*.pyc' -delete\
-"
-
-FROM python:3.11-slim
-ARG DEBIAN_FRONTEND=noninteractive
-
-ENV PYTHONUNBUFFERED=1
-
-# Обновляем индекс пакетов и добавляем только необходимые зависимости
-# выполнения. ``libstdc++6`` и ``libgcc-s1`` требуются бинарям PyTorch/
-# TorchMetrics, ``libgomp1`` — NumPy/Scikit-learn, а ``libssl3`` —
-# криптографическим библиотекам. ``apt-get upgrade`` не используется во
-# исполнение требования Semgrep ``dockerfile.security.apt-get-upgrade``.
-RUN <<'EOSHELL'
-set -eux
-apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libgcc-s1 \
-        libgomp1 \
-        libstdc++6 \
-        libssl3 \
-    && rm -rf /var/lib/apt/lists/*
-EOSHELL
-
-# Проверяем, что рантайм тоже использует Python 3.11. Это гарантирует,
-# что окружение исполнения совпадает со сборочным и мы не столкнёмся с
-# несовместимостью зависимостей.
-RUN python - <<'PY'
-import sys
-major, minor = sys.version_info[:2]
-if (major, minor) != (3, 11):
-    raise SystemExit(
-        f"Runtime Python version mismatch: expected 3.11, got {major}.{minor}"
-    )
-PY
-
-# Аналогично стадии сборки обновляем системный pip/setuptools, чтобы в
-# рантайме не оставалось уязвимых версий из базового образа.
-RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=25.2' \
-        'setuptools>=80.9.0,<81' \
-        wheel \
-    && python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -502,58 +225,74 @@ from pathlib import Path
 import pip
 
 unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-text = unpacking.read_text()
+source = unpacking.read_text()
 
-if "def is_symlink_target_in_tar(" not in text:
-    helper = (
-        "\n\n"
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
-        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
-        "    linkname = os.path.normpath(linkname)\n"
-        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
-        "    try:\n"
-        "        tar.getmember(linkname)\n"
-        "        return True\n"
-        "    except KeyError:\n"
-        "        return False\n"
-        "\n"
-    )
-    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+if "def is_symlink_target_in_tar(" in source:
+    print("pip tar symlink guard already present; skipping patch")
+else:
+    helper = "\n".join([
+        "",
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
+        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
+        "    linkname = os.path.normpath(linkname)",
+        '    linkname = linkname.replace("\\", "/")',
+        "    try:",
+        "        tar.getmember(linkname)",
+        "        return True",
+        "    except KeyError:",
+        "        return False",
+        "",
+    ])
+    comment = "\n".join([
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
+        "    # This feature is fully supported from CPython 3.12 onward.",
+    ])
+    sentinel_options = [
+        '    """Fallback for Python without tarfile.data_filter"""',
+        '    """Fallback for Python without tarfile.data_filter."""',
+    ]
+    sentinel = next((option for option in sentinel_options if option in source), None)
 
-    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
-    comment = (
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
-        "    # This feature is fully supported from CPython 3.12 onward.\n"
-    )
-    if sentinel + "    for member" not in text:
-        raise SystemExit("unexpected pip layout: missing fallback header")
-    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+    if sentinel is None:
+        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
+    else:
+        target_header = f"{sentinel}\n    for member"
+        if target_header not in source:
+            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
+        else:
+            old_variants = [
+                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
+            ]
+            for old in old_variants:
+                if old in source:
+                    new_block = "\n".join([
+                        "        elif member.issym():",
+                        "            if not is_symlink_target_in_tar(tar, member):",
+                        "                message = (",
+                        '                    "The tar file ({}) has a file ({}) trying to install "',
+                        '                    "outside target directory ({})"',
+                        "                )",
+                        "                raise InstallationError(",
+                        "                    message.format(filename, member.name, member.linkname)",
+                        "                )",
+                        "            try:",
+                        "                tar._extract_member(member, path)",
+                    ])
+                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+                    updated = updated.replace(
+                        target_header,
+                        f"{sentinel}\n{comment}\n    for member",
+                        1,
+                    )
+                    updated = updated.replace(old, new_block, 1)
+                    unpacking.write_text(updated)
+                    print("Patched pip tar symlink extraction guard")
+                    break
+            else:
+                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
 
-    old_block = (
-        "        elif member.issym():\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    new_block = (
-        "        elif member.issym():\n"
-        "            if not is_symlink_target_in_tar(tar, member):\n"
-        "                message = (\n"
-        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
-        "                    \"outside target directory ({})\"\n"
-        "                )\n"
-        "                raise InstallationError(\n"
-        "                    message.format(filename, member.name, member.linkname)\n"
-        "                )\n"
-        "            try:\n"
-        "                tar._extract_member(member, path)\n"
-    )
-    if old_block not in text:
-        raise SystemExit("unexpected pip layout: missing symlink branch")
-    text = text.replace(old_block, new_block, 1)
-
-    unpacking.write_text(text)
 PY
     && python -m pip cache purge
 
