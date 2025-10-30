@@ -25,6 +25,9 @@ permissions:
   pull-requests: write
   issues: write
 
+env:
+  RELEASE_DRAFTER_ACTION_REF: b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # release-drafter v6.1.0 commit
+
 concurrency:
   group: >-
     ${{
@@ -45,7 +48,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate_release_drafter_action:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.2.1
+      - name: Ensure Release Drafter action ref is consistent
+        run: |
+          set -euo pipefail
+          expected="release-drafter/release-drafter@${RELEASE_DRAFTER_ACTION_REF}"
+          mapfile -t refs < <(grep -oE 'release-drafter/release-drafter@[^ ]+' .github/workflows/release-drafter.yml | sort -u)
+          if [ "${#refs[@]}" -eq 0 ]; then
+            echo "Release Drafter action reference not found in workflow." >&2
+            exit 1
+          fi
+          for ref in "${refs[@]}"; do
+            if [ "$ref" != "$expected" ]; then
+              echo "Unexpected Release Drafter action ref: $ref (expected $expected)" >&2
+              exit 1
+            fi
+          done
+      - name: Verify Release Drafter action ref exists upstream
+        run: |
+          set -euo pipefail
+          if ! git ls-remote --exit-code https://github.com/release-drafter/release-drafter.git "${RELEASE_DRAFTER_ACTION_REF}" >/dev/null; then
+            echo "Release Drafter ref ${RELEASE_DRAFTER_ACTION_REF} not found upstream." >&2
+            exit 1
+          fi
+
   update_release_draft:
+    needs: validate_release_drafter_action
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -89,6 +125,7 @@ jobs:
           exit 1
 
   autolabel_pull_request:
+    needs: validate_release_drafter_action
     if: >-
       github.event_name == 'pull_request_target' &&
       github.event.pull_request != null &&
