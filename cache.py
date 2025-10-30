@@ -3,6 +3,7 @@ import gzip
 import importlib
 import json
 import os
+import re
 import shutil
 import time
 from functools import lru_cache
@@ -41,6 +42,23 @@ def _sanitize_symbol(symbol: str) -> str:
     if cleaned.startswith(".") or ".." in cleaned:
         raise ValueError("Symbol sanitization resulted in unsafe value")
     return cleaned
+
+
+_SAFE_CACHE_TOKEN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_cache_component(value: str, *, description: str) -> str:
+    """Return *value* when it is safe for inclusion in cache filenames."""
+
+    if not value:
+        raise ValueError(f"{description} component is empty")
+    if value.startswith(".") or ".." in value:
+        raise ValueError(f"{description} component contains unsafe dot segments")
+    if "/" in value or "\\" in value:
+        raise ValueError(f"{description} component contains path separators")
+    if not _SAFE_CACHE_TOKEN.fullmatch(value):
+        raise ValueError(f"{description} component contains invalid characters")
+    return value
 
 
 def _sanitize_timeframe(timeframe: str) -> str:
@@ -180,8 +198,18 @@ class HistoricalDataCache:
             logger.error("Ошибка удаления файла кэша %s: %s", target, e)
 
     def _cache_file(self, safe_symbol: str, safe_timeframe: str, suffix: str) -> Path:
-        filename = f"{safe_symbol}_{safe_timeframe}{suffix}"
-        return self._base_path / filename
+        symbol_component = _validate_cache_component(safe_symbol, description="symbol")
+        timeframe_component = _validate_cache_component(
+            safe_timeframe, description="timeframe"
+        )
+        filename = f"{symbol_component}_{timeframe_component}{suffix}"
+        candidate = self._base_path / filename
+        resolved = candidate.resolve(strict=False)
+        try:
+            resolved.relative_to(self._base_path)
+        except ValueError as exc:
+            raise ValueError("cache path escapes base directory") from exc
+        return resolved
 
     def _ensure_not_symlink(self, path: Path) -> bool:
         try:
