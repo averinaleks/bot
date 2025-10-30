@@ -14,10 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import sys
 from pathlib import Path
 from typing import Any
-
-import sys
 
 try:
     from ._filesystem import write_secure_text
@@ -39,6 +39,9 @@ except ImportError:  # pragma: no cover - executed when run as a script
 
 SARIF_PATH = Path("semgrep.sarif")
 _FD_PREFIXES = {"fd", "pipe"}
+_FD_PATH_PATTERN = re.compile(
+    r"^/(?:proc/(?:self|thread-self|\d+)/fd|dev/fd)/(\d+)$"
+)
 
 _EMPTY_SARIF: dict[str, Any] = {
     "version": "2.1.0",
@@ -137,6 +140,30 @@ def write_github_output(
     )
 
 
+def _descriptor_from_path(candidate: Path) -> int | None:
+    """Return a file descriptor when *candidate* points to ``/proc/*/fd``."""
+
+    normalized = os.path.normpath(str(candidate))
+    match = _FD_PATH_PATTERN.match(normalized)
+    if match is None:
+        return None
+
+    try:
+        fd = int(match.group(1), 10)
+    except ValueError:  # pragma: no cover - defensive guard
+        return None
+
+    if fd < 0:
+        return None
+
+    try:
+        os.fstat(fd)
+    except OSError:
+        return None
+
+    return fd
+
+
 def _normalize_github_output(value: Path | str | None) -> Path | int | None:
     """Return a usable GitHub output target or ``None`` when invalid."""
 
@@ -171,6 +198,10 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
     if path.exists() and path.is_dir():
         return None
 
+    descriptor = _descriptor_from_path(path)
+    if descriptor is not None:
+        return descriptor
+
     # GitHub Actions may expose ``GITHUB_OUTPUT`` as a symlink that ultimately
     # resolves to the writable command file hosted in the runner workspace.
     # ``Path.resolve(strict=False)`` safely follows the link even if the target
@@ -181,9 +212,26 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
     # guardrails for regular usage while still supporting the CI environment.
     if path.is_symlink():
         try:
+            target_text = os.readlink(path)
+        except OSError:
+            target_text = None
+        else:
+            target_path = Path(target_text)
+            if not target_path.is_absolute():
+                target_path = (path.parent / target_path).resolve(strict=False)
+
+            descriptor = _descriptor_from_path(target_path)
+            if descriptor is not None:
+                return descriptor
+
+        try:
             resolved = path.resolve(strict=False)
         except OSError:
             return None
+
+        descriptor = _descriptor_from_path(resolved)
+        if descriptor is not None:
+            return descriptor
 
         if resolved.exists() and resolved.is_dir():
             return None
