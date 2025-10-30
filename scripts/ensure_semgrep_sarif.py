@@ -116,7 +116,29 @@ def _normalize_github_output(path: Path | None) -> Path | None:
         return None
 
     text = str(path).strip()
-    return path if text else None
+    if not text:
+        return None
+
+    # GitHub Actions may expose ``GITHUB_OUTPUT`` as a symlink that ultimately
+    # resolves to the writable command file hosted in the runner workspace.
+    # ``Path.resolve(strict=False)`` safely follows the link even if the target
+    # does not yet exist (for example when the file will be created by this
+    # script).  Falling back to the original ``path`` would later trigger the
+    # security guard inside :func:`write_secure_text` which refuses to operate
+    # on symlinks, causing the workflow step to fail.  Resolving here keeps the
+    # guardrails for regular usage while still supporting the CI environment.
+    if path.is_symlink():
+        try:
+            resolved = path.resolve(strict=False)
+        except OSError:
+            return None
+
+        if resolved.exists() and resolved.is_dir():
+            return None
+
+        path = resolved
+
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:

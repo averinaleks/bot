@@ -79,6 +79,30 @@ def test_write_github_output_supports_named_pipes(tmp_path: Path) -> None:
     assert "result_count=3" in received[0]
 
 
+def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    target_output = workspace / "outputs.txt"
+    symlink_path = workspace / "outputs-link.txt"
+    symlink_path.symlink_to(target_output)
+
+    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--github-output", str(symlink_path)],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert target_output.exists()
+    assert "upload=false" in target_output.read_text(encoding="utf-8")
+
+
 def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     workspace = tmp_path / "workspace"
