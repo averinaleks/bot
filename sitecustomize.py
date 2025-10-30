@@ -34,7 +34,20 @@ def _running_under_codeql() -> bool:
     if os.environ.get("CODEQL_DIST"):
         return True
 
-    return any(name.startswith("CODEQL_EXTRACTOR_PYTHON") for name in os.environ)
+    if any(name.startswith("CODEQL_EXTRACTOR_PYTHON") for name in os.environ):
+        return True
+
+    # CodeQL 2.18 tightened sandboxing and now spawns analysis processes with
+    # ``CODEQL_*`` orchestration variables that do not necessarily use the
+    # ``CODEQL_EXTRACTOR_PYTHON`` prefix.  Earlier we only recognised the
+    # extractor variables which meant the sandboxed interpreter failed to notice
+    # it was running under CodeQL and attempted to ``pip install`` optional
+    # dependencies.  Network access is blocked during analysis so the
+    # installation failed, aborting the database creation.  Treat any
+    # ``CODEQL_`` environment variable as a signal that CodeQL is driving the
+    # interpreter so that we skip auto-install hooks entirely in those
+    # environments.
+    return any(name.startswith("CODEQL_") for name in os.environ)
 
 
 def _ensure_packages(packages: Iterable[tuple[str, str]]) -> None:
