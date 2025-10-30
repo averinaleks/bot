@@ -64,7 +64,8 @@ jobs:
           mapfile -t refs < <(grep -Eo '^\s*uses:\s*release-drafter/release-drafter@[^ ]+' \
             .github/workflows/release-drafter.yml \
             | sed -E 's/^\s*uses:\s*//' \
-            | sort -u)
+            | sort -u \
+            || true)
           if [ "${#refs[@]}" -eq 0 ]; then
             echo "Release Drafter action reference not found in workflow." >&2
             exit 1
