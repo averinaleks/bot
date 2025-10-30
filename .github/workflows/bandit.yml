@@ -26,7 +26,11 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Bandit
-        run: pip install "bandit[sarif]"
+        run: |
+          pip install "bandit[sarif]"
+          # The "sarif" formatter is provided by a separate plugin which
+          # is not automatically installed in some environments.
+          pip install bandit-sarif-formatter
       - name: Run Bandit
         id: run_bandit
         continue-on-error: true

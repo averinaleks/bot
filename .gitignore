@@ -13,3 +13,5 @@ nonexistent
 default.pkl.sig
 # Semgrep CI artifacts
 semgrep.sarif
+# Bandit security scan artifacts
+bandit.sarif

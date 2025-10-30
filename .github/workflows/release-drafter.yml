@@ -28,6 +28,10 @@ permissions:
 env:
   RELEASE_DRAFTER_ACTION_REF: b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 # release-drafter v6.1.0 commit
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: >-
     ${{
@@ -57,6 +61,21 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.2.1
+        with:
+          # Always clone the default branch when running in the
+          # ``pull_request_target`` context so that untrusted fork code is
+          # never executed.  Explicitly drop the workflow token from the local
+          # checkout to prevent unintended pushes when the job runs with
+          # elevated write permissions.
+          persist-credentials: false
+          fetch-depth: 1
+          repository: ${{ github.repository }}
+          ref: >-
+            ${{
+              github.event_name == 'pull_request_target'
+                && github.event.repository.default_branch
+                || github.sha
+            }}
       - name: Ensure Release Drafter action ref is consistent
         run: |
           set -euo pipefail
@@ -77,14 +96,28 @@ jobs:
             fi
           done
       - name: Verify Release Drafter action ref exists upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! git ls-remote https://github.com/release-drafter/release-drafter.git \
-            | cut -f1 \
-            | grep -Fxq "${RELEASE_DRAFTER_ACTION_REF}"; then
-            echo "Release Drafter ref ${RELEASE_DRAFTER_ACTION_REF} not found upstream." >&2
-            exit 1
+          auth_header=()
+          if [ -n "${GH_TOKEN:-}" ]; then
+            auth_header+=("-H" "Authorization: Bearer ${GH_TOKEN}")
           fi
+          for attempt in {1..5}; do
+            if curl -fsS \
+              -H "Accept: application/vnd.github+json" \
+              "${auth_header[@]}" \
+              "https://api.github.com/repos/release-drafter/release-drafter/git/commits/${RELEASE_DRAFTER_ACTION_REF}" \
+              > /dev/null; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              sleep "${attempt}"
+            fi
+          done
+          echo "Release Drafter ref ${RELEASE_DRAFTER_ACTION_REF} not found upstream." >&2
+          exit 1
 
   update_release_draft:
     needs: validate_release_drafter_action

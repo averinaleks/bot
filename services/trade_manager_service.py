@@ -184,9 +184,9 @@ def _exchange_call_timeout() -> float | None:
         value = float(raw)
     except (TypeError, ValueError):
         logger.warning(
-            "Invalid %s value %r; falling back to default timeout",
+            "Invalid %s value %s; falling back to default timeout",
             _EXCHANGE_TIMEOUT_ENV,
-            raw,
+            sanitize_log_value(repr(raw)),
         )
         return _EXCHANGE_TIMEOUT_DEFAULT
     if value <= 0:
@@ -311,7 +311,7 @@ def _require_api_token() -> ResponseReturnValue | None:
             'Rejected TradeManager request to %s from %s: %s',
             sanitize_log_value(request.path),
             sanitize_log_value(remote),
-            reason,
+            sanitize_log_value(reason),
         )
         return jsonify({'error': 'unauthorized'}), 401
     return None
@@ -371,20 +371,20 @@ def _positions_directory_is_safe(path: Path) -> bool:
             if ancestor.is_symlink():
                 logger.warning(
                     'Отказ записи позиций: каталог %s является символьной ссылкой',
-                    sanitize_log_value(str(ancestor)),
+                    sanitize_log_value(ancestor),
                 )
                 return False
             if ancestor == directory and not ancestor.is_dir():
                 logger.warning(
                     'Отказ записи позиций: путь %s не является каталогом',
-                    sanitize_log_value(str(directory)),
+                    sanitize_log_value(directory),
                 )
                 return False
         except OSError as exc:
             logger.warning(
                 'Отказ записи позиций: не удалось проверить каталог %s: %s',
-                sanitize_log_value(str(ancestor)),
-                exc,
+                sanitize_log_value(ancestor),
+                sanitize_log_value(exc),
             )
             return False
     return True
@@ -398,13 +398,13 @@ def _positions_file_is_safe(path: Path) -> bool:
     if stat.S_ISLNK(info.st_mode):
         logger.warning(
             'Отказ доступа к кэшу позиций: файл %s является символьной ссылкой',
-            sanitize_log_value(str(path)),
+            sanitize_log_value(path),
         )
         return False
     if not stat.S_ISREG(info.st_mode):
         logger.warning(
             'Отказ доступа к кэшу позиций: путь %s не является обычным файлом',
-            sanitize_log_value(str(path)),
+            sanitize_log_value(path),
         )
         return False
     return True
@@ -420,15 +420,15 @@ def _load_positions_from_file(path: Path) -> list[dict]:
     except OSError as exc:
         logger.warning(
             'Не удалось получить информацию о файле позиций %s: %s',
-            sanitize_log_value(str(path)),
-            exc,
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
         )
         return []
 
     if size > _MAX_POSITIONS_CACHE_BYTES:
         logger.warning(
             'Кэш позиций %s слишком большой (%d байт, предел %d), пропускаем файл',
-            sanitize_log_value(str(path)),
+            sanitize_log_value(path),
             size,
             _MAX_POSITIONS_CACHE_BYTES,
         )
@@ -439,8 +439,8 @@ def _load_positions_from_file(path: Path) -> list[dict]:
     except (OSError, UnicodeDecodeError) as exc:
         logger.warning(
             'Не удалось прочитать кэш позиций %s: %s',
-            sanitize_log_value(str(path)),
-            exc,
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
         )
         return []
 
@@ -449,15 +449,15 @@ def _load_positions_from_file(path: Path) -> list[dict]:
     except json.JSONDecodeError as exc:
         logger.warning(
             'Кэш позиций %s содержит некорректный JSON: %s',
-            sanitize_log_value(str(path)),
-            exc,
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
         )
         return []
 
     if not isinstance(data, list):
         logger.warning(
             'Кэш позиций %s должен содержать список, найдено %s',
-            sanitize_log_value(str(path)),
+            sanitize_log_value(path),
             type(data).__name__,
         )
         return []
@@ -469,9 +469,9 @@ def _load_positions_from_file(path: Path) -> list[dict]:
                 entry = dict(entry)
             except Exception:
                 logger.debug(
-                    'Пропускаем некорректную запись в кэше позиций %s: %r',
-                    sanitize_log_value(str(path)),
-                    entry,
+                    'Пропускаем некорректную запись в кэше позиций %s: %s',
+                    sanitize_log_value(path),
+                    sanitize_log_value(entry),
                 )
                 continue
         trimmed.append(entry)
@@ -481,7 +481,7 @@ def _load_positions_from_file(path: Path) -> list[dict]:
     if len(trimmed) < len(data) and len(trimmed) >= _MAX_POSITIONS_CACHE_ENTRIES:
         logger.warning(
             'Кэш позиций %s содержит более %d записей, лишние отброшены',
-            sanitize_log_value(str(path)),
+            sanitize_log_value(path),
             _MAX_POSITIONS_CACHE_ENTRIES,
         )
 
@@ -513,14 +513,14 @@ def _write_positions_locked() -> None:
     except OSError as exc:  # pragma: no cover - disk errors
         logging.warning(
             'Failed to create positions cache directory %s: %s',
-            sanitize_log_value(str(directory)),
-            exc,
+            sanitize_log_value(directory),
+            sanitize_log_value(exc),
         )
         return
     if directory.is_symlink() or not directory.is_dir():
         logger.warning(
             'Refusing to persist positions: %s is not a regular directory',
-            sanitize_log_value(str(directory)),
+            sanitize_log_value(directory),
         )
         return
     if not _positions_file_is_safe(POSITIONS_FILE):
@@ -548,7 +548,10 @@ def _write_positions_locked() -> None:
             suffix='.tmp',
         )
     except OSError as exc:  # pragma: no cover - tmp creation failures
-        logging.warning('Failed to create temporary positions cache: %s', exc)
+        logging.warning(
+            'Failed to create temporary positions cache: %s',
+            sanitize_log_value(exc),
+        )
         return
 
     tmp_path = Path(tmp_name)
@@ -559,8 +562,8 @@ def _write_positions_locked() -> None:
             except OSError as exc:
                 logging.debug(
                     'Failed to enforce permissions on temporary positions cache %s: %s',
-                    tmp_path,
-                    exc,
+                    sanitize_log_value(tmp_path),
+                    sanitize_log_value(exc),
                 )
         tmp_file = os.fdopen(tmp_fd, 'w', encoding='utf-8')
     except Exception as exc:  # pragma: no cover - descriptor preparation failures
@@ -574,11 +577,14 @@ def _write_positions_locked() -> None:
         except OSError as cleanup_exc:
             logging.debug(
                 'Failed to remove temporary positions cache %s: %s',
-                tmp_path,
-                cleanup_exc,
+                sanitize_log_value(tmp_path),
+                sanitize_log_value(cleanup_exc),
             )
         if isinstance(exc, OSError):
-            logging.warning('Failed to prepare temporary positions cache: %s', exc)
+            logging.warning(
+                'Failed to prepare temporary positions cache: %s',
+                sanitize_log_value(exc),
+            )
         raise
 
     try:
@@ -604,8 +610,8 @@ def _write_positions_locked() -> None:
         except OSError as cleanup_exc:
             logging.debug(
                 'Failed to remove temporary positions cache %s: %s',
-                tmp_path,
-                cleanup_exc,
+                sanitize_log_value(tmp_path),
+                sanitize_log_value(cleanup_exc),
             )
         logging.warning('Failed to serialise positions cache: %s', exc)
         raise
@@ -625,11 +631,14 @@ def _write_positions_locked() -> None:
         except OSError as cleanup_exc:
             logging.debug(
                 'Failed to remove temporary positions cache %s: %s',
-                tmp_path,
-                cleanup_exc,
+                sanitize_log_value(tmp_path),
+                sanitize_log_value(cleanup_exc),
             )
         if isinstance(exc, OSError):
-            logging.warning('Failed to write temporary positions cache: %s', exc)
+            logging.warning(
+                'Failed to write temporary positions cache: %s',
+                sanitize_log_value(exc),
+            )
         raise
     else:
         tmp_file.close()
@@ -641,11 +650,15 @@ def _write_positions_locked() -> None:
     try:
         os.replace(tmp_path, POSITIONS_FILE)
     except OSError as exc:  # pragma: no cover - disk errors
-        logging.warning('Failed to save positions cache: %s', exc)
+        logging.warning('Failed to save positions cache: %s', sanitize_log_value(exc))
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug('Failed to remove temporary positions cache %s: %s', tmp_path, cleanup_exc)
+            logging.debug(
+                'Failed to remove temporary positions cache %s: %s',
+                sanitize_log_value(tmp_path),
+                sanitize_log_value(cleanup_exc),
+            )
         raise
 
 
@@ -668,10 +681,10 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
     try:
         remote_positions = _call_exchange_method(exchange, 'fetch_positions')
     except TimeoutError as exc:
-        logging.warning('fetch_positions timed out: %s', exc)
+        logging.warning('fetch_positions timed out: %s', sanitize_log_value(exc))
         return
     except Exception as exc:  # pragma: no cover - network/API issues
-        logging.warning('fetch_positions failed: %s', exc)
+        logging.warning('fetch_positions failed: %s', sanitize_log_value(exc))
         return
 
     remote_positions = remote_positions or []
@@ -982,13 +995,21 @@ def open_position() -> ResponseReturnValue:
 
             def _log_exception(prefix: str) -> Callable[[int, BaseException], None]:
                 def _inner(attempt: int, exc: BaseException) -> None:
-                    app.logger.debug('%s failed: %s', prefix, exc)
+                    app.logger.debug(
+                        '%s failed: %s',
+                        sanitize_log_value(prefix),
+                        sanitize_log_value(exc),
+                    )
 
                 return _inner
 
             def _log_failed(prefix: str) -> Callable[[int, Any], None]:
                 def _inner(attempt: int, result: Any) -> None:
-                    app.logger.debug('%s returned: %s', prefix, result)
+                    app.logger.debug(
+                        '%s returned: %s',
+                        sanitize_log_value(prefix),
+                        sanitize_log_value(result),
+                    )
 
                 return _inner
 
@@ -1088,7 +1109,7 @@ def open_position() -> ResponseReturnValue:
             )
         except OSError as exc:
             safe_symbol = sanitize_log_value(symbol or 'unknown')
-            safe_exc = sanitize_log_value(str(exc))
+            safe_exc = sanitize_log_value(exc)
             warn_msg = f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
             app.logger.warning(warn_msg)
             logger.warning(warn_msg)
@@ -1100,7 +1121,9 @@ def open_position() -> ResponseReturnValue:
         if protective_failures:
             safe_symbol = sanitize_log_value(symbol)
             app.logger.error(
-                'protective order failures for %s: %s', safe_symbol, protective_failures
+                'protective order failures for %s: %s',
+                safe_symbol,
+                sanitize_log_value(protective_failures),
             )
             cancel_success = False
             if hasattr(exchange, 'cancel_order'):
@@ -1117,9 +1140,9 @@ def open_position() -> ResponseReturnValue:
                 except CCXT_BASE_ERROR as exc:
                     app.logger.warning(
                         'failed to cancel primary order %s for %s: %s',
-                        order.get('id'),
+                        sanitize_log_value(order.get('id')),
                         safe_symbol,
-                        exc,
+                        sanitize_log_value(exc),
                     )
             if not cancel_success:
                 emergency_close_success = False
@@ -1144,7 +1167,7 @@ def open_position() -> ResponseReturnValue:
                     app.logger.exception(
                         'failed to place emergency close order for %s: %s',
                         safe_symbol,
-                        exc,
+                        sanitize_log_value(exc),
                     )
                 if not emergency_close_success:
                     mitigation_actions.append('emergency_close_failed')
@@ -1159,7 +1182,10 @@ def open_position() -> ResponseReturnValue:
             response['warnings'] = warnings_payload
         return jsonify(response)
     except TimeoutError as exc:
-        app.logger.exception('exchange request timed out while creating order: %s', exc)
+        app.logger.exception(
+            'exchange request timed out while creating order: %s',
+            sanitize_log_value(exc),
+        )
         return _open_position_error(
             OpenPositionErrorCode.EXCHANGE_TIMEOUT,
             'exchange request timed out',
@@ -1168,13 +1194,13 @@ def open_position() -> ResponseReturnValue:
             log_level=logging.ERROR,
         )
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        app.logger.exception('network error creating order: %s', exc)
+        app.logger.exception('network error creating order: %s', sanitize_log_value(exc))
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BAD_REQUEST as exc:
-        app.logger.warning('bad request when creating order: %s', exc)
+        app.logger.warning('bad request when creating order: %s', sanitize_log_value(exc))
         return jsonify({'error': 'invalid order parameters'}), 400
     except CCXT_BASE_ERROR as exc:
-        app.logger.exception('exchange error creating order: %s', exc)
+        app.logger.exception('exchange error creating order: %s', sanitize_log_value(exc))
         return jsonify({'error': 'exchange error creating order'}), 502
 
 
@@ -1279,7 +1305,7 @@ def close_position() -> ResponseReturnValue:
                     _write_positions_locked()
                 except OSError as exc:
                     safe_symbol = sanitize_log_value(symbol or 'unknown')
-                    safe_exc = sanitize_log_value(str(exc))
+                    safe_exc = sanitize_log_value(exc)
                     warn_msg = (
                         f'не удалось обновить кэш позиций для {safe_symbol}: {safe_exc}'
                     )
@@ -1296,16 +1322,19 @@ def close_position() -> ResponseReturnValue:
             response_payload['warnings'] = warnings_payload
         return jsonify(response_payload)
     except TimeoutError as exc:
-        app.logger.exception('exchange request timed out while closing order: %s', exc)
+        app.logger.exception(
+            'exchange request timed out while closing order: %s',
+            sanitize_log_value(exc),
+        )
         return jsonify({'error': 'exchange request timed out'}), 504
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        app.logger.exception('network error closing position: %s', exc)
+        app.logger.exception('network error closing position: %s', sanitize_log_value(exc))
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BAD_REQUEST as exc:
-        app.logger.warning('bad request when closing position: %s', exc)
+        app.logger.warning('bad request when closing position: %s', sanitize_log_value(exc))
         return jsonify({'error': 'invalid order parameters'}), 400
     except CCXT_BASE_ERROR as exc:
-        app.logger.exception('exchange error closing position: %s', exc)
+        app.logger.exception('exchange error closing position: %s', sanitize_log_value(exc))
         return jsonify({'error': 'exchange error closing position'}), 502
 
 
@@ -1334,7 +1363,7 @@ if hasattr(app, "errorhandler"):
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
         """Log unexpected errors and return a 500 response."""
-        app.logger.exception('unhandled error: %s', exc)
+        app.logger.exception('unhandled error: %s', sanitize_log_value(exc))
         return jsonify({'error': 'internal server error'}), 500
 else:
     def too_large(_) -> ResponseReturnValue:
@@ -1342,7 +1371,7 @@ else:
 
     def handle_unexpected_error(exc: Exception) -> ResponseReturnValue:
         """Log unexpected errors and return a 500 response."""
-        app.logger.exception('unhandled error: %s', exc)
+        app.logger.exception('unhandled error: %s', sanitize_log_value(exc))
         return jsonify({'error': 'internal server error'}), 500
 
 
@@ -1353,5 +1382,9 @@ if __name__ == '__main__':
     host = validate_host()
     port = safe_int(os.getenv("PORT", "8002"))
     init_exchange()
-    app.logger.info('Запуск сервиса TradeManager на %s:%s', host, port)
+    app.logger.info(
+        'Запуск сервиса TradeManager на %s:%s',
+        sanitize_log_value(host),
+        port,
+    )
     app.run(host=host, port=port)  # host validated above

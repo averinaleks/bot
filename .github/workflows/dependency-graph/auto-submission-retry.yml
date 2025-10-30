@@ -3,6 +3,7 @@ name: dependency-submission-auto-retry
 on:
   workflow_run:
     workflows:
+      - dependency-submission
       - Automatic Dependency Submission (Python)
     types:
       - completed
