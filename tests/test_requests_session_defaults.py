@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ssl
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,6 +95,32 @@ def test_get_requests_session_rejects_verify_false(monkeypatch: pytest.MonkeyPat
         with http_client.get_requests_session(verify=False):
             pass
 
+
+def test_get_requests_session_rejects_insecure_ssl_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = DummySession()
+
+    def factory() -> DummySession:
+        return session
+
+    fake_requests = SimpleNamespace(Session=factory)
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    hostname_context = ssl.create_default_context()
+    hostname_context.check_hostname = False
+
+    with pytest.raises(ValueError):
+        with http_client.get_requests_session(verify=hostname_context):
+            pass
+
+    verify_context = ssl.create_default_context()
+    verify_context.check_hostname = False
+    verify_context.verify_mode = ssl.CERT_NONE
+
+    with pytest.raises(ValueError):
+        with http_client.get_requests_session(verify=verify_context):
+            pass
 
 def test_get_requests_session_accepts_custom_ca(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
