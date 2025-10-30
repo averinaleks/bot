@@ -68,10 +68,16 @@ jobs:
               raise SystemExit(1)
           OWNER, REPO = OWNER_REPO
 
+          user_agent = os.getenv(
+              "DEPENDENCY_SNAPSHOT_USER_AGENT",
+              "averinaleks-bot-dependency-retry",
+          ).strip() or "averinaleks-bot-dependency-retry"
+
           HEADERS = {
               "Authorization": f"Bearer {TOKEN}",
               "Accept": "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": user_agent,
           }
 
           def _raw_request(method: str, path: str, data: dict[str, Any] | None = None) -> tuple[int, bytes]:
