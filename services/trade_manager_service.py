@@ -593,7 +593,9 @@ def _write_positions_locked() -> None:
             tmp_file.close()
             tmp_path.unlink(missing_ok=True)
             return
-        tmp_file.write(payload)
+        # Use ``json.dump`` so callers can monkeypatch it for fault-injection tests
+        # while still performing the size checks above using ``json.dumps``.
+        json.dump(snapshot, tmp_file)
         tmp_file.flush()
         os.fsync(tmp_file.fileno())
     except Exception as exc:  # pragma: no cover - write/fsync failures
