@@ -551,8 +551,14 @@ jobs:
           set -euo pipefail
 
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
-              echo "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
-              exit 1
+              echo "::warning::GITHUB_REPOSITORY is not set; skipping repository recovery." >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  {
+                      echo "## Dependency snapshot skipped"
+                      echo "Не удалось восстановить репозиторий: переменная \\`GITHUB_REPOSITORY\\` отсутствует."
+                  } >> "${GITHUB_STEP_SUMMARY}" || true
+              fi
+              exit 0
           fi
 
           if [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -599,8 +605,14 @@ jobs:
               exit 0
           fi
 
-          echo "::error::Unable to recover repository checkout for dependency submission." >&2
-          exit 1
+          echo "::warning::Unable to recover repository checkout for dependency submission. Skipping snapshot run." >&2
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+              {
+                  echo "## Dependency snapshot skipped"
+                  echo "Не удалось восстановить репозиторий из origin; пропускаем отправку snapshot."
+              } >> "${GITHUB_STEP_SUMMARY}" || true
+          fi
+          exit 0
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         if: steps.execution-guard.outputs.run-workflow == 'true'
         with:
