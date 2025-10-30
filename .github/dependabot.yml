@@ -52,6 +52,10 @@ updates:
       - dependency-name: "gymnasium"
       - dependency-name: "lightning-utilities"
       - dependency-name: "ray"
+      # NumPy 2.4+ currently conflicts with the pinned numba runtime.
+      - dependency-name: "numpy"
+        versions:
+          - ">=2.4"
       # ccxtpro is a commercial package that often trips Dependabot's rate
       # limits; it is safer to upgrade it manually together with the
       # matching back-end services.

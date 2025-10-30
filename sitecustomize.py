@@ -117,7 +117,7 @@ def _run_pip_install(requirement: str) -> None:
 if sys.version_info < (3, 11):
     _numpy_requirement = "numpy==2.2.6"
 else:
-    _numpy_requirement = "numpy==2.3.3"
+    _numpy_requirement = "numpy==2.3.4"
 
 _required_packages: list[tuple[str, str]] = [
     ("numpy", _numpy_requirement),

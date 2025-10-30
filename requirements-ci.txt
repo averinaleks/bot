@@ -34,12 +34,11 @@ setuptools>=80.9.0,<81
 types-requests
 mypy==1.18.2
 hypothesis>=6.90.0
-# Keep numpy aligned with requirements-core.txt and Docker builds.
-# NumPy 2.3 dropped support for Python 3.10, so we keep the 3.10 builds on
-# the latest compatible 2.2.x release and allow newer interpreters to use
-# the 2.3 series.
+# Keep numpy aligned with requirements-core.txt and Docker builds.  NumPy 2.4
+# requires a newer numba release than is currently available, so cap the
+# version below 2.4 until upstream support lands.
 numpy==2.2.6; python_version < "3.11"
-numpy==2.3.3; python_version >= "3.11"
+numpy==2.3.4; python_version >= "3.11"
 pip-audit==2.9.0
 pybit==5.12.0
 
