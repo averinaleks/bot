@@ -397,9 +397,10 @@ jobs:
               return 1
             fi
 
-            # GHCR периодически отвечает HTML-страницами или ошибками 5xx.
-            # Распознаём такие ответы, чтобы включить fallback на Docker Hub
-            # или локальную сборку и избежать ложных падений workflow.
+            # GHCR периодически отвечает HTML-страницами, ошибками 5xx или
+            # банальными сетевыми сбоями DNS/handshake. Распознаём такие
+            # ответы, чтобы включить fallback на Docker Hub или локальную
+            # сборку и избежать ложных падений workflow.
             local -a generic_patterns=(
               "Our services aren't available right now"
               "failed to parse error response 400"
@@ -425,6 +426,10 @@ jobs:
                 "context deadline exceeded"
                 "i/o timeout"
                 "TLS handshake timeout"
+                "lookup ghcr.io"
+                "no such host"
+                "Name or service not known"
+                "temporary failure in name resolution"
               )
               # GHCR также может отвечать 4xx-статусами с HTML/текстом вместо JSON,
               # когда сервис авторизации недоступен. В таких случаях buildx
