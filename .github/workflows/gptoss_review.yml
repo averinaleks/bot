@@ -326,7 +326,7 @@ jobs:
             "$api_url" \
             | tar -xz --strip-components=1 -C "$workdir"
 
-          rsync -a --delete "$workdir"/ ./
+          rsync -a --delete --exclude='.git/' "$workdir"/ ./
 
       - name: Start mock GPT-OSS server
         if: >-
