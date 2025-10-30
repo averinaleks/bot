@@ -61,7 +61,10 @@ jobs:
         run: |
           set -euo pipefail
           expected="release-drafter/release-drafter@${RELEASE_DRAFTER_ACTION_REF}"
-          mapfile -t refs < <(grep -oE 'release-drafter/release-drafter@[^ ]+' .github/workflows/release-drafter.yml | sort -u)
+          mapfile -t refs < <(grep -Eo '^\s*uses:\s*release-drafter/release-drafter@[^ ]+' \
+            .github/workflows/release-drafter.yml \
+            | sed -E 's/^\s*uses:\s*//' \
+            | sort -u)
           if [ "${#refs[@]}" -eq 0 ]; then
             echo "Release Drafter action reference not found in workflow." >&2
             exit 1
