@@ -615,11 +615,11 @@ jobs:
           output: ${{ matrix.artifact }}.txt
           scanners: vuln
       - name: Show Trivy scan results
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && contains(fromJSON('["success","failure"]'), steps.trivy.outcome) }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
         run: cat ${{ matrix.artifact }}.txt
 
       - name: Upload Trivy report artifact
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && contains(fromJSON('["success","failure"]'), steps.trivy.outcome) }}
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v4
         with:
           name: ${{ matrix.artifact }}
