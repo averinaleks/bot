@@ -173,6 +173,109 @@ def test_cli_supports_fd_github_output(tmp_path: Path) -> None:
     assert (workspace / "semgrep.sarif").exists()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",  # pragma: no cover - Windows lacks pass_fds support
+    reason="File descriptor propagation is not supported on Windows runners",
+)
+def test_cli_supports_proc_fd_path(tmp_path: Path) -> None:
+    if not Path("/proc/self/fd").exists():  # pragma: no cover - non-Linux environments
+        pytest.skip("/proc/self/fd is not available on this platform")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    read_fd, write_fd = os.pipe()
+    received: list[str] = []
+
+    def _reader() -> None:
+        with os.fdopen(read_fd, "r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
+    proc_fd_path = Path(f"/proc/self/fd/{write_fd}")
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script_path),
+                "--github-output",
+                str(proc_fd_path),
+            ],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            text=True,
+            pass_fds=(write_fd,),
+        )
+    finally:
+        os.close(write_fd)
+        reader.join(timeout=5)
+
+    assert result.returncode == 0
+    assert not reader.is_alive()
+    assert received
+    assert "upload=false" in received[0]
+    assert (workspace / "semgrep.sarif").exists()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",  # pragma: no cover - Windows lacks pass_fds support
+    reason="File descriptor propagation is not supported on Windows runners",
+)
+def test_cli_supports_symlinked_proc_fd(tmp_path: Path) -> None:
+    if not Path("/proc/self/fd").exists():  # pragma: no cover - non-Linux environments
+        pytest.skip("/proc/self/fd is not available on this platform")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    read_fd, write_fd = os.pipe()
+    received: list[str] = []
+
+    def _reader() -> None:
+        with os.fdopen(read_fd, "r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    proc_fd_path = Path(f"/proc/self/fd/{write_fd}")
+    github_output = workspace / "gh-output"
+    github_output.symlink_to(proc_fd_path)
+
+    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script_path),
+                "--github-output",
+                str(github_output),
+            ],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            text=True,
+            pass_fds=(write_fd,),
+        )
+    finally:
+        os.close(write_fd)
+        reader.join(timeout=5)
+
+    assert result.returncode == 0
+    assert not reader.is_alive()
+    assert received
+    assert "upload=false" in received[0]
+    assert (workspace / "semgrep.sarif").exists()
+
+
 def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     workspace = tmp_path / "workspace"
