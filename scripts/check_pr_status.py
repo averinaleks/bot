@@ -117,9 +117,13 @@ class PRStatus:
     skip: bool
     head_sha: str
     notices: list[str]
+    trusted_repo: bool
+    head_repo: str
 
 
-def _write_github_output(skip: bool, head_sha: str) -> None:
+def _write_github_output(
+    skip: bool, head_sha: str, trusted_repo: bool, head_repo: str
+) -> None:
     """Append outputs for downstream workflow steps if possible."""
 
     path = resolve_github_path(
@@ -133,7 +137,12 @@ def _write_github_output(skip: bool, head_sha: str) -> None:
     try:
         write_secure_text(
             path,
-            f"skip={'true' if skip else 'false'}\nhead_sha={head_sha}\n",
+            (
+                f"skip={'true' if skip else 'false'}\n"
+                f"head_sha={head_sha}\n"
+                f"trusted_repo={'true' if trusted_repo else 'false'}\n"
+                f"head_repo={head_repo}\n"
+            ),
             append=True,
             allow_special_files=True,
         )
@@ -198,9 +207,16 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
 
     notices: list[str] = []
     head_sha = ""
+    trusted_repo = False
 
     if not isinstance(payload, dict):
-        return PRStatus(skip=True, head_sha="", notices=["Ответ GitHub API имеет неожиданный формат"])
+        return PRStatus(
+            skip=True,
+            head_sha="",
+            notices=["Ответ GitHub API имеет неожиданный формат"],
+            trusted_repo=False,
+            head_repo="",
+        )
 
     state = str(payload.get("state") or "").strip()
     draft_flag = payload.get("draft")
@@ -236,9 +252,15 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
     if not head_repo:
         skip = True
         notices.append("head-репозиторий недоступен (ветка могла быть удалена)")
-    elif repository and head_repo.lower() != repository.lower():
-        skip = True
-        notices.append(f"PR создан из репозитория {head_repo}, ожидается {repository}")
+    else:
+        normalised_repo = repository.lower() if repository else ""
+        normalised_head = head_repo.lower()
+        trusted_repo = bool(normalised_repo and normalised_head == normalised_repo)
+        if not trusted_repo:
+            skip = True
+            notices.append(
+                f"PR создан из репозитория {head_repo}, ожидается {repository}"
+            )
 
     if not head_sha or not _SHA_RE.fullmatch(head_sha):
         skip = True
@@ -247,7 +269,13 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
         else:
             notices.append("Не удалось получить SHA head-коммита PR")
 
-    return PRStatus(skip=skip, head_sha=head_sha if _SHA_RE.fullmatch(head_sha or "") else "", notices=notices)
+    return PRStatus(
+        skip=skip,
+        head_sha=head_sha if _SHA_RE.fullmatch(head_sha or "") else "",
+        notices=notices,
+        trusted_repo=trusted_repo,
+        head_repo=head_repo,
+    )
 
 
 def _build_api_url(repo: str, pr_number: str) -> str:
@@ -261,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         args = _parse_args(argv)
     except ValueError as exc:
         print(f"::warning::{exc}", file=sys.stderr)
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
     except SystemExit as exc:  # pragma: no cover - argparse --help
         code = getattr(exc, "code", 0)
@@ -270,14 +298,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"::warning::Парсер аргументов завершился с кодом {code}",
                 file=sys.stderr,
             )
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
 
     repo = args.repo.strip()
     pr_number = str(args.pr_number).strip()
     if not repo or not pr_number:
         print("::notice::PR не найден – пропускаю запуск обзора.", file=sys.stderr)
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
 
     try:
@@ -285,21 +313,21 @@ def main(argv: list[str] | None = None) -> int:
         payload = _fetch_pull_request(url, args.token, args.timeout)
     except RuntimeError as exc:
         print(f"::warning::{exc}", file=sys.stderr)
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
     except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Критическое исключение в check_pr_status: {exc}",
             file=sys.stderr,
         )
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Неожиданная ошибка при проверке PR: {exc}",
             file=sys.stderr,
         )
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
 
     status = _evaluate_payload(payload, repo)
@@ -315,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("::debug::PR прошёл проверку статуса и источника.")
 
-    _write_github_output(status.skip, status.head_sha)
+    _write_github_output(status.skip, status.head_sha, status.trusted_repo, status.head_repo)
     return 0
 
 
@@ -331,21 +359,21 @@ def cli(argv: list[str] | None = None) -> int:
                 f"::warning::Скрипт завершился с кодом {code}. Возвращаю 0.",
                 file=sys.stderr,
             )
-            _write_github_output(skip=True, head_sha="")
+            _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
     except KeyboardInterrupt as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Критическое исключение в check_pr_status: {exc}",
             file=sys.stderr,
         )
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
     except Exception as exc:  # pragma: no cover - defensive guard
         print(
             f"::warning::Критическое исключение в check_pr_status: {exc}",
             file=sys.stderr,
         )
-        _write_github_output(skip=True, head_sha="")
+        _write_github_output(skip=True, head_sha="", trusted_repo=False, head_repo="")
         return 0
 
 

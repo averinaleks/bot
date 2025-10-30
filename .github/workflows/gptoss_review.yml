@@ -222,6 +222,8 @@ jobs:
               {
                 echo "skip=true"
                 echo "head_sha="
+                echo "trusted_repo=false"
+                echo "head_repo="
               } >>"$GITHUB_OUTPUT"
             fi
             exit 0
@@ -238,10 +240,12 @@ jobs:
             else
               echo "::notice::Скрипт ${helpers_dir}/scripts/check_pr_status.py не найден, пропускаю проверку PR"
               if [ -n "${GITHUB_OUTPUT:-}" ]; then
-                {
-                  echo "skip=true"
-                  echo "head_sha="
-                } >>"$GITHUB_OUTPUT"
+              {
+                echo "skip=true"
+                echo "head_sha="
+                echo "trusted_repo=false"
+                echo "head_repo="
+              } >>"$GITHUB_OUTPUT"
               fi
               exit 0
             fi
@@ -256,6 +260,8 @@ jobs:
               {
                 echo "skip=true"
                 echo "head_sha="
+                echo "trusted_repo=false"
+                echo "head_repo="
               } >>"$GITHUB_OUTPUT"
             fi
             exit 0
@@ -270,33 +276,56 @@ jobs:
               {
                 echo "skip=true"
                 echo "head_sha="
+                echo "trusted_repo=false"
+                echo "head_repo="
               } >>"$GITHUB_OUTPUT"
             fi
             exit 0
           fi
 
-      - name: Checkout PR head
+      - name: Checkout trusted baseline
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
               && steps.ensure_pr_ready.outputs.skip != 'true'
-              && github.event_name == 'pull_request'
-              && github.event.pull_request.head.repo.full_name == github.repository
-              && env.PR_NUMBER != '' }}
+              && steps.ensure_pr_ready.outputs.trusted_repo == 'true'
+              && steps.ensure_pr_ready.outputs.head_sha != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
 
-      - name: Checkout repository
+      - name: Download PR head snapshot
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
               && steps.ensure_pr_ready.outputs.skip != 'true'
-              && github.event_name != 'pull_request'
-              && env.PR_NUMBER != '' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-        with:
-          fetch-depth: 0
-          ref: ${{ format('refs/pull/{0}/head', env.PR_NUMBER) }}
+              && steps.ensure_pr_ready.outputs.trusted_repo == 'true'
+              && steps.ensure_pr_ready.outputs.head_sha != '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          head_sha="${{ steps.ensure_pr_ready.outputs.head_sha }}"
+          repo="${REPOSITORY:-}"
+          if [ -z "$repo" ] || [ -z "$head_sha" ]; then
+            echo "::error::Не удалось определить целевой коммит PR" >&2
+            exit 1
+          fi
+
+          workdir="${RUNNER_TEMP%/}/pr-${head_sha}"
+          rm -rf "$workdir"
+          mkdir -p "$workdir"
+
+          api_url="https://api.github.com/repos/${repo}/tarball/${head_sha}"
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "$api_url" \
+            | tar -xz --strip-components=1 -C "$workdir"
+
+          rsync -a --delete "$workdir"/ ./
 
       - name: Start mock GPT-OSS server
         if: >-
