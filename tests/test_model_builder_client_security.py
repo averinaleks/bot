@@ -100,13 +100,34 @@ def test_prepare_endpoint_rejects_unlisted_host(monkeypatch):
     assert endpoint is None
 
 
+class _DummyStream:
+    def __init__(self, peer_ip: str):
+        self._peer = peer_ip
+
+    def get_extra_info(self, name):
+        if name == "peername":
+            return (self._peer, 0)
+        return None
+
+
 class _DummyResponse:
-    def __init__(self, *, headers=None, content=b"{}", parsed=None, json_exc=None):
+    def __init__(
+        self,
+        *,
+        headers=None,
+        content=b"{}",
+        parsed=None,
+        json_exc=None,
+        peer_ip: str | None = None,
+    ):
         self.status_code = 200
         self.headers = headers or {}
         self._content = content
         self._parsed = parsed if parsed is not None else {"ohlcv": []}
         self._json_exc = json_exc
+        self.extensions = {}
+        if peer_ip is not None:
+            self.extensions["network_stream"] = _DummyStream(peer_ip)
 
     @property
     def content(self):
@@ -129,6 +150,9 @@ class _DummyAsyncClient:
         return False
 
     async def get(self, *_args, **_kwargs):
+        return self._response
+
+    async def post(self, *_args, **_kwargs):
         return self._response
 
 
@@ -206,3 +230,75 @@ def test_fetch_training_data_limits_payload_size(monkeypatch, caplog):
     assert features == []
     assert labels == []
     assert "exceeded" in caplog.text
+
+
+def test_fetch_training_data_rejects_unexpected_peer_ip(monkeypatch, caplog):
+    endpoint = model_builder_client.ServiceEndpoint(
+        scheme="https",
+        base_url="https://model_builder:8001",
+        hostname="model_builder",
+        allowed_ips=frozenset({"127.0.0.1"}),
+    )
+
+    async def _allow(_endpoint):
+        return True
+
+    monkeypatch.setattr(model_builder_client, "_hostname_still_allowed", _allow)
+
+    response = _DummyResponse(
+        headers={"Content-Type": "application/json"},
+        parsed={"ohlcv": []},
+        peer_ip="192.0.2.5",
+    )
+    monkeypatch.setattr(
+        model_builder_client.httpx,
+        "AsyncClient",
+        lambda *a, **k: _DummyAsyncClient(response),
+    )
+
+    async def _run():
+        return await model_builder_client._fetch_training_data_from_endpoint(  # type: ignore[attr-defined]
+            endpoint,
+            "BTCUSDT",
+        )
+
+    with caplog.at_level("ERROR"):
+        features, labels = asyncio.run(_run())
+
+    assert features == []
+    assert labels == []
+    assert "неожиданного IP" in caplog.text
+
+
+def test_train_with_endpoint_rejects_unexpected_peer_ip(monkeypatch, caplog):
+    endpoint = model_builder_client.ServiceEndpoint(
+        scheme="https",
+        base_url="https://model_builder:8001",
+        hostname="model_builder",
+        allowed_ips=frozenset({"127.0.0.1"}),
+    )
+
+    async def _allow(_endpoint):
+        return True
+
+    monkeypatch.setattr(model_builder_client, "_hostname_still_allowed", _allow)
+
+    response = _DummyResponse(peer_ip="192.0.2.5")
+    monkeypatch.setattr(
+        model_builder_client.httpx,
+        "AsyncClient",
+        lambda *a, **k: _DummyAsyncClient(response),
+    )
+
+    async def _run():
+        return await model_builder_client._train_with_endpoint(  # type: ignore[attr-defined]
+            endpoint,
+            [[1, 2, 3, 4, 5]],
+            [1],
+        )
+
+    with caplog.at_level("ERROR"):
+        result = asyncio.run(_run())
+
+    assert result is False
+    assert "неожиданного IP" in caplog.text
