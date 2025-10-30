@@ -228,7 +228,12 @@ def _write_github_output(**outputs: str | bool) -> None:
             lines.append(f"{key}={value}\n")
         if not lines:
             return
-        write_secure_text(path, "".join(lines), append=True)
+        write_secure_text(
+            path,
+            "".join(lines),
+            append=True,
+            allow_special_files=True,
+        )
     except OSError as exc:  # pragma: no cover - extremely unlikely on CI
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
 
