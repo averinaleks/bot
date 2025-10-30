@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ except ImportError:  # pragma: no cover - executed when run as a script
     write_secure_text = module.write_secure_text  # type: ignore[attr-defined]
 
 SARIF_PATH = Path("semgrep.sarif")
+_FD_PREFIXES = {"fd", "pipe"}
 
 _EMPTY_SARIF: dict[str, Any] = {
     "version": "2.1.0",
@@ -85,26 +87,80 @@ def sarif_result_count(path: Path = SARIF_PATH) -> int:
     return sum(len(run.get("results", [])) for run in runs)
 
 
-def write_github_output(path: Path, *, upload: bool, findings: int, sarif_path: Path) -> None:
-    """Append outputs consumed by subsequent workflow steps."""
+def write_github_output(
+    target: Path | int,
+    *,
+    upload: bool,
+    findings: int,
+    sarif_path: Path,
+) -> None:
+    """Append outputs consumed by subsequent workflow steps.
+
+    Parameters
+    ----------
+    target:
+        Either the filesystem path backing ``GITHUB_OUTPUT`` or a numeric file
+        descriptor exposed by GitHub's workflow runner.  The latter is
+        normalised from ``fd:X`` specifications when callers pass a file
+        descriptor explicitly.
+    """
+
+    payload = (
+        f"upload={'true' if upload else 'false'}\n"
+        f"result_count={findings}\n"
+        f"sarif_path={sarif_path}\n"
+    )
+
+    if isinstance(target, int):
+        try:
+            dup_fd = os.dup(target)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            raise RuntimeError(
+                f"Unable to duplicate GitHub output file descriptor {target}: {exc}"
+            ) from exc
+
+        try:
+            with os.fdopen(dup_fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            raise RuntimeError(
+                f"Unable to write Semgrep outputs via descriptor {target}: {exc}"
+            ) from exc
+
+        return
 
     write_secure_text(
-        path,
-        (
-            f"upload={'true' if upload else 'false'}\n"
-            f"result_count={findings}\n"
-            f"sarif_path={sarif_path}\n"
-        ),
+        target,
+        payload,
         append=True,
         allow_special_files=True,
     )
 
 
-def _normalize_github_output(path: Path | None) -> Path | None:
-    """Return ``None`` when *path* is unset, empty, or refers to a directory."""
+def _normalize_github_output(value: Path | str | None) -> Path | int | None:
+    """Return a usable GitHub output target or ``None`` when invalid."""
 
-    if path is None:
+    if value is None:
         return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    prefix, _, descriptor = text.partition(":")
+    if prefix in _FD_PREFIXES and descriptor:
+        descriptor = descriptor.strip()
+        try:
+            fd = int(descriptor, 10)
+        except ValueError:
+            return None
+
+        if fd < 0:
+            return None
+
+        return fd
+
+    path = Path(text)
 
     # ``Path("")`` normalizes to ``Path(".")`` which is not a real file target and
     # causes ``os.open`` to raise ``IsADirectoryError``.  Treat it as missing so the
@@ -113,10 +169,6 @@ def _normalize_github_output(path: Path | None) -> Path | None:
         return None
 
     if path.exists() and path.is_dir():
-        return None
-
-    text = str(path).strip()
-    if not text:
         return None
 
     # GitHub Actions may expose ``GITHUB_OUTPUT`` as a symlink that ultimately
