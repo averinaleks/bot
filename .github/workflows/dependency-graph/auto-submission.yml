@@ -507,6 +507,7 @@ jobs:
           ref: ${{ steps.event-metadata.outputs.checkout_ref }}
       - name: Recover checkout when branch references are stale
         if: steps.checkout.outcome == 'failure'
+        id: recover
         env:
           CHECKOUT_REF: ${{ steps.event-metadata.outputs.checkout_ref }}
           CHECKOUT_AFTER: ${{ steps.event-metadata.outputs.after }}
@@ -515,9 +516,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          output_path="${GITHUB_OUTPUT:-}"
+
+          mark_recovery() {
+              if [ -n "${output_path}" ]; then
+                  echo "recovered=$1" >>"${output_path}"
+              fi
+          }
+
+          mark_recovery "false"
+
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
-              echo "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
-              exit 1
+              echo "::warning::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
+              exit 0
           fi
 
           if [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -536,10 +547,12 @@ jobs:
               fi
               if git fetch --no-tags --depth=1 origin "$target"; then
                   git checkout --force --detach FETCH_HEAD
+                  mark_recovery "true"
                   return 0
               fi
               if git fetch --no-tags origin "$target"; then
                   git checkout --force --detach FETCH_HEAD
+                  mark_recovery "true"
                   return 0
               fi
               if [ -n "${GITHUB_TOKEN:-}" ] && [ "${AUTH_FALLBACK_ATTEMPTED:-0}" = "0" ]; then
@@ -548,10 +561,12 @@ jobs:
                   git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
                   if git fetch --no-tags --depth=1 origin "$target"; then
                       git checkout --force --detach FETCH_HEAD
+                      mark_recovery "true"
                       return 0
                   fi
                   if git fetch --no-tags origin "$target"; then
                       git checkout --force --detach FETCH_HEAD
+                      mark_recovery "true"
                       return 0
                   fi
               fi
@@ -580,13 +595,36 @@ jobs:
               exit 0
           fi
 
-          echo "::error::Unable to recover repository checkout for dependency submission." >&2
-          exit 1
+          echo "::warning::Unable to recover repository checkout for dependency submission." >&2
+          exit 0
+      - name: Determine repository availability
+        id: repository-ready
+        if: ${{ always() }}
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          RECOVER_OUTCOME: ${{ steps.recover.outcome }}
+          RECOVERED: ${{ steps.recover.outputs.recovered }}
+        run: |
+          set -euo pipefail
+          ready="false"
+          if [ "${CHECKOUT_OUTCOME:-}" = "success" ]; then
+              ready="true"
+          elif [ "${RECOVER_OUTCOME:-}" = "success" ] && [ "${RECOVERED:-}" = "true" ]; then
+              ready="true"
+          fi
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "ready=${ready}" >>"${GITHUB_OUTPUT}"
+          fi
+          if [ "${ready}" != "true" ]; then
+              echo "::notice::Skipping dependency submission because the repository checkout is unavailable." >&2
+          fi
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        if: steps.repository-ready.outputs.ready == 'true'
         with:
           python-version: '3.11'
       - name: Detect dependency manifest changes
         id: detect
+        if: steps.repository-ready.outputs.ready == 'true'
         env:
           BEFORE: ${{ steps.event-metadata.outputs.before }}
           AFTER: ${{ steps.event-metadata.outputs.after }}
@@ -761,9 +799,11 @@ jobs:
           PY
       - name: Install dependency snapshot dependencies
         if: >-
-          steps.detect.outputs.changed == 'true' ||
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'repository_dispatch'
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
+            github.event_name == 'workflow_dispatch' ||
+            github.event_name == 'repository_dispatch'
+          )
         run: |
           python -m pip install --upgrade pip \
             || python -m pip install --upgrade pip --break-system-packages \
@@ -773,9 +813,11 @@ jobs:
             || echo '::warning::Unable to install requests; dependency snapshot submission may fail.'
       - name: Prepare requirements
         if: >-
-          steps.detect.outputs.changed == 'true' ||
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'repository_dispatch'
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
+            github.event_name == 'workflow_dispatch' ||
+            github.event_name == 'repository_dispatch'
+          )
         run: |
           python <<'PY'
           from __future__ import annotations
@@ -860,9 +902,11 @@ jobs:
           PY
       - name: Submit dependency snapshot
         if: >-
-          steps.detect.outputs.changed == 'true' ||
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'repository_dispatch'
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
+            github.event_name == 'workflow_dispatch' ||
+            github.event_name == 'repository_dispatch'
+          )
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/submit_dependency_snapshot.py
