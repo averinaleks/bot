@@ -135,6 +135,7 @@ def _write_github_output(skip: bool, head_sha: str) -> None:
             path,
             f"skip={'true' if skip else 'false'}\nhead_sha={head_sha}\n",
             append=True,
+            allow_special_files=True,
         )
     except OSError as exc:  # pragma: no cover - extremely rare on GitHub runners
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)

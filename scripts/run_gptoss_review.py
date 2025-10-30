@@ -505,6 +505,7 @@ def _write_github_output(has_content: bool) -> None:
             path,
             f"has_content={'true' if has_content else 'false'}\n",
             append=True,
+            allow_special_files=True,
         )
     except OSError as exc:  # pragma: no cover - extremely rare on GH runners
         print(f"::warning::Не удалось записать GITHUB_OUTPUT: {exc}", file=sys.stderr)
