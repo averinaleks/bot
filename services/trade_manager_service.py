@@ -139,6 +139,9 @@ atexit.register(_reset_exchange_executor)
 _get_state()
 POSITIONS: list[dict] = _get_state()._positions
 
+_MAX_POSITIONS_CACHE_BYTES = 1 * 1024 * 1024  # 1 MB hard limit for cache file size
+_MAX_POSITIONS_CACHE_ENTRIES = 5000  # prevent unbounded growth from untrusted input
+
 
 def _normalize_trade_side(value: Any) -> str:
     """Normalise side values like ``long``/``short`` to ``buy``/``sell``."""
@@ -407,6 +410,84 @@ def _positions_file_is_safe(path: Path) -> bool:
     return True
 
 
+def _load_positions_from_file(path: Path) -> list[dict]:
+    """Return a validated list of cached positions from *path*."""
+
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        logger.warning(
+            'Не удалось получить информацию о файле позиций %s: %s',
+            sanitize_log_value(str(path)),
+            exc,
+        )
+        return []
+
+    if size > _MAX_POSITIONS_CACHE_BYTES:
+        logger.warning(
+            'Кэш позиций %s слишком большой (%d байт, предел %d), пропускаем файл',
+            sanitize_log_value(str(path)),
+            size,
+            _MAX_POSITIONS_CACHE_BYTES,
+        )
+        return []
+
+    try:
+        raw = path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning(
+            'Не удалось прочитать кэш позиций %s: %s',
+            sanitize_log_value(str(path)),
+            exc,
+        )
+        return []
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            'Кэш позиций %s содержит некорректный JSON: %s',
+            sanitize_log_value(str(path)),
+            exc,
+        )
+        return []
+
+    if not isinstance(data, list):
+        logger.warning(
+            'Кэш позиций %s должен содержать список, найдено %s',
+            sanitize_log_value(str(path)),
+            type(data).__name__,
+        )
+        return []
+
+    trimmed: list[dict] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            try:
+                entry = dict(entry)
+            except Exception:
+                logger.debug(
+                    'Пропускаем некорректную запись в кэше позиций %s: %r',
+                    sanitize_log_value(str(path)),
+                    entry,
+                )
+                continue
+        trimmed.append(entry)
+        if len(trimmed) >= _MAX_POSITIONS_CACHE_ENTRIES:
+            break
+
+    if len(trimmed) < len(data) and len(trimmed) >= _MAX_POSITIONS_CACHE_ENTRIES:
+        logger.warning(
+            'Кэш позиций %s содержит более %d записей, лишние отброшены',
+            sanitize_log_value(str(path)),
+            _MAX_POSITIONS_CACHE_ENTRIES,
+        )
+
+    return trimmed
+
+
 def _load_positions() -> None:
     """Load positions list from on-disk cache."""
     state = _get_state()
@@ -416,15 +497,8 @@ def _load_positions() -> None:
     if not _positions_file_is_safe(POSITIONS_FILE):
         state.clear_positions()
         return
-    loaded: list[dict] = []
-    try:
-        with POSITIONS_FILE.open('r', encoding='utf-8') as fh:
-            data = json.load(fh)
-        if isinstance(data, list):
-            loaded = data
-    except (OSError, json.JSONDecodeError):
-        loaded = []
 
+    loaded = _load_positions_from_file(POSITIONS_FILE)
     state.replace_positions(loaded)
 
 
@@ -460,6 +534,13 @@ def _write_positions_locked() -> None:
             dict(entry) if isinstance(entry, dict) else entry
             for entry in positions
         ]
+        if len(snapshot) > _MAX_POSITIONS_CACHE_ENTRIES:
+            logger.warning(
+                'Количество позиций (%d) превышает лимит %d, часть записей не будет сохранена',
+                len(snapshot),
+                _MAX_POSITIONS_CACHE_ENTRIES,
+            )
+            snapshot = snapshot[:_MAX_POSITIONS_CACHE_ENTRIES]
     try:
         tmp_fd, tmp_name = tempfile.mkstemp(
             dir=str(directory),
@@ -501,7 +582,18 @@ def _write_positions_locked() -> None:
         raise
 
     try:
-        json.dump(snapshot, tmp_file)
+        payload = json.dumps(snapshot)
+        encoded = payload.encode('utf-8')
+        if len(encoded) > _MAX_POSITIONS_CACHE_BYTES:
+            logger.warning(
+                'Снимок позиций размером %d байт превышает предел %d, пропускаем сохранение',
+                len(encoded),
+                _MAX_POSITIONS_CACHE_BYTES,
+            )
+            tmp_file.close()
+            tmp_path.unlink(missing_ok=True)
+            return
+        tmp_file.write(payload)
         tmp_file.flush()
         os.fsync(tmp_file.fileno())
     except Exception as exc:  # pragma: no cover - write/fsync failures
