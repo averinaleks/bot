@@ -551,7 +551,7 @@ jobs:
           mark_recovery "false"
 
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
-              echo "::warning::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
+              echo "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
               exit 0
           fi
 
