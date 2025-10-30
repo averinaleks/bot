@@ -41,13 +41,19 @@ from security import (
     verify_model_state_signature,
     write_model_state_signature,
 )
-_utils = require_utils("ensure_writable_directory", "safe_int", "validate_host")
+_utils = require_utils(
+    "ensure_writable_directory",
+    "safe_int",
+    "sanitize_symbol",
+    "validate_host",
+)
 ensure_writable_directory = _utils.ensure_writable_directory
 safe_int = _utils.safe_int
+sanitize_symbol = _utils.sanitize_symbol
 validate_host = _utils.validate_host
 
 _FILENAME_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
-_FILENAME_HYPHEN_RE = re.compile(r"[-\s]+")
+_FILENAME_HYPHEN_RE = re.compile(r"[-_\s]+")
 
 
 def _fallback_secure_filename(filename: str) -> str:
@@ -384,23 +390,23 @@ else:  # scikit-learn fallback used by tests
                 self.fit(X)
                 return self.transform(X)
 
+    def _normalise_symbol(symbol: str) -> str:
+        """Return a safe filesystem token derived from ``symbol``."""
+
+        cleaned = sanitize_symbol(symbol)
+        cleaned = _FILENAME_HYPHEN_RE.sub("-", cleaned)[:64].strip(".-_")
+        if not cleaned:
+            raise ValueError("symbol resolves to an empty filename")
+        if cleaned.startswith(".") or ".." in cleaned:
+            raise ValueError("symbol resolves to a hidden or unsafe filename")
+        if "/" in cleaned or "\\" in cleaned:
+            raise ValueError("symbol must not contain path separators")
+        return cleaned
+
     def _model_path(symbol: str) -> Path:
         """Return a strictly sanitized and contained path for per-symbol joblib artefacts."""
 
-        # Sanitize symbol to prevent path traversal and unsafe characters
-        # Remove any directory components and allow only safe characters.
-        safe = Path(symbol).name  # take only the base name
-        # Remove any unsafe characters (keep only [A-Za-z0-9_.-])
-        safe = _FILENAME_STRIP_RE.sub("", safe)
-        # Replace any runs of hyphens or whitespace with a single hyphen
-        safe = _FILENAME_HYPHEN_RE.sub("-", safe)
-        # Max length restriction (e.g., 64)
-        safe = safe[:64].strip()
-        if not safe or safe in (".", ".."):
-            raise ValueError("symbol resolves to an empty filename")
-        # Ensure no path separators remain
-        if "/" in safe or "\\" in safe:
-            raise ValueError("symbol must not contain path separators")
+        safe = _normalise_symbol(symbol)
         filename = f"{safe}.pkl"
         # Create candidate path and normalize it
         candidate_path = MODEL_DIR / filename

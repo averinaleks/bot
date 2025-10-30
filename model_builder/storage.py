@@ -20,10 +20,12 @@ from services.logging_utils import sanitize_log_value
 _utils = require_utils(
     "ensure_writable_directory",
     "logger",
+    "sanitize_symbol",
 )
 
 ensure_writable_directory = _utils.ensure_writable_directory
 logger = _utils.logger
+sanitize_symbol = _utils.sanitize_symbol
 
 MODEL_DIR = ensure_writable_directory(
     Path(os.getenv("MODEL_DIR", ".")),
@@ -82,7 +84,7 @@ def _resolve_model_artifact(path_value: str | Path | None) -> Path:
 
 
 _SYMBOL_STRIP_RE = re.compile(r"[^A-Za-z0-9_.-]")
-_SYMBOL_HYPHEN_RE = re.compile(r"[-\s]+")
+_SYMBOL_HYPHEN_RE = re.compile(r"[-_\s]+")
 
 
 def _symbol_directory(symbol: str) -> Path:
@@ -91,12 +93,16 @@ def _symbol_directory(symbol: str) -> Path:
     if not isinstance(symbol, str):
         raise ValueError("symbol must be a string")
 
-    safe = Path(symbol).name
+    safe = sanitize_symbol(symbol)
     safe = _SYMBOL_HYPHEN_RE.sub("-", safe)
     safe = _SYMBOL_STRIP_RE.sub("", safe)
     safe = safe.strip("._-")[:64]
     if not safe:
         raise ValueError("symbol resolves to an empty directory name")
+    if safe.startswith(".") or ".." in safe:
+        raise ValueError("symbol resolves to a hidden or unsafe directory name")
+    if "/" in safe or "\\" in safe:
+        raise ValueError("symbol directory must not contain path separators")
 
     candidate = MODEL_DIR / safe
     resolved = candidate.resolve(strict=False)
