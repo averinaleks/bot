@@ -4,12 +4,35 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import threading
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from scripts import ensure_semgrep_sarif as semgrep_helper
+
+
+@dataclass
+class _CLIResult:
+    """Container mirroring the subset of ``subprocess.CompletedProcess`` we assert on."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+def _run_cli(monkeypatch: pytest.MonkeyPatch, cwd: Path, *args: str) -> _CLIResult:
+    """Execute :func:`scripts.ensure_semgrep_sarif.main` as if invoked via CLI."""
+
+    monkeypatch.chdir(cwd)
+    stdout_buffer = StringIO()
+    stderr_buffer = StringIO()
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        returncode = semgrep_helper.main(list(args))
+    return _CLIResult(returncode=returncode, stdout=stdout_buffer.getvalue(), stderr=stderr_buffer.getvalue())
 
 
 def test_ensure_semgrep_sarif_creates_empty_report(tmp_path: Path) -> None:
@@ -79,8 +102,9 @@ def test_write_github_output_supports_named_pipes(tmp_path: Path) -> None:
     assert "result_count=3" in received[0]
 
 
-def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def test_cli_supports_symlink_github_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
@@ -88,14 +112,11 @@ def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     symlink_path = workspace / "outputs-link.txt"
     symlink_path.symlink_to(target_output)
 
-    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
-
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(symlink_path)],
-        cwd=workspace,
-        check=True,
-        capture_output=True,
-        text=True,
+    result = _run_cli(
+        monkeypatch,
+        workspace,
+        "--github-output",
+        str(symlink_path.relative_to(workspace)),
     )
 
     assert result.returncode == 0
@@ -103,20 +124,19 @@ def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     assert "upload=false" in target_output.read_text(encoding="utf-8")
 
 
-def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def test_cli_execution_from_arbitrary_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
     github_output = workspace / "outputs.txt"
-    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(github_output)],
-        cwd=workspace,
-        check=True,
-        capture_output=True,
-        text=True,
+    result = _run_cli(
+        monkeypatch,
+        workspace,
+        "--github-output",
+        str(github_output.relative_to(workspace)),
     )
 
     assert "No Semgrep findings detected" in result.stdout
@@ -130,20 +150,19 @@ def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
     assert sarif_data["runs"][0]["results"] == []
 
 
-def test_cli_creates_parent_directories(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def test_cli_creates_parent_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
     github_output = workspace / "nested" / "outputs.txt"
-    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(github_output)],
-        cwd=workspace,
-        check=True,
-        capture_output=True,
-        text=True,
+    result = _run_cli(
+        monkeypatch,
+        workspace,
+        "--github-output",
+        str(github_output.relative_to(workspace)),
     )
 
     assert result.returncode == 0
@@ -151,20 +170,13 @@ def test_cli_creates_parent_directories(tmp_path: Path) -> None:
     assert "upload=false" in github_output.read_text(encoding="utf-8")
 
 
-def test_cli_skips_empty_github_output_value(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def test_cli_skips_empty_github_output_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
-
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", ""],
-        cwd=workspace,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    result = _run_cli(monkeypatch, workspace, "--github-output", "")
 
     assert result.returncode == 0
     assert "skipping output export" in result.stderr.lower()
@@ -175,19 +187,17 @@ def test_cli_skips_empty_github_output_value(tmp_path: Path) -> None:
     assert json.loads(sarif_path.read_text(encoding="utf-8"))["runs"][0]["results"] == []
 
 
-def test_cli_skips_directory_github_output(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def test_cli_skips_directory_github_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
-
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(workspace)],
-        cwd=workspace,
-        check=True,
-        capture_output=True,
-        text=True,
+    result = _run_cli(
+        monkeypatch,
+        workspace,
+        "--github-output",
+        str(workspace),
     )
 
     assert result.returncode == 0
