@@ -704,7 +704,7 @@ async def _fetch_response(
 
     if not current_ips & allowed_for_check:
         if skip_ip_verification:
-            return await _stream_response(client, prompt, url)
+            return await _stream_response(client, prompt, url, None)
         safe_current_ips = sanitize_log_value(sorted(current_ips))
         safe_allowed_ips = sanitize_log_value(sorted(allowed_ips))
         logger.error(
@@ -715,19 +715,109 @@ async def _fetch_response(
         )
         raise GPTClientNetworkError("GPT_OSS_API host resolution mismatch")
 
-    return await _stream_response(client, prompt, url)
+    allowed_for_stream = None if skip_ip_verification else allowed_for_check
+    return await _stream_response(
+        client,
+        prompt,
+        url,
+        allowed_for_stream,
+    )
+
+
+def _extract_peer_ip(response: httpx.Response) -> str | None:
+    """Return the canonical peer IP of *response* when exposed by httpx."""
+
+    peer: Any = None
+    stream = response.extensions.get("network_stream")
+    if stream is not None:
+        get_extra = getattr(stream, "get_extra_info", None)
+        if callable(get_extra):
+            peer = get_extra("peername")
+    if peer is None:
+        sock = response.extensions.get("sock")
+        if sock is not None and hasattr(sock, "getpeername"):
+            try:
+                peer = sock.getpeername()
+            except OSError:
+                peer = None
+    if peer is None:
+        connection = response.extensions.get("connection")
+        if connection is not None:
+            origin = getattr(connection, "origin", None)
+            host = getattr(origin, "host", None)
+            if host:
+                peer = host
+
+    host_value: Any
+    if isinstance(peer, (list, tuple)) and peer:
+        host_value = peer[0]
+    else:
+        host_value = peer
+
+    if isinstance(host_value, bytes):
+        try:
+            host_value = host_value.decode()
+        except UnicodeDecodeError:
+            return None
+
+    if isinstance(host_value, str):
+        trimmed = host_value.split("%", 1)[0]
+        if trimmed.startswith("[") and trimmed.endswith("]"):
+            trimmed = trimmed[1:-1]
+        return _normalise_ip(trimmed)
+
+    host_attr = getattr(host_value, "host", None)
+    if isinstance(host_attr, str):
+        trimmed = host_attr.split("%", 1)[0]
+        if trimmed.startswith("[") and trimmed.endswith("]"):
+            trimmed = trimmed[1:-1]
+        return _normalise_ip(trimmed)
+
+    return None
+
+
+def _ensure_peer_ip_allowed(
+    response: httpx.Response, allowed_ips: set[str] | None
+) -> None:
+    """Raise :class:`GPTClientNetworkError` if peer IP is outside ``allowed_ips``."""
+
+    if not allowed_ips:
+        return
+
+    effective_allowed = {
+        ip for ip in allowed_ips if ip and ip != _TEST_MODE_DNS_FALLBACK
+    }
+    if not effective_allowed:
+        return
+
+    peer_ip = _extract_peer_ip(response)
+    if peer_ip is None:
+        return
+    if peer_ip in effective_allowed:
+        return
+
+    safe_peer = sanitize_log_value(peer_ip)
+    safe_allowed = sanitize_log_value(sorted(effective_allowed))
+    logger.error(
+        "GPT_OSS_API ответил с неожиданного IP %s (ожидались %s)",
+        safe_peer,
+        safe_allowed,
+    )
+    raise GPTClientNetworkError("GPT_OSS_API responded from unexpected IP address")
 
 
 async def _stream_response(
     client: httpx.Client | httpx.AsyncClient,
     prompt: str,
     url: str,
+    allowed_ips: set[str] | None,
 ) -> bytes:
     """Stream response content regardless of client type."""
 
     if isinstance(client, httpx.AsyncClient):
         async with client.stream("POST", url, json={"prompt": prompt}) as response:
             response.raise_for_status()
+            _ensure_peer_ip_allowed(response, allowed_ips)
             content_type = response.headers.get("Content-Type", "")
             if not content_type.startswith("application/json"):
                 raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")
@@ -740,6 +830,7 @@ async def _stream_response(
 
     with client.stream("POST", url, json={"prompt": prompt}) as response:
         response.raise_for_status()
+        _ensure_peer_ip_allowed(response, allowed_ips)
         content_type = response.headers.get("Content-Type", "")
         if not content_type.startswith("application/json"):
             raise GPTClientResponseError("Unexpected Content-Type from GPT OSS API")

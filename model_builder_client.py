@@ -134,6 +134,18 @@ def _host_is_allowlisted(hostname: str, allowed_hosts: set[str]) -> bool:
     return host in allowed_hosts
 
 
+def _normalise_ip_string(value: str) -> str:
+    """Return a canonical textual representation of an IP *value*."""
+
+    trimmed = value.split("%", 1)[0]
+    if trimmed.startswith("[") and trimmed.endswith("]"):
+        trimmed = trimmed[1:-1]
+    try:
+        return ip_address(trimmed).compressed
+    except ValueError:
+        return trimmed
+
+
 def _collect_ip_strings(infos: Iterable[AddrInfo]) -> set[str]:
     """Extract string IP addresses from *infos* ignoring unexpected variants."""
 
@@ -149,7 +161,7 @@ def _collect_ip_strings(infos: Iterable[AddrInfo]) -> set[str]:
             except UnicodeDecodeError:
                 continue
         if isinstance(host, str):
-            results.add(host)
+            results.add(_normalise_ip_string(host))
     return results
 
 
@@ -231,7 +243,7 @@ def _prepare_endpoint(raw_url: str, *, purpose: str) -> ServiceEndpoint | None:
         scheme=scheme,
         base_url=raw_url.rstrip("/"),
         hostname=hostname,
-        allowed_ips=frozenset(resolved_ips),
+        allowed_ips=frozenset(_normalise_ip_string(ip) for ip in resolved_ips),
     )
 
 
@@ -288,6 +300,72 @@ async def _hostname_still_allowed(endpoint: ServiceEndpoint) -> bool:
     return True
 
 
+def _extract_peer_ip(response: httpx.Response) -> str | None:
+    """Return the IP address of the remote peer for *response* when available."""
+
+    peer: Any = None
+    stream = response.extensions.get("network_stream")
+    if stream is not None:
+        get_extra = getattr(stream, "get_extra_info", None)
+        if callable(get_extra):
+            peer = get_extra("peername")
+    if peer is None:
+        sock = response.extensions.get("sock")
+        if sock is not None and hasattr(sock, "getpeername"):
+            try:
+                peer = sock.getpeername()
+            except OSError:
+                peer = None
+    if peer is None:
+        connection = response.extensions.get("connection")
+        if connection is not None:
+            origin = getattr(connection, "origin", None)
+            host = getattr(origin, "host", None)
+            if host:
+                peer = host
+
+    host_value: Any
+    if isinstance(peer, (list, tuple)) and peer:
+        host_value = peer[0]
+    else:
+        host_value = peer
+
+    if isinstance(host_value, bytes):
+        try:
+            host_value = host_value.decode()
+        except UnicodeDecodeError:
+            return None
+
+    if isinstance(host_value, str):
+        return _normalise_ip_string(host_value)
+
+    host_attr = getattr(host_value, "host", None)
+    if isinstance(host_attr, str):
+        return _normalise_ip_string(host_attr)
+
+    return None
+
+
+def _peer_ip_is_allowed(endpoint: ServiceEndpoint, response: httpx.Response) -> bool:
+    """Return ``True`` if the response came from an allow-listed IP."""
+
+    peer_ip = _extract_peer_ip(response)
+    if peer_ip is None:
+        return True
+    if peer_ip in endpoint.allowed_ips:
+        return True
+
+    safe_peer = sanitize_log_value(peer_ip)
+    safe_expected = sanitize_log_value(sorted(endpoint.allowed_ips))
+    logger.error(
+        "Ответ от %s пришёл с неожиданного IP %s (ожидались %s)",
+        sanitize_log_value(endpoint.hostname),
+        safe_peer,
+        safe_expected,
+    )
+    return False
+
+
 async def _fetch_training_data_from_endpoint(
     endpoint: ServiceEndpoint, symbol: str, limit: int = 50
 ) -> Tuple[List[List[float]], List[int]]:
@@ -307,6 +385,8 @@ async def _fetch_training_data_from_endpoint(
                 params={"limit": limit},
                 timeout=timeout,
             )
+        if not _peer_ip_is_allowed(endpoint, resp):
+            return features, labels
         if resp.status_code != 200:
             logger.error("Failed to fetch OHLCV: HTTP %s", resp.status_code)
             return features, labels
@@ -380,6 +460,8 @@ async def _train_with_endpoint(
             response = await client.post(
                 f"{endpoint.base_url}/train", json=payload, timeout=timeout
             )
+        if not _peer_ip_is_allowed(endpoint, response):
+            return False
         if response.status_code == 200:
             return True
         logger.error("Model training failed: HTTP %s", response.status_code)

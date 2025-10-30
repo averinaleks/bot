@@ -29,9 +29,12 @@ from bot.gpt_client import (
 
 
 class DummyStream:
-    def __init__(self, content=b"content", headers=None):
+    def __init__(self, content=b"content", headers=None, peer_ip: str | None = None):
         self.content = content
         self.headers = headers or {"Content-Type": "application/json"}
+        self.extensions = {}
+        if peer_ip is not None:
+            self.extensions["network_stream"] = _PeerInfo(peer_ip)
 
     def raise_for_status(self):
         pass
@@ -53,6 +56,16 @@ class DummyStream:
 
     async def __aexit__(self, exc_type, exc, tb):
         pass
+
+
+class _PeerInfo:
+    def __init__(self, ip: str):
+        self._ip = ip
+
+    def get_extra_info(self, name):
+        if name == "peername":
+            return (self._ip, 0)
+        return None
 
 
 QUERIES = [
@@ -295,6 +308,20 @@ async def test_ipv4_mapped_ipv6_resolution(monkeypatch):
 
     result = await query_gpt_async("hi")
     assert result == "ok"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("func, client_cls", QUERIES)
+async def test_unexpected_peer_ip(monkeypatch, func, client_cls):
+    monkeypatch.setenv("GPT_OSS_API", "https://127.0.0.1")
+
+    def fake_stream(self, *args, **kwargs):
+        content = json.dumps({"choices": [{"text": "ok"}]}).encode()
+        return DummyStream(content=content, peer_ip="192.0.2.5")
+
+    monkeypatch.setattr(client_cls, "stream", fake_stream)
+    with pytest.raises(GPTClientNetworkError):
+        await run_query(func, "hi")
 
 
 @pytest.mark.asyncio
