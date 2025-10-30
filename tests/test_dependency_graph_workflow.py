@@ -13,6 +13,12 @@ def _load_dependency_graph_auto_submission_workflow() -> str:
     ).read_text(encoding="utf-8")
 
 
+def _load_dependency_graph_auto_retry_workflow() -> str:
+    return Path(
+        ".github/workflows/dependency-graph/auto-submission-retry.yml"
+    ).read_text(encoding="utf-8")
+
+
 def _extract_permissions(text: str) -> dict[str, str]:
     permissions: dict[str, str] = {}
     inside_block = False
@@ -76,6 +82,62 @@ def _extract_events(text: str) -> list[str]:
     return events
 
 
+def _extract_workflow_run_targets(text: str) -> list[str]:
+    targets: list[str] = []
+    in_workflow_run = False
+    workflow_indent: int | None = None
+    collecting = False
+    list_indent: int | None = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        current_indent = len(line) - len(line.lstrip())
+
+        if not in_workflow_run:
+            if stripped == "workflow_run:":
+                in_workflow_run = True
+                workflow_indent = current_indent
+            continue
+
+        if workflow_indent is None:
+            workflow_indent = current_indent
+
+        if current_indent <= workflow_indent and stripped != "workflow_run:":
+            break
+
+        if stripped == "workflows:":
+            collecting = True
+            list_indent = None
+            continue
+
+        if stripped.endswith(":") and not stripped.startswith("- "):
+            if collecting and list_indent is not None and current_indent <= list_indent:
+                collecting = False
+            if current_indent <= workflow_indent:
+                break
+            continue
+
+        if not collecting:
+            continue
+
+        if stripped.startswith("- "):
+            if list_indent is None:
+                list_indent = current_indent
+            if current_indent < list_indent:
+                collecting = False
+                continue
+            target = stripped[2:].strip()
+            if target:
+                targets.append(target)
+        elif list_indent is not None and current_indent <= list_indent:
+            collecting = False
+
+    return targets
+
+
 def test_dependency_graph_permissions_are_valid() -> None:
     workflow = _load_dependency_graph_workflow()
     permissions = _extract_permissions(workflow)
@@ -105,6 +167,14 @@ def test_dependency_graph_auto_submission_events_exclude_dependency_graph_trigge
 
     assert {"workflow_dispatch", "repository_dispatch"} <= set(events)
     assert "dependency_graph" not in events
+
+
+def test_dependency_graph_auto_retry_targets_custom_workflow() -> None:
+    workflow = _load_dependency_graph_auto_retry_workflow()
+    targets = _extract_workflow_run_targets(workflow)
+
+    assert "dependency-submission" in targets
+    assert "Automatic Dependency Submission (Python)" in targets
 
 
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
