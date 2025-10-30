@@ -593,7 +593,7 @@ def _write_positions_locked() -> None:
             tmp_file.close()
             tmp_path.unlink(missing_ok=True)
             return
-        tmp_file.write(payload)
+        json.dump(snapshot, tmp_file)
         tmp_file.flush()
         os.fsync(tmp_file.fileno())
     except Exception as exc:  # pragma: no cover - write/fsync failures
