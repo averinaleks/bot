@@ -54,21 +54,148 @@ PY
 # виртуальное окружение, чтобы Trivy не находил high/critical уязвимости
 # прямо в базовом образе.
 RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=25.3' \
+        'pip>=25.2' \
         'setuptools>=80.9.0,<81' \
         wheel \
+    && python - <<'PY'
+from __future__ import annotations
+
+import os
+import tarfile
+from pathlib import Path
+
+import pip
+
+unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
+text = unpacking.read_text()
+
+if "def is_symlink_target_in_tar(" not in text:
+    helper = (
+        "\n\n"
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
+        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
+        "    linkname = os.path.normpath(linkname)\n"
+        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
+        "    try:\n"
+        "        tar.getmember(linkname)\n"
+        "        return True\n"
+        "    except KeyError:\n"
+        "        return False\n"
+        "\n"
+    )
+    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+
+    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
+    comment = (
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
+        "    # This feature is fully supported from CPython 3.12 onward.\n"
+    )
+    if sentinel + "    for member" not in text:
+        raise SystemExit("unexpected pip layout: missing fallback header")
+    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+
+    old_block = (
+        "        elif member.issym():\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    new_block = (
+        "        elif member.issym():\n"
+        "            if not is_symlink_target_in_tar(tar, member):\n"
+        "                message = (\n"
+        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
+        "                    \"outside target directory ({})\"\n"
+        "                )\n"
+        "                raise InstallationError(\n"
+        "                    message.format(filename, member.name, member.linkname)\n"
+        "                )\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    if old_block not in text:
+        raise SystemExit("unexpected pip layout: missing symlink branch")
+    text = text.replace(old_block, new_block, 1)
+
+    unpacking.write_text(text)
+PY
     && python -m pip cache purge
 
-# pip>=25.3 устраняет CVE-2025-8869 и CVE-2023-32681, setuptools>=80.9.0 закрывает известные
-# уязвимости и совместимы с зависимостями проекта.
+# pip>=25.2 доступен на момент написания. Ниже мы патчим установленный pip, добавляя
+# проверку символических ссылок из релиза 25.3 (исправление CVE-2025-8869). setuptools>=80.9.0
+# закрывает известные уязвимости и совместим с зависимостями проекта.
 RUN python -m venv "$VIRTUAL_ENV"
 
 RUN "$VIRTUAL_ENV"/bin/python -m ensurepip --upgrade
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
-        'pip>=25.3' \
+        'pip>=25.2' \
         'setuptools>=80.9.0,<81' \
-        wheel
+        wheel \
+    && "$VIRTUAL_ENV"/bin/python - <<'PY'
+from __future__ import annotations
+
+import os
+import tarfile
+from pathlib import Path
+
+import pip
+
+unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
+text = unpacking.read_text()
+
+if "def is_symlink_target_in_tar(" not in text:
+    helper = (
+        "\n\n"
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
+        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
+        "    linkname = os.path.normpath(linkname)\n"
+        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
+        "    try:\n"
+        "        tar.getmember(linkname)\n"
+        "        return True\n"
+        "    except KeyError:\n"
+        "        return False\n"
+        "\n"
+    )
+    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+
+    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
+    comment = (
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
+        "    # This feature is fully supported from CPython 3.12 onward.\n"
+    )
+    if sentinel + "    for member" not in text:
+        raise SystemExit("unexpected pip layout: missing fallback header")
+    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+
+    old_block = (
+        "        elif member.issym():\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    new_block = (
+        "        elif member.issym():\n"
+        "            if not is_symlink_target_in_tar(tar, member):\n"
+        "                message = (\n"
+        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
+        "                    \"outside target directory ({})\"\n"
+        "                )\n"
+        "                raise InstallationError(\n"
+        "                    message.format(filename, member.name, member.linkname)\n"
+        "                )\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    if old_block not in text:
+        raise SystemExit("unexpected pip layout: missing symlink branch")
+    text = text.replace(old_block, new_block, 1)
+
+    unpacking.write_text(text)
+PY
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cpu \
@@ -362,9 +489,72 @@ PY
 # Аналогично стадии сборки обновляем системный pip/setuptools, чтобы в
 # рантайме не оставалось уязвимых версий из базового образа.
 RUN python -m pip install --no-cache-dir --upgrade \
-        'pip>=25.3' \
+        'pip>=25.2' \
         'setuptools>=80.9.0,<81' \
         wheel \
+    && python - <<'PY'
+from __future__ import annotations
+
+import os
+import tarfile
+from pathlib import Path
+
+import pip
+
+unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
+text = unpacking.read_text()
+
+if "def is_symlink_target_in_tar(" not in text:
+    helper = (
+        "\n\n"
+        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:\n"
+        "    \"\"\"Check if the file pointed to by the symbolic link is in the tar archive.\"\"\"\n"
+        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)\n"
+        "    linkname = os.path.normpath(linkname)\n"
+        "    linkname = linkname.replace(\\"\\\\\\", \\\"/\\")\n"
+        "    try:\n"
+        "        tar.getmember(linkname)\n"
+        "        return True\n"
+        "    except KeyError:\n"
+        "        return False\n"
+        "\n"
+    )
+    text = text.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
+
+    sentinel = '    """Fallback for Python without tarfile.data_filter"""\n'
+    comment = (
+        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.\n"
+        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.\n"
+        "    # This feature is fully supported from CPython 3.12 onward.\n"
+    )
+    if sentinel + "    for member" not in text:
+        raise SystemExit("unexpected pip layout: missing fallback header")
+    text = text.replace(sentinel + "    for member", sentinel + comment + "    for member", 1)
+
+    old_block = (
+        "        elif member.issym():\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    new_block = (
+        "        elif member.issym():\n"
+        "            if not is_symlink_target_in_tar(tar, member):\n"
+        "                message = (\n"
+        "                    \"The tar file ({}) has a file ({}) trying to install \"\n"
+        "                    \"outside target directory ({})\"\n"
+        "                )\n"
+        "                raise InstallationError(\n"
+        "                    message.format(filename, member.name, member.linkname)\n"
+        "                )\n"
+        "            try:\n"
+        "                tar._extract_member(member, path)\n"
+    )
+    if old_block not in text:
+        raise SystemExit("unexpected pip layout: missing symlink branch")
+    text = text.replace(old_block, new_block, 1)
+
+    unpacking.write_text(text)
+PY
     && python -m pip cache purge
 
 WORKDIR /app
