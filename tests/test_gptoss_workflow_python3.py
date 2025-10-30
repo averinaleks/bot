@@ -85,6 +85,7 @@ def test_review_job_runs_only_for_supported_events() -> None:
 
     assert "needs.evaluate.outputs.run_review == 'true'" in workflow_text
     assert "&& needs.evaluate.outputs.skip_reason == ''" in workflow_text
+    assert "&& github.event_name != 'pull_request_target'" in workflow_text
 
 
 def test_skip_job_covers_target_events() -> None:
