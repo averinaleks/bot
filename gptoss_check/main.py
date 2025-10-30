@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from importlib import import_module
 import logging
 import os
 import sys
+from importlib import import_module
 from pathlib import Path
 from typing import Optional
 
