@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from types import ModuleType
 
 
 def _reload_sitecustomize() -> ModuleType:
     """Reload :mod:`sitecustomize` to pick up environment changes."""
 
-    module = importlib.import_module("sitecustomize")  # type: ignore[import-untyped]
+    module_name = "sitecustomize"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)  # type: ignore[import-untyped]
 
 
 
@@ -23,6 +26,8 @@ def test_ensure_packages_skips_in_github_actions(monkeypatch):
 
     # ``sitecustomize`` caches the CodeQL detection helper at import time, so
     # ensure the reload sees the adjusted environment variables.
+
+    sitecustomize_module = _reload_sitecustomize()
 
     calls: list[str] = []
     monkeypatch.setattr(sitecustomize_module, "_run_pip_install", calls.append)
