@@ -539,6 +539,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.event-metadata.outputs.checkout_ref }}
       - name: Recover checkout when branch references are stale
+        id: recover
         if: >-
           steps.execution-guard.outputs.run-workflow == 'true' &&
           steps.checkout.outcome == 'failure'
@@ -549,6 +550,16 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+
+          output_path="${GITHUB_OUTPUT:-}"
+
+          mark_recovery() {
+              if [ -n "${output_path}" ]; then
+                  echo "recovered=$1" >>"${output_path}"
+              fi
+          }
+
+          mark_recovery "false"
 
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
               echo "::warning::GITHUB_REPOSITORY is not set; skipping repository recovery." >&2
@@ -568,24 +579,44 @@ jobs:
               REPO="https://github.com/${GITHUB_REPOSITORY}.git"
           fi
 
+          AUTH_FALLBACK_ATTEMPTED=0
+
           fetch_target() {
               local target="$1"
               if [ -z "$target" ]; then
                   return 1
               fi
               if git fetch --no-tags --depth=1 origin "$target"; then
-                  git checkout --detach FETCH_HEAD
+                  git checkout --force --detach FETCH_HEAD
+                  mark_recovery "true"
                   return 0
               fi
               if git fetch --no-tags origin "$target"; then
-                  git checkout --detach FETCH_HEAD
+                  git checkout --force --detach FETCH_HEAD
+                  mark_recovery "true"
                   return 0
+              fi
+              if [ -n "${GITHUB_TOKEN:-}" ] && [ "${AUTH_FALLBACK_ATTEMPTED:-0}" = "0" ]; then
+                  echo "::warning::Authenticated fetch for ${target} failed; retrying without GITHUB_TOKEN." >&2
+                  AUTH_FALLBACK_ATTEMPTED=1
+                  git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+                  if git fetch --no-tags --depth=1 origin "$target"; then
+                      git checkout --force --detach FETCH_HEAD
+                      mark_recovery "true"
+                      return 0
+                  fi
+                  if git fetch --no-tags origin "$target"; then
+                      git checkout --force --detach FETCH_HEAD
+                      mark_recovery "true"
+                      return 0
+                  fi
               fi
               return 1
           }
 
           rm -rf .git
           git init .
+          git config --global --add safe.directory "$(pwd)"
           git remote add origin "$REPO"
 
           if [ -n "${CHECKOUT_BEFORE}" ]; then
@@ -613,6 +644,38 @@ jobs:
               } >> "${GITHUB_STEP_SUMMARY}" || true
           fi
           exit 0
+      - name: Determine repository availability
+        id: repository-ready
+        if: steps.execution-guard.outputs.run-workflow == 'true'
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          RECOVER_OUTCOME: ${{ steps.recover.outcome }}
+          RECOVERED: ${{ steps.recover.outputs.recovered }}
+        run: |
+          set -euo pipefail
+
+          ready="false"
+          if [ "${CHECKOUT_OUTCOME:-}" = "success" ]; then
+              ready="true"
+          elif [ "${RECOVER_OUTCOME:-}" = "success" ] && [ "${RECOVERED:-}" = "true" ]; then
+              ready="true"
+          elif git rev-parse HEAD >/dev/null 2>&1; then
+              ready="true"
+          fi
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "ready=${ready}" >>"${GITHUB_OUTPUT}"
+          fi
+
+          if [ "${ready}" != "true" ]; then
+              echo "::notice::Skipping dependency submission because the repository checkout is unavailable." >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  {
+                      echo "## Dependency snapshot skipped"
+                      echo "Репозиторий недоступен для отправки dependency snapshot."
+                  } >> "${GITHUB_STEP_SUMMARY}" || true
+              fi
+          fi
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         if: >-
           steps.execution-guard.outputs.run-workflow == 'true' &&
