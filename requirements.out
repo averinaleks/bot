@@ -99,7 +99,7 @@ farama-notifications==0.0.4
     # via
     #   -r requirements.txt
     #   gymnasium
-fastapi==0.120.2
+fastapi==0.120.3
     # via -r requirements.txt
 fastapi-csrf-protect==1.0.7
     # via -r requirements.txt
