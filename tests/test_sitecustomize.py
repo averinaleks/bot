@@ -12,7 +12,6 @@ def _reload_sitecustomize() -> ModuleType:
     module = importlib.import_module("sitecustomize")  # type: ignore[import-untyped]
     return importlib.reload(module)
 
-
 sitecustomize_module = _reload_sitecustomize()
 
 def test_ensure_packages_skips_in_github_actions(monkeypatch):
@@ -25,6 +24,8 @@ def test_ensure_packages_skips_in_github_actions(monkeypatch):
 
     # ``sitecustomize`` caches the CodeQL detection helper at import time, so
     # ensure the reload sees the adjusted environment variables.
+
+    sitecustomize_module = _reload_sitecustomize()
 
     calls: list[str] = []
     monkeypatch.setattr(sitecustomize_module, "_run_pip_install", calls.append)
