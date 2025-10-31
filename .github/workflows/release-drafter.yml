@@ -96,27 +96,19 @@ jobs:
             fi
           done
       - name: Verify Release Drafter action ref exists upstream
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          auth_header=()
-          if [ -n "${GH_TOKEN:-}" ]; then
-            auth_header+=("-H" "Authorization: Bearer ${GH_TOKEN}")
-          fi
+          release_drafter_repo="https://github.com/release-drafter/release-drafter.git"
+          ref="${RELEASE_DRAFTER_ACTION_REF}"
           for attempt in {1..5}; do
-            if curl -fsS \
-              -H "Accept: application/vnd.github+json" \
-              "${auth_header[@]}" \
-              "https://api.github.com/repos/release-drafter/release-drafter/git/commits/${RELEASE_DRAFTER_ACTION_REF}" \
-              > /dev/null; then
+            if git ls-remote --exit-code "${release_drafter_repo}" "${ref}^{commit}" >/dev/null 2>&1; then
               exit 0
             fi
             if [ "${attempt}" -lt 5 ]; then
               sleep "${attempt}"
             fi
           done
-          echo "Release Drafter ref ${RELEASE_DRAFTER_ACTION_REF} not found upstream." >&2
+          echo "Release Drafter ref ${ref} not found upstream." >&2
           exit 1
 
   update_release_draft:
