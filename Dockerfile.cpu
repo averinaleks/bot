@@ -42,259 +42,30 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python - <<'PY'
 from __future__ import annotations
 
-import os
-import tarfile
-from pathlib import Path
+import sys
 
-import pip
-
-unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-source = unpacking.read_text()
-
-if "def is_symlink_target_in_tar(" in source:
-    print("pip tar symlink guard already present; skipping patch")
-else:
-    helper = "\n".join([
-        "",
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
-        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
-        "    linkname = os.path.normpath(linkname)",
-        '    linkname = linkname.replace("\\", "/")',
-        "    try:",
-        "        tar.getmember(linkname)",
-        "        return True",
-        "    except KeyError:",
-        "        return False",
-        "",
-    ])
-    comment = "\n".join([
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
-        "    # This feature is fully supported from CPython 3.12 onward.",
-    ])
-    sentinel_options = [
-        '    """Fallback for Python without tarfile.data_filter"""',
-        '    """Fallback for Python without tarfile.data_filter."""',
-    ]
-    sentinel = next((option for option in sentinel_options if option in source), None)
-
-    if sentinel is None:
-        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
-    else:
-        target_header = f"{sentinel}\n    for member"
-        if target_header not in source:
-            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
-        else:
-            old_variants = [
-                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
-            ]
-            for old in old_variants:
-                if old in source:
-                    new_block = "\n".join([
-                        "        elif member.issym():",
-                        "            if not is_symlink_target_in_tar(tar, member):",
-                        "                message = (",
-                        '                    "The tar file ({}) has a file ({}) trying to install "',
-                        '                    "outside target directory ({})"',
-                        "                )",
-                        "                raise InstallationError(",
-                        "                    message.format(filename, member.name, member.linkname)",
-                        "                )",
-                        "            try:",
-                        "                tar._extract_member(member, path)",
-                    ])
-                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
-                    updated = updated.replace(
-                        target_header,
-                        f"{sentinel}\n{comment}\n    for member",
-                        1,
-                    )
-                    updated = updated.replace(old, new_block, 1)
-                    unpacking.write_text(updated)
-                    print("Patched pip tar symlink extraction guard")
-                    break
-            else:
-                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
-
+if sys.version_info[:2] != (3, 11):
+    raise SystemExit(f"Expected Python 3.11, got {sys.version}")
 PY
-    && python -m pip cache purge
 
-# pip>=25.2 доступен на момент написания. Ниже мы патчим установленный pip, добавляя
-# проверку символических ссылок из релиза 25.3 (исправление CVE-2025-8869). setuptools>=80.9.0
-# закрывает известные уязвимости и совместим с зависимостями проекта.
+RUN python -m pip cache purge
+
+# pip>=25.3 уже включает проверку символических ссылок (исправление CVE-2025-8869).
+# setuptools>=80.9.0 закрывает известные уязвимости и совместим с зависимостями проекта.
 RUN python -m venv "$VIRTUAL_ENV"
 
 RUN "$VIRTUAL_ENV"/bin/python -m ensurepip --upgrade
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
-        'pip>=25.2' \
+        'pip>=25.3' \
         'setuptools>=80.9.0,<81' \
-        wheel \
-    && "$VIRTUAL_ENV"/bin/python - <<'PY'
-from __future__ import annotations
-
-import os
-import tarfile
-from pathlib import Path
-
-import pip
-
-unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-source = unpacking.read_text()
-
-if "def is_symlink_target_in_tar(" in source:
-    print("pip tar symlink guard already present; skipping patch")
-else:
-    helper = "\n".join([
-        "",
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
-        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
-        "    linkname = os.path.normpath(linkname)",
-        '    linkname = linkname.replace("\\", "/")',
-        "    try:",
-        "        tar.getmember(linkname)",
-        "        return True",
-        "    except KeyError:",
-        "        return False",
-        "",
-    ])
-    comment = "\n".join([
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
-        "    # This feature is fully supported from CPython 3.12 onward.",
-    ])
-    sentinel_options = [
-        '    """Fallback for Python without tarfile.data_filter"""',
-        '    """Fallback for Python without tarfile.data_filter."""',
-    ]
-    sentinel = next((option for option in sentinel_options if option in source), None)
-
-    if sentinel is None:
-        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
-    else:
-        target_header = f"{sentinel}\n    for member"
-        if target_header not in source:
-            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
-        else:
-            old_variants = [
-                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
-            ]
-            for old in old_variants:
-                if old in source:
-                    new_block = "\n".join([
-                        "        elif member.issym():",
-                        "            if not is_symlink_target_in_tar(tar, member):",
-                        "                message = (",
-                        '                    "The tar file ({}) has a file ({}) trying to install "',
-                        '                    "outside target directory ({})"',
-                        "                )",
-                        "                raise InstallationError(",
-                        "                    message.format(filename, member.name, member.linkname)",
-                        "                )",
-                        "            try:",
-                        "                tar._extract_member(member, path)",
-                    ])
-                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
-                    updated = updated.replace(
-                        target_header,
-                        f"{sentinel}\n{comment}\n    for member",
-                        1,
-                    )
-                    updated = updated.replace(old, new_block, 1)
-                    unpacking.write_text(updated)
-                    print("Patched pip tar symlink extraction guard")
-                    break
-            else:
-                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
-
-PY
+        wheel
 
 RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cpu \
         -r requirements-core.txt
 
-RUN "$VIRTUAL_ENV"/bin/python - <<'PY'
-from __future__ import annotations
-
-import os
-import tarfile
-from pathlib import Path
-
-import pip
-
-unpacking = Path(pip.__file__).resolve().parent / "_internal" / "utils" / "unpacking.py"
-source = unpacking.read_text()
-
-if "def is_symlink_target_in_tar(" in source:
-    print("pip tar symlink guard already present; skipping patch")
-else:
-    helper = "\n".join([
-        "",
-        "def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:",
-        '    """Check if the file pointed to by the symbolic link is in the tar archive."""',
-        "    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)",
-        "    linkname = os.path.normpath(linkname)",
-        '    linkname = linkname.replace("\\", "/")',
-        "    try:",
-        "        tar.getmember(linkname)",
-        "        return True",
-        "    except KeyError:",
-        "        return False",
-        "",
-    ])
-    comment = "\n".join([
-        "    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.",
-        "    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.",
-        "    # This feature is fully supported from CPython 3.12 onward.",
-    ])
-    sentinel_options = [
-        '    """Fallback for Python without tarfile.data_filter"""',
-        '    """Fallback for Python without tarfile.data_filter."""',
-    ]
-    sentinel = next((option for option in sentinel_options if option in source), None)
-
-    if sentinel is None:
-        print("::warning::pip layout changed; fallback docstring not found; skipping symlink guard patch")
-    else:
-        target_header = f"{sentinel}\n    for member"
-        if target_header not in source:
-            print("::warning::pip layout changed; fallback loop header not found; skipping symlink guard patch")
-        else:
-            old_variants = [
-                "        elif member.issym():\n            try:\n                tar._extract_member(member, path)\n",
-            ]
-            for old in old_variants:
-                if old in source:
-                    new_block = "\n".join([
-                        "        elif member.issym():",
-                        "            if not is_symlink_target_in_tar(tar, member):",
-                        "                message = (",
-                        '                    "The tar file ({}) has a file ({}) trying to install "',
-                        '                    "outside target directory ({})"',
-                        "                )",
-                        "                raise InstallationError(",
-                        "                    message.format(filename, member.name, member.linkname)",
-                        "                )",
-                        "            try:",
-                        "                tar._extract_member(member, path)",
-                    ])
-                    updated = source.replace("def _untar_without_filter(", helper + "def _untar_without_filter(", 1)
-                    updated = updated.replace(
-                        target_header,
-                        f"{sentinel}\n{comment}\n    for member",
-                        1,
-                    )
-                    updated = updated.replace(old, new_block, 1)
-                    unpacking.write_text(updated)
-                    print("Patched pip tar symlink extraction guard")
-                    break
-            else:
-                print("::warning::pip layout changed; symlink branch not found; skipping symlink guard patch")
-
-PY
-    && python -m pip cache purge
+RUN "$VIRTUAL_ENV"/bin/pip cache purge
 
 WORKDIR /app
 

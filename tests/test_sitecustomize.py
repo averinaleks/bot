@@ -10,11 +10,8 @@ from types import ModuleType
 def _reload_sitecustomize() -> ModuleType:
     """Reload :mod:`sitecustomize` to pick up environment changes."""
 
-    module_name = "sitecustomize"
-    sys.modules.pop(module_name, None)
-    return importlib.import_module(module_name)  # type: ignore[import-untyped]
 
-
+sitecustomize_module = _reload_sitecustomize()
 
 def test_ensure_packages_skips_in_github_actions(monkeypatch):
     """Auto-install hooks should be disabled on GitHub Actions runners."""
