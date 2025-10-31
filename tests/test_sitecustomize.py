@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from types import ModuleType
 
 
 def _reload_sitecustomize() -> ModuleType:
     """Reload :mod:`sitecustomize` to pick up environment changes."""
 
-    module = importlib.import_module("sitecustomize")  # type: ignore[import-untyped]
-    return importlib.reload(module)
 
 sitecustomize_module = _reload_sitecustomize()
 
