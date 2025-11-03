@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover - exercised in dedicated test
 
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
+from http_client import async_http_client
 
 
 logger = logging.getLogger("TradingBot")
@@ -379,7 +380,7 @@ async def _fetch_training_data_from_endpoint(
 
     timeout = 5.0
     try:
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with async_http_client(timeout=timeout) as client:
             resp = await client.get(
                 f"{endpoint.base_url}/ohlcv/{symbol}",
                 params={"limit": limit},
@@ -456,7 +457,7 @@ async def _train_with_endpoint(
     payload = {"features": features, "labels": labels}
     timeout = 5.0
     try:
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with async_http_client(timeout=timeout) as client:
             response = await client.post(
                 f"{endpoint.base_url}/train", json=payload, timeout=timeout
             )

@@ -22,6 +22,11 @@ from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_as
 from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
+from http_client import (
+    async_http_client,
+    close_async_http_client,
+    get_async_http_client,
+)
 from telegram_logger import TelegramLogger, resolve_unsent_path
 
 _stub_data_handler = sys.modules.get("data_handler")
@@ -362,17 +367,9 @@ async def get_http_client() -> httpx.AsyncClient:
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
             timeout = _http_client_timeout()
-            kwargs = {"trust_env": False, "timeout": timeout}
+            HTTP_CLIENT = await get_async_http_client(timeout=timeout)
             if bot_config.OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
                 logger.debug("Offline HTTP client instantiated")
-            try:
-                HTTP_CLIENT = httpx.AsyncClient(**kwargs)
-            except TypeError:  # pragma: no cover - stub may ignore kwargs
-                simplified_kwargs = {"timeout": timeout}
-                try:
-                    HTTP_CLIENT = httpx.AsyncClient(**simplified_kwargs)
-                except TypeError:  # pragma: no cover - extremely minimal stub
-                    HTTP_CLIENT = httpx.AsyncClient(timeout=timeout)
     return HTTP_CLIENT
 
 
@@ -380,11 +377,8 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
-    if HTTP_CLIENT is not None:
-        close = getattr(HTTP_CLIENT, "aclose", None)
-        if callable(close):
-            await close()
-        HTTP_CLIENT = None
+    await close_async_http_client()
+    HTTP_CLIENT = None
 
 
 
@@ -467,7 +461,7 @@ async def check_services() -> None:
     deadline = time.monotonic() + overall_timeout
     timed_out = False
 
-    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+    async with async_http_client(timeout=timeout) as client:
         async def _probe(name: str, url: str, endpoint: str) -> str | None:
             nonlocal timed_out
             for attempt in range(1, retries + 1):
@@ -541,7 +535,7 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
     timeout = _http_client_timeout()
     try:
         encoded_symbol = _encode_symbol(symbol)
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with async_http_client(timeout=timeout) as client:
             resp = await client.get(
                 f"{env['data_handler_url']}/price/{encoded_symbol}", timeout=timeout
             )
@@ -574,7 +568,7 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+    async with async_http_client(timeout=timeout) as client:
         try:
             resp = await client.get(
                 f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
@@ -660,7 +654,7 @@ async def get_prediction(symbol: str, features: list[float], env: dict) -> dict 
             "Content-Type": "application/json",
             "Content-Length": str(len(payload)),
         }
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with async_http_client(timeout=timeout) as client:
             try:
                 resp = await client.post(
                     f"{env['model_builder_url']}/predict",
@@ -898,7 +892,7 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
         return
     trail_state: dict[str, float] = {}
     timeout = _http_client_timeout()
-    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+    async with async_http_client(timeout=timeout) as client:
         while True:
             try:
                 resp = await client.get(
@@ -1291,7 +1285,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     env = env or _load_env()
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+    async with async_http_client(timeout=timeout) as client:
         try:
             resp = await client.get(
                 f"{env['data_handler_url']}/price/{encoded_symbol}", timeout=timeout

@@ -1,5 +1,7 @@
 import asyncio
 import pytest
+
+import http_client
 from bot import trading_bot
 
 
@@ -88,7 +90,7 @@ def test_check_services_invalid_env(monkeypatch):
             calls["count"] += 1
             raise trading_bot.httpx.HTTPError("boom")
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with pytest.raises(trading_bot.ServiceUnavailableError):
         asyncio.run(trading_bot.check_services())
     assert calls["count"] == 3
