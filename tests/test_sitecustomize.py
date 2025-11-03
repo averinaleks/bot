@@ -10,6 +10,15 @@ from types import ModuleType
 def _reload_sitecustomize() -> ModuleType:
     """Reload :mod:`sitecustomize` to pick up environment changes."""
 
+    module_name = "sitecustomize"
+
+    # ``sitecustomize`` is imported at interpreter start-up which means the
+    # module can cache state derived from environment variables.  The tests
+    # mutate those variables and expect a fresh import that observes the new
+    # values, so drop any existing module instance before importing it again.
+    sys.modules.pop(module_name, None)
+
+    return importlib.import_module(module_name)
 
 sitecustomize_module = _reload_sitecustomize()
 
