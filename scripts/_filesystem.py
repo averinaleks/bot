@@ -20,6 +20,7 @@ def write_secure_text(
     encoding: str = "utf-8",
     dir_permissions: int | None = 0o700,
     allow_special_files: bool = False,
+    allow_symlink_special_files: bool = False,
 ) -> None:
     """Write ``content`` to ``path`` using restrictive file permissions.
 
@@ -51,6 +52,11 @@ def write_secure_text(
         (e.g. ``GITHUB_OUTPUT``) which are provided as named pipes on hosted
         runners.  The safeguard against symlinks remains in place to avoid
         TOCTOU attacks.
+    allow_symlink_special_files:
+        When ``True`` and ``allow_special_files`` is also set, the helper
+        permits writing through symlinks that resolve to special files (for
+        example FIFO pipes exposed by GitHub Actions).  Symlinks targeting
+        regular files remain prohibited.
     """
 
     if dir_permissions is not None:
@@ -104,7 +110,8 @@ def write_secure_text(
         except OSError:
             link_info = None
         if link_info is not None and stat.S_ISLNK(link_info.st_mode):
-            raise OSError(errno.EPERM, "refusing to write through symlink")
+            if not (allow_symlink_special_files and is_allowed_special):
+                raise OSError(errno.EPERM, "refusing to write through symlink")
 
         with os.fdopen(fd, "a" if append else "w", encoding=encoding, closefd=False) as handle:
             handle.write(content)
