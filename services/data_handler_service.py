@@ -7,8 +7,9 @@ import re
 import tempfile
 from collections import deque
 from contextvars import ContextVar
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Iterator
 
 from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
@@ -230,32 +231,111 @@ def _require_api_key() -> "ResponseReturnValue | None":
     return jsonify({'error': 'unauthorized'}), 401
 
 
+def _iter_cache_dir_ancestors(path: Path) -> Iterator[Path]:
+    """Yield *path* and each ancestor up to the filesystem root."""
+
+    current = path
+    while True:
+        yield current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+
+def _normalise_cache_dir(raw_path: str) -> Path | None:
+    """Return a hardened cache directory for historical data."""
+
+    if not raw_path or not raw_path.strip():
+        logging.getLogger(__name__).warning(
+            "Игнорируем CACHE_DIR: путь не должен быть пустым",
+        )
+        return None
+
+    try:
+        candidate = Path(raw_path).expanduser()
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Игнорируем CACHE_DIR %s: некорректный путь (%s)",
+            sanitize_log_value(raw_path),
+            sanitize_log_value(str(exc)),
+        )
+        return None
+
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logging.getLogger(__name__).warning(
+            "Игнорируем CACHE_DIR %s: не удалось создать каталог (%s)",
+            sanitize_log_value(str(candidate)),
+            sanitize_log_value(str(exc)),
+        )
+        return None
+
+    try:
+        for ancestor in _iter_cache_dir_ancestors(candidate):
+            if ancestor.exists() and ancestor.is_symlink():
+                logging.getLogger(__name__).warning(
+                    "Игнорируем CACHE_DIR %s: путь содержит символьную ссылку %s",
+                    sanitize_log_value(str(candidate)),
+                    sanitize_log_value(str(ancestor)),
+                )
+                return None
+        if not candidate.is_dir():
+            logging.getLogger(__name__).warning(
+                "Игнорируем CACHE_DIR %s: путь не является каталогом",
+                sanitize_log_value(str(candidate)),
+            )
+            return None
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        logging.getLogger(__name__).warning(
+            "Игнорируем CACHE_DIR %s: не удалось проверить каталог (%s)",
+            sanitize_log_value(str(candidate)),
+            sanitize_log_value(str(exc)),
+        )
+        return None
+
+    if not os.access(resolved, os.R_OK | os.W_OK):
+        logging.getLogger(__name__).warning(
+            "Игнорируем CACHE_DIR %s: каталог недоступен для чтения/записи",
+            sanitize_log_value(str(resolved)),
+        )
+        return None
+
+    return resolved
+
+
 def _create_history_cache() -> "HistoricalDataCache | None":
     if HistoricalDataCache is None:
         return None
 
     logger = logging.getLogger(__name__)
-    candidates: list[str] = []
+    candidates: list[Path] = []
     env_path = os.getenv("CACHE_DIR")
     if env_path:
-        candidates.append(env_path)
-    tmp_path = os.path.join(tempfile.gettempdir(), "cache")
+        safe_env = _normalise_cache_dir(env_path)
+        if safe_env is not None:
+            candidates.append(safe_env)
+
     reset_tempdir_cache()
-    if not env_path or env_path != tmp_path:
-        candidates.append(tmp_path)
+    fallback_raw = os.path.join(tempfile.gettempdir(), "cache")
+    fallback = _normalise_cache_dir(fallback_raw)
+    if fallback is not None and (not candidates or fallback != candidates[0]):
+        candidates.append(fallback)
 
     for path in candidates:
         try:
-            return HistoricalDataCache(path)
+            return HistoricalDataCache(str(path))
         except PermissionError:
             logger.warning(
                 "Нет прав на запись в каталог кэша %s, пробуем временную директорию",
-                path,
+                sanitize_log_value(str(path)),
             )
         except Exception:
             logger.exception(
                 "Не удалось инициализировать кэш исторических данных в %s",
-                path,
+                sanitize_log_value(str(path)),
             )
     return None
 
