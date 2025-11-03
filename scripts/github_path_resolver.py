@@ -1,8 +1,8 @@
 """Utilities for loading ``resolve_github_path`` with graceful fallbacks."""
 from __future__ import annotations
 
+import importlib.util
 import sys
-from importlib import util as importlib_util
 from importlib.abc import Loader
 from pathlib import Path
 from typing import Protocol
@@ -36,9 +36,9 @@ def _load_resolver() -> _Resolver:
         if callable(candidate):
             return candidate
 
-    spec = importlib_util.find_spec("scripts.github_paths")
+    spec = importlib.util.find_spec("scripts.github_paths")
     if spec and spec.loader:
-        module = importlib_util.module_from_spec(spec)
+        module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
         try:
             loader = spec.loader
