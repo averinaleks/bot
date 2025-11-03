@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ _FD_PREFIXES = {"fd", "pipe"}
 _FD_PATH_PATTERN = re.compile(
     r"^/(?:proc/(?:self|thread-self|\d+)/fd|dev/fd)/(\d+)$"
 )
+_SPECIAL_FD_LABEL_PATTERN = re.compile(r"^(?:pipe|socket):\[\d+\]$")
 
 _EMPTY_SARIF: dict[str, Any] = {
     "version": "2.1.0",
@@ -63,6 +65,15 @@ _EMPTY_SARIF: dict[str, Any] = {
         }
     ],
 }
+
+
+@dataclass(frozen=True)
+class GithubOutputTarget:
+    """Normalised representation of a GitHub Actions output destination."""
+
+    handle: Path | int
+    close_after: bool = False
+    allow_symlink_special: bool = False
 
 
 def ensure_semgrep_sarif(path: Path = SARIF_PATH) -> Path:
@@ -91,7 +102,7 @@ def sarif_result_count(path: Path = SARIF_PATH) -> int:
 
 
 def write_github_output(
-    target: Path | int,
+    target: GithubOutputTarget | Path | int,
     *,
     upload: bool,
     findings: int,
@@ -108,35 +119,47 @@ def write_github_output(
         descriptor explicitly.
     """
 
+    if not isinstance(target, GithubOutputTarget):
+        target = GithubOutputTarget(target)
+
     payload = (
         f"upload={'true' if upload else 'false'}\n"
         f"result_count={findings}\n"
         f"sarif_path={sarif_path}\n"
     )
 
-    if isinstance(target, int):
+    handle = target.handle
+
+    if isinstance(handle, int):
         try:
-            dup_fd = os.dup(target)
+            dup_fd = os.dup(handle)
         except OSError as exc:  # pragma: no cover - defensive guard
             raise RuntimeError(
-                f"Unable to duplicate GitHub output file descriptor {target}: {exc}"
+                f"Unable to duplicate GitHub output file descriptor {handle}: {exc}"
             ) from exc
 
         try:
-            with os.fdopen(dup_fd, "w", encoding="utf-8") as handle:
-                handle.write(payload)
+            with os.fdopen(dup_fd, "w", encoding="utf-8") as output:
+                output.write(payload)
         except OSError as exc:  # pragma: no cover - defensive guard
             raise RuntimeError(
-                f"Unable to write Semgrep outputs via descriptor {target}: {exc}"
+                f"Unable to write Semgrep outputs via descriptor {handle}: {exc}"
             ) from exc
+        finally:
+            if target.close_after:
+                try:
+                    os.close(handle)
+                except OSError:
+                    pass
 
         return
 
     write_secure_text(
-        target,
+        handle,
         payload,
         append=True,
         allow_special_files=True,
+        allow_symlink_special_files=target.allow_symlink_special,
     )
 
 
@@ -164,7 +187,20 @@ def _descriptor_from_path(candidate: Path) -> int | None:
     return fd
 
 
-def _normalize_github_output(value: Path | str | None) -> Path | int | None:
+def _open_descriptor(path: Path) -> int | None:
+    """Return a writable descriptor for *path* when possible."""
+
+    flags = os.O_WRONLY | os.O_APPEND
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags | cloexec)
+    except OSError:
+        return None
+
+    return fd
+
+
+def _normalize_github_output(value: Path | str | None) -> GithubOutputTarget | None:
     """Return a usable GitHub output target or ``None`` when invalid."""
 
     if value is None:
@@ -185,7 +221,7 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
         if fd < 0:
             return None
 
-        return fd
+        return GithubOutputTarget(fd)
 
     path = Path(text)
 
@@ -200,7 +236,7 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
 
     descriptor = _descriptor_from_path(path)
     if descriptor is not None:
-        return descriptor
+        return GithubOutputTarget(descriptor)
 
     # GitHub Actions may expose ``GITHUB_OUTPUT`` as a symlink that ultimately
     # resolves to the writable command file hosted in the runner workspace.
@@ -211,18 +247,25 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
     # on symlinks, causing the workflow step to fail.  Resolving here keeps the
     # guardrails for regular usage while still supporting the CI environment.
     if path.is_symlink():
+        original_path = path
         try:
-            target_text = os.readlink(path)
+            target_text = os.readlink(path).strip()
         except OSError:
             target_text = None
         else:
             target_path = Path(target_text)
+            target_label = target_path.name
+            if _SPECIAL_FD_LABEL_PATTERN.match(target_label):
+                fd = _open_descriptor(original_path)
+                if fd is not None:
+                    return GithubOutputTarget(fd, close_after=True)
+                return None
             if not target_path.is_absolute():
                 target_path = (path.parent / target_path).resolve(strict=False)
 
             descriptor = _descriptor_from_path(target_path)
             if descriptor is not None:
-                return descriptor
+                return GithubOutputTarget(descriptor)
 
         try:
             resolved = path.resolve(strict=False)
@@ -231,14 +274,20 @@ def _normalize_github_output(value: Path | str | None) -> Path | int | None:
 
         descriptor = _descriptor_from_path(resolved)
         if descriptor is not None:
-            return descriptor
+            return GithubOutputTarget(descriptor)
+
+        if _SPECIAL_FD_LABEL_PATTERN.match(resolved.name):
+            fd = _open_descriptor(original_path)
+            if fd is not None:
+                return GithubOutputTarget(fd, close_after=True)
+            return None
 
         if resolved.exists() and resolved.is_dir():
             return None
 
         path = resolved
 
-    return path
+    return GithubOutputTarget(path)
 
 
 def main(argv: list[str] | None = None) -> int:

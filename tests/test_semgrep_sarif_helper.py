@@ -109,6 +109,37 @@ def test_write_github_output_supports_file_descriptors(tmp_path: Path) -> None:
     assert "result_count=5" in received[0]
 
 
+def test_write_github_output_closes_acquired_descriptor(tmp_path: Path) -> None:
+    read_fd, write_fd = os.pipe()
+    received: list[str] = []
+
+    def _reader() -> None:
+        with os.fdopen(read_fd, "r", encoding="utf-8") as handle:
+            received.append(handle.read())
+
+    reader = threading.Thread(target=_reader)
+    reader.start()
+
+    target = semgrep_helper.GithubOutputTarget(write_fd, close_after=True)
+
+    try:
+        semgrep_helper.write_github_output(
+            target,
+            upload=False,
+            findings=0,
+            sarif_path=Path("semgrep.sarif"),
+        )
+    finally:
+        reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    assert received
+    assert "upload=false" in received[0]
+
+    with pytest.raises(OSError):
+        os.close(write_fd)
+
+
 def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     workspace = tmp_path / "workspace"
@@ -131,6 +162,31 @@ def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert target_output.exists()
     assert "upload=false" in target_output.read_text(encoding="utf-8")
+
+
+def test_normalize_supports_pipe_style_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    read_fd, write_fd = os.pipe()
+    github_output = workspace / "outputs-link.txt"
+    github_output.symlink_to("pipe:[12345]")
+
+    monkeypatch.setattr(
+        semgrep_helper,
+        "_open_descriptor",
+        lambda path: write_fd,
+    )
+
+    target = semgrep_helper._normalize_github_output(github_output)
+    assert isinstance(target, semgrep_helper.GithubOutputTarget)
+    assert target.handle == write_fd
+    assert target.close_after is True
+
+    os.close(write_fd)
+    os.close(read_fd)
 
 
 def test_cli_supports_fd_github_output(tmp_path: Path) -> None:
