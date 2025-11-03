@@ -173,6 +173,7 @@ def update_commons_lang3() -> None:
             adapter = requests.adapters.HTTPAdapter(max_retries=retries)
             session.mount("https://", adapter)
             session.trust_env = False
+            session.verify = True
 
             with session.get(
                 COMMONS_LANG3_URL,

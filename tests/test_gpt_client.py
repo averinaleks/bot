@@ -692,6 +692,31 @@ def test_validate_api_url_multiple_dns_results_public_blocked(monkeypatch):
         _validate_api_url("http://foo.local", {"foo.local"})
 
 
+def test_validate_api_url_rejects_disallowed_port(monkeypatch):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(GPTClientError, match="port"):
+        _validate_api_url("https://foo.local:1234", {"foo.local"})
+
+
+def test_validate_api_url_custom_allowed_port(monkeypatch):
+    def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        assert host == "foo.local"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setenv("GPT_OSS_ALLOWED_PORTS", "1234, 4321")
+
+    host, ips = _validate_api_url("https://foo.local:1234", {"foo.local"})
+
+    assert host == "foo.local"
+    assert ips == {"10.0.0.1"}
+
+
 def test_validate_api_url_rejects_userinfo():
     with pytest.raises(GPTClientError) as excinfo:
         _validate_api_url(
