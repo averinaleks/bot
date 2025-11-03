@@ -287,6 +287,29 @@ jobs:
           # Защищаемся от history expansion (``!DOCTYPE`` и т.п.) в bash.
           set +H
 
+          LOG_BASE_DIR="${RUNNER_TEMP:-/tmp}/docker-build-logs/${MATRIX_IMAGE}"
+          rm -rf "${LOG_BASE_DIR}"
+          mkdir -p "${LOG_BASE_DIR}"
+          log_index=0
+
+          archive_build_log() {
+            local source="$1"
+            local label="$2"
+
+            if [ ! -f "${source}" ]; then
+              return 0
+            fi
+
+            log_index=$((log_index + 1))
+            local dest="${LOG_BASE_DIR}/$(printf '%02d' "${log_index}")-${label}.log"
+
+            if ! cp "${source}" "${dest}" 2>/dev/null; then
+              cat "${source}" >"${dest}"
+            fi
+
+            echo "${dest}"
+          }
+
           if [ -z "${IMAGE_TAGS}" ]; then
             echo "::error::Не удалось подготовить теги Docker-образа"
             exit 1
@@ -388,6 +411,7 @@ jobs:
             docker buildx build "${args[@]}" |& tee "${log_file}"
             local status=${PIPESTATUS[0]}
             BUILD_LOG="${log_file}"
+            archive_build_log "${log_file}" "build-${use_cache}-${push_mode}"
             return "${status}"
           }
 
@@ -446,6 +470,16 @@ jobs:
                 "response status: 401"
                 "response status: 403"
                 "response status: 429"
+                "denied: requested access to the resource is denied"
+                "requested access to the resource is denied"
+                "denied: permission denied"
+                "permission denied"
+                "MANIFEST_UNKNOWN"
+                "NAME_UNKNOWN"
+                "unauthorized: authentication required"
+                "unauthorized: access to the requested resource is denied"
+                "UNAUTHORIZED"
+                "insufficient_scope: authorization failed"
                 "error fetching anonymous token"
                 "token exchange is currently unavailable"
                 "TOOMANYREQUESTS"
@@ -512,6 +546,7 @@ jobs:
               local_log=$(mktemp -t docker-build-log.XXXXXX)
               docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
               local_status=${PIPESTATUS[0]}
+              archive_build_log "${local_log}" "local-fallback"
 
               if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
                 for extra_tag in "${local_tags[@]:1}"; do
@@ -591,6 +626,14 @@ jobs:
           fi
           rm -f "${first_log}" "${second_log}"
           exit "${retry_status}"
+
+      - name: Upload Docker build logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v4
+        with:
+          name: docker-build-logs-${{ matrix.image }}
+          path: ${{ runner.temp }}/docker-build-logs/${{ matrix.image }}
+          if-no-files-found: ignore
 
       - name: Cleanup before Trivy scan
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' }}
