@@ -138,7 +138,8 @@ def _resolve_config_path(raw: str | os.PathLike[str] | None) -> Path:
     try:
         candidate = Path(raw)
     except TypeError:
-        logger.warning("Invalid CONFIG_PATH %r; falling back to default", raw)
+        safe_raw = sanitize_log_value(repr(raw))
+        logger.warning("Invalid CONFIG_PATH %s; falling back to default", safe_raw)
         return _DEFAULT_CONFIG_PATH
 
     if candidate.is_absolute():
@@ -481,7 +482,10 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
             return True
         if lowered in {"0", "false", "no", "off"}:
             return False
-        logger.warning("Unknown boolean value %r", value)
+        logger.warning(
+            "Unknown boolean value %s",
+            sanitize_log_value(value),
+        )
         if fallback is not None:
             return fallback
         raise ValueError(f"Invalid boolean value: {value}")
@@ -489,7 +493,10 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
         try:
             return int(value)
         except ValueError:
-            logger.warning("Failed to convert %r to int", value)
+            logger.warning(
+                "Failed to convert %s to int",
+                sanitize_log_value(value),
+            )
             if fallback is not None:
                 return fallback
             raise
@@ -497,7 +504,10 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
         try:
             return float(value)
         except ValueError:
-            logger.warning("Failed to convert %r to float", value)
+            logger.warning(
+                "Failed to convert %s to float",
+                sanitize_log_value(value),
+            )
             if fallback is not None:
                 return fallback
             raise
