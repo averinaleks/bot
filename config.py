@@ -483,7 +483,7 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
         if lowered in {"0", "false", "no", "off"}:
             return False
         logger.warning(
-            "Unknown boolean value %s",
+            "Unknown boolean value %r",
             sanitize_log_value(value),
         )
         if fallback is not None:
