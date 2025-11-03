@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 import run_bot
+import http_client
 from bot import trading_bot
 
 
@@ -50,7 +51,7 @@ async def test_get_http_client_single_instance(monkeypatch):
         async def aclose(self):
             pass
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", DummyClient)
 
     clients = await asyncio.gather(
         *(trading_bot.get_http_client() for _ in range(10))
@@ -396,7 +397,7 @@ async def test_monitor_positions_tp(monkeypatch):
             called['payload'] = json
             return DummyResp()
     dummy = DummyClient()
-    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    monkeypatch.setattr(http_client.httpx, 'AsyncClient', lambda *a, **k: dummy)
     async def fake_price(symbol, env):
         return 101
     monkeypatch.setattr(trading_bot, 'fetch_price', fake_price)
@@ -444,7 +445,7 @@ async def test_monitor_positions_sl(monkeypatch):
             called['payload'] = json
             return DummyResp()
     dummy = DummyClient()
-    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    monkeypatch.setattr(http_client.httpx, 'AsyncClient', lambda *a, **k: dummy)
     async def fake_price(symbol, env):
         return 89
     monkeypatch.setattr(trading_bot, 'fetch_price', fake_price)
@@ -492,7 +493,7 @@ async def test_monitor_positions_trailing_stop(monkeypatch):
             called['payload'] = json
             return DummyResp()
     dummy = DummyClient()
-    monkeypatch.setattr(trading_bot.httpx, 'AsyncClient', lambda *a, **k: dummy)
+    monkeypatch.setattr(http_client.httpx, 'AsyncClient', lambda *a, **k: dummy)
     prices = {'i': 0}
     async def fake_price(symbol, env):
         prices['i'] += 1
@@ -608,7 +609,7 @@ async def test_reactive_trade_latency_alert(monkeypatch, fast_sleep):
 
     dummy = DummyClient()
     monkeypatch.setattr(
-        trading_bot.httpx, "AsyncClient", lambda *a, **k: dummy, raising=False
+        http_client.httpx, "AsyncClient", lambda *a, **k: dummy, raising=False
     )
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
@@ -644,7 +645,7 @@ async def test_reactive_trade_invalid_json(monkeypatch, caplog):
                 return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
             pytest.fail("Trade manager should not be called")
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     monkeypatch.setattr(trading_bot, "_load_env", lambda: {
         "data_handler_url": "http://dh",
         "model_builder_url": "http://mb",
@@ -680,7 +681,7 @@ async def test_reactive_trade_reports_error_field(monkeypatch):
 
     dummy = DummyClient()
     monkeypatch.setattr(
-        trading_bot.httpx, "AsyncClient", lambda *a, **k: dummy, raising=False
+        http_client.httpx, "AsyncClient", lambda *a, **k: dummy, raising=False
     )
     monkeypatch.setattr(trading_bot, "HTTP_CLIENT", dummy)
     monkeypatch.setattr(
@@ -734,7 +735,7 @@ def test_fetch_price_error(monkeypatch):
         async def get(self, url, timeout=None):
             return types.SimpleNamespace(status_code=503, json=lambda: {"error": "down"})
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     price = asyncio.run(trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"}))
     assert price is None
 
@@ -748,7 +749,7 @@ def test_fetch_price_invalid_json(monkeypatch, caplog):
         async def get(self, url, timeout=None):
             return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with caplog.at_level("ERROR"):
         price = asyncio.run(trading_bot.fetch_price("BTCUSDT", {"data_handler_url": "http://dh"}))
     assert price is None
@@ -764,7 +765,7 @@ def test_get_prediction_invalid_json(monkeypatch, caplog):
         async def post(self, url, json=None, timeout=None):
             return types.SimpleNamespace(status_code=200, json=lambda: (_ for _ in ()).throw(ValueError("bad")))
 
-    monkeypatch.setattr(trading_bot.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", lambda *a, **k: DummyClient(), raising=False)
     with caplog.at_level("ERROR"):
         data = asyncio.run(trading_bot.get_prediction("BTCUSDT", [1, 2, 3, 4, 5], {"model_builder_url": "http://mb"}))
     assert data is None

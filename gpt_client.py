@@ -25,6 +25,7 @@ from bot.pydantic_compat import BaseModel, Field, ValidationError
 from bot.utils import retry
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, is_offline_env
+from http_client import async_http_client
 
 
 _OFFLINE_ENV = bool(bot_config.OFFLINE_MODE) or is_offline_env()
@@ -1005,7 +1006,7 @@ def query_gpt(prompt: str) -> str:
     )
     def _post() -> bytes:
         async def _async_post() -> bytes:
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            async with async_http_client(timeout=timeout) as client:
                 return await _fetch_response(
                     client, prompt, url, hostname, allowed_ips
                 )
@@ -1062,7 +1063,7 @@ async def query_gpt_async(prompt: str) -> str:
         lambda attempt: min(2 ** (attempt - 1), 10),
     )
     async def _post() -> bytes:
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with async_http_client(timeout=timeout) as client:
             return await _fetch_response(client, prompt, url, hostname, allowed_ips)
 
     try:
