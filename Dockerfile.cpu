@@ -67,6 +67,23 @@ RUN "$VIRTUAL_ENV"/bin/pip install --no-cache-dir \
 
 RUN "$VIRTUAL_ENV"/bin/pip cache purge
 
+
+FROM python:3.11-slim AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Сохраняем те же гарантии предсказуемых журналов, что и в стадии сборки.
+ENV PYTHONUNBUFFERED=1
+
+RUN <<'EOSHELL'
+set -eux
+apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+EOSHELL
+
 WORKDIR /app
 
 COPY --from=builder /opt/venv /app/venv
