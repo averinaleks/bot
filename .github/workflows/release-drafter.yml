@@ -100,11 +100,20 @@ jobs:
           set -euo pipefail
           release_drafter_repo="https://github.com/release-drafter/release-drafter.git"
           ref="${RELEASE_DRAFTER_ACTION_REF}"
+          temp_dir="$(mktemp -d)"
+          cleanup() {
+            rm -rf "${temp_dir}"
+          }
+          trap cleanup EXIT
+          git -C "${temp_dir}" init --quiet
+          git -C "${temp_dir}" remote add origin "${release_drafter_repo}"
           for attempt in {1..5}; do
-            if git ls-remote --exit-code "${release_drafter_repo}" "${ref}^{commit}" >/dev/null 2>&1; then
+            if git -C "${temp_dir}" fetch --quiet --depth 1 origin "${ref}"; then
               exit 0
             fi
             if [ "${attempt}" -lt 5 ]; then
+              # Remove any partial FETCH_HEAD before retrying to avoid fetch noise.
+              rm -f "${temp_dir}/.git/FETCH_HEAD"
               sleep "${attempt}"
             fi
           done
