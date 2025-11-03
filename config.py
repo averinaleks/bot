@@ -484,7 +484,7 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
             return False
         logger.warning(
             "Unknown boolean value %s",
-            sanitize_log_value(value),
+            sanitize_log_value(repr(value)),
         )
         if fallback is not None:
             return fallback
@@ -495,7 +495,7 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
         except ValueError:
             logger.warning(
                 "Failed to convert %s to int",
-                sanitize_log_value(value),
+                sanitize_log_value(repr(value)),
             )
             if fallback is not None:
                 return fallback
@@ -506,7 +506,7 @@ def _convert(value: str, typ: type, fallback: Any | None = None) -> Any:
         except ValueError:
             logger.warning(
                 "Failed to convert %s to float",
-                sanitize_log_value(value),
+                sanitize_log_value(repr(value)),
             )
             if fallback is not None:
                 return fallback
