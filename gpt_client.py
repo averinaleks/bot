@@ -72,6 +72,12 @@ _TEST_MODE_DNS_FALLBACK = "__test_mode_dns_fallback__"
 # integration tests (which rely on that hostname) working without requiring
 # additional configuration.  Loopback addresses remain permitted out of the
 # box for single-host deployments.
+# Default ports permitted for local development instances where GPT OSS is
+# typically exposed on the host network.  The set deliberately focuses on the
+# canonical development ports used throughout the project documentation so that
+# operators still need to opt in explicitly when exposing the service on
+# unusual ports.
+_DEFAULT_LOCAL_PORTS = frozenset({8000, 8003})
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "gptoss"})
 # Restrict additional allow-listed host entries to safe hostname characters.
 # The set mirrors common DNS label characters plus IPv6 notation (``[]`` and
@@ -529,6 +535,53 @@ def _load_allowed_hosts() -> set[str]:
     return hosts
 
 
+def _parse_allowed_ports(raw: str | None) -> set[int]:
+    """Return a set of explicitly permitted GPT OSS ports."""
+
+    if not raw:
+        return set()
+
+    ports: set[int] = set()
+    for part in raw.split(","):
+        candidate = part.strip()
+        if not candidate:
+            continue
+        try:
+            port = int(candidate)
+        except ValueError:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_PORTS entry %s: not an integer",
+                sanitize_log_value(candidate),
+            )
+            continue
+        if port <= 0 or port >= 65536:
+            logger.warning(
+                "Ignoring GPT_OSS_ALLOWED_PORTS entry %s: port must be between 1 and 65535",
+                sanitize_log_value(candidate),
+            )
+            continue
+        ports.add(port)
+    return ports
+
+
+def _ips_are_private(candidates: set[str]) -> bool:
+    """Return ``True`` if every entry in *candidates* is a private or loopback IP."""
+
+    has_ip = False
+    for value in candidates:
+        try:
+            parsed = ip_address(value)
+        except ValueError:
+            # Sentinel values (e.g. ``_TEST_MODE_DNS_FALLBACK``) are ignored for
+            # privacy checks. When only sentinels are present we conservatively
+            # return ``False`` so that the caller requires explicit configuration.
+            continue
+        has_ip = True
+        if not (parsed.is_loopback or parsed.is_private):
+            return False
+    return has_ip
+
+
 def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[str]]:
     parsed = urlparse(api_url)
     if not parsed.scheme:
@@ -564,6 +617,9 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
             )
 
     scheme = parsed.scheme.lower()
+    port = parsed.port
+    if port is not None and (port <= 0 or port >= 65536):
+        raise GPTClientError("GPT_OSS_API port must be between 1 and 65535")
     if scheme not in {"http", "https"}:
         raise GPTClientError(
             f"GPT_OSS_API URL scheme {scheme!r} is not supported; use http or https"
@@ -583,6 +639,7 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
 
     normalised_allowed_hosts = {host.lower() for host in allowed_hosts}
     allowed_ips: set[str] = set()
+    is_local_host = _is_local_hostname(parsed.hostname)
 
     if host_ip is None:
         if hostname not in normalised_allowed_hosts:
@@ -623,7 +680,23 @@ def _validate_api_url(api_url: str, allowed_hosts: set[str]) -> tuple[str, set[s
                 f"GPT_OSS_API host {parsed.hostname!r} cannot be resolved"
             ) from exc
 
-    is_local_host = _is_local_hostname(parsed.hostname)
+    all_private_ips = _ips_are_private(resolved_ips)
+
+    allowed_ports = _parse_allowed_ports(os.getenv("GPT_OSS_ALLOWED_PORTS"))
+    if scheme == "https":
+        allowed_ports.add(443)
+    elif scheme == "http":
+        allowed_ports.add(80)
+
+    if is_local_host or all_private_ips:
+        allowed_ports.update(_DEFAULT_LOCAL_PORTS)
+
+    if port is not None and port not in allowed_ports:
+        raise GPTClientError(
+            "GPT_OSS_API port {port} is not permitted; configure GPT_OSS_ALLOWED_PORTS"
+            .format(port=port)
+        )
+
     if scheme == "http":
         if not is_local_host:
             all_private = (

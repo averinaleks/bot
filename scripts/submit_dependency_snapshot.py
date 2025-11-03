@@ -1061,6 +1061,10 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
             with requests.Session() as session:  # type: ignore[union-attr]
                 session.trust_env = False
                 session.proxies = {}
+                # ``requests`` defaults to verifying HTTPS certificates, but set the flag
+                # explicitly so that static analysers can see the hardened intent even when
+                # alternative transports mutate ``session.verify``.
+                session.verify = True
                 if retry_strategy is not None:
                     adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
                     if hasattr(session, "mount"):
