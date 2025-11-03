@@ -1,7 +1,8 @@
 cupy-cuda12x>=13.5.1
 torch>=2.9.0,<3
 tensorflow>=2.20.0,<3
-keras>=3.11.3,<3.12
+# NOTE: Pin upper bound to avoid regressions while picking up security fix for GHSA-mq84-hjqx-cwf2.
+keras>=3.12.0,<3.13
 jsonschema>=4.25.1,<5
 setuptools>=80.9.0,<81
 grpcio>=1.75.1
