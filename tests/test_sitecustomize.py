@@ -9,6 +9,13 @@ from types import ModuleType
 
 def _reload_sitecustomize() -> ModuleType:
     """Reload :mod:`sitecustomize` to pick up environment changes."""
+    module_name = "sitecustomize"
+
+    # Ensure the module is re-imported with the latest environment overrides.
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+    return importlib.import_module(module_name)
 
 
 sitecustomize_module = _reload_sitecustomize()
