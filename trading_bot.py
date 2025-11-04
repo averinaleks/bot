@@ -22,6 +22,7 @@ from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_as
 from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
+import http_client as http_client_module
 from http_client import (
     async_http_client,
     close_async_http_client,
@@ -46,6 +47,14 @@ except Exception:  # noqa: BLE001 - ensure stubs are used when dependencies miss
     httpx = create_httpx_stub()
 else:
     httpx = _httpx
+
+
+def _sync_http_client_httpx() -> None:
+    """Ensure :mod:`http_client` uses the same ``httpx`` module as this file."""
+
+    current = getattr(http_client_module, "httpx", None)
+    if current is not httpx:
+        http_client_module.httpx = httpx
 
 try:  # pragma: no cover - fallback executed in offline/testing scenarios
     if _OFFLINE_ENV:
@@ -366,6 +375,8 @@ async def get_http_client() -> httpx.AsyncClient:
     global HTTP_CLIENT
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
+            _sync_http_client_httpx()
+            await close_async_http_client()
             timeout = _http_client_timeout()
             if bot_config.OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
                 # In offline environments avoid reusing the global client from
@@ -400,17 +411,6 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
-    client: httpx.AsyncClient | None
-    async with HTTP_CLIENT_LOCK:
-        client = HTTP_CLIENT
-        HTTP_CLIENT = None
-    if client is not None:
-        close = getattr(client, "aclose", None)
-        if callable(close):
-            try:
-                await close()
-            except Exception:  # pragma: no cover - defensive logging path
-                logger.exception("Failed to close trading bot HTTP client")
     await close_async_http_client()
 
 
@@ -494,6 +494,7 @@ async def check_services() -> None:
     deadline = time.monotonic() + overall_timeout
     timed_out = False
 
+    _sync_http_client_httpx()
     async with async_http_client(timeout=timeout) as client:
         async def _probe(name: str, url: str, endpoint: str) -> str | None:
             nonlocal timed_out
@@ -566,6 +567,7 @@ async def fetch_price(symbol: str, env: dict) -> float | None:
         logger.debug("Offline mode: price fetch skipped for %s", symbol)
         return None
     timeout = _http_client_timeout()
+    _sync_http_client_httpx()
     try:
         encoded_symbol = _encode_symbol(symbol)
         async with async_http_client(timeout=timeout) as client:
@@ -601,8 +603,6 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    try:
-        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             resp = await client.get(
                 f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
             )
@@ -688,6 +688,7 @@ async def get_prediction(symbol: str, features: list[float], env: dict) -> dict 
             "Content-Type": "application/json",
             "Content-Length": str(len(payload)),
         }
+        _sync_http_client_httpx()
         async with async_http_client(timeout=timeout) as client:
             try:
                 resp = await client.post(
@@ -926,6 +927,7 @@ async def monitor_positions(env: dict, interval: float = INTERVAL) -> None:
         return
     trail_state: dict[str, float] = {}
     timeout = _http_client_timeout()
+    _sync_http_client_httpx()
     async with async_http_client(timeout=timeout) as client:
         while True:
             try:
@@ -1319,6 +1321,7 @@ async def reactive_trade(symbol: str, env: dict | None = None) -> None:
     env = env or _load_env()
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
+    _sync_http_client_httpx()
     async with async_http_client(timeout=timeout) as client:
         try:
             resp = await client.get(
