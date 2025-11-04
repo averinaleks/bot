@@ -98,22 +98,27 @@ jobs:
       - name: Verify Release Drafter action ref exists upstream
         run: |
           set -euo pipefail
-          release_drafter_repo="https://github.com/release-drafter/release-drafter.git"
+          repo="release-drafter/release-drafter"
           ref="${RELEASE_DRAFTER_ACTION_REF}"
-          temp_dir="$(mktemp -d)"
-          cleanup() {
-            rm -rf "${temp_dir}"
-          }
-          trap cleanup EXIT
-          git -C "${temp_dir}" init --quiet
-          git -C "${temp_dir}" remote add origin "${release_drafter_repo}"
+          api_url="https://api.github.com/repos/${repo}/commits/${ref}"
+          curl_args=(
+            --fail
+            --show-error
+            --silent
+            --location
+            -H 'Accept: application/vnd.github+json'
+          )
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+            curl_args+=(
+              -H "Authorization: Bearer ${GITHUB_TOKEN}"
+              -H 'X-GitHub-Api-Version: 2022-11-28'
+            )
+          fi
           for attempt in {1..5}; do
-            if git -C "${temp_dir}" fetch --quiet --depth 1 origin "${ref}"; then
+            if curl "${curl_args[@]}" "${api_url}" > /dev/null; then
               exit 0
             fi
             if [ "${attempt}" -lt 5 ]; then
-              # Remove any partial FETCH_HEAD before retrying to avoid fetch noise.
-              rm -f "${temp_dir}/.git/FETCH_HEAD"
               sleep "${attempt}"
             fi
           done
