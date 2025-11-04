@@ -367,9 +367,19 @@ async def get_http_client() -> httpx.AsyncClient:
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
             timeout = _http_client_timeout()
-            HTTP_CLIENT = await get_async_http_client(timeout=timeout)
-            if bot_config.OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
+            await close_async_http_client()
+            httpx_async_client = getattr(httpx, "AsyncClient", None)
+            if (
+                httpx_async_client is not None
+                and (
+                    bot_config.OFFLINE_MODE
+                    or getattr(httpx, "__offline_stub__", False)
+                )
+            ):
+                HTTP_CLIENT = httpx_async_client(timeout=timeout)
                 logger.debug("Offline HTTP client instantiated")
+            else:
+                HTTP_CLIENT = await get_async_http_client(timeout=timeout)
     return HTTP_CLIENT
 
 
@@ -377,8 +387,16 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
-    await close_async_http_client()
+
+    client = HTTP_CLIENT
     HTTP_CLIENT = None
+    if client is not None and hasattr(client, "aclose"):
+        try:
+            await client.aclose()
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to close trading bot HTTP client")
+
+    await close_async_http_client()
 
 
 
@@ -568,13 +586,19 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    async with async_http_client(timeout=timeout) as client:
+    client_factory = getattr(httpx, "AsyncClient", None)
+    if client_factory is None:  # pragma: no cover - defensive guard
+        logger.warning("HTTP client missing AsyncClient attribute; skipping history fetch")
+        candles: list[list[float]] = []
+    else:
         try:
-            resp = await client.get(
-                f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
-            )
-            data = resp.json() if resp.status_code == 200 else {}
-            candles = data.get("history", [])
+            async with client_factory(timeout=timeout) as client:
+                resp = await client.get(
+                    f"{env['data_handler_url']}/history/{encoded_symbol}",
+                    timeout=timeout,
+                )
+                data = resp.json() if resp.status_code == 200 else {}
+                candles = data.get("history", [])
         except Exception as exc:  # pragma: no cover - network errors
             logger.warning(
                 "Failed to fetch initial history: %s",
