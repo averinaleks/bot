@@ -22,6 +22,7 @@ from bot.gpt_client import GPTClientError, GPTClientJSONError, query_gpt_json_as
 from bot.utils_loader import require_utils
 from services.logging_utils import sanitize_log_value
 from services.stubs import create_httpx_stub, create_pydantic_stub, is_offline_env
+import http_client as http_client_module
 from http_client import (
     async_http_client,
     close_async_http_client,
@@ -366,10 +367,18 @@ async def get_http_client() -> httpx.AsyncClient:
     global HTTP_CLIENT
     async with HTTP_CLIENT_LOCK:
         if HTTP_CLIENT is None:
-            timeout = _http_client_timeout()
-            HTTP_CLIENT = await get_async_http_client(timeout=timeout)
             if bot_config.OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
+                await close_async_http_client()
+                try:
+                    HTTP_CLIENT = httpx.AsyncClient(timeout=_http_client_timeout())
+                except TypeError:
+                    HTTP_CLIENT = httpx.AsyncClient()
                 logger.debug("Offline HTTP client instantiated")
+            else:
+                timeout = _http_client_timeout()
+                if getattr(http_client_module, "_ASYNC_CLIENT", None) is not None:
+                    await close_async_http_client()
+                HTTP_CLIENT = await get_async_http_client(timeout=timeout)
     return HTTP_CLIENT
 
 
@@ -377,8 +386,15 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
+    client: httpx.AsyncClient | None
+    async with HTTP_CLIENT_LOCK:
+        client = HTTP_CLIENT
+        HTTP_CLIENT = None
+    if client is not None:
+        close = getattr(client, "aclose", None)
+        if callable(close):
+            await close()
     await close_async_http_client()
-    HTTP_CLIENT = None
 
 
 
@@ -568,19 +584,35 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    async with async_http_client(timeout=timeout) as client:
+    client: httpx.AsyncClient | None = None
+    close_client = False
+    try:
         try:
-            resp = await client.get(
-                f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
-            )
-            data = resp.json() if resp.status_code == 200 else {}
-            candles = data.get("history", [])
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.warning(
-                "Failed to fetch initial history: %s",
-                sanitize_log_value(str(exc)),
-            )
-            candles = []
+            client = httpx.AsyncClient(timeout=timeout)
+            close_client = True
+        except TypeError:
+            client = httpx.AsyncClient()
+            close_client = True
+        except Exception:
+            client = await get_http_client()
+            close_client = False
+        resp = await client.get(
+            f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
+        )
+        data = resp.json() if getattr(resp, "status_code", None) == 200 else {}
+        candles = data.get("history", [])
+    except Exception as exc:  # pragma: no cover - network errors
+        logger.warning(
+            "Failed to fetch initial history: %s",
+            sanitize_log_value(str(exc)),
+        )
+        candles = []
+    finally:
+        if close_client and client is not None:
+            close = getattr(client, "aclose", None)
+            if callable(close):
+                with suppress(Exception):
+                    await close()
     async with PRICE_HISTORY_LOCK:
         hist = _PRICE_HISTORY[symbol]
         hist.clear()
