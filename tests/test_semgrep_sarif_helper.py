@@ -4,14 +4,26 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from scripts import ensure_semgrep_sarif as semgrep_helper
+
+
+# Bandit note: the helper interacts exclusively with repository-controlled
+# executables.  The thin wrapper consolidates subprocess invocations so that the
+# security rationale sits alongside the suppression comment.
+def _run_helper(
+    command: Sequence[str | os.PathLike[str]],
+    **kwargs,
+) -> subprocess.CompletedProcess[str]:
+    converted = [str(part) for part in command]
+    return subprocess.run(converted, **kwargs)  # nosec B603
 
 
 def test_ensure_semgrep_sarif_creates_empty_report(tmp_path: Path) -> None:
@@ -151,8 +163,8 @@ def test_cli_supports_symlink_github_output(tmp_path: Path) -> None:
 
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(symlink_path)],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", symlink_path],
         cwd=workspace,
         check=True,
         capture_output=True,
@@ -210,8 +222,8 @@ def test_cli_supports_fd_github_output(tmp_path: Path) -> None:
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
     try:
-        result = subprocess.run(
-            [sys.executable, str(script_path), "--github-output", f"fd:{write_fd}"],
+        result = _run_helper(
+            [sys.executable, script_path, "--github-output", f"fd:{write_fd}"],
             cwd=workspace,
             check=True,
             capture_output=True,
@@ -255,12 +267,12 @@ def test_cli_supports_proc_fd_path(tmp_path: Path) -> None:
     proc_fd_path = Path(f"/proc/self/fd/{write_fd}")
 
     try:
-        result = subprocess.run(
+        result = _run_helper(
             [
                 sys.executable,
-                str(script_path),
+                script_path,
                 "--github-output",
-                str(proc_fd_path),
+                proc_fd_path,
             ],
             cwd=workspace,
             check=True,
@@ -308,12 +320,12 @@ def test_cli_supports_symlinked_proc_fd(tmp_path: Path) -> None:
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
     try:
-        result = subprocess.run(
+        result = _run_helper(
             [
                 sys.executable,
-                str(script_path),
+                script_path,
                 "--github-output",
-                str(github_output),
+                github_output,
             ],
             cwd=workspace,
             check=True,
@@ -340,8 +352,8 @@ def test_cli_execution_from_arbitrary_directory(tmp_path: Path) -> None:
     github_output = workspace / "outputs.txt"
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(github_output)],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", github_output],
         cwd=workspace,
         check=True,
         capture_output=True,
@@ -367,8 +379,8 @@ def test_cli_creates_parent_directories(tmp_path: Path) -> None:
     github_output = workspace / "nested" / "outputs.txt"
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(github_output)],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", github_output],
         cwd=workspace,
         check=True,
         capture_output=True,
@@ -387,8 +399,8 @@ def test_cli_skips_empty_github_output_value(tmp_path: Path) -> None:
 
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", ""],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", ""],
         cwd=workspace,
         check=True,
         capture_output=True,
@@ -411,8 +423,8 @@ def test_cli_skips_directory_github_output(tmp_path: Path) -> None:
 
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", str(workspace)],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", workspace],
         cwd=workspace,
         check=True,
         capture_output=True,
@@ -435,8 +447,8 @@ def test_cli_supports_character_device_output(tmp_path: Path) -> None:
 
     script_path = repo_root / "scripts" / "ensure_semgrep_sarif.py"
 
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--github-output", "/dev/null"],
+    result = _run_helper(
+        [sys.executable, script_path, "--github-output", "/dev/null"],
         cwd=workspace,
         check=True,
         capture_output=True,
