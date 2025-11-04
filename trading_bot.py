@@ -378,12 +378,32 @@ async def get_http_client() -> httpx.AsyncClient:
             _sync_http_client_httpx()
             await close_async_http_client()
             timeout = _http_client_timeout()
-            if getattr(httpx, "__offline_stub__", False):
-                HTTP_CLIENT = httpx.AsyncClient(timeout=timeout)
-            else:
-                HTTP_CLIENT = await get_async_http_client(timeout=timeout)
             if bot_config.OFFLINE_MODE or getattr(httpx, "__offline_stub__", False):
+                # In offline environments avoid reusing the global client from
+                # :mod:`http_client` because it may have been initialised before
+                # ``OFFLINE_MODE`` was enabled. Create a fresh stub instance
+                # instead so tests and local runs do not trigger real network
+                # requests.
+                try:
+                    HTTP_CLIENT = httpx.AsyncClient(timeout=timeout, trust_env=False)
+                except TypeError:
+                    # ``services.stubs`` provides a very small surface area so
+                    # fall back to constructing the client without keyword
+                    # arguments when running under the stub implementation.
+                    HTTP_CLIENT = httpx.AsyncClient()
+                setattr(
+                    HTTP_CLIENT,
+                    "__offline_stub__",
+                    getattr(httpx, "__offline_stub__", False),
+                )
                 logger.debug("Offline HTTP client instantiated")
+            else:
+                # ``http_client`` caches its own global instance. When tests
+                # replace the underlying ``httpx.AsyncClient`` class we need to
+                # drop that cache so a new instance is created with the patched
+                # implementation.
+                await close_async_http_client()
+                HTTP_CLIENT = await get_async_http_client(timeout=timeout)
     return HTTP_CLIENT
 
 
@@ -391,12 +411,6 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
-    client = HTTP_CLIENT
-    HTTP_CLIENT = None
-    if client is not None:
-        close = getattr(client, "aclose", None)
-        if callable(close):
-            await close()
     await close_async_http_client()
 
 
@@ -589,20 +603,18 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
-    _sync_http_client_httpx()
-    async with async_http_client(timeout=timeout) as client:
-        try:
             resp = await client.get(
                 f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
             )
             data = resp.json() if resp.status_code == 200 else {}
-            candles = data.get("history", [])
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.warning(
-                "Failed to fetch initial history: %s",
-                sanitize_log_value(str(exc)),
-            )
-            candles = []
+    except Exception as exc:  # pragma: no cover - network errors
+        logger.warning(
+            "Failed to fetch initial history: %s",
+            sanitize_log_value(str(exc)),
+        )
+        candles = []
+    else:
+        candles = data.get("history", [])
     async with PRICE_HISTORY_LOCK:
         hist = _PRICE_HISTORY[symbol]
         hist.clear()
