@@ -664,7 +664,14 @@ jobs:
           scanners: vuln
       - name: Show Trivy scan results
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
-        run: cat ${{ matrix.artifact }}.txt
+        run: |
+          set -euo pipefail
+          report="${{ matrix.artifact }}.txt"
+          if [[ -r "${report}" ]]; then
+            cat "${report}"
+          else
+            echo "::warning::Trivy report ${report} is missing or unreadable"
+          fi
 
       - name: Upload Trivy report artifact
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
@@ -672,6 +679,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.txt
+          if-no-files-found: warn
       - name: Cleanup Docker
         if: ${{ always() }}
         run: |
