@@ -27,6 +27,17 @@ def test_ensure_semgrep_sarif_creates_empty_report(tmp_path: Path) -> None:
     assert data["runs"][0]["results"] == []
 
 
+def test_sarif_result_count_recovers_from_invalid_json(tmp_path: Path) -> None:
+    sarif_path = tmp_path / "report.sarif"
+    sarif_path.write_text("not json", encoding="utf-8")
+
+    count = semgrep_helper.sarif_result_count(sarif_path)
+
+    assert count == 0
+    data = json.loads(sarif_path.read_text(encoding="utf-8"))
+    assert data["runs"][0]["results"] == []
+
+
 def test_write_github_output_appends_expected_values(tmp_path: Path) -> None:
     output_path = tmp_path / "github_output.txt"
 

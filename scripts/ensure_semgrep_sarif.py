@@ -94,8 +94,13 @@ def sarif_result_count(path: Path = SARIF_PATH) -> int:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return 0
-    except json.JSONDecodeError as exc:  # pragma: no cover - defensive branch
-        raise RuntimeError(f"Invalid SARIF report at {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        print(
+            f"Invalid Semgrep SARIF at {path}: {exc}; regenerating empty report.",
+            file=sys.stderr,
+        )
+        write_secure_text(path, json.dumps(_EMPTY_SARIF, indent=2))
+        return 0
 
     runs = data.get("runs", [])
     return sum(len(run.get("results", [])) for run in runs)
