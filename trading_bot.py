@@ -411,6 +411,20 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
+
+    client: httpx.AsyncClient | None
+    async with HTTP_CLIENT_LOCK:
+        client = HTTP_CLIENT
+        HTTP_CLIENT = None
+
+    if client is not None:
+        close = getattr(client, "aclose", None)
+        if callable(close):
+            try:
+                await close()
+            except Exception:  # pragma: no cover - close failures are rare
+                logger.exception("Failed to close shared HTTP client")
+
     await close_async_http_client()
 
 
@@ -602,11 +616,24 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         logger.debug("Offline mode: initial history fetch skipped for %s", symbol)
         return
     timeout = _http_client_timeout()
-    encoded_symbol = _encode_symbol(symbol)
+    _sync_http_client_httpx()
+    try:
+        encoded_symbol = _encode_symbol(symbol)
+        async with async_http_client(timeout=timeout) as client:
             resp = await client.get(
                 f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
             )
-            data = resp.json() if resp.status_code == 200 else {}
+        if resp.status_code != 200:
+            logger.error(
+                "Failed to fetch initial history: HTTP %s", resp.status_code
+            )
+            data: dict[str, object] = {}
+        else:
+            try:
+                data = resp.json()
+            except ValueError:
+                logger.error("Invalid JSON from history service")
+                data = {}
     except Exception as exc:  # pragma: no cover - network errors
         logger.warning(
             "Failed to fetch initial history: %s",
