@@ -122,14 +122,20 @@ jobs:
         run: |
           set -euo pipefail
           if command -v systemctl >/dev/null; then
-            sudo systemctl stop docker || true
+            if ! sudo systemctl stop docker; then
+              echo "systemctl stop docker failed, falling back to service command"
+              sudo service docker stop || true
+            fi
           else
             sudo service docker stop || true
           fi
           sudo mv /var/lib/docker /mnt/docker || true
           sudo ln -sfn /mnt/docker /var/lib/docker
           if command -v systemctl >/dev/null; then
-            sudo systemctl start docker
+            if ! sudo systemctl start docker; then
+              echo "systemctl start docker failed, falling back to service command"
+              sudo service docker start
+            fi
           else
             sudo service docker start
           fi
@@ -495,10 +501,10 @@ jobs:
                   return 0
                 fi
               done
-              fi
+            fi
 
-              return 1
-            }
+            return 1
+          }
 
             handle_ghcr_outage() {
               local log_file="$1"
