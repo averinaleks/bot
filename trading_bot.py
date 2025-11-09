@@ -411,6 +411,20 @@ async def close_http_client() -> None:
     """Close the module-level HTTP client if it exists."""
     global HTTP_CLIENT
     await shutdown_async_tasks()
+
+    client: httpx.AsyncClient | None = None
+    async with HTTP_CLIENT_LOCK:
+        if HTTP_CLIENT is not None:
+            client, HTTP_CLIENT = HTTP_CLIENT, None
+
+    if client is not None:
+        close = getattr(client, "aclose", None)
+        if callable(close):
+            try:
+                await close()
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("Failed to close shared HTTP client")
+
     await close_async_http_client()
 
 
@@ -603,18 +617,39 @@ async def fetch_initial_history(symbol: str, env: dict) -> None:
         return
     timeout = _http_client_timeout()
     encoded_symbol = _encode_symbol(symbol)
+    _sync_http_client_httpx()
+    try:
+        async with async_http_client(timeout=timeout) as client:
             resp = await client.get(
-                f"{env['data_handler_url']}/history/{encoded_symbol}", timeout=timeout
+                f"{env['data_handler_url']}/history/{encoded_symbol}",
+                timeout=timeout,
             )
-            data = resp.json() if resp.status_code == 200 else {}
-    except Exception as exc:  # pragma: no cover - network errors
+    except httpx.HTTPError as exc:  # pragma: no cover - network errors
         logger.warning(
             "Failed to fetch initial history: %s",
             sanitize_log_value(str(exc)),
         )
-        candles = []
+        candles: list = []
     else:
-        candles = data.get("history", [])
+        if resp.status_code != 200:
+            logger.warning(
+                "History request failed for %s: HTTP %s",
+                symbol,
+                resp.status_code,
+            )
+            candles = []
+        else:
+            try:
+                data = resp.json()
+            except ValueError:
+                logger.warning("Invalid JSON from history service for %s", symbol)
+                candles = []
+            else:
+                history = data.get("history", []) if isinstance(data, dict) else []
+                if not isinstance(history, list):
+                    candles = []
+                else:
+                    candles = history
     async with PRICE_HISTORY_LOCK:
         hist = _PRICE_HISTORY[symbol]
         hist.clear()
