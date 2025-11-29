@@ -101,7 +101,7 @@ jobs:
           echo "Skipping SARIF upload because this pull request originates from a fork without security-events permission."
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
         if: |
           steps.sarif_check.outputs.upload == 'true' &&
           (
