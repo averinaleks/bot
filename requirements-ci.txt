@@ -12,8 +12,9 @@ fastapi==0.121.0
 fastapi-csrf-protect==1.0.7
 flask==3.1.2
 pydantic==2.12.4
-# Align with production requirements to address CVE-2025-62727
-starlette==0.50.0
+# FastAPI 0.121.x currently requires Starlette <0.50.0; keep the latest
+# compatible 0.49.x release to avoid resolver conflicts in CI.
+starlette==0.49.3
 # gymnasium and scikit-learn are unavailable on some Python versions
 gymnasium==1.2.0; python_version<'3.12'
 # Pin pandas to stay compatible with the numpy version used across builds
