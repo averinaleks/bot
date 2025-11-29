@@ -674,7 +674,10 @@ jobs:
           set -euo pipefail
           report="${{ matrix.artifact }}.txt"
           if [[ -r "${report}" ]]; then
-            cat "${report}"
+            # ``cat`` может завершиться с ошибкой, если Trivy оставил пустой или
+            # частично записанный файл. Поскольку этот шаг информационный, не
+            # допускаем падение job и дублируем ошибку через предупреждение.
+            cat "${report}" || echo "::warning::Failed to read Trivy report ${report}"
           else
             echo "::warning::Trivy report ${report} is missing or unreadable"
           fi
