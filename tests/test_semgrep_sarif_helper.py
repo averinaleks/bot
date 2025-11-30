@@ -468,3 +468,27 @@ def test_cli_supports_character_device_output(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert "No Semgrep findings detected" in result.stdout
+
+
+def test_cli_handles_output_write_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    github_output = workspace / "outputs.txt"
+    github_output.write_text("", encoding="utf-8")
+
+    def _explode(*_: object, **__: object) -> None:
+        raise OSError("simulated failure")
+
+    monkeypatch.setattr(semgrep_helper, "write_github_output", _explode)
+    monkeypatch.chdir(workspace)
+
+    exit_code = semgrep_helper.main(["--github-output", str(github_output)])
+
+    stdout, stderr = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "unable to write semgrep outputs" in stderr.lower()
+    assert "No Semgrep findings detected" in stdout
