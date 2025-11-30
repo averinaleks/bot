@@ -22,6 +22,7 @@ import json
 import os
 import signal
 import sys
+import threading
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -393,16 +394,38 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--port-file", type=Path)
+    parser.add_argument(
+        "--model",
+        help="Optional model identifier to advertise via the mock API",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        help="Stop the server automatically after the specified number of seconds",
+    )
     args = parser.parse_args()
+
+    global _MODEL_NAME
+    if args.model:
+        _MODEL_NAME = args.model
 
     server = _Server((args.host, args.port), _RequestHandler)
     _write_port_file(args.port_file, server.server_address[1])
     _install_signal_handlers(server)
+    timer: threading.Timer | None = None
+
+    if args.timeout is not None and args.timeout > 0:
+        timer = threading.Timer(args.timeout, server.shutdown)
+        timer.daemon = True
+        timer.start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:  # pragma: no cover - manual shutdown
         pass
     finally:
+        if timer is not None:
+            timer.cancel()
         server.server_close()
 
 
