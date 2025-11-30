@@ -4,7 +4,7 @@
 # that CI jobs do not have to compile the Rust extension.
 aiohttp==3.13.2
 flake8==7.3.0
-bandit==1.8.6
+bandit==1.9.2
 pytest-asyncio==1.2.0
 fastapi==0.122.0
 fastapi-csrf-protect==1.0.7
