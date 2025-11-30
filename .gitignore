@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .docker-cache/
+*.egg-info/
 *.log
 pytest_cache/
 .pytest_cache/
