@@ -84,13 +84,6 @@ jobs:
           echo 'Trivy scan завершился с ошибкой и не создал SARIF отчёт.' >&2
           exit 1
 
-      - name: Fail workflow on Trivy findings
-        if: ${{ steps.summarize.outputs.sarif == 'true' && steps.summarize.outputs.count != '0' }}
-        shell: bash
-        run: |
-          echo "Обнаружено high/critical уязвимостей: ${{ steps.summarize.outputs.count }}" >&2
-          exit 1
-
   upload-sarif:
     name: Publish Trivy SARIF to Security tab
     needs: scan
@@ -111,3 +104,15 @@ jobs:
         with:
           category: trivy-fs
           sarif_file: trivy-results.sarif
+
+  fail-on-findings:
+    name: Fail workflow on Trivy findings
+    needs: scan
+    if: ${{ needs.scan.outputs.sarif == 'true' && needs.scan.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail on detected vulnerabilities
+        shell: bash
+        run: |
+          echo "Обнаружено high/critical уязвимостей: ${{ needs.scan.outputs.count }}" >&2
+          exit 1

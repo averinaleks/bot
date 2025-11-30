@@ -9,7 +9,7 @@ pytest-asyncio==1.2.0
 fastapi==0.122.0
 fastapi-csrf-protect==1.0.7
 flask==3.1.2
-pydantic==2.12.4
+pydantic==2.12.5
 # Align with production requirements while staying within FastAPI's supported range.
 starlette==0.49.1
 # gymnasium and scikit-learn are unavailable on some Python versions
@@ -21,7 +21,7 @@ polars==1.34.0
 pyarrow==22.0.0
 python-dotenv==1.2.1
 psutil==7.1.2
-werkzeug==3.1.3
+werkzeug==3.1.4
 requests==2.32.5
 httpx==0.28.1
 cloudpickle==3.1.2
