@@ -324,12 +324,19 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if github_output is not None:
-        write_github_output(
-            github_output,
-            upload=has_findings,
-            findings=findings,
-            sarif_path=sarif_path,
-        )
+        try:
+            write_github_output(
+                github_output,
+                upload=has_findings,
+                findings=findings,
+                sarif_path=sarif_path,
+            )
+        except OSError as exc:
+            print(
+                f"Unable to write Semgrep outputs to {github_output.handle}: {exc}",
+                file=sys.stderr,
+            )
+            github_output = None
 
     if has_findings:
         print(f"Semgrep detected {findings} potential issue(s).")
