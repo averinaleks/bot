@@ -20,6 +20,8 @@ updates:
       # constrained execution environment.  Skip them so the scheduled
       # job stops erroring while manual updates continue to happen via
       # regular PRs.
+      - dependency-name: "numba"
+      - dependency-name: "shap"
       - dependency-name: "mlflow"
       - dependency-name: "mlflow-skinny"
       - dependency-name: "mlflow-tracing"
