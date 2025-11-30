@@ -506,77 +506,77 @@ jobs:
             return 1
           }
 
-            handle_ghcr_outage() {
-              local log_file="$1"
-              local stage="$2"
+          handle_ghcr_outage() {
+            local log_file="$1"
+            local stage="$2"
 
-              if ! detect_ghcr_outage "${log_file}"; then
-                return 1
+            if ! detect_ghcr_outage "${log_file}"; then
+              return 1
+            fi
+
+            echo "::warning::GHCR responded with an HTML error during docker build (${stage})"
+
+            if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
+              ghcr_tags_disabled="true"
+              if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
+                printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
+                skipped_tags=${skipped_tags%, }
+                echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
               fi
+            fi
 
-              echo "::warning::GHCR responded with an HTML error during docker build (${stage})"
-
-              if [ "${ghcr_tags_disabled}" != "true" ] && disable_ghcr_tags; then
-                ghcr_tags_disabled="true"
-                if [ "${#ORIGINAL_GHCR_TAGS[@]}" -gt 0 ]; then
-                  printf -v skipped_tags '%s, ' "${ORIGINAL_GHCR_TAGS[@]}"
-                  skipped_tags=${skipped_tags%, }
-                  echo "::warning::Temporarily skipping GHCR tag(s): ${skipped_tags}"
-                fi
-              fi
-
-              if [ "${SHOULD_PUSH}" = "true" ] && [ "${#DOCKERHUB_TAGS[@]}" -gt 0 ]; then
-                echo "::warning::Retrying docker build with Docker Hub tags only due to GHCR outage (${stage})"
-                set +e
-                run_build false auto "${DOCKERHUB_TAGS[@]}"
-                dockerhub_status=$?
-                dockerhub_log="${BUILD_LOG}"
-                set -e
-                if [ "${dockerhub_status}" -eq 0 ]; then
-                  rm -f "${log_file}" "${dockerhub_log}"
-                  echo "::notice::GHCR push skipped; Docker Hub image updated successfully"
-                  echo "status=success" >> "${GITHUB_OUTPUT}"
-                  return 0
-                fi
-                rm -f "${dockerhub_log}" || true
-              fi
-
-              echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification (${stage})"
+            if [ "${SHOULD_PUSH}" = "true" ] && [ "${#DOCKERHUB_TAGS[@]}" -gt 0 ]; then
+              echo "::warning::Retrying docker build with Docker Hub tags only due to GHCR outage (${stage})"
               set +e
-              local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
-              local_tags=("${NON_GHCR_TAGS[@]}")
-              if [ "${#local_tags[@]}" -eq 0 ]; then
-                local_tags=("${local_fallback_tag}")
-              fi
-              primary_local_tag="${local_tags[0]}"
-              local_log=$(mktemp -t docker-build-log.XXXXXX)
-              docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
-              local_status=${PIPESTATUS[0]}
-              archive_build_log "${local_log}" "local-fallback"
-
-              if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
-                for extra_tag in "${local_tags[@]:1}"; do
-                  docker tag "${primary_local_tag}" "${extra_tag}" || local_status=$?
-                done
-              fi
-
-              local_log_path="${local_log}"
+              run_build false auto "${DOCKERHUB_TAGS[@]}"
+              dockerhub_status=$?
+              dockerhub_log="${BUILD_LOG}"
               set -e
-              if [ "${local_status}" -eq 0 ]; then
-                rm -f "${log_file}" "${local_log_path}"
-                printf -v rendered_tags '%s, ' "${local_tags[@]}"
-                rendered_tags=${rendered_tags%, }
-                echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
+              if [ "${dockerhub_status}" -eq 0 ]; then
+                rm -f "${log_file}" "${dockerhub_log}"
+                echo "::notice::GHCR push skipped; Docker Hub image updated successfully"
                 echo "status=success" >> "${GITHUB_OUTPUT}"
                 return 0
               fi
+              rm -f "${dockerhub_log}" || true
+            fi
 
-              rm -f "${local_log_path}" || true
-              return 1
-            }
+            echo "::warning::Skipping registry push due to GHCR outage; building image locally for verification (${stage})"
+            set +e
+            local_fallback_tag="local/${MATRIX_IMAGE}:ghcr-outage-${GITHUB_RUN_ID}"
+            local_tags=("${NON_GHCR_TAGS[@]}")
+            if [ "${#local_tags[@]}" -eq 0 ]; then
+              local_tags=("${local_fallback_tag}")
+            fi
+            primary_local_tag="${local_tags[0]}"
+            local_log=$(mktemp -t docker-build-log.XXXXXX)
+            docker build --file "${DOCKERFILE_PATH}" --tag "${primary_local_tag}" . |& tee "${local_log}"
+            local_status=${PIPESTATUS[0]}
+            archive_build_log "${local_log}" "local-fallback"
 
-            ghcr_tags_disabled="false"
-            ghcr_local_only="false"
+            if [ "${local_status}" -eq 0 ] && [ "${#local_tags[@]}" -gt 1 ]; then
+              for extra_tag in "${local_tags[@]:1}"; do
+                docker tag "${primary_local_tag}" "${extra_tag}" || local_status=$?
+              done
+            fi
+
+            local_log_path="${local_log}"
+            set -e
+            if [ "${local_status}" -eq 0 ]; then
+              rm -f "${log_file}" "${local_log_path}"
+              printf -v rendered_tags '%s, ' "${local_tags[@]}"
+              rendered_tags=${rendered_tags%, }
+              echo "::notice::Docker image built locally under tag(s) ${rendered_tags} because GHCR was unavailable"
+              echo "status=success" >> "${GITHUB_OUTPUT}"
+              return 0
+            fi
+
+            rm -f "${local_log_path}" || true
+            return 1
+          }
+
+          ghcr_tags_disabled="false"
+          ghcr_local_only="false"
 
           set +e
           run_build true auto "${CURRENT_IMAGE_TAGS[@]}"
