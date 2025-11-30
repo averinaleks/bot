@@ -170,3 +170,61 @@ def test_main_writes_port_file_and_serves_requests(tmp_path: Path):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+
+
+def test_main_respects_model_and_timeout(tmp_path: Path):
+    port_file = tmp_path / "port.txt"
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "gptoss_mock_server.py"
+
+    process = subprocess.Popen(  # nosec B603 - controlled local execution
+        [
+            sys.executable,
+            str(script_path),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--port-file",
+            str(port_file),
+            "--model",
+            "custom-model",
+            "--timeout",
+            "2",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    try:
+        port: int | None = None
+        for _ in range(50):
+            if port_file.exists():
+                content = port_file.read_text(encoding="utf-8").strip()
+                if content.isdigit():
+                    port = int(content)
+                    break
+            time.sleep(0.1)
+
+        if port is None:
+            pytest.fail("mock server did not write port file")
+
+        with httpx.Client(timeout=5) as client:
+            response = client.get(f"http://127.0.0.1:{port}/v1/models")
+            response.raise_for_status()
+            payload = response.json()
+            assert payload == {"data": [{"id": "custom-model"}]}
+
+        for _ in range(100):
+            if process.poll() is not None:
+                break
+            time.sleep(0.05)
+
+        assert process.poll() is not None, "mock server did not stop after timeout"
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
