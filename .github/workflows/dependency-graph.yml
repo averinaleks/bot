@@ -563,12 +563,12 @@ jobs:
 
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
               echo "::warning::GITHUB_REPOSITORY is not set; skipping repository recovery." >&2
-              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-                  {
-                      echo "## Dependency snapshot skipped"
-                      echo "Не удалось восстановить репозиторий: переменная \\`GITHUB_REPOSITORY\\` отсутствует."
-                  } >> "${GITHUB_STEP_SUMMARY}" || true
-              fi
+                if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                    {
+                        echo "## Dependency snapshot skipped"
+                        echo "Не удалось восстановить репозиторий: переменная \`GITHUB_REPOSITORY\` отсутствует."
+                    } >> "${GITHUB_STEP_SUMMARY}" || true
+                fi
               exit 0
           fi
 
