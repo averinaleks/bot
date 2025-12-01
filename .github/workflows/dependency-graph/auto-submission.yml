@@ -935,4 +935,6 @@ jobs:
             github.event_name == 'repository_dispatch')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ steps.event-metadata.outputs.after || github.sha }}
+          GITHUB_REF: ${{ steps.event-metadata.outputs.checkout_ref || github.ref }}
         run: python scripts/submit_dependency_snapshot.py
