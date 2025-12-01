@@ -3,6 +3,10 @@
 ---
 name: GPT-OSS Code Review
 
+defaults:
+  run:
+    shell: bash
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
