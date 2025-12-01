@@ -169,7 +169,25 @@ numba==0.62.1
     # via
     #   -r requirements-core.in
     #   shap
-numpy==2.3.4
+numpy==2.2.6; python_version < "3.11"
+    # via
+    #   -r requirements-core.in
+    #   contourpy
+    #   gymnasium
+    #   imbalanced-learn
+    #   matplotlib
+    #   numba
+    #   pandas
+    #   patsy
+    #   scikit-learn
+    #   scipy
+    #   shap
+    #   stable-baselines3
+    #   statsmodels
+    #   ta
+    #   torchmetrics
+    #   transformers
+numpy==2.3.4; python_version >= "3.11"
     # via
     #   -r requirements-core.in
     #   contourpy
