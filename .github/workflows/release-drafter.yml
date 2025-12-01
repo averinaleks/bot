@@ -107,16 +107,42 @@ jobs:
             fi
           done
       - name: Verify Release Drafter action ref exists upstream
+        env:
+          RELEASE_DRAFTER_REPO: release-drafter/release-drafter
         run: |
           set -euo pipefail
-          repo="release-drafter/release-drafter"
+          repo="${RELEASE_DRAFTER_REPO}"
           ref="${RELEASE_DRAFTER_ACTION_REF}"
-          remote_url="https://github.com/${repo}.git"
+          api_base="https://api.github.com/repos/${repo}"
+
+          check_ref() {
+            local endpoint=$1
+            local status
+
+            status="$(curl -sS -o /tmp/release_drafter_ref_check -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "${endpoint}" || true)"
+
+            if [ "${status}" = "200" ]; then
+              return 0
+            fi
+
+            echo "GitHub API status ${status} for ${endpoint}" >&2
+            if [ -s /tmp/release_drafter_ref_check ]; then
+              sed 's/^/  /' /tmp/release_drafter_ref_check >&2
+            fi
+
+            return 1
+          }
 
           for attempt in {1..5}; do
-            if git ls-remote "${remote_url}" \
-              | awk '{print $1}' \
-              | grep -Fx "${ref}" >/dev/null; then
+            if check_ref "${api_base}/git/commits/${ref}" \
+              || check_ref "${api_base}/git/tags/${ref}" \
+              || check_ref "${api_base}/git/refs/${ref}" \
+              || check_ref "${api_base}/git/refs/tags/${ref}"; then
+              echo "Release Drafter ref ${ref} is reachable upstream."
               exit 0
             fi
 
@@ -125,7 +151,7 @@ jobs:
             fi
           done
 
-          echo "Release Drafter ref ${ref} not found upstream." >&2
+          echo "Release Drafter ref ${ref} not found upstream after retries." >&2
           exit 1
 
   update_release_draft:
