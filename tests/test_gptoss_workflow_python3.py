@@ -110,7 +110,10 @@ def test_pr_status_step_gates_supported_events() -> None:
 def test_issue_comment_requires_pull_request_reference() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
-    assert 'ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}' in workflow_text
+    assert (
+        'ISSUE_IS_PR: ${{ github.event.issue && github.event.issue.pull_request != null }}'
+        in workflow_text
+    )
     assert 'issue_is_pr="${ISSUE_IS_PR:-false}"' in workflow_text
     assert 'Комментарий не относится к pull request' in workflow_text
 

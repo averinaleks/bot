@@ -47,14 +47,14 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          PR_DRAFT: ${{ github.event.pull_request.draft || 'false' }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
-          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
-          ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}
-          COMMENT_AUTHOR: ${{ github.event.comment.user.login || '' }}
-          COMMENT_AUTHOR_ASSOC: ${{ github.event.comment.author_association || '' }}
-          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          PR_NUMBER: ${{ github.event.pull_request && github.event.pull_request.number || '' }}
+          PR_DRAFT: ${{ github.event.pull_request && github.event.pull_request.draft || 'false' }}
+          PR_HEAD_REPO: ${{ github.event.pull_request && github.event.pull_request.head.repo.full_name || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue && github.event.issue.number || '' }}
+          ISSUE_IS_PR: ${{ github.event.issue && github.event.issue.pull_request != null }}
+          COMMENT_AUTHOR: ${{ github.event.comment && github.event.comment.user.login || '' }}
+          COMMENT_AUTHOR_ASSOC: ${{ github.event.comment && github.event.comment.author_association || '' }}
+          COMMENT_BODY: ${{ github.event.comment && github.event.comment.body || '' }}
         run: |
           set -euo pipefail
 
