@@ -33,6 +33,7 @@ runs:
           sudo rm -rf /var/lib/docker/*
         ' || true
     - name: Ensure LVM tools are available
+      continue-on-error: true
       shell: bash
       run: |
         if ! command -v pvcreate >/dev/null 2>&1; then
@@ -40,6 +41,7 @@ runs:
           sudo apt-get install -y --no-install-recommends lvm2
         fi
     - name: Prepare build volume
+      continue-on-error: true
       shell: bash
       run: |
         if [ -e /dev/buildvg/buildlv ]; then
@@ -51,6 +53,7 @@ runs:
         sudo rm -f /mnt/swapfile
         sudo rm -rf /mnt/*
     - name: Maximize build space
+      continue-on-error: true
       uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
       with:
         root-reserve-mb: 2048
