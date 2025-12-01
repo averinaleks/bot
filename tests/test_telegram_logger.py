@@ -217,6 +217,18 @@ def test_resolve_unsent_path_rejects_absolute(tmp_path):
         resolve_unsent_path(log_dir, tmp_path / "unsent.log")
 
 
+def test_resolve_unsent_path_rejects_symlink(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    target_dir = log_dir / "target"
+    target_dir.mkdir()
+    symlink = log_dir / "alias"
+    symlink.symlink_to(target_dir, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        resolve_unsent_path(log_dir, "alias/unsent.log")
+
+
 def test_logger_normalises_relative_unsent_path(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     log_dir = tmp_path / "logs"
