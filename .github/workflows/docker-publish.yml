@@ -671,13 +671,15 @@ jobs:
       - name: Show Trivy scan results
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success' && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
         run: |
-          set -euo pipefail
+          set -u
           report="${{ matrix.artifact }}.txt"
           if [[ -r "${report}" ]]; then
             # ``cat`` может завершиться с ошибкой, если Trivy оставил пустой или
-            # частично записанный файл. Поскольку этот шаг информационный, не
-            # допускаем падение job и дублируем ошибку через предупреждение.
-            cat "${report}" || echo "::warning::Failed to read Trivy report ${report}"
+            # частично записанный файл. Поскольку этот шаг информационный,
+            # выводим предупреждение, но не прерываем job.
+            if ! cat "${report}"; then
+              echo "::warning::Failed to read Trivy report ${report}"
+            fi
           else
             echo "::warning::Trivy report ${report} is missing or unreadable"
           fi
