@@ -100,7 +100,24 @@ def resolve_unsent_path(
     path = Path(candidate)
     if path.is_absolute():
         raise ValueError("unsent_telegram_path must be relative to log_dir")
-    resolved = (base / path).resolve(strict=False)
+    candidate_path = base / path
+    try:
+        relative_parts = candidate_path.relative_to(base).parts
+    except ValueError as exc:  # pragma: no cover - defensive fallback
+        raise ValueError("unsent_telegram_path escapes log_dir") from exc
+
+    current = base
+    for part in relative_parts:
+        current = current / part
+        try:
+            if current.exists() and current.is_symlink():
+                raise ValueError("unsent_telegram_path cannot traverse symlinks")
+        except OSError as exc:  # pragma: no cover - filesystem race conditions
+            raise ValueError(
+                "unsent_telegram_path could not be validated due to filesystem error"
+            ) from exc
+
+    resolved = candidate_path.resolve(strict=False)
     if not resolved.is_relative_to(base):
         raise ValueError("unsent_telegram_path escapes log_dir")
     return resolved
