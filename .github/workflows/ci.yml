@@ -33,6 +33,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           device: ${{ matrix.device }}
+      - name: Show tool versions
+        run: |
+          python --version
+          python -m ruff --version
+          python -m mypy --version
+          python -m bandit --version
+          python -m flake8 --version
       - run: python -m ruff check bot tests --output-format=github
       - run: python -m mypy bot
       - run: python -m bandit -r bot -x tests -ll
