@@ -114,7 +114,9 @@ jobs:
           remote_url="https://github.com/${repo}.git"
 
           for attempt in {1..5}; do
-            if git ls-remote --exit-code "${remote_url}" "${ref}" >/dev/null; then
+            if git ls-remote "${remote_url}" \
+              | awk '{print $1}' \
+              | grep -Fx "${ref}" >/dev/null; then
               exit 0
             fi
 
