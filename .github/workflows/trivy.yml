@@ -67,7 +67,10 @@ jobs:
             exit 0
           fi
           echo "sarif=true" >>"$GITHUB_OUTPUT"
-          count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif)
+          if ! count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif); then
+            echo "error: failed to summarize Trivy SARIF report" >&2
+            exit 1
+          fi
           # Guard against empty or non-numeric output so downstream conditions behave predictably.
           if ! [[ "$count" =~ ^[0-9]+$ ]]; then
             echo "error: unexpected count output '$count'" >&2
