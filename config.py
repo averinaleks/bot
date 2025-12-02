@@ -27,17 +27,17 @@ logger = logging.getLogger(__name__)
 class MissingEnvError(Exception):
     """Raised when required environment variables are missing."""
 
-    def __init__(self, missing_keys: list[str]):
+    def __init__(self, missing_keys: list[str], *, hint: str | None = None):
         self.missing_keys = tuple(missing_keys)
-        hint = (
-            " Run 'python run_bot.py --offline' or create a .env file with the required"
-            " variables."
+        self.hint = hint or (
+            " Запустите `python run_bot.py --offline` или создайте файл .env с обязательными"
+            " переменными."
         )
         message = (
             "Missing required environment variables: "
             + ", ".join(missing_keys)
             + "."
-            + hint
+            + self.hint
         )
         super().__init__(message)
 
@@ -78,6 +78,17 @@ def validate_env(required_keys: list[str]) -> None:
         if not (os.getenv(key) or _env.get(key)):
             missing_keys.append(key)
 
+    hybrid_mode = _get_bool_env("HYBRID_MODE", False)
+    if not OFFLINE_MODE and not hybrid_mode:
+        has_openai_key = bool(os.getenv("OPENAI_API_KEY") or _env.get("OPENAI_API_KEY"))
+        has_gpt_oss_api = bool(os.getenv("GPT_OSS_API") or _env.get("GPT_OSS_API"))
+        if not (has_openai_key or has_gpt_oss_api):
+            hint = (
+                " Укажите OPENAI_API_KEY или GPT_OSS_API (см. README), либо запустите "
+                "`python run_bot.py --offline`."
+            )
+            raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=hint)
+
     if missing_keys:
         raise MissingEnvError(missing_keys)
 
@@ -104,9 +115,9 @@ except MissingEnvError as exc:
         )
     else:
         logger.critical(
-            "Не заданы обязательные переменные окружения: %s. "
-            "Запустите `python run_bot.py --offline` или создайте файл .env с обязательными переменными.",
+            "Не заданы обязательные переменные окружения: %s.%s",
             sanitize_log_value(missing),
+            exc.hint,
         )
         raise
 
