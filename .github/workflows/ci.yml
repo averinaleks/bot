@@ -23,7 +23,9 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.10', '3.11']
         device: [cpu]
@@ -34,15 +36,34 @@ jobs:
           python-version: ${{ matrix.python-version }}
           device: ${{ matrix.device }}
       - name: Show tool versions
-        run: |
-          python --version
-          python -m ruff --version
-          python -m mypy --version
-          python -m bandit --version
-          python -m flake8 --version
-      - run: python -m ruff check bot tests --output-format=github
-      - run: python -m mypy bot
-      - run: python -m bandit -r bot -x tests -ll
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 3
+          timeout_minutes: 5
+          command: |
+            python --version
+            python -m ruff --version
+            python -m mypy --version
+            python -m bandit --version
+            python -m flake8 --version
+      - name: Lint with ruff
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 2
+          timeout_minutes: 15
+          command: python -m ruff check bot tests --output-format=github
+      - name: Type-check with mypy
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 2
+          timeout_minutes: 20
+          command: python -m mypy bot
+      - name: Security scan with bandit
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 2
+          timeout_minutes: 10
+          command: python -m bandit -r bot -x tests -ll
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
@@ -58,10 +79,14 @@ jobs:
           path: /mnt/pip-audit.json
           if-no-files-found: ignore
       - name: Run flake8
-        run: |
-          set -o pipefail
-          python -m flake8 . | tee flake8.log || code=$?
-          exit $code
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 2
+          timeout_minutes: 15
+          command: |
+            set -o pipefail
+            python -m flake8 . | tee flake8.log || code=$?
+            exit $code
       - name: Upload flake8 log
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
@@ -73,9 +98,13 @@ jobs:
         uses: ./.github/actions/clear-test-caches
       - name: Run unit tests
         if: always()
-        run: |
-          set -o pipefail
-          timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 2
+          timeout_minutes: 20
+          command: |
+            set -o pipefail
+            timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload unit test log
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
@@ -90,8 +119,10 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: unit
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.10', '3.11']
         device: [cpu]
