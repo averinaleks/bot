@@ -100,7 +100,9 @@ class HistoricalSimulator:
                 "symbol"
             ).unique()
         for symbol in symbols:
-            df = self.history.get(symbol) or getattr(self.data_handler, "history", None)
+            df = self.history.get(symbol)
+            if df is None:
+                df = getattr(self.data_handler, "history", None)
             if df is None:
                 continue
             if symbol in getattr(df.index, "names", []):
