@@ -18,6 +18,33 @@ if len(_SYMBOL_PERSONALISATION) > _BLAKE2S_PERSON_SIZE:
 logger = logging.getLogger(__name__)
 
 
+class _ConfigWrapper:
+    """Provide mapping-like access to configuration objects."""
+
+    def __init__(self, cfg: Any | None) -> None:
+        self._cfg = cfg
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if self._cfg is None:
+            return default
+        if isinstance(self._cfg, dict):
+            return self._cfg.get(key, default)
+        getter = getattr(self._cfg, "get", None)
+        if callable(getter):
+            try:
+                return getter(key, default)
+            except TypeError:  # pragma: no cover - defensive
+                logger.debug("Config get() call failed; falling back to attributes")
+        if hasattr(self._cfg, key):
+            return getattr(self._cfg, key)
+        return default
+
+    def __getattr__(self, name: str) -> Any:
+        if self._cfg is None:
+            raise AttributeError(name)
+        return getattr(self._cfg, name)
+
+
 @dataclass(frozen=True)
 class Candle:
     """Immutable representation of a single OHLCV entry."""
@@ -81,10 +108,11 @@ class OfflineDataHandler:
         exchange: Any | None = None,
     ) -> None:
         self.cfg = cfg
+        self.config = self._wrap_config(cfg)
         self.http_client = http_client
         self.exchange = exchange
         self._optimizer = optimizer
-        self.usdt_pairs = self._resolve_pairs(cfg)
+        self.usdt_pairs = self._resolve_pairs(self.config)
         self.indicators: dict[str, SimpleNamespace] = {}
         self.indicators_2h: dict[str, SimpleNamespace] = {}
         self.ohlcv: dict[str, tuple[Candle, ...]] = {}
@@ -96,6 +124,16 @@ class OfflineDataHandler:
         self.parameter_optimizer = self._ensure_optimizer()
         self._last_refresh = 0.0
         self.refresh()
+
+    @staticmethod
+    def _wrap_config(cfg: Any | None) -> Any:
+        if cfg is None:
+            return {}
+        if isinstance(cfg, dict):
+            return cfg
+        if getattr(cfg, "get", None):
+            return cfg
+        return _ConfigWrapper(cfg)
 
     @staticmethod
     def _resolve_pairs(cfg: Any | None) -> list[str]:
