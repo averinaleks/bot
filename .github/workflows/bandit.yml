@@ -27,13 +27,12 @@ jobs:
           python-version: '3.11'
       - name: Install Bandit
         run: |
-          pip install "bandit[sarif]"
+          pip install "bandit[sarif]==1.9.2"
           # The "sarif" formatter is provided by a separate plugin which
           # is not automatically installed in some environments.
-          pip install bandit-sarif-formatter
+          pip install bandit-sarif-formatter==1.1.1
       - name: Run Bandit
         id: run_bandit
-        continue-on-error: true
         run: bandit -r . -ll -ii -x ./tests,./scripts,./gptoss_check -f sarif -o bandit.sarif
       - name: Check for SARIF results
         id: sarif_check
@@ -63,6 +62,11 @@ jobs:
         if: steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
         with:
           sarif_file: bandit.sarif
+      - name: Fail if Bandit found issues
+        if: steps.sarif_check.outputs.upload == 'true'
+        run: |
+          echo "Bandit обнаружил проблемы безопасности. Ознакомьтесь с отчетом bandit.sarif."
+          exit 1
       - name: Fail if Bandit failed
         if: ${{ steps.run_bandit.outcome == 'failure' }}
         run: exit 1
