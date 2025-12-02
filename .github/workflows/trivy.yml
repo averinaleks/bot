@@ -59,6 +59,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
           if [ ! -f trivy-results.sarif ]; then
             printf '### Trivy scan summary\n\n* Отчёт Trivy не был создан.\n' >> "$GITHUB_STEP_SUMMARY"
             echo "sarif=false" >>"$GITHUB_OUTPUT"
@@ -66,11 +67,14 @@ jobs:
             exit 0
           fi
           echo "sarif=true" >>"$GITHUB_OUTPUT"
-          count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif || true)
+          if ! count=$(python3 scripts/trivy_sarif_summary.py trivy-results.sarif); then
+            echo "error: failed to summarize Trivy SARIF report" >&2
+            exit 1
+          fi
           # Guard against empty or non-numeric output so downstream conditions behave predictably.
           if ! [[ "$count" =~ ^[0-9]+$ ]]; then
-            echo "warning: unexpected count output '$count', defaulting to 0" >&2
-            count=0
+            echo "error: unexpected count output '$count'" >&2
+            exit 1
           fi
           printf '### Trivy scan summary\n\n* Найдено high/critical уязвимостей: `%s`\n' "$count" >> "$GITHUB_STEP_SUMMARY"
           echo "count=$count" >>"$GITHUB_OUTPUT"
