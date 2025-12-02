@@ -6,7 +6,7 @@ import math
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 _SYMBOL_PERSONALISATION = b"botdho1"
 _BLAKE2S_PERSON_SIZE = getattr(hashlib.blake2s, "PERSON_SIZE", 8)
@@ -91,6 +91,8 @@ class OfflineDataHandler:
         self.ohlcv_2h: dict[str, tuple[Candle, ...]] = {}
         self.funding_rates: dict[str, float] = {}
         self.open_interest: dict[str, float] = {}
+        self.history: Optional[Any] = None
+        self.cache: Optional[Any] = None
         self.parameter_optimizer = self._ensure_optimizer()
         self._last_refresh = 0.0
         self.refresh()
@@ -152,6 +154,46 @@ class OfflineDataHandler:
             self.funding_rates[symbol] = 0.0
             self.open_interest[symbol] = 0.0
         self._last_refresh = time.time()
+        self._build_history_cache()
+
+    def _build_history_cache(self) -> None:
+        try:
+            import pandas as pd
+        except Exception:  # pragma: no cover - pandas not installed in some setups
+            self.history = None
+            self.cache = SimpleNamespace(load_cached_data=lambda *_a, **_k: None)
+            return
+
+        frames: list[pd.DataFrame] = []
+        for symbol, candles in self.ohlcv.items():
+            timestamps = pd.to_datetime([candle.timestamp for candle in candles], unit="ms", utc=True)
+            frame = pd.DataFrame(
+                {
+                    "open": [candle.open for candle in candles],
+                    "high": [candle.high for candle in candles],
+                    "low": [candle.low for candle in candles],
+                    "close": [candle.close for candle in candles],
+                    "volume": [candle.volume for candle in candles],
+                },
+                index=pd.MultiIndex.from_arrays(
+                    [[symbol] * len(candles), timestamps], names=["symbol", "timestamp"]
+                ),
+            )
+            frames.append(frame)
+
+        self.history = pd.concat(frames).sort_index()
+
+        def _load_cached_data(symbol: str, timeframe: str) -> Optional[pd.DataFrame]:  # noqa: ARG001
+            if self.history is None:
+                return None
+            if "symbol" not in self.history.index.names:
+                return None
+            try:
+                return self.history.xs(symbol, level="symbol", drop_level=False)
+            except KeyError:
+                return None
+
+        self.cache = SimpleNamespace(load_cached_data=_load_cached_data)
 
     @staticmethod
     def _symbol_seed(symbol: str) -> int:
