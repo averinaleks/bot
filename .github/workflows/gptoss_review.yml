@@ -19,6 +19,7 @@ on:
       - '.github/workflows/gptoss_review.yml'
 
 permissions:
+  actions: write
   contents: read
   pull-requests: write
   issues: write
