@@ -24,16 +24,17 @@ from services.logging_utils import sanitize_log_value
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_ENV_HINT = (
+    " Run 'python run_bot.py --offline' or create a .env file with the required variables. "
+    "(Запустите `python run_bot.py --offline` или создайте файл .env с обязательными переменными.)"
+)
+
+
 class MissingEnvError(Exception):
     """Raised when required environment variables are missing."""
 
     def __init__(self, missing_keys: list[str], *, hint: str | None = None):
         self.missing_keys = tuple(missing_keys)
-        self.hint = hint or (
-            " Run 'python run_bot.py --offline' or create a .env file with the required"
-            " variables. Запустите `python run_bot.py --offline` или создайте файл .env с"
-            " обязательными переменными."
-        )
         message = (
             "Missing required environment variables: "
             + ", ".join(missing_keys)
@@ -85,9 +86,6 @@ def validate_env(required_keys: list[str]) -> None:
         has_gpt_oss_api = bool(os.getenv("GPT_OSS_API") or _env.get("GPT_OSS_API"))
         if not (has_openai_key or has_gpt_oss_api):
             hint = (
-                " Provide OPENAI_API_KEY or GPT_OSS_API (see README), or run "
-                "'python run_bot.py --offline'. Укажите OPENAI_API_KEY или GPT_OSS_API (см."
-                " README), либо запустите `python run_bot.py --offline`."
             )
             raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=hint)
 
