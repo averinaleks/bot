@@ -22,4 +22,4 @@ tomli==2.3.0
 flake8==7.3.0
 ruff==0.6.9
 bandit==1.9.2
-pip-audit==2.9.0
+pip-audit==2.10.0
