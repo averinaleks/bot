@@ -118,15 +118,34 @@ jobs:
           check_ref() {
             local endpoint=$1
             local status
+            local -a headers=(
+              -H 'Accept: application/vnd.github+json'
+              -H 'X-GitHub-Api-Version: 2022-11-28'
+            )
+
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+              headers+=(
+                -H "Authorization: Bearer ${GITHUB_TOKEN}"
+              )
+            fi
 
             status="$(curl -sS -o /tmp/release_drafter_ref_check -w '%{http_code}' \
-              -H 'Accept: application/vnd.github+json' \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "${headers[@]}" \
               "${endpoint}" || true)"
 
             if [ "${status}" = "200" ]; then
               return 0
+            fi
+
+            if [ "${status}" = "403" ]; then
+              echo "GitHub API returned 403 for ${endpoint}; retrying without authentication." >&2
+              status="$(curl -sS -o /tmp/release_drafter_ref_check -w '%{http_code}' \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "${endpoint}" || true)"
+              if [ "${status}" = "200" ]; then
+                return 0
+              fi
             fi
 
             echo "GitHub API status ${status} for ${endpoint}" >&2
