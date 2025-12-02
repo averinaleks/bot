@@ -45,13 +45,13 @@ else
     devscripts \
     equivs
   /bin/bash /tmp/security/harden_gnutar.sh
-  python3 -m pip install --no-compile --no-cache-dir --break-system-packages \
+  python3 -m pip install --no-compile --no-cache-dir --break-system-packages --ignore-installed \
     'pip>=25.3' \
     'setuptools>=80.9.0,<81' \
     wheel
   if command -v python3.11 >/dev/null 2>&1; then
     python3.11 -m ensurepip --upgrade
-    python3.11 -m pip install --no-compile --no-cache-dir --break-system-packages \
+    python3.11 -m pip install --no-compile --no-cache-dir --break-system-packages --ignore-installed \
       'setuptools>=80.9.0,<81'
   fi
   curl --netrc-file /dev/null -L "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" -o zlib.tar.gz
