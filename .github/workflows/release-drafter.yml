@@ -87,6 +87,20 @@ jobs:
             echo 'Release Drafter configuration file is missing or empty.' >&2
             exit 1
           fi
+      - name: Validate Release Drafter config syntax
+        run: |
+          set -euo pipefail
+          ruby <<'RUBY'
+            require 'yaml'
+
+            config = YAML.safe_load(File.read('.github/release-drafter.yml'))
+            required = %w[name-template tag-template template]
+            missing = required.reject { |key| config.key?(key) && !config[key].to_s.strip.empty? }
+
+            unless missing.empty?
+              abort("Missing required keys in release-drafter config: #{missing.join(', ')}")
+            end
+          RUBY
       - name: Ensure Release Drafter action ref is consistent
         run: |
           set -euo pipefail
