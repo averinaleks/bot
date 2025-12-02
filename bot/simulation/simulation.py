@@ -52,7 +52,13 @@ class HistoricalSimulator:
         self.history.clear()
         loaded_symbols: List[str] = []
         missing_symbols: List[str] = []
-        timeframe = self.data_handler.config.get("timeframe", "1m")
+        config = getattr(self.data_handler, "config", None)
+        timeframe = "1m"
+        if config is not None:
+            if hasattr(config, "get") and callable(config.get):
+                timeframe = config.get("timeframe", timeframe)
+            else:
+                timeframe = getattr(config, "timeframe", timeframe)
         for symbol in self.data_handler.usdt_pairs:
             df = None
             if hasattr(self.data_handler, "history"):
@@ -94,11 +100,17 @@ class HistoricalSimulator:
                 "symbol"
             ).unique()
         for symbol in symbols:
-            ohlcv = self.data_handler.ohlcv
-            if "symbol" in ohlcv.index.names and symbol in ohlcv.index.get_level_values("symbol"):
-                df = ohlcv.xs(symbol, level="symbol", drop_level=False)
-            else:
+            df = self.history.get(symbol) or getattr(self.data_handler, "history", None)
+            if df is None:
                 continue
+            if symbol in getattr(df.index, "names", []):
+                df = df.xs(symbol, level="symbol", drop_level=False)
+            elif getattr(df.index, "names", None) == ["timestamp"]:
+                pass
+            elif isinstance(df.index, pd.MultiIndex) and "timestamp" in df.index.names:
+                pass
+            elif "symbol" in getattr(df, "columns", []):
+                df = df[df["symbol"] == symbol].set_index("timestamp")
             if df.empty:
                 continue
             price = df["close"].iloc[-1]
@@ -162,19 +174,17 @@ class HistoricalSimulator:
             for symbol in self.data_handler.usdt_pairs:
                 signal = await self.trade_manager.evaluate_signal(symbol)
                 if signal:
-                    ohlcv = self.data_handler.ohlcv
-                    if "symbol" in ohlcv.index.names and symbol in ohlcv.index.get_level_values("symbol"):
-                        price_df = ohlcv.xs(symbol, level="symbol")
-                        if isinstance(price_df.index, pd.MultiIndex):
-                            mask = price_df.index.get_level_values("timestamp") <= ts
-                        else:
-                            mask = price_df.index <= ts
-                        price_subset = price_df.loc[mask]
-                        if price_subset.empty:
-                            continue
-                        price = price_subset["close"].iloc[-1]
-                    else:
+                    history_df = self.history.get(symbol)
+                    if history_df is None:
                         continue
+                    if isinstance(history_df.index, pd.MultiIndex):
+                        idx = history_df.index.get_level_values("timestamp")
+                    else:
+                        idx = history_df.index
+                    price_subset = history_df.loc[idx <= ts]
+                    if price_subset.empty:
+                        continue
+                    price = price_subset["close"].iloc[-1]
                     params = await self.data_handler.parameter_optimizer.optimize(symbol)
                     await self.trade_manager.open_position(symbol, signal, float(price), params)
             await self._manage_positions_once()
