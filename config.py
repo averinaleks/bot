@@ -30,8 +30,8 @@ class MissingEnvError(Exception):
     def __init__(self, missing_keys: list[str], *, hint: str | None = None):
         self.missing_keys = tuple(missing_keys)
         self.hint = hint or (
-            " Запустите `python run_bot.py --offline` или создайте файл .env с обязательными"
-            " переменными."
+            " Run 'python run_bot.py --offline' or create a .env file with the required"
+            " variables."
         )
         message = (
             "Missing required environment variables: "
