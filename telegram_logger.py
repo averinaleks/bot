@@ -53,7 +53,15 @@ try:  # pragma: no cover - optional dependency
 except Exception as exc:  # pragma: no cover - missing telegram
     logger_ref = logging.getLogger("TradingBot")
     if not _TELEGRAM_IMPORT_LOGGED:
-        logger_ref.error("Telegram package not available: %s", exc)
+        if bot_config.OFFLINE_MODE or not (
+            os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")
+        ):
+            logger_ref.warning(
+                "Telegram package not available in offline/unauthenticated mode: %s",
+                exc,
+            )
+        else:
+            logger_ref.error("Telegram package not available: %s", exc)
         _TELEGRAM_IMPORT_LOGGED = True
     else:
         logger_ref.debug("Telegram package not available: %s", exc)
