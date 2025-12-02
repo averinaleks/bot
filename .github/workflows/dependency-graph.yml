@@ -61,6 +61,10 @@ jobs:
           {
               echo "run-workflow=${run_workflow}"
           } >> "${GITHUB_OUTPUT}"
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        if: steps.execution-guard.outputs.run-workflow == 'true'
+        with:
+          python-version: '3.11'
       - name: Resolve event metadata
         id: event-metadata
         if: steps.execution-guard.outputs.run-workflow == 'true'
@@ -531,7 +535,7 @@ jobs:
           if after:
               print(f"Resolved 'after' commit: {after}")
           PY
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v4
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         id: checkout
         if: steps.execution-guard.outputs.run-workflow == 'true'
         continue-on-error: true
@@ -676,12 +680,6 @@ jobs:
                   } >> "${GITHUB_STEP_SUMMARY}" || true
               fi
           fi
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
-        if: >-
-          steps.execution-guard.outputs.run-workflow == 'true' &&
-          steps.repository-ready.outputs.ready == 'true'
-        with:
-          python-version: '3.11'
       - name: Detect dependency manifest changes
         id: detect
         if: >-
