@@ -35,7 +35,6 @@ class MissingEnvError(Exception):
 
     def __init__(self, missing_keys: list[str], *, hint: str | None = None):
         self.missing_keys = tuple(missing_keys)
-        self.hint = hint or DEFAULT_ENV_HINT
         message = (
             "Missing required environment variables: "
             + ", ".join(missing_keys)
@@ -87,10 +86,6 @@ def validate_env(required_keys: list[str]) -> None:
         has_gpt_oss_api = bool(os.getenv("GPT_OSS_API") or _env.get("GPT_OSS_API"))
         if not (has_openai_key or has_gpt_oss_api):
             hint = (
-                " Specify OPENAI_API_KEY or GPT_OSS_API (see README), or run 'python run_bot.py"
-                " --offline'."
-                " Укажите OPENAI_API_KEY или GPT_OSS_API (см. README), либо запустите `python"
-                " run_bot.py --offline`."
             )
             raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=hint)
 
