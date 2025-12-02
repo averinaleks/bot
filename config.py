@@ -35,6 +35,7 @@ class MissingEnvError(Exception):
 
     def __init__(self, missing_keys: list[str], *, hint: str | None = None):
         self.missing_keys = tuple(missing_keys)
+        self.hint = hint if hint is not None else DEFAULT_ENV_HINT
         message = (
             "Missing required environment variables: "
             + ", ".join(missing_keys)
@@ -85,9 +86,7 @@ def validate_env(required_keys: list[str]) -> None:
         has_openai_key = bool(os.getenv("OPENAI_API_KEY") or _env.get("OPENAI_API_KEY"))
         has_gpt_oss_api = bool(os.getenv("GPT_OSS_API") or _env.get("GPT_OSS_API"))
         if not (has_openai_key or has_gpt_oss_api):
-            hint = (
-            )
-            raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=hint)
+            raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=DEFAULT_ENV_HINT)
 
     if missing_keys:
         raise MissingEnvError(missing_keys)
