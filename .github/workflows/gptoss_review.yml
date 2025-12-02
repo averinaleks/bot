@@ -333,10 +333,64 @@ jobs:
 
           rsync -a --delete --exclude='.git/' "$workdir"/ ./
 
+      - name: Generate diff
+        if: >-
+          ${{ steps.validate_event.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.skip != 'true' }}
+        id: generate_diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PR_NUMBER:-}" ]; then
+            echo "::notice::Не удалось определить номер PR – пропускаю подготовку diff" >&2
+            exit 0
+          fi
+
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            has_diff_output="false"
+            cleanup_output() {
+              printf 'has_diff=%s\n' "$has_diff_output" >> "$output_file"
+            }
+            trap cleanup_output EXIT
+          fi
+
+          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
+          script_path="${helpers_dir}/scripts/prepare_gptoss_diff.py"
+          fallback_path="scripts/prepare_gptoss_diff.py"
+
+          if [ ! -f "$script_path" ]; then
+            if [ -f "$fallback_path" ]; then
+              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, использую $fallback_path"
+              script_path="$fallback_path"
+            else
+              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
+              exit 0
+            fi
+          fi
+
+          if ! python3 "$script_path" \
+            --repo "${{ github.repository }}" \
+            --pr-number "${PR_NUMBER}" \
+            --token "${GITHUB_TOKEN}" \
+            --output diff.patch \
+            --path ':(glob)**/*.py'; then
+            echo "::warning::Не удалось подготовить diff – пропускаю обзор"
+            has_diff_output="false"
+            exit 0
+          fi
+
+          if [ -s diff.patch ]; then
+            has_diff_output="true"
+          fi
+
       - name: Start mock GPT-OSS server
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
               && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.generate_diff.outputs.has_diff == 'true'
               && (github.event_name != 'issue_comment'
                   || github.event.comment.author_association == 'OWNER'
                   || github.event.comment.author_association == 'MEMBER'
@@ -421,6 +475,7 @@ jobs:
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
               && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.generate_diff.outputs.has_diff == 'true'
               && steps.start_llm.outputs.started == 'true' }}
         id: wait_llm
         run: |
@@ -460,56 +515,6 @@ jobs:
           fi
 
           ready_output="true"
-
-      - name: Generate diff
-        if: >-
-          ${{ steps.validate_event.outputs.skip != 'true'
-              && steps.ensure_pr_ready.outputs.skip != 'true'
-              && steps.start_llm.outputs.started == 'true'
-              && steps.wait_llm.outputs.ready == 'true' }}
-        id: generate_diff
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          output_file="${GITHUB_OUTPUT:-}"
-          if [ -n "$output_file" ]; then
-            has_diff_output="false"
-            cleanup_output() {
-              printf 'has_diff=%s\n' "$has_diff_output" >> "$output_file"
-            }
-            trap cleanup_output EXIT
-          fi
-
-          helpers_dir="${HELPERS_DIR:-gptoss_helpers}"
-          script_path="${helpers_dir}/scripts/prepare_gptoss_diff.py"
-          fallback_path="scripts/prepare_gptoss_diff.py"
-
-          if [ ! -f "$script_path" ]; then
-            if [ -f "$fallback_path" ]; then
-              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, использую $fallback_path"
-              script_path="$fallback_path"
-            else
-              echo "::notice::Скрипт ${helpers_dir}/scripts/prepare_gptoss_diff.py не найден, пропускаю подготовку diff"
-              exit 0
-            fi
-          fi
-
-          if ! python3 "$script_path" \
-            --repo "${{ github.repository }}" \
-            --pr-number "${PR_NUMBER}" \
-            --token "${GITHUB_TOKEN}" \
-            --output diff.patch \
-            --path ':(glob)**/*.py'; then
-            echo "::warning::Не удалось подготовить diff – пропускаю обзор"
-            has_diff_output="false"
-            exit 0
-          fi
-
-          if [ -s diff.patch ]; then
-            has_diff_output="true"
-          fi
 
       - name: LLM review
         if: >-
