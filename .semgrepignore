@@ -15,6 +15,3 @@ cache/**
 .cache/**
 __pycache__/**
 
-# Temporarily ignore the multi-stage Dockerfile until upstream parser bug
-# (tree-sitter Docker module assertion failure on here-doc syntax) is fixed.
-Dockerfile
