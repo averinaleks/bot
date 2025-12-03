@@ -32,13 +32,53 @@ def _assert_project_layout() -> None:
         "bot",
     )
 
-    missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
-    if missing:
-        root_hint = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parent
+
+    def _is_in_repo(module_name: str) -> bool:
+        spec = importlib.util.find_spec(module_name)
+        if spec is None:
+            return False
+
+        candidates = []
+        if spec.submodule_search_locations:
+            candidates.extend(spec.submodule_search_locations)
+        if spec.origin:
+            candidates.append(spec.origin)
+
+        for candidate in candidates:
+            try:
+                Path(candidate).resolve().relative_to(repo_root)
+            except (OSError, ValueError):
+                continue
+            return True
+        return False
+
+    missing = []
+    foreign = []
+    for name in required_modules:
+        spec = importlib.util.find_spec(name)
+        if spec is None:
+            missing.append(name)
+            continue
+        if not _is_in_repo(name):
+            foreign.append((name, spec.origin or "<unknown>"))
+
+    if missing or foreign:
+        problems = []
+        if missing:
+            problems.append(
+                "отсутствуют: %s" % ", ".join(missing)
+            )
+        if foreign:
+            details = "; ".join(f"{name} -> {origin}" for name, origin in foreign)
+            problems.append(
+                "найдены сторонние модули (ожидались из %s): %s" % (repo_root, details)
+            )
+
         raise SystemExit(
-            "Отсутствуют необходимые модули проекта: %s.\n"
+            "Отсутствуют необходимые модули проекта или найдено постороннее содержимое (%s).\n"
             "Убедитесь, что репозиторий склонирован полностью и каталог %s содержит "
-            "подкаталоги services, data_handler, model_builder и bot." % (", ".join(missing), root_hint)
+            "подкаталоги services, data_handler, model_builder и bot." % ("; ".join(problems), repo_root)
         )
 
 
