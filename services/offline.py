@@ -11,7 +11,7 @@ import os
 import secrets
 import time
 from collections.abc import Callable, Mapping
-from typing import SupportsFloat, SupportsIndex, SupportsInt, cast
+from typing import Final, SupportsFloat, SupportsIndex, SupportsInt, cast
 
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
@@ -21,7 +21,10 @@ logger = logging.getLogger("TradingBot")
 # ``OFFLINE_MODE`` mirrors :data:`bot.config.OFFLINE_MODE` so that tests can
 # monkeypatch the flag directly on this module without poking at the config
 # package.  The constant must therefore be defined at import time.
-OFFLINE_MODE: bool = bool(bot_config.OFFLINE_MODE)
+OFFLINE_MODE: Final[bool] = cast(
+    bool,
+    getattr(bot_config, "OFFLINE_MODE", False),
+)
 
 _PlaceholderValue = str | Callable[[], str]
 _IntLike = SupportsInt | SupportsIndex | str | bytes | bytearray
