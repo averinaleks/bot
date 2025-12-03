@@ -22,6 +22,26 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 logger = logging.getLogger("TradingBot")
 
 
+def _assert_project_layout() -> None:
+    """Проверяет, что запущен полный проект, а не урезанная копия."""
+
+    required_modules = (
+        "services",
+        "data_handler",
+        "model_builder",
+        "bot",
+    )
+
+    missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
+    if missing:
+        root_hint = Path(__file__).resolve().parent
+        raise SystemExit(
+            "Отсутствуют необходимые модули проекта: %s.\n"
+            "Убедитесь, что репозиторий склонирован полностью и каталог %s содержит "
+            "подкаталоги services, data_handler, model_builder и bot." % (", ".join(missing), root_hint)
+        )
+
+
 def _ensure_data_handler_package() -> None:
     """Prevent lingering test stubs from breaking ``data_handler`` imports."""
 
@@ -104,7 +124,13 @@ def configure_environment(args: argparse.Namespace) -> bool:
     offline_mode = offline_env in {"1", "true", "yes", "on"}
     if offline_mode:
         os.environ.setdefault("TEST_MODE", "1")
-        from services import offline as offline_env_module
+        try:
+            from services import offline as offline_env_module
+        except ImportError as exc:
+            raise SystemExit(
+                "OFFLINE_MODE=1: не удалось импортировать services.offline. "
+                "Убедитесь, что каталог services/offline.py присутствует в проекте." 
+            ) from exc
 
         offline_env_module.ensure_offline_env()
     return offline_mode
@@ -577,6 +603,7 @@ async def _maybe_load_initial(data_handler: Any) -> None:
 
 
 async def main() -> None:
+    _assert_project_layout()
     args = parse_args()
     offline_mode = configure_environment(args)
 
