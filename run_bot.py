@@ -158,10 +158,46 @@ def parse_args() -> argparse.Namespace:
 def configure_environment(args: argparse.Namespace) -> bool:
     """Apply environment configuration and return the resulting offline flag."""
 
+    # Load .env early without importing project packages to avoid triggering
+    # config validation before we can decide on a safe mode.
+    env_file_values: dict[str, str] = {}
+    try:
+        from dotenv import dotenv_values as _dotenv_values  # type: ignore
+
+        env_file_values = {k: v for k, v in _dotenv_values().items() if v is not None}
+    except Exception:
+        env_file_values = {}
+
     if args.offline:
         os.environ["OFFLINE_MODE"] = "1"
+
     offline_env = os.getenv("OFFLINE_MODE", "0").strip().lower()
     offline_mode = offline_env in {"1", "true", "yes", "on"}
+
+    # If offline was not explicitly requested, enable it automatically when
+    # mandatory production secrets are absent. This prevents an immediate crash
+    # with MissingEnvError and mirrors the user-facing "run with --offline"
+    # guidance from the README.
+    if not offline_mode:
+        required_keys = (
+            "TELEGRAM_BOT_TOKEN",
+            "TELEGRAM_CHAT_ID",
+            "TRADE_MANAGER_TOKEN",
+            "TRADE_RISK_USD",
+            "BYBIT_API_KEY",
+            "BYBIT_API_SECRET",
+        )
+        missing = [
+            key for key in required_keys if not (os.getenv(key) or env_file_values.get(key))
+        ]
+        if missing:
+            offline_mode = True
+            os.environ["OFFLINE_MODE"] = "1"
+            logger.warning(
+                "OFFLINE_MODE=1 включён автоматически: отсутствуют обязательные переменные: %s",
+                ", ".join(missing),
+            )
+
     if offline_mode:
         os.environ.setdefault("TEST_MODE", "1")
         try:
@@ -169,7 +205,7 @@ def configure_environment(args: argparse.Namespace) -> bool:
         except ImportError as exc:
             raise SystemExit(
                 "OFFLINE_MODE=1: не удалось импортировать services.offline. "
-                "Убедитесь, что каталог services/offline.py присутствует в проекте." 
+                "Убедитесь, что каталог services/offline.py присутствует в проекте."
             ) from exc
 
         offline_env_module.ensure_offline_env()
