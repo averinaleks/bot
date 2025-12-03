@@ -61,6 +61,19 @@ if _CORE_AVAILABLE:
         spaces,
         validate_host,
     )
+else:
+    logger = logging.getLogger("TradingBot")
+    ModelBuilder = OfflineModelBuilder
+
+    if _CORE_IMPORT_ERROR is not None:
+        logger.warning(
+            "model_builder.core недоступен: %s", _CORE_IMPORT_ERROR
+        )
+
+    # Storage helpers remain available even без core, because they do not pull
+    # heavy ML dependencies but are required by tests that validate signature
+    # handling. Import them unconditionally to avoid raising RuntimeError in
+    # offline/dep-missing scenarios.
     from .storage import (
         JOBLIB_AVAILABLE,
         MODEL_DIR,
@@ -71,14 +84,6 @@ if _CORE_AVAILABLE:
         _resolve_model_artifact,
         _safe_model_file_path,
     )
-else:
-    logger = logging.getLogger("TradingBot")
-    ModelBuilder = OfflineModelBuilder
-
-    if _CORE_IMPORT_ERROR is not None:
-        logger.warning(
-            "model_builder.core недоступен: %s", _CORE_IMPORT_ERROR
-        )
 
     def _offline_unavailable(name: str):  # noqa: ANN001
         def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
@@ -135,17 +140,40 @@ else:
     shap = _OfflineProxy("shap")
     spaces = _OfflineProxy("spaces")
     validate_host = _offline_unavailable("validate_host")
-    JOBLIB_AVAILABLE = False
-    MODEL_DIR = None
-    MODEL_FILE = None
-    joblib = types.SimpleNamespace(
-        dump=_offline_unavailable("joblib.dump"),
-        load=_offline_unavailable("joblib.load"),
-    )
-    save_artifacts = _offline_unavailable("save_artifacts")
-    _is_within_directory = _offline_unavailable("_is_within_directory")
-    _resolve_model_artifact = _offline_unavailable("_resolve_model_artifact")
-    _safe_model_file_path = _offline_unavailable("_safe_model_file_path")
+    if "JOBLIB_AVAILABLE" not in globals():
+        JOBLIB_AVAILABLE = False
+    if "MODEL_DIR" not in globals():
+        MODEL_DIR = None
+    if "MODEL_FILE" not in globals():
+        MODEL_FILE = None
+    if "joblib" not in globals():
+        joblib = types.SimpleNamespace(
+            dump=_offline_unavailable("joblib.dump"),
+            load=_offline_unavailable("joblib.load"),
+        )
+    if "save_artifacts" not in globals():
+        save_artifacts = _offline_unavailable("save_artifacts")
+    if "_is_within_directory" not in globals():
+        _is_within_directory = _offline_unavailable("_is_within_directory")
+    if "_resolve_model_artifact" not in globals():
+        _resolve_model_artifact = _offline_unavailable("_resolve_model_artifact")
+    if "_safe_model_file_path" not in globals():
+        _safe_model_file_path = _offline_unavailable("_safe_model_file_path")
+
+# Storage helpers are lightweight and required in both online and offline
+# modes, so import them unconditionally after the main implementation is
+# resolved. This guarantees that utilities like ``_safe_model_file_path`` are
+# available even when :mod:`model_builder.core` is missing.
+from .storage import (
+    JOBLIB_AVAILABLE,
+    MODEL_DIR,
+    MODEL_FILE,
+    joblib,
+    save_artifacts,
+    _is_within_directory,
+    _resolve_model_artifact,
+    _safe_model_file_path,
+)
 
 _API_AVAILABLE = True
 _API_IMPORT_ERROR: ImportError | None = None

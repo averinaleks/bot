@@ -7,6 +7,7 @@
 """
 
 import importlib
+import os
 from typing import TYPE_CHECKING, Any, List, cast
 
 from bot import config as bot_config
@@ -18,7 +19,7 @@ else:
     TradeManagerType = Any
     TelegramLoggerType = Any
 
-if bot_config.OFFLINE_MODE:
+if bot_config.OFFLINE_MODE and os.getenv("TEST_MODE") != "1":
     from services.offline import OfflineTelegram, OfflineTradeManager
 
     _trade_manager_impl = cast(type[TradeManagerType], OfflineTradeManager)
