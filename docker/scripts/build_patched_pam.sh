@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PATCH_SPECS="${1:-/tmp/security/linux-pam-CVE-2024-10963.patch}"
+PATCH_SPECS="${1:-/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch}"
 CHANGELOG_HELPER="${2:-/tmp/security/update_pam_changelog.py}"
 DIST_CODENAME="${3:-noble}"
 BUILD_ROOT="${4:-/tmp/security/pam-build}"
@@ -16,6 +16,11 @@ determine_sentinels() {
     linux-pam-CVE-2024-10963.patch)
       printf '%s\n' \
         'modules/pam_access/pam_access.c:nodns'
+      ;;
+    linux-pam-hardening.patch)
+      printf '%s\n' \
+        'configure.ac:AC_PROG_LEX([noyywrap])' \
+        'modules/pam_extrausers/passverify.c:pam_safe_drop'
       ;;
     linux-pam-CVE-2024-10041.patch)
       printf '%s\n' \
@@ -74,6 +79,31 @@ helper_comment = "The helper has to be invoked"
 acct_pattern = re.compile(r"pam_syslog\(pamh,\s*(?:\(?geteuid\(\)\s*==\s*0\)?|euid\s*==\s*0)\s*\?\s*LOG_ERR\s*:\s*LOG_DEBUG")
 
 if helper_comment in pass_text and acct_pattern.search(acct_text):
+    sys.exit(0)
+
+sys.exit(1)
+PY
+      return
+      ;;
+    linux-pam-hardening.patch)
+      python3 - "$patch_file" <<'PY'
+import pathlib
+import sys
+
+cfg = pathlib.Path("configure.ac")
+bigcrypt = pathlib.Path("modules/pam_extrausers/bigcrypt.c")
+passverify = pathlib.Path("modules/pam_extrausers/passverify.c")
+lckpwdf = pathlib.Path("modules/pam_extrausers/lckpwdf.-c")
+
+try:
+    cfg_text = cfg.read_text(encoding="utf-8")
+    bigcrypt_text = bigcrypt.read_text(encoding="utf-8")
+    passverify_text = passverify.read_text(encoding="utf-8")
+    lckpwdf_text = lckpwdf.read_text(encoding="utf-8")
+except FileNotFoundError:
+    sys.exit(1)
+
+if "AC_PROG_LEX([noyywrap])" in cfg_text and "pam_safe_drop" in passverify_text and "pam_inline.h" in bigcrypt_text and "char *create_context" in lckpwdf_text:
     sys.exit(0)
 
 sys.exit(1)
