@@ -26,6 +26,13 @@ class OfflineModelBuilder:
         self.trade_manager = trade_manager
         self.gpt_client_factory = gpt_client_factory
         self.predictive_models: dict[str, Any] = {}
+        self.feature_cache: dict[str, Any] = {}
+        self.calibrators: dict[str, Any | None] = {}
+        self.scalers: dict[str, Any] = {}
+        self.prediction_history: dict[str, list[float]] = {}
+        self.base_thresholds: dict[str, float] = {}
+        self.threshold_offset: float = 0.0
+        self.device = "cpu"
         self.last_update_at: float | None = None
         logger.info(
             "OFFLINE_MODE=1 или отсутствуют зависимости: используется заглушка ModelBuilder"
@@ -50,6 +57,9 @@ class OfflineModelBuilder:
             "probability": 0.5,
             "meta": {"source": "offline"},
         }
+
+    def get_cached_features(self, symbol: str):  # noqa: ANN201 - совместимость с основным классом
+        return self.feature_cache.get(symbol)
 
     def save_state(self, *args: Any, **kwargs: Any) -> None:
         """Сохранение состояния в офлайн-режиме опускается."""
@@ -76,7 +86,35 @@ class OfflineModelBuilder:
     def get_threshold(self, symbol: str) -> float:
         """Вернуть базовое значение порога для детерминированных ответов."""
 
-        return 0.5
+        return self.base_thresholds.get(symbol, 0.5)
+
+    async def prepare_lstm_features(self, symbol: str, indicators: Any) -> Any:
+        """Подготовить минимальный набор признаков для LSTM в офлайне."""
+
+        _ = (symbol, indicators)
+        try:  # pragma: no cover - numpy может отсутствовать
+            import numpy as np
+
+            return np.zeros((60, 5), dtype=float)
+        except Exception:
+            return [[0.0] * 5 for _ in range(60)]
+
+    async def adjust_thresholds(self, symbol: str, prediction: float) -> tuple[float, float]:
+        """Вернуть фиксированные пороги для офлайн-режима."""
+
+        _ = (symbol, prediction)
+        return 0.6, 0.4
+
+    async def retrain_symbol(self, symbol: str) -> None:
+        """Имитировать переобучение модели для указанного символа."""
+
+        self.last_update_at = time.time()
+        self.predictive_models[symbol] = {"retrained": True, "timestamp": self.last_update_at}
+
+    async def prepare_dataset(self, *args: Any, **kwargs: Any) -> None:
+        """Заглушка для совместимости с основным интерфейсом."""
+
+        return None
 
     def __repr__(self) -> str:  # pragma: no cover - диагностический хелпер
         return "<OfflineModelBuilder stub>"

@@ -115,8 +115,8 @@ class OfflineDataHandler:
         self.usdt_pairs = self._resolve_pairs(self.config)
         self.indicators: dict[str, SimpleNamespace] = {}
         self.indicators_2h: dict[str, SimpleNamespace] = {}
-        self.ohlcv: dict[str, tuple[Candle, ...]] = {}
-        self.ohlcv_2h: dict[str, tuple[Candle, ...]] = {}
+        self.ohlcv: Any = {}
+        self.ohlcv_2h: Any = {}
         self.funding_rates: dict[str, float] = {}
         self.open_interest: dict[str, float] = {}
         self.history: Optional[Any] = None
@@ -182,15 +182,31 @@ class OfflineDataHandler:
         """Populate deterministic OHLC and indicator fixtures."""
 
         now_ms = int(time.time() * 1000)
+        try:
+            import pandas as pd
+        except Exception:  # pragma: no cover - pandas not available
+            pd = None
+
+        frames_primary: list[Any] = []
+        frames_secondary: list[Any] = []
         for symbol in self.usdt_pairs:
             candles_primary = self._build_series(symbol, now_ms, step_seconds=60, length=60)
             candles_secondary = self._build_series(symbol, now_ms, step_seconds=7_200, length=30)
-            self.ohlcv[symbol] = candles_primary
-            self.ohlcv_2h[symbol] = candles_secondary
+            if pd is None:
+                self.ohlcv[symbol] = candles_primary
+                self.ohlcv_2h[symbol] = candles_secondary
+            else:
+                frame_primary = self._to_dataframe(pd, symbol, candles_primary)
+                frame_secondary = self._to_dataframe(pd, symbol, candles_secondary)
+                frames_primary.append(frame_primary)
+                frames_secondary.append(frame_secondary)
             self.indicators[symbol] = self._build_indicators(candles_primary)
             self.indicators_2h[symbol] = self._build_indicators(candles_secondary)
             self.funding_rates[symbol] = 0.0
             self.open_interest[symbol] = 0.0
+        if pd is not None:
+            self.ohlcv = pd.concat(frames_primary).sort_index() if frames_primary else pd.DataFrame()
+            self.ohlcv_2h = pd.concat(frames_secondary).sort_index() if frames_secondary else pd.DataFrame()
         self._last_refresh = time.time()
         self._build_history_cache()
 
@@ -202,24 +218,15 @@ class OfflineDataHandler:
             self.cache = SimpleNamespace(load_cached_data=lambda *_a, **_k: None)
             return
 
-        frames: list[pd.DataFrame] = []
-        for symbol, candles in self.ohlcv.items():
-            timestamps = pd.to_datetime([candle.timestamp for candle in candles], unit="ms", utc=True)
-            frame = pd.DataFrame(
-                {
-                    "open": [candle.open for candle in candles],
-                    "high": [candle.high for candle in candles],
-                    "low": [candle.low for candle in candles],
-                    "close": [candle.close for candle in candles],
-                    "volume": [candle.volume for candle in candles],
-                },
-                index=pd.MultiIndex.from_arrays(
-                    [[symbol] * len(candles), timestamps], names=["symbol", "timestamp"]
-                ),
-            )
-            frames.append(frame)
+        if isinstance(self.ohlcv, pd.DataFrame):
+            self.history = self.ohlcv
+        else:
+            frames: list[pd.DataFrame] = []
+            for symbol, candles in self.ohlcv.items():
+                frame = self._to_dataframe(pd, symbol, candles)
+                frames.append(frame)
 
-        self.history = pd.concat(frames).sort_index()
+            self.history = pd.concat(frames).sort_index() if frames else pd.DataFrame()
 
         def _load_cached_data(symbol: str, timeframe: str) -> Optional[pd.DataFrame]:  # noqa: ARG001
             if self.history is None:
@@ -232,6 +239,22 @@ class OfflineDataHandler:
                 return None
 
         self.cache = SimpleNamespace(load_cached_data=_load_cached_data)
+
+    @staticmethod
+    def _to_dataframe(pd: Any, symbol: str, candles: tuple[Candle, ...]) -> Any:
+        timestamps = pd.to_datetime([candle.timestamp for candle in candles], unit="ms", utc=True)
+        return pd.DataFrame(
+            {
+                "open": [candle.open for candle in candles],
+                "high": [candle.high for candle in candles],
+                "low": [candle.low for candle in candles],
+                "close": [candle.close for candle in candles],
+                "volume": [candle.volume for candle in candles],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [[symbol] * len(candles), timestamps], names=["symbol", "timestamp"]
+            ),
+        )
 
     @staticmethod
     def _symbol_seed(symbol: str) -> int:
