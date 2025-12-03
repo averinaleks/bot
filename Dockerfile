@@ -144,12 +144,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     libpam0g \
     libpam-modules \
-    libssl3t64 \
+    libssl3 \
     openssl \
     ca-certificates \
     && python3 -m ensurepip --upgrade \
     && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=80.9.0,<81' \
-    && dpkg -i /tmp/pam-fixed/*.deb \
+    && dpkg -i \
+        /tmp/pam-fixed/libpam0g_* \
+        /tmp/pam-fixed/libpam-runtime_* \
+        /tmp/pam-fixed/libpam-modules-bin_* \
+        /tmp/pam-fixed/libpam-modules_* \
     && /bin/bash /tmp/security/harden_gnutar.sh \
     && if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
