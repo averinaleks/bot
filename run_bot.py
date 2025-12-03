@@ -60,19 +60,19 @@ def parse_args() -> argparse.Namespace:
         help="Use offline stubs to avoid network calls",
     )
     parser.add_argument(
+        "--runtime",
+        type=float,
+        default=60.0,
+        help="Optional runtime limit in seconds for trade mode (set to 0 for no limit)",
+    )
+    parser.add_argument(
         "--symbols",
         help="Comma-separated list of symbols to monitor (defaults to BTCUSDT)",
     )
 
     subparsers = parser.add_subparsers(dest="command")
 
-    trade_parser = subparsers.add_parser("trade", help="Run the live trading loop")
-    trade_parser.add_argument(
-        "--runtime",
-        type=float,
-        default=60.0,
-        help="Optional runtime limit in seconds (set to 0 for no limit)",
-    )
+    subparsers.add_parser("trade", help="Run the live trading loop")
 
     simulate_parser = subparsers.add_parser("simulate", help="Replay cached market data")
     simulate_parser.add_argument("--start", required=True, help="Simulation start timestamp (YYYY-MM-DD)")
@@ -87,7 +87,9 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if not args.command:
         args.command = "trade"
-    if getattr(args, "runtime", None) is not None and args.runtime <= 0:
+    if args.command != "trade":
+        args.runtime = None
+    elif getattr(args, "runtime", None) is not None and args.runtime <= 0:
         args.runtime = None
     args.symbols = parse_symbols(getattr(args, "symbols", None))
     return args
