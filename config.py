@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import stat
+import sys
 import threading
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
@@ -93,6 +94,38 @@ def validate_env(required_keys: list[str]) -> None:
 
 
 OFFLINE_MODE = _get_bool_env("OFFLINE_MODE", False)
+
+
+def _apply_offline_placeholders() -> list[str]:
+    """Заполнить переменные окружения фиктивными значениями в офлайне."""
+
+    if not OFFLINE_MODE:
+        return []
+
+    bot_module = sys.modules.get("bot")
+    if bot_module is not None:
+        try:
+            setattr(bot_module, "config", sys.modules[__name__])
+        except Exception:  # pragma: no cover - defensive fallback
+            logger.debug("OFFLINE_MODE=1: не удалось обновить bot.config ссылку")
+
+    try:  # Local import to avoid circular dependencies when OFFLINE_MODE=0
+        from services.offline import ensure_offline_env
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.debug("OFFLINE_MODE=1: не удалось импортировать offline-stubs: %s", exc)
+        return []
+
+    try:
+        return ensure_offline_env()
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning(
+            "OFFLINE_MODE=1: не удалось применить офлайн-плейсхолдеры: %s",
+            sanitize_log_value(str(exc)),
+        )
+        return []
+
+
+_apply_offline_placeholders()
 
 try:
     validate_env(

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import os
+import sys
 
 import pytest
 
@@ -72,3 +74,25 @@ def test_default_placeholders_include_trade_risk(monkeypatch):
 
     assert "TRADE_RISK_USD" in applied
     assert os.environ["TRADE_RISK_USD"] == "10"
+
+
+def test_config_import_populates_offline_placeholders(monkeypatch):
+    monkeypatch.setenv("OFFLINE_MODE", "1")
+    for key in (
+        "BYBIT_API_KEY",
+        "BYBIT_API_SECRET",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    sys.modules.pop("config", None)
+    sys.modules.pop("services.offline", None)
+    importlib.invalidate_caches()
+
+    importlib.import_module("config")
+
+    assert os.environ["BYBIT_API_KEY"].startswith("offline-bybit-key-")
+    assert os.environ["BYBIT_API_SECRET"].startswith("offline-bybit-secret-")
+    assert os.environ["TELEGRAM_BOT_TOKEN"].startswith("offline-telegram-token-")
+    assert os.environ["TELEGRAM_CHAT_ID"].startswith("offline-telegram-chat-")
