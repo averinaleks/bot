@@ -1,4 +1,5 @@
 import builtins
+import importlib.util
 import logging
 import sys
 import traceback
@@ -137,3 +138,36 @@ def test_prepare_data_handler_without_pandas(monkeypatch, caplog):
 
     assert handler.funding_rates == {"BTCUSDT": 0.0}
     assert handler.open_interest == {"BTCUSDT": 0.0}
+
+
+def test_assert_project_layout_rejects_foreign_modules(monkeypatch, tmp_path):
+    import run_bot
+
+    foreign_root = tmp_path / "external"
+    package_root = foreign_root / "services"
+    package_root.mkdir(parents=True)
+    init_file = package_root / "__init__.py"
+    init_file.write_text("# dummy external services package\n")
+
+    external_spec = importlib.util.spec_from_file_location(
+        "services",
+        init_file,
+        submodule_search_locations=[str(package_root)],
+    )
+
+    original_find_spec = importlib.util.find_spec
+
+    def _fake_find_spec(name):
+        if name == "services":
+            return external_spec
+        return original_find_spec(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_bot._assert_project_layout()
+
+    message = str(excinfo.value)
+    assert "постороннее" in message
+    assert "services" in message
+    assert str(package_root) in message
