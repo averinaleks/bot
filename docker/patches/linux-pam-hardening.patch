@@ -1,0 +1,306 @@
+diff -urN pam-1.5.3/configure.ac pam-1.5.3.patched/configure.ac
+--- pam-1.5.3/configure.ac	2025-12-03 06:36:24.000000000 +0000
++++ pam-1.5.3.patched/configure.ac	2025-12-03 06:34:08.177298216 +0000
+@@ -67,7 +67,7 @@
+ dnl Checks for programs.
+ AC_PROG_CC
+ AC_PROG_YACC
+-AM_PROG_LEX
++AC_PROG_LEX([noyywrap])
+ AC_PROG_INSTALL
+ AC_PROG_LN_S
+ AC_PROG_MAKE_SET
+@@ -438,15 +438,29 @@
+         WITH_DB=$enableval, WITH_DB=yes)
+ AC_ARG_WITH([db-uniquename],
+ 	AS_HELP_STRING([--with-db-uniquename=extension],[Unique name for db libraries and functions.]))
+-if test x"$WITH_DB" != xno ; then
+-        if test x"$WITH_DB" = xyes || test x"$WITH_DB" = xdb ; then
+-              old_libs=$LIBS
+-              LIBS="$LIBS -ldb$with_db_uniquename"
+-              AC_CHECK_FUNCS([db_create$with_db_uniquename db_create dbm_store$with_db_uniquename dbm_store],
+-                [LIBDB="-ldb$with_db_uniquename"; break])
+-              LIBS=$old_libs
+-        fi
+-        if test -z "$LIBDB" ; then
++  if test x"$WITH_DB" != xno ; then
++          if test x"$WITH_DB" = xyes || test x"$WITH_DB" = xdb ; then
++                old_libs=$LIBS
++                LIBS="$LIBS -ldb$with_db_uniquename"
++                pam_db_func_found="no"
++                if test -n "$with_db_uniquename" ; then
++                  AC_MSG_CHECKING([for db_create$with_db_uniquename and dbm_store$with_db_uniquename])
++                  AC_LINK_IFELSE([
++                    AC_LANG_PROGRAM([[int db_create$with_db_uniquename(void); int dbm_store$with_db_uniquename(void);]],
++                                     [[db_create$with_db_uniquename(); dbm_store$with_db_uniquename();]])],
++                    [pam_db_func_found="yes"],
++                    [pam_db_func_found="no"])
++                  AC_MSG_RESULT([$pam_db_func_found])
++                  if test "x$pam_db_func_found" = xyes ; then
++                    LIBDB="-ldb$with_db_uniquename"
++                  fi
++                fi
++                if test -z "$LIBDB" ; then
++                  AC_CHECK_FUNCS([db_create dbm_store], [LIBDB="-ldb$with_db_uniquename"])
++                fi
++                LIBS=$old_libs
++          fi
++          if test -z "$LIBDB" ; then
+             AC_CHECK_LIB([ndbm],[dbm_store], LIBDB="-lndbm", LIBDB="")
+             if test -n "$LIBDB" ; then
+                 AC_CHECK_HEADERS(ndbm.h)
+@@ -596,9 +610,8 @@
+ 
+ dnl Checks for header files.
+ AC_HEADER_DIRENT
+-AC_HEADER_STDC
+ AC_HEADER_SYS_WAIT
+-AC_CHECK_HEADERS(fcntl.h limits.h malloc.h sys/file.h sys/ioctl.h sys/time.h syslog.h net/if.h termio.h unistd.h sys/fsuid.h inittypes.h)
++AC_CHECK_HEADERS(fcntl.h limits.h malloc.h sys/file.h sys/ioctl.h sys/time.h time.h syslog.h net/if.h termio.h unistd.h sys/fsuid.h inittypes.h)
+ 
+ dnl For module/pam_lastlog
+ AC_CHECK_HEADERS(lastlog.h utmp.h utmpx.h)
+@@ -610,7 +623,6 @@
+ AC_TYPE_OFF_T
+ AC_TYPE_PID_T
+ AC_TYPE_SIZE_T
+-AC_HEADER_TIME
+ AC_STRUCT_TM
+ 
+ dnl Checks for library functions.
+diff -urN pam-1.5.3/modules/pam_extrausers/bigcrypt.c pam-1.5.3.patched/modules/pam_extrausers/bigcrypt.c
+--- pam-1.5.3/modules/pam_extrausers/bigcrypt.c	2025-12-03 06:36:24.000000000 +0000
++++ pam-1.5.3.patched/modules/pam_extrausers/bigcrypt.c	2025-12-03 06:34:13.561246070 +0000
+@@ -29,6 +29,7 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <security/_pam_macros.h>
++#include "pam_inline.h"
+ #ifdef HAVE_LIBXCRYPT
+ #include <xcrypt.h>
+ #elif defined(HAVE_CRYPT_H)
+@@ -135,7 +136,7 @@
+ 			tmp_ptr = crypt(plaintext_ptr, salt_ptr);
+ #endif
+ 			if (tmp_ptr == NULL) {
+-				_pam_overwrite(dec_c2_cryptbuf);
++                        pam_overwrite_n(dec_c2_cryptbuf, CBUF_SIZE);
+ 				free(dec_c2_cryptbuf);
+ 				return NULL;
+ 			}
+diff -urN pam-1.5.3/modules/pam_extrausers/lckpwdf.-c pam-1.5.3.patched/modules/pam_extrausers/lckpwdf.-c
+--- pam-1.5.3/modules/pam_extrausers/lckpwdf.-c	2025-12-03 06:36:24.000000000 +0000
++++ pam-1.5.3.patched/modules/pam_extrausers/lckpwdf.-c	2025-12-03 06:36:12.208103408 +0000
+@@ -71,9 +71,9 @@
+ 	if(is_selinux_enabled()>0)
+ 	{
+ 		lockfd = open(LOCKFILE, O_WRONLY);
+-		if(lockfd == -1 && errno == ENOENT)
+-		{
+-			security_context_t create_context;
++                if(lockfd == -1 && errno == ENOENT)
++                {
++                        char *create_context;
+ 			int rc;
+ 
+ 			if(getfilecon("/var/lib/extrausers/passwd", &create_context))
+diff -urN pam-1.5.3/modules/pam_extrausers/passverify.c pam-1.5.3.patched/modules/pam_extrausers/passverify.c
+--- pam-1.5.3/modules/pam_extrausers/passverify.c	2025-12-03 06:36:24.000000000 +0000
++++ pam-1.5.3.patched/modules/pam_extrausers/passverify.c	2025-12-03 06:36:07.632148152 +0000
+@@ -5,6 +5,7 @@
+ #include <security/_pam_macros.h>
+ #include <security/pam_modules.h>
+ #include "support.h"
++#include "pam_inline.h"
+ #include <stdio.h>
+ #include <string.h>
+ #include <sys/types.h>
+@@ -49,6 +50,22 @@
+ # include "./lckpwdf.-c"
+ #endif
+ 
++static void pam_safe_drop(char *buffer)
++{
++        if (buffer != NULL) {
++                pam_overwrite_string(buffer);
++                free(buffer);
++        }
++}
++
++#ifdef WITH_SELINUX
++static inline void safe_freecon(char *context)
++{
++        if (context != NULL)
++                freecon(context);
++}
++#endif
++
+ static void
+ strip_hpux_aging(char *hash)
+ {
+@@ -90,13 +107,13 @@
+ 		if (!strncmp(hash, "$1$", 3)) {
+ 			pp = Goodcrypt_md5(p, hash);
+ 			if (pp && strcmp(pp, hash) != 0) {
+-				_pam_delete(pp);
++                            pam_safe_drop(pp);
+ 				pp = Brokencrypt_md5(p, hash);
+ 			}
+ 		} else if (*hash != '$' && hash_len >= 13) {
+ 			pp = bigcrypt(p, hash);
+ 			if (pp && hash_len == 13 && strlen(pp) > hash_len) {
+-				_pam_overwrite(pp + hash_len);
++                            pam_overwrite_string(pp + hash_len);
+ 			}
+ 		} else {
+ 			/*
+@@ -129,7 +146,7 @@
+ 	}
+ 
+ 	if (pp)
+-		_pam_delete(pp);
++            pam_safe_drop(pp);
+ 	D(("done [%d].", retval));
+ 
+ 	return retval;
+@@ -164,28 +181,33 @@
+ #ifdef HELPER_COMPILE
+ 			uid_t save_euid, save_uid;
+ 
+-			save_euid = geteuid();
+-			save_uid = getuid();
+-			if (save_uid == (*pwd)->pw_uid)
+-				setreuid(save_euid, save_uid);
+-			else  {
+-				setreuid(0, -1);
+-				if (setreuid(-1, (*pwd)->pw_uid) == -1) {
+-					setreuid(-1, 0);
+-					setreuid(0, -1);
+-					if(setreuid(-1, (*pwd)->pw_uid) == -1)
+-						return PAM_CRED_INSUFFICIENT;
+-				}
+-			}
+-
+-			*spwdent = pam_modutil_getspnam(pamh, name);
+-			if (save_uid == (*pwd)->pw_uid)
+-				setreuid(save_uid, save_euid);
+-			else {
+-				setreuid(-1, 0);
+-				setreuid(save_uid, -1);
+-				setreuid(-1, save_euid);
+-			}
++                        save_euid = geteuid();
++                        save_uid = getuid();
++                        if (save_uid == (*pwd)->pw_uid) {
++                                if (setreuid(save_euid, save_uid))
++                                        return PAM_CRED_INSUFFICIENT;
++                        } else  {
++                                if (setreuid(0, -1))
++                                        return PAM_CRED_INSUFFICIENT;
++                                if (setreuid(-1, (*pwd)->pw_uid) == -1) {
++                                        if (setreuid(-1, 0)
++                                            || setreuid(0, -1)
++                                            || setreuid(-1, (*pwd)->pw_uid)) {
++                                                return PAM_CRED_INSUFFICIENT;
++                                        }
++                                }
++                        }
++
++                        *spwdent = pam_modutil_getspnam(pamh, name);
++                        if (save_uid == (*pwd)->pw_uid) {
++                                if (setreuid(save_uid, save_euid))
++                                        return PAM_CRED_INSUFFICIENT;
++                        } else {
++                                if (setreuid(-1, 0)
++                                    || setreuid(save_uid, -1)
++                                    || setreuid(-1, save_euid))
++                                        return PAM_CRED_INSUFFICIENT;
++                        }
+ 
+ 			if (*spwdent == NULL || (*spwdent)->sp_pwdp == NULL)
+ 				return PAM_AUTHINFO_UNAVAIL;
+@@ -566,7 +588,7 @@
+     struct stat st;
+     size_t len = strlen(forwho);
+ #ifdef WITH_SELINUX
+-    security_context_t prev_context=NULL;
++    char *prev_context = NULL;
+ #endif
+ 
+     if (howmany < 0) {
+@@ -581,7 +603,7 @@
+ 
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+-      security_context_t passwd_context=NULL;
++      char *passwd_context = NULL;
+       if (getfilecon("/var/lib/extrausers/passwd",&passwd_context)<0) {
+         return PAM_AUTHTOK_ERR;
+       };
+@@ -656,7 +678,7 @@
+ 	    else
+ 		snprintf(nbuf, sizeof(nbuf),"%s:%s:%d:%s,%s\n",
+ 			 s_luser, s_uid, npas, s_pas, pass);
+-	    _pam_delete(pass);
++        pam_safe_drop(pass);
+ 	    if (fputs(nbuf, pwfile) < 0) {
+ 		err = 1;
+ 		break;
+@@ -676,7 +698,7 @@
+ 	    pass = crypt_md5_wrapper(oldpass);
+ 	    snprintf(nbuf, sizeof(nbuf), "%s:%lu:1:%s\n",
+ 		     forwho, (unsigned long)pwd->pw_uid, pass);
+-	    _pam_delete(pass);
++        pam_safe_drop(pass);
+ 	    if (fputs(nbuf, pwfile) < 0) {
+ 		err = 1;
+ 	    }
+@@ -725,15 +747,15 @@
+     int err = 1, found = 0;
+     int oldmask;
+ #ifdef WITH_SELINUX
+-    security_context_t prev_context=NULL;
++    char *prev_context = NULL;
+ #endif
+ 
+     oldmask = umask(077);
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+-      security_context_t passwd_context=NULL;
++      char *passwd_context = NULL;
+       if (getfilecon("/var/lib/extrausers/passwd",&passwd_context)<0) {
+-	return PAM_AUTHTOK_ERR;
++        return PAM_AUTHTOK_ERR;
+       };
+       if (getfscreatecon(&prev_context)<0) {
+ 	freecon(passwd_context);
+@@ -850,16 +872,16 @@
+     int oldmask;
+     int wroteentry = 0;
+ #ifdef WITH_SELINUX
+-    security_context_t prev_context=NULL;
++    char *prev_context = NULL;
+ #endif
+ 
+     oldmask = umask(077);
+ 
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+-      security_context_t shadow_context=NULL;
++      char *shadow_context = NULL;
+       if (getfilecon("/var/lib/extrausers/shadow",&shadow_context)<0) {
+-	return PAM_AUTHTOK_ERR;
++        return PAM_AUTHTOK_ERR;
+       };
+       if (getfscreatecon(&prev_context)<0) {
+ 	freecon(shadow_context);
+@@ -1004,8 +1026,7 @@
+ 	}
+ 
+ 	if (salt) {
+-		_pam_overwrite(salt);
+-		_pam_drop(salt);
++          pam_safe_drop(salt);
+ 	}
+ 
+ 	p = NULL;		/* no longer needed here */
