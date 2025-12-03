@@ -204,7 +204,11 @@ popd >/dev/null
 
 mkdir -p "${OUTPUT_DIR}"
 cp libpam-modules_* libpam-modules-bin_* libpam-runtime_* libpam0g_* "${OUTPUT_DIR}/"
-dpkg -i "${OUTPUT_DIR}"/*.deb
+dpkg -i \
+  "${OUTPUT_DIR}"/libpam0g_* \
+  "${OUTPUT_DIR}"/libpam-runtime_* \
+  "${OUTPUT_DIR}"/libpam-modules-bin_* \
+  "${OUTPUT_DIR}"/libpam-modules_*
 
 rm -rf pam-src "${SRC_LIST}"
 apt-get purge -y --auto-remove devscripts equivs
