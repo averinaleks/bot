@@ -277,7 +277,18 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if endpoint in {"/health", "/v1/health"}:
             self._send_json({"status": "ok"})
         elif endpoint == "/v1/models":
-            self._send_json({"data": [{"id": _MODEL_NAME}]})
+            self._send_json(
+                {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": _MODEL_NAME,
+                            "object": "model",
+                            "owned_by": "gptoss-mock-server",
+                        }
+                    ],
+                }
+            )
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
