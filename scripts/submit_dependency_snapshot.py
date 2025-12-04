@@ -1041,9 +1041,12 @@ def _submit_with_headers(url: str, body: bytes, headers: dict[str, str]) -> None
     _https_components(url)
 
     if requests is None:
-        message = "requests package is required to submit dependency snapshots"
+        message = (
+            "Dependency snapshot submission requires the 'requests' package. "
+            "Install it with 'pip install requests'."
+        )
         if _REQUESTS_IMPORT_ERROR is not None:
-            message = f"{message}: {_REQUESTS_IMPORT_ERROR}"
+            message = f"{message} ({_REQUESTS_IMPORT_ERROR})"
         raise DependencySubmissionError(None, message, _REQUESTS_IMPORT_ERROR)
 
     last_error: Exception | None = None
