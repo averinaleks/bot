@@ -314,8 +314,8 @@ def _log_mode(command: str, offline: bool) -> None:
     logger.info("Starting %s mode in %s configuration", command, mode)
 
 
-_SAFE_FACTORY_MODULE_PREFIXES = ("bot.", "services.")
-_SAFE_FACTORY_ROOTS = frozenset({"bot", "services"})
+_SAFE_FACTORY_MODULE_PREFIXES = ("bot.", "services.", "model_builder.", "data_handler.")
+_SAFE_FACTORY_ROOTS = frozenset({"bot", "services", "model_builder", "data_handler"})
 _REPO_ROOT = Path(__file__).resolve().parent
 
 
@@ -518,12 +518,35 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
 
     telegram_factory = _load_factory("telegram_logger", optional=True)
     gpt_factory = _load_factory("gpt_client", optional=True)
+    model_builder_factory = _resolve_factory(cfg, "model_builder") or ModelBuilder
+    trade_manager_factory = _resolve_factory(cfg, "trade_manager") or TradeManager
 
     data_handler = DataHandler(cfg, None, None, exchange=exchange)
     prepare_data_handler(data_handler, cfg, symbols)
 
-    model_builder = ModelBuilder(cfg, data_handler, None, gpt_client_factory=gpt_factory)
-    trade_manager = TradeManager(
+    model_builder = _call_factory(
+        model_builder_factory, cfg, data_handler, None, gpt_client_factory=gpt_factory
+    )
+    if offline:
+        BotOfflineModelBuilder = None
+        try:
+            from bot.model_builder.offline import (
+                OfflineModelBuilder as BotOfflineModelBuilder,
+            )
+        except Exception:
+            try:
+                from model_builder.offline import OfflineModelBuilder as BotOfflineModelBuilder
+            except Exception:  # pragma: no cover - fallback when offline stub missing
+                BotOfflineModelBuilder = None  # type: ignore[assignment]
+
+        if BotOfflineModelBuilder is not None and not isinstance(
+            model_builder, BotOfflineModelBuilder
+        ):
+            model_builder = BotOfflineModelBuilder(
+                cfg, data_handler, None, gpt_client_factory=gpt_factory
+            )
+    trade_manager = _call_factory(
+        trade_manager_factory,
         cfg,
         data_handler,
         model_builder,
@@ -532,7 +555,8 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
         telegram_logger_factory=telegram_factory,
         gpt_client_factory=gpt_factory,
     )
-    model_builder.trade_manager = trade_manager
+    if hasattr(model_builder, "trade_manager"):
+        model_builder.trade_manager = trade_manager
     return data_handler, model_builder, trade_manager
 
 

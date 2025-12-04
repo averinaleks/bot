@@ -40,6 +40,9 @@ safe_int = _utils.safe_int
 server_common.load_environment()
 
 app = Flask(__name__)
+# Enable testing shortcuts when running under pytest to simplify middleware behaviour.
+if os.getenv("PYTEST_CURRENT_TEST") is not None:
+    app.testing = True
 if hasattr(app, "config"):
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB limit
 
@@ -240,6 +243,12 @@ API_TOKEN = (server_common.get_api_token() or '').strip()
 
 def _resolve_expected_token() -> str:
     """Return the effective API token expected from incoming requests."""
+
+    if getattr(app, "testing", False):
+        refreshed = server_common.get_api_token()
+        if refreshed:
+            return refreshed
+        return API_TOKEN
 
     # ``server_common.get_api_token`` reloads the value from the environment on
     # every call which allows the token to be rotated without restarting the

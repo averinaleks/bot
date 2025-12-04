@@ -15,6 +15,7 @@ def _reset_positions(tmp_path, monkeypatch):
     cache_file = tmp_path / 'positions.json'
     monkeypatch.setattr(tms, 'POSITIONS_FILE', cache_file, raising=False)
     monkeypatch.setattr(tms, 'API_TOKEN', 'test-token')
+    monkeypatch.delenv('TRADE_MANAGER_TOKEN', raising=False)
     tms._reset_exchange_executor()
     tms.exchange_provider.override(None)
     state = tms._get_state()

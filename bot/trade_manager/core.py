@@ -1840,40 +1840,37 @@ class TradeManager:
                     if "symbol" in self.positions.index.names:
                         symbols = self.positions.index.get_level_values("symbol").unique()
                 for symbol in symbols:
-                    ohlcv = self.data_handler.ohlcv
-                    if (
-                        "symbol" in ohlcv.index.names
-                        and symbol in ohlcv.index.get_level_values("symbol")
-                    ):
-                        df = ohlcv.xs(symbol, level="symbol", drop_level=False)
-                    else:
-                        df = None
-                    empty = await _check_df_async(df, f"manage_positions {symbol}")
-                    if empty:
-                        continue
-                    current_price = df["close"].iloc[-1]
-                    if self._has_position(symbol):
-                        res = self.check_trailing_stop(symbol, current_price)
-                        if inspect.isawaitable(res):
-                            await res
-                    if self._has_position(symbol):
-                        res = self.check_stop_loss_take_profit(symbol, current_price)
-                        if inspect.isawaitable(res):
-                            await res
-                    if self._has_position(symbol):
-                        res = self.check_exit_signal(symbol, current_price)
-                        if inspect.isawaitable(res):
-                            await res
+                    try:
+                        ohlcv = self.data_handler.ohlcv
+                        if (
+                            "symbol" in ohlcv.index.names
+                            and symbol in ohlcv.index.get_level_values("symbol")
+                        ):
+                            df = ohlcv.xs(symbol, level="symbol", drop_level=False)
+                        else:
+                            df = None
+                        empty = await _check_df_async(df, f"manage_positions {symbol}")
+                        if empty:
+                            continue
+                        current_price = df["close"].iloc[-1]
+                        if self._has_position(symbol):
+                            res = self.check_trailing_stop(symbol, current_price)
+                            if inspect.isawaitable(res):
+                                await res
+                        if self._has_position(symbol):
+                            res = self.check_stop_loss_take_profit(symbol, current_price)
+                            if inspect.isawaitable(res):
+                                await res
+                        if self._has_position(symbol):
+                            res = self.check_exit_signal(symbol, current_price)
+                            if inspect.isawaitable(res):
+                                await res
+                    except Exception as exc:  # pragma: no cover - defensive to keep loop alive
+                        logger.exception("manage_positions failed for %s: %s", symbol, exc)
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (
-                ValueError,
-                RuntimeError,
-                KeyError,
-                httpx.HTTPError,
-                aiohttp.ClientError,
-            ) as e:
+            except Exception as e:
                 logger.exception(
                     "Error managing positions (%s): %s",
                     type(e).__name__,
@@ -2016,7 +2013,7 @@ class TradeManager:
             await self.model_builder.retrain_symbol(symbol)
             self._min_retrain_size.pop(symbol, None)
             return True
-        except (httpx.HTTPError, aiohttp.ClientError, ConnectionError, RuntimeError) as exc:
+        except Exception as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 400:
                 self._min_retrain_size[symbol] = size
@@ -2261,7 +2258,7 @@ class TradeManager:
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 raise
-            except (ValueError, RuntimeError, httpx.HTTPError) as e:
+            except Exception as e:
                 logger.exception(
                     "Error processing ranked signals (%s): %s",
                     type(e).__name__,
