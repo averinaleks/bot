@@ -44,30 +44,89 @@ load_dotenv()
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"
 ALLOW_ANONYMOUS_ENV_VAR = "DATA_HANDLER_ALLOW_ANONYMOUS"
 
-try:  # optional dependency
-    import flask
-except Exception:  # pragma: no cover - flask missing entirely
-    flask = None  # type: ignore
-
-if flask is None:  # pragma: no cover - flask absent
-    raise ImportError("Flask is required for the data handler service")
-
-Flask = flask.Flask  # type: ignore[attr-defined]
-jsonify = flask.jsonify  # type: ignore[attr-defined]
-request = flask.request  # type: ignore[attr-defined]
-current_app = getattr(flask, "current_app", None)
-
-try:  # optional dependency
-    from flask.typing import ResponseReturnValue
-except Exception:  # pragma: no cover - fallback when flask.typing missing
-    ResponseReturnValue = Any  # type: ignore
-
 _ALLOW_OFFLINE = (
     os.getenv("OFFLINE_MODE") == "1"
     or os.getenv("TEST_MODE") == "1"
     or os.getenv("DATA_HANDLER_USE_STUB") == "1"
 )
 _FORCE_OFFLINE = os.getenv("DATA_HANDLER_USE_STUB") == "1"
+
+try:  # optional dependency
+    import flask
+except Exception:  # pragma: no cover - flask missing entirely
+    flask = None  # type: ignore
+
+if flask is None and _ALLOW_OFFLINE:
+    class _RequestStub:
+        def __init__(self) -> None:
+            self.args: dict[str, Any] = {}
+            self.environ: dict[str, Any] = {}
+            self.path = ""
+            self.remote_addr = ""
+            self.headers: dict[str, str] = {}
+
+        def __getattr__(self, name: str) -> Any:
+            raise RuntimeError(
+                "Flask is not installed; request attribute '%s' is unavailable" % name
+            )
+
+    class _FlaskStub:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.config: dict[str, Any] = {}
+            self.testing = False
+            self.logger = logging.getLogger(f"{__name__}.flask_stub")
+
+        def route(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+            def decorator(func: Any) -> Any:
+                return func
+
+            return decorator
+
+        def before_first_request(self, func: Any) -> Any:  # pragma: no cover - shim
+            return func
+
+        def teardown_appcontext(self, func: Any) -> Any:  # pragma: no cover - shim
+            return func
+
+        def teardown_request(self, func: Any) -> Any:  # pragma: no cover - shim
+            return func
+
+        def errorhandler(self, *_: Any, **__: Any):  # pragma: no cover - shim
+            def decorator(func: Any) -> Any:
+                return func
+
+            return decorator
+
+        def run(self, *_: Any, **__: Any) -> None:  # pragma: no cover - shim
+            raise RuntimeError(
+                "Flask is not installed. Install `flask` to run the data handler service."
+            )
+
+    def _jsonify_stub(payload: Any, status: int | None = None):  # pragma: no cover - shim
+        return payload if status is None else (payload, status)
+
+    logging.getLogger(__name__).warning(
+        "Flask не установлен: используется упрощённый заглушечный сервер. "
+        "Установите зависимость `flask` для запуска HTTP-сервиса."
+    )
+    Flask = _FlaskStub  # type: ignore[assignment]
+    jsonify = _jsonify_stub  # type: ignore[assignment]
+    request = _RequestStub()  # type: ignore[assignment]
+    current_app = None
+    ResponseReturnValue = Any  # type: ignore[assignment]
+elif flask is None:  # pragma: no cover - flask absent
+    raise ImportError("Flask is required for the data handler service")
+else:
+    Flask = flask.Flask  # type: ignore[attr-defined]
+    jsonify = flask.jsonify  # type: ignore[attr-defined]
+    request = flask.request  # type: ignore[attr-defined]
+    current_app = getattr(flask, "current_app", None)
+
+    try:  # optional dependency
+        from flask.typing import ResponseReturnValue
+    except Exception:  # pragma: no cover - fallback when flask.typing missing
+        ResponseReturnValue = Any  # type: ignore
 
 try:
     if _FORCE_OFFLINE:
