@@ -107,15 +107,15 @@ def _resolve_source_directory(raw_path: str | os.PathLike[str] | None) -> Path:
 def _ensure_within_directory(base: Path, target: Path) -> Path:
     """Return *target* if it stays within *base*, otherwise raise ``ValueError``."""
 
-    base = base.resolve(strict=False)
-    target = target.resolve(strict=False)
-    try:
-        target.relative_to(base)
-    except ValueError as exc:  # pragma: no cover - defensive guard
+    base_resolved = base.resolve(strict=True)
+    target_resolved = target.resolve(strict=False)
+
+    if not target_resolved.is_relative_to(base_resolved):
         raise ValueError(
-            f"ManifestFile must be located within SourceDirectory ({base})"
-        ) from exc
-    return target
+            f"ManifestFile must be located within SourceDirectory ({base_resolved})"
+        )
+
+    return target_resolved
 
 
 def _normalise_manifest_path(base: Path, raw_path: str | os.PathLike[str]) -> Path:
