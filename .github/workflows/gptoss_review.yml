@@ -308,11 +308,21 @@ jobs:
               && steps.ensure_pr_ready.outputs.skip != 'true'
               && steps.ensure_pr_ready.outputs.trusted_repo == 'true'
               && steps.ensure_pr_ready.outputs.head_sha != '' }}
+        id: download_head
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          output_file="${GITHUB_OUTPUT:-}"
+          success_output="false"
+          if [ -n "$output_file" ]; then
+            cleanup_output() {
+              printf 'success=%s\n' "$success_output" >>"$output_file"
+            }
+            trap cleanup_output EXIT
+          fi
 
           head_sha="${{ steps.ensure_pr_ready.outputs.head_sha }}"
           repo="${REPOSITORY:-}"
@@ -326,13 +336,18 @@ jobs:
           mkdir -p "$workdir"
 
           api_url="https://api.github.com/repos/${repo}/tarball/${head_sha}"
-          curl -fsSL \
+          if ! curl -fsSL \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             "$api_url" \
-            | tar -xz --strip-components=1 -C "$workdir"
+            | tar -xz --strip-components=1 -C "$workdir"; then
+            echo "::warning::Не удалось скачать снапшот PR ${head_sha} – пропускаю обзор" >&2
+            exit 0
+          fi
 
           rsync -a --delete --exclude='.git/' "$workdir"/ ./
+
+          success_output="true"
 
       - name: Generate diff
         if: >-
