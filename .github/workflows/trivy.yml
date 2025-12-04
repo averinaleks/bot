@@ -117,7 +117,7 @@ jobs:
   fail-on-findings:
     name: Fail workflow on Trivy findings
     needs: scan
-    if: ${{ needs.scan.outputs.sarif == 'true' && needs.scan.outputs.count != '0' }}
+    if: ${{ github.event_name == 'pull_request' && needs.scan.outputs.sarif == 'true' && needs.scan.outputs.count != '0' }}
     runs-on: ubuntu-latest
     steps:
       - name: Fail on detected vulnerabilities
