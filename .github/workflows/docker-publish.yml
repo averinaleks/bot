@@ -673,6 +673,11 @@ jobs:
           ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success'
               && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
         run: |
+          # ``bash`` в GitHub Actions запускается с ``-e`` по умолчанию, из-за чего
+          # отсутствие отчёта или пустой файл могло приводить к падению шага
+          # ``Show Trivy scan results``. Снимаем ``errexit`` перед чтением отчёта,
+          # чтобы выводить предупреждения без прерывания job.
+          set +e
           set -u
           report="${{ matrix.artifact }}.txt"
           if [[ -r "${report}" ]]; then
