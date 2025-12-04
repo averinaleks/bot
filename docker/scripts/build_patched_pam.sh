@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PATCH_SPECS="${1:-/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch}"
+PATCH_SPECS="${1:-/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-doc-messaging.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch}"
 CHANGELOG_HELPER="${2:-/tmp/security/update_pam_changelog.py}"
 DIST_CODENAME="${3:-noble}"
 BUILD_ROOT="${4:-/tmp/security/pam-build}"
@@ -13,6 +13,12 @@ determine_sentinels() {
   local patch_name
   patch_name=$(basename "$1")
   case "${patch_name}" in
+    linux-pam-doc-messaging.patch)
+      printf '%s\n' \
+        'doc/adg/Makefile.am:No FO-to-PDF processor installed; skipping PDF generation.' \
+        'doc/mwg/Makefile.am:No FO-to-PDF processor installed; skipping PDF generation.' \
+        'doc/sag/Makefile.am:No FO-to-PDF processor installed; skipping PDF generation.'
+      ;;
     linux-pam-CVE-2024-10963.patch)
       printf '%s\n' \
         'modules/pam_access/pam_access.c:nodns'
@@ -39,6 +45,31 @@ patch_already_present() {
   patch_name=$(basename "${patch_file}")
 
   case "${patch_name}" in
+    linux-pam-doc-messaging.patch)
+      python3 - "$patch_file" <<'PY'
+import pathlib
+import sys
+
+targets = [
+    pathlib.Path("doc/adg/Makefile.am"),
+    pathlib.Path("doc/mwg/Makefile.am"),
+    pathlib.Path("doc/sag/Makefile.am"),
+]
+
+expected = "No FO-to-PDF processor installed; skipping PDF generation."
+
+try:
+    contents = [path.read_text(encoding="utf-8") for path in targets]
+except FileNotFoundError:
+    sys.exit(1)
+
+if all(expected in text for text in contents):
+    sys.exit(0)
+
+sys.exit(1)
+PY
+      return
+      ;;
     linux-pam-CVE-2024-10963.patch)
       python3 - "$patch_file" <<'PY'
 import pathlib
@@ -198,13 +229,15 @@ for patch_file in "${PATCH_PATHS[@]}"; do
   apply_patch_or_skip "${patch_file}"
 done
 python3 "${CHANGELOG_HELPER}"
+export DH_STRIP_ARGS="${DH_STRIP_ARGS:+${DH_STRIP_ARGS} }--no-dwz"
+export DH_DWZ_ARGS="${DH_DWZ_ARGS:+${DH_DWZ_ARGS} }--no-dwz"
 export DEB_BUILD_OPTIONS=nocheck
 dpkg-buildpackage -b -uc -us
 popd >/dev/null
 
 mkdir -p "${OUTPUT_DIR}"
 cp libpam-modules_* libpam-modules-bin_* libpam-runtime_* libpam0g_* "${OUTPUT_DIR}/"
-dpkg -i \
+apt-get install -y --no-install-recommends \
   "${OUTPUT_DIR}"/libpam0g_* \
   "${OUTPUT_DIR}"/libpam-runtime_* \
   "${OUTPUT_DIR}"/libpam-modules-bin_* \

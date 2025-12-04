@@ -13,6 +13,7 @@ ENV TZ=Etc/UTC
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/patches/linux-pam-hardening.patch /tmp/security/linux-pam-hardening.patch
+COPY docker/patches/linux-pam-doc-messaging.patch /tmp/security/linux-pam-doc-messaging.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
 COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
@@ -46,13 +47,17 @@ else
     devscripts \
     equivs
   /bin/bash /tmp/security/harden_gnutar.sh
-  python3 -m pip install --no-compile --no-cache-dir --break-system-packages --ignore-installed \
+  PYTOOLS_VENV=/opt/security-layer/pytools
+  python3 -m venv "$PYTOOLS_VENV"
+  PATH="$PYTOOLS_VENV/bin:$PATH"
+  "$PYTOOLS_VENV/bin/pip" install --no-compile --no-cache-dir \
     'pip>=25.3' \
     'setuptools>=80.9.0,<81' \
     wheel
   if command -v python3.11 >/dev/null 2>&1; then
-    python3.11 -m ensurepip --upgrade
-    python3.11 -m pip install --no-compile --no-cache-dir --break-system-packages --ignore-installed \
+    PYTOOLS_VENV311=/opt/security-layer/pytools-py311
+    python3.11 -m venv "$PYTOOLS_VENV311"
+    "$PYTOOLS_VENV311/bin/pip" install --no-compile --no-cache-dir \
       'setuptools>=80.9.0,<81'
   fi
   curl --netrc-file /dev/null -L "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" -o zlib.tar.gz
@@ -65,7 +70,7 @@ else
   cd /tmp/build
   rm -rf zlib.tar.gz zlib-src
   /tmp/security/build_patched_pam.sh \
-    "/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
+    "/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-doc-messaging.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
     /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
   ldconfig
   python3 --version
@@ -148,8 +153,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     && python3 -m ensurepip --upgrade \
-    && python3 -m pip install --no-cache-dir --break-system-packages 'setuptools>=80.9.0,<81' \
-    && dpkg -i \
+    && python3 -m venv /tmp/runtime-packaging \
+    && /tmp/runtime-packaging/bin/pip install --no-cache-dir 'setuptools>=80.9.0,<81' \
+    && apt-get install -y --no-install-recommends \
         /tmp/pam-fixed/libpam0g_* \
         /tmp/pam-fixed/libpam-runtime_* \
         /tmp/pam-fixed/libpam-modules-bin_* \
@@ -157,9 +163,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && /bin/bash /tmp/security/harden_gnutar.sh \
     && if command -v python3.11 >/dev/null 2>&1; then \
         python3.11 -m ensurepip --upgrade; \
-        python3.11 -m pip install --no-cache-dir --break-system-packages 'setuptools>=80.9.0,<81'; \
+        python3.11 -m venv /tmp/runtime-packaging-py311; \
+        /tmp/runtime-packaging-py311/bin/pip install --no-cache-dir 'setuptools>=80.9.0,<81'; \
     fi \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed /tmp/runtime-packaging /tmp/runtime-packaging-py311 \
     && ldconfig \
     && /app/venv/bin/python --version \
     && openssl version

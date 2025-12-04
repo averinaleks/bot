@@ -1,0 +1,66 @@
+--- a/doc/adg/Makefile.am
++++ b/doc/adg/Makefile.am
+@@ -24,7 +24,7 @@ if ENABLE_REGENERATE_MAN
+ else
+ doc_DATA = pamdoc1.pdf
+ pamdoc1.pdf: pamdoc1.fo
+- echo "No fo2pdf processor installed, skip PDF generation"
++ echo "No FO-to-PDF processor installed; skipping PDF generation."
+ endif
+ 
+ CLEANFILES = $(doc_DATA)
+--- a/doc/mwg/Makefile.am
++++ b/doc/mwg/Makefile.am
+@@ -24,7 +24,7 @@ if ENABLE_REGENERATE_MAN
+ else
+ doc_DATA = pamdoc1.pdf
+ pamdoc1.pdf: pamdoc1.fo
+- echo "No fo2pdf processor installed, skip PDF generation"
++ echo "No FO-to-PDF processor installed; skipping PDF generation."
+ endif
+ 
+ CLEANFILES = $(doc_DATA)
+--- a/doc/sag/Makefile.am
++++ b/doc/sag/Makefile.am
+@@ -24,7 +24,7 @@ if ENABLE_REGENERATE_MAN
+ else
+ doc_DATA = pamdoc1.pdf
+ pamdoc1.pdf: pamdoc1.fo
+- echo "No fo2pdf processor installed, skip PDF generation"
++ echo "No FO-to-PDF processor installed; skipping PDF generation."
+ endif
+ 
+ CLEANFILES = $(doc_DATA)
+--- a/doc/adg/Makefile.in
++++ b/doc/adg/Makefile.in
+@@ -543,7 +543,7 @@ doc_DATA = pamdoc1.pdf
+ 
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
+-@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
+ 
+ @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
+ @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml
+--- a/doc/mwg/Makefile.in
++++ b/doc/mwg/Makefile.in
+@@ -543,7 +543,7 @@ doc_DATA = pamdoc1.pdf
+ 
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
+-@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
+ 
+ @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
+ @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml
+--- a/doc/sag/Makefile.in
++++ b/doc/sag/Makefile.in
+@@ -543,7 +543,7 @@ doc_DATA = pamdoc1.pdf
+ 
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
+ @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
+-@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
+ 
+ @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
+ @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml

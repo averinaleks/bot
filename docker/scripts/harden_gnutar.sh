@@ -23,7 +23,9 @@ fi
 # enforces symlink-safe extraction flags.  This mitigates CVE-2025-45582 by
 # preventing follow-up archives from traversing directory symlinks created by
 # previous extractions.
-dpkg-divert --local --rename --add "$TARGET_BIN"
+dpkg-divert --local --no-rename --divert "$DIVERTED_BIN" --add "$TARGET_BIN"
+
+cp --update=none "$TARGET_BIN" "$DIVERTED_BIN"
 
 cat <<'WRAPPER' > "$TARGET_BIN"
 #!/usr/bin/env bash
