@@ -22,17 +22,27 @@ def create_httpx_stub() -> SimpleNamespace:
     class HTTPError(Exception):
         """Base HTTPX error placeholder."""
 
+        __offline_stub__ = True
+
     class TimeoutException(HTTPError):
         """Timeout error placeholder."""
+
+        __offline_stub__ = True
 
     class ConnectError(HTTPError):
         """Connection error placeholder."""
 
+        __offline_stub__ = True
+
     class Headers(dict):
         """Simple headers mapping."""
 
+        __offline_stub__ = True
+
     class Request:
         """Simplified HTTP request representation."""
+
+        __offline_stub__ = True
 
         def __init__(self, method: str, url: str):
             self.method = method
@@ -40,6 +50,8 @@ def create_httpx_stub() -> SimpleNamespace:
 
     class Response:
         """Simplified HTTP response object."""
+
+        __offline_stub__ = True
 
         def __init__(
             self,
@@ -162,6 +174,8 @@ def create_httpx_stub() -> SimpleNamespace:
         )
 
     class Client:
+        __offline_stub__ = True
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self._closed = False
 
@@ -188,6 +202,8 @@ def create_httpx_stub() -> SimpleNamespace:
             self.close()
 
     class AsyncClient:
+        __offline_stub__ = True
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self._closed = False
 
