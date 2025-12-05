@@ -120,6 +120,11 @@ def parse_args() -> argparse.Namespace:
         help="Use offline stubs to avoid network calls",
     )
     parser.add_argument(
+        "--auto-offline",
+        action="store_true",
+        help="Automatically enable offline mode when required secrets are missing",
+    )
+    parser.add_argument(
         "--runtime",
         type=float,
         default=60.0,
@@ -174,28 +179,30 @@ def configure_environment(args: argparse.Namespace) -> bool:
     offline_env = os.getenv("OFFLINE_MODE", "0").strip().lower()
     offline_mode = offline_env in {"1", "true", "yes", "on"}
 
-    # If offline was not explicitly requested, enable it automatically when
-    # mandatory production secrets are absent. This prevents an immediate crash
-    # with MissingEnvError and mirrors the user-facing "run with --offline"
-    # guidance from the README.
-    if not offline_mode:
-        required_keys = (
-            "TELEGRAM_BOT_TOKEN",
-            "TELEGRAM_CHAT_ID",
-            "TRADE_MANAGER_TOKEN",
-            "TRADE_RISK_USD",
-            "BYBIT_API_KEY",
-            "BYBIT_API_SECRET",
-        )
-        missing = [
-            key for key in required_keys if not (os.getenv(key) or env_file_values.get(key))
-        ]
-        if missing:
+    required_keys = (
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "TRADE_MANAGER_TOKEN",
+        "TRADE_RISK_USD",
+        "BYBIT_API_KEY",
+        "BYBIT_API_SECRET",
+    )
+    missing = [key for key in required_keys if not (os.getenv(key) or env_file_values.get(key))]
+
+    if missing and not offline_mode:
+        if args.auto_offline:
             offline_mode = True
             os.environ["OFFLINE_MODE"] = "1"
             logger.warning(
-                "OFFLINE_MODE=1 включён автоматически: отсутствуют обязательные переменные: %s",
+                "OFFLINE_MODE=1 включён автоматически (--auto-offline): отсутствуют обязательные переменные: %s",
                 ", ".join(missing),
+            )
+        else:
+            missing_msg = ", ".join(missing)
+            raise SystemExit(
+                "Отсутствуют обязательные переменные окружения: %s. "
+                "Укажите их в .env/окружении или запустите бота с флагом --offline "
+                "(или --auto-offline для автоматического перехода)." % missing_msg
             )
 
     if offline_mode:

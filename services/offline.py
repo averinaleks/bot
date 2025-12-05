@@ -69,13 +69,22 @@ _OFFLINE_ENV_DEFAULTS: dict[str, _PlaceholderValue] = {
     "TRADE_RISK_USD": lambda: "10",
 }
 
+# Cache resolved placeholders to keep credentials consistent across services and
+# repeated invocations in tests.
+_OFFLINE_ENV_RESOLVED: dict[str, str] = {}
 
-def _resolve_placeholder(value: _PlaceholderValue) -> str:
+
+def _resolve_placeholder(key: str, value: _PlaceholderValue) -> str:
+    if key in _OFFLINE_ENV_RESOLVED:
+        return _OFFLINE_ENV_RESOLVED[key]
+
     result = value() if callable(value) else value
     if not isinstance(result, str):
         raise TypeError("placeholder generator must return a string")
     if not result:
         raise ValueError("placeholder value must be non-empty")
+
+    _OFFLINE_ENV_RESOLVED[key] = result
     return result
 
 
@@ -108,7 +117,7 @@ def ensure_offline_env(
         if os.getenv(key):
             continue
         try:
-            resolved = _resolve_placeholder(raw_value)
+            resolved = _resolve_placeholder(key, raw_value)
         except Exception as exc:  # pragma: no cover - defensive fallback
             logger.error(
                 "OFFLINE_MODE=1: не удалось сгенерировать значение для %s: %s",

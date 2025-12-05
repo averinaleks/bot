@@ -1,0 +1,86 @@
+import os
+from types import SimpleNamespace
+
+import pytest
+
+import run_bot
+
+
+@pytest.fixture(autouse=True)
+def clear_offline_mode(monkeypatch):
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+    monkeypatch.delenv("TEST_MODE", raising=False)
+
+
+def _clear_required_env(monkeypatch):
+    for key in (
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "TRADE_MANAGER_TOKEN",
+        "TRADE_RISK_USD",
+        "BYBIT_API_KEY",
+        "BYBIT_API_SECRET",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_configure_environment_requires_explicit_offline(monkeypatch):
+    _clear_required_env(monkeypatch)
+
+    import dotenv
+
+    monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
+
+    args = SimpleNamespace(offline=False, auto_offline=False)
+
+    with pytest.raises(SystemExit, match=r"Отсутствуют обязательные переменные окружения"):
+        run_bot.configure_environment(args)
+
+    assert os.getenv("OFFLINE_MODE") is None
+
+
+def test_configure_environment_auto_offline_switch(monkeypatch, caplog):
+    _clear_required_env(monkeypatch)
+
+    import dotenv
+
+    monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
+
+    args = SimpleNamespace(offline=False, auto_offline=True)
+
+    caplog.set_level("WARNING", logger="TradingBot")
+    offline_mode = run_bot.configure_environment(args)
+
+    assert offline_mode is True
+    assert os.getenv("OFFLINE_MODE") == "1"
+    assert any("--auto-offline" in msg for msg in caplog.messages)
+
+
+def test_offline_placeholders_are_stable(monkeypatch):
+    import services.offline as offline
+
+    monkeypatch.setattr(offline, "OFFLINE_MODE", True)
+    monkeypatch.setattr(offline, "_OFFLINE_ENV_RESOLVED", {}, raising=False)
+
+    counter = 0
+
+    def generate():
+        nonlocal counter
+        counter += 1
+        return f"value-{counter}"
+
+    mapping = {"FOO": generate}
+
+    monkeypatch.delenv("FOO", raising=False)
+    applied_first = offline.ensure_offline_env(mapping)
+
+    assert os.getenv("FOO") == "value-1"
+    assert applied_first == ["FOO"]
+    assert counter == 1
+
+    monkeypatch.delenv("FOO", raising=False)
+    applied_second = offline.ensure_offline_env(mapping)
+
+    assert os.getenv("FOO") == "value-1"
+    assert applied_second == ["FOO"]
+    assert counter == 1
