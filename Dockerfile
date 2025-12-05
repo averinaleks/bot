@@ -96,6 +96,7 @@ ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
+ENV PYTHONUNBUFFERED=1
 ENV TF_CPP_MIN_LOG_LEVEL=3
 
 WORKDIR /app
@@ -129,6 +130,7 @@ ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
+ENV PYTHONUNBUFFERED=1
 ENV TF_CPP_MIN_LOG_LEVEL=3
 
 WORKDIR /app
@@ -182,6 +184,8 @@ ENV PYTHONPATH=/app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD /app/venv/bin/python -c "import bot" || exit 1
+
+RUN mkdir -p /app/logs
 
 # Optionally enable TensorFlow checks during build
 ARG ENABLE_TF=0

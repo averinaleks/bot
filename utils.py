@@ -308,6 +308,7 @@ def configure_logging() -> None:
 
     log_dir = os.getenv("LOG_DIR", "/app/logs")
     fallback_dir = os.path.join(os.path.dirname(__file__), "logs")
+    fallback_used = False
     try:
         os.makedirs(log_dir, exist_ok=True)
         if not os.access(log_dir, os.W_OK):
@@ -315,6 +316,7 @@ def configure_logging() -> None:
     except (OSError, PermissionError):
         log_dir = fallback_dir
         os.makedirs(log_dir, exist_ok=True)
+        fallback_used = True
 
     if logger.handlers:
         for handler in logger.handlers[:]:
@@ -339,6 +341,12 @@ def configure_logging() -> None:
         log_file_path,
         logging.getLevelName(logger.level),
     )
+    if fallback_used:
+        logger.warning(
+            "LOG_DIR '%s' недоступен для записи, используется резервная папка %s",
+            sanitize_log_value(os.getenv("LOG_DIR", "/app/logs")),
+            log_dir,
+        )
 
 
 # Hide Numba performance warnings
