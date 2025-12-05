@@ -24,4 +24,4 @@ ruff==0.14.7
 bandit==1.9.2
 bandit-sarif-formatter==1.1.1
 pip-audit==2.4.0
-semgrep==1.144.0
+semgrep==1.144.1
