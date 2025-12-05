@@ -63,7 +63,7 @@ def _get_bool_env(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def validate_env(required_keys: list[str]) -> None:
+def validate_env(required_keys: list[str], *, allow_missing: bool = False) -> None:
     """Ensure that required environment variables are present.
 
     Parameters
@@ -90,6 +90,12 @@ def validate_env(required_keys: list[str]) -> None:
             raise MissingEnvError(["OPENAI_API_KEY", "GPT_OSS_API"], hint=DEFAULT_ENV_HINT)
 
     if missing_keys:
+        if allow_missing:
+            logger.debug(
+                "Skipping missing env validation in permissive mode: %s",
+                ", ".join(missing_keys),
+            )
+            return
         raise MissingEnvError(missing_keys)
 
 
@@ -136,7 +142,8 @@ try:
             "TRADE_RISK_USD",
             "BYBIT_API_KEY",
             "BYBIT_API_SECRET",
-        ]
+        ],
+        allow_missing=OFFLINE_MODE,
     )
 except MissingEnvError as exc:
     missing = ", ".join(exc.missing_keys)

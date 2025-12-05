@@ -91,19 +91,38 @@ else:
     _UNSENT_FALLBACK_PATH = None
 
 
-class GPTAdviceModel(BaseModel):
-    """Model for parsing GPT advice responses."""
+def _build_gpt_advice_model_class() -> type[BaseModel]:
+    """Return the GPT advice model class with offline stub metadata."""
 
-    signal: float | str | None = None
-    tp_mult: float | None = None
-    sl_mult: float | None = None
-    model_config = ConfigDict(validate_assignment=False)
+    offline_stub = bool(_OFFLINE_ENV or getattr(BaseModel, "__offline_stub__", False))
 
-    def __setattr__(self, name, value):  # pragma: no cover - simple assignment logic
-        super().__setattr__(name, value)
-        if name == "signal" and value is None:
-            super().__setattr__("tp_mult", None)
-            super().__setattr__("sl_mult", None)
+    class _GPTAdviceModel(BaseModel):
+        """Model for parsing GPT advice responses."""
+
+        __offline_stub__ = offline_stub
+
+        signal: float | str | None = None
+        tp_mult: float | None = None
+        sl_mult: float | None = None
+        model_config = ConfigDict(validate_assignment=False)
+
+        def __setattr__(self, name, value):  # pragma: no cover - simple assignment logic
+            super().__setattr__(name, value)
+            if name == "signal" and value is None:
+                super().__setattr__("tp_mult", None)
+                super().__setattr__("sl_mult", None)
+
+        def predict(self, *args, **kwargs):  # pragma: no cover - offline helper only
+            """Return a neutral advice value in offline environments."""
+
+            if not self.__offline_stub__:
+                raise RuntimeError("predict is only available in offline stub mode")
+            return 0.5
+
+    return _GPTAdviceModel
+
+
+GPTAdviceModel = _build_gpt_advice_model_class()
 
 
 GPT_ADVICE = GPTAdviceModel()
