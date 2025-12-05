@@ -63,11 +63,13 @@ services:
       - ../.env
     environment:
       PORT: "8002"
+      CONFIG_PATH: /app/config.json
     ports:
       - "8002:8002"
     volumes:
       - ../cache:/app/cache
       - ../logs:/app/logs
+      - ../config.json:/app/config.json:ro
     depends_on:
       - data_handler
     healthcheck:
