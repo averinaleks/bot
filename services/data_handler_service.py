@@ -534,11 +534,15 @@ def _normalize_symbol(symbol: str) -> str | None:
     if not cleaned:
         return None
 
-    if validate_symbol(cleaned):
-        return cleaned
+    if "/" in cleaned or ":" in cleaned:
+        return _normalise_symbol(cleaned)
 
-    if "/" in cleaned or not _SIMPLE_SYMBOL_PATTERN.fullmatch(cleaned):
+    if not _SIMPLE_SYMBOL_PATTERN.fullmatch(cleaned):
         return None
+
+    for quote in _KNOWN_QUOTE_SUFFIXES:
+        if cleaned.endswith(quote) and len(cleaned) > len(quote):
+            return None
 
     if not _allow_legacy_symbol_format():
         return None
