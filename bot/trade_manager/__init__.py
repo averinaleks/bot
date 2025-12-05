@@ -19,7 +19,9 @@ else:
     TradeManagerType = Any
     TelegramLoggerType = Any
 
-if bot_config.OFFLINE_MODE and os.getenv("TEST_MODE") != "1":
+use_offline_stubs = bot_config.OFFLINE_MODE or os.getenv("TEST_MODE") == "1"
+
+if use_offline_stubs:
     from services.offline import OfflineTelegram, OfflineTradeManager
 
     _trade_manager_impl = cast(type[TradeManagerType], OfflineTradeManager)
