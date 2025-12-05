@@ -7,6 +7,8 @@ import os
 
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 _CONTROL_MAP: dict[int, str] = {
     ord("\n"): "\\n",
     ord("\r"): "\\r",
@@ -45,7 +47,8 @@ def configure_service_logging() -> None:
 
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = logging.getLevelName(level_name)
-    if isinstance(level, str):
+    invalid_level = isinstance(level, str)
+    if invalid_level:
         level = logging.INFO
 
     root_logger = logging.getLogger()
@@ -67,4 +70,10 @@ def configure_service_logging() -> None:
                 handler.setFormatter(formatter)
             except Exception:
                 continue
+
+    if invalid_level:
+        logger.warning(
+            "Некорректное значение LOG_LEVEL=%s: используется INFO по умолчанию",
+            level_name,
+        )
 

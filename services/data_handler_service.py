@@ -21,8 +21,9 @@ _utils = require_utils("reset_tempdir_cache")
 reset_tempdir_cache = _utils.reset_tempdir_cache
 
 
+LOGGER = logging.getLogger(__name__)
+
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,20}/[A-Z0-9]{1,20}$")
-_SYMBOL_SIMPLE_PATTERN = re.compile(r"^[A-Z0-9]{1,20}$")
 _SIMPLE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,20}$")
 _KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
     "USDT",
@@ -107,7 +108,7 @@ if flask is None and _ALLOW_OFFLINE:
     def _jsonify_stub(payload: Any, status: int | None = None):  # pragma: no cover - shim
         return payload if status is None else (payload, status)
 
-    logging.getLogger(__name__).warning(
+    LOGGER.warning(
         "Flask не установлен: используется упрощённый заглушечный сервер. "
         "Установите зависимость `flask` для запуска HTTP-сервиса."
     )
@@ -134,14 +135,13 @@ try:
         raise ImportError("Offline stub requested via DATA_HANDLER_USE_STUB=1")
     import ccxt  # type: ignore
 except ImportError as exc:  # pragma: no cover - optional in offline mode
-    logger = logging.getLogger(__name__)
     if _ALLOW_OFFLINE:
         if _FORCE_OFFLINE:
-            logger.info(
+            LOGGER.info(
                 "DATA_HANDLER_USE_STUB=1: DataHandlerService использует OfflineBybit без загрузки ccxt"
             )
         else:
-            logger.warning(
+            LOGGER.warning(
                 "`ccxt` не найден: DataHandlerService использует OfflineBybit. "
                 "Для онлайн-запуска установите зависимость `pip install ccxt`."
             )
@@ -153,7 +153,7 @@ except ImportError as exc:  # pragma: no cover - optional in offline mode
             NetworkError=Exception,
         )
     else:
-        logger.critical(
+        LOGGER.critical(
             "Библиотека `ccxt` не установлена. Установите `pip install ccxt` "
             "или активируйте офлайн-режим (OFFLINE_MODE=1)."
         )
@@ -164,7 +164,7 @@ except ImportError as exc:  # pragma: no cover - optional in offline mode
 try:  # optional dependency
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - pandas not installed
-    logging.getLogger(__name__).warning(
+    LOGGER.warning(
         "Библиотека `pandas` не найдена: %s. Установите `pip install pandas` "
         "или используйте альтернативу на базе стандартных структур данных.",
         exc,
@@ -230,7 +230,7 @@ def _require_api_key() -> "ResponseReturnValue | None":
         auto_allow_reason = "TEST_MODE"
     elif os.getenv("OFFLINE_MODE") == "1":
         auto_allow_reason = "OFFLINE_MODE"
-    logger = logging.getLogger(__name__)
+    logger = LOGGER
 
     if not token:
         if allow_anonymous:
@@ -283,7 +283,7 @@ def _require_api_key() -> "ResponseReturnValue | None":
         return None
 
     remote = request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown"
-    logging.getLogger(__name__).warning(
+    LOGGER.warning(
         "Запрос к %s от %s отклонён: проверка API-ключа не пройдена",
         sanitize_log_value(request.path),
         sanitize_log_value(remote),
@@ -307,7 +307,7 @@ def _normalise_cache_dir(raw_path: str) -> Path | None:
     """Return a hardened cache directory for historical data."""
 
     if not raw_path or not raw_path.strip():
-        logging.getLogger(__name__).warning(
+        LOGGER.warning(
             "Игнорируем CACHE_DIR: путь не должен быть пустым",
         )
         return None
@@ -315,7 +315,7 @@ def _normalise_cache_dir(raw_path: str) -> Path | None:
     try:
         candidate = Path(raw_path).expanduser()
     except Exception as exc:
-        logging.getLogger(__name__).warning(
+        LOGGER.warning(
             "Игнорируем CACHE_DIR %s: некорректный путь (%s)",
             sanitize_log_value(raw_path),
             sanitize_log_value(str(exc)),
@@ -325,7 +325,7 @@ def _normalise_cache_dir(raw_path: str) -> Path | None:
     try:
         candidate.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        logging.getLogger(__name__).warning(
+        LOGGER.warning(
             "Игнорируем CACHE_DIR %s: не удалось создать каталог (%s)",
             sanitize_log_value(str(candidate)),
             sanitize_log_value(str(exc)),
@@ -335,21 +335,21 @@ def _normalise_cache_dir(raw_path: str) -> Path | None:
     try:
         for ancestor in _iter_cache_dir_ancestors(candidate):
             if ancestor.exists() and ancestor.is_symlink():
-                logging.getLogger(__name__).warning(
+                LOGGER.warning(
                     "Игнорируем CACHE_DIR %s: путь содержит символьную ссылку %s",
                     sanitize_log_value(str(candidate)),
                     sanitize_log_value(str(ancestor)),
                 )
                 return None
         if not candidate.is_dir():
-            logging.getLogger(__name__).warning(
+            LOGGER.warning(
                 "Игнорируем CACHE_DIR %s: путь не является каталогом",
                 sanitize_log_value(str(candidate)),
             )
             return None
         resolved = candidate.resolve(strict=True)
     except OSError as exc:
-        logging.getLogger(__name__).warning(
+        LOGGER.warning(
             "Игнорируем CACHE_DIR %s: не удалось проверить каталог (%s)",
             sanitize_log_value(str(candidate)),
             sanitize_log_value(str(exc)),
@@ -357,7 +357,7 @@ def _normalise_cache_dir(raw_path: str) -> Path | None:
         return None
 
     if not os.access(resolved, os.R_OK | os.W_OK):
-        logging.getLogger(__name__).warning(
+        LOGGER.warning(
             "Игнорируем CACHE_DIR %s: каталог недоступен для чтения/записи",
             sanitize_log_value(str(resolved)),
         )
@@ -370,7 +370,7 @@ def _create_history_cache() -> "HistoricalDataCache | None":
     if HistoricalDataCache is None:
         return None
 
-    logger = logging.getLogger(__name__)
+    logger = LOGGER
     candidates: list[Path] = []
     env_path = os.getenv("CACHE_DIR")
     if env_path:
@@ -437,7 +437,7 @@ def _load_initial_history(exchange: Any) -> None:
             )
             history_cache.save_cached_data(sym, timeframe, df)
         except Exception as exc:  # pragma: no cover - unexpected fetch errors
-            logging.exception("Failed to prefetch history for %s: %s", sym, exc)
+            LOGGER.exception("Failed to prefetch history for %s: %s", sym, exc)
 
 
 def _allow_compact_symbol_format() -> bool:
@@ -488,14 +488,14 @@ def _normalise_symbol(symbol: str) -> str | None:
         normalised_main = _normalise_symbol(main)
         if normalised_main is None:
             return None
-        if not _SYMBOL_SIMPLE_PATTERN.fullmatch(suffix):
+        if not _SIMPLE_SYMBOL_PATTERN.fullmatch(suffix):
             return None
         return f"{normalised_main}:{suffix}"
 
     if "/" in raw:
         return raw if _SYMBOL_PATTERN.fullmatch(raw) else None
 
-    if not _SYMBOL_SIMPLE_PATTERN.fullmatch(raw):
+    if not _SIMPLE_SYMBOL_PATTERN.fullmatch(raw):
         return None
 
     if not _allow_compact_symbol_format():
@@ -504,7 +504,7 @@ def _normalise_symbol(symbol: str) -> str | None:
     for quote in _KNOWN_QUOTE_SUFFIXES:
         if raw.endswith(quote) and len(raw) > len(quote):
             base = raw[: -len(quote)]
-            if _SYMBOL_SIMPLE_PATTERN.fullmatch(base):
+            if _SIMPLE_SYMBOL_PATTERN.fullmatch(base):
                 candidate = f"{base}/{quote}"
                 if _SYMBOL_PATTERN.fullmatch(candidate):
                     return candidate
@@ -579,10 +579,11 @@ def init_exchange() -> None:
     try:
         exchange = provider.create()
     except Exception as exc:  # pragma: no cover - config errors
-        logging.exception("Failed to initialize Bybit client: %s", exc)
+        LOGGER.exception("Failed to initialize Bybit client: %s", exc)
         raise RuntimeError("Invalid Bybit configuration") from exc
     else:
         _exchange_ctx.set(exchange)
+        LOGGER.info("Инициализирован клиент Bybit для DataHandlerService")
         close_exchange(None)
 
 
@@ -605,7 +606,7 @@ def close_exchange(_: BaseException | None = None) -> None:
     try:
         provider.close_instance(exchange)
     except Exception:  # pragma: no cover - defensive logging
-        logging.getLogger(__name__).exception("Failed to close exchange instance")
+        LOGGER.exception("Failed to close exchange instance")
     finally:
         _recently_closed.append(exchange)
 
@@ -641,14 +642,14 @@ def price(symbol: str) -> ResponseReturnValue:
             return jsonify({'error': 'invalid price'}), 502
         return jsonify({'price': last})
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        logging.exception(
+        LOGGER.exception(
             "Network error fetching price for %s: %s",
             sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
-        logging.exception(
+        LOGGER.exception(
             "Exchange error fetching price for %s: %s",
             sanitize_log_value(normalized_symbol),
             exc,
@@ -723,7 +724,7 @@ def history(symbol: str) -> ResponseReturnValue:
                     )
                     history_cache.save_cached_data(normalized_symbol, timeframe, df)
                 except Exception as exc:  # pragma: no cover - logging best effort
-                    logging.exception(
+                    LOGGER.exception(
                         "Failed to cache history for %s on %s: %s",
                         sanitize_log_value(normalized_symbol),
                         sanitize_log_value(timeframe),
@@ -734,14 +735,14 @@ def history(symbol: str) -> ResponseReturnValue:
             response_payload['warnings'] = warnings_payload
         return jsonify(response_payload)
     except CCXT_NETWORK_ERROR as exc:  # pragma: no cover - network errors
-        logging.exception(
+        LOGGER.exception(
             "Network error fetching history for %s: %s",
             sanitize_log_value(normalized_symbol),
             exc,
         )
         return jsonify({'error': 'network error contacting exchange'}), 503
     except CCXT_BASE_ERROR as exc:
-        logging.exception(
+        LOGGER.exception(
             "Exchange error fetching history for %s: %s",
             sanitize_log_value(normalized_symbol),
             exc,
@@ -767,7 +768,7 @@ if hasattr(app, "errorhandler"):
         """Log unexpected errors and return a 500 response."""
         if isinstance(exc, HTTPException):
             return exc
-        logging.exception("Unhandled error: %s", exc)
+        LOGGER.exception("Unhandled error: %s", exc)
         return jsonify({'error': 'internal server error'}), 500
 else:
     def too_large(_) -> ResponseReturnValue:
@@ -777,7 +778,7 @@ else:
         """Log unexpected errors and return a 500 response."""
         if isinstance(exc, HTTPException):
             return exc
-        logging.exception("Unhandled error: %s", exc)
+        LOGGER.exception("Unhandled error: %s", exc)
         return jsonify({'error': 'internal server error'}), 500
 
 

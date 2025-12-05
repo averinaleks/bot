@@ -1190,6 +1190,13 @@ def open_position() -> ResponseReturnValue:
             warnings_payload['positions_cache_failed'] = cache_warning
         if warnings_payload:
             response['warnings'] = warnings_payload
+        app.logger.info(
+            'open_position: %s %s amount=%s order_id=%s',
+            sanitize_log_value(symbol),
+            sanitize_log_value(side),
+            sanitize_log_value(amount),
+            sanitize_log_value(order.get('id')),
+        )
         return jsonify(response)
     except TimeoutError as exc:
         app.logger.exception(
@@ -1330,6 +1337,12 @@ def close_position() -> ResponseReturnValue:
             warnings_payload['positions_cache_failed'] = cache_warning
         if warnings_payload:
             response_payload['warnings'] = warnings_payload
+        app.logger.info(
+            'close_position: %s amount=%s order_id=%s',
+            sanitize_log_value(symbol),
+            sanitize_log_value(amount),
+            sanitize_log_value(order.get('id')),
+        )
         return jsonify(response_payload)
     except TimeoutError as exc:
         app.logger.exception(
