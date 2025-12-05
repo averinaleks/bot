@@ -219,9 +219,8 @@ else:  # pragma: no cover - type-checking aid
 try:  # pragma: no cover - fallback для тестов
     from bot.utils import configure_logging  # noqa: E402
 except ImportError:  # pragma: no cover - заглушка
-    def configure_logging() -> None:
-        """Stubbed logging configurator."""
-        pass
+    from services.logging_utils import configure_service_logging as configure_logging  # type: ignore
+from services.logging_utils import configure_service_logging  # noqa: E402
 from bot import config as bot_config  # noqa: E402
 
 BotConfig: TypeAlias = bot_config.BotConfig

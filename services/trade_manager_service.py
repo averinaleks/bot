@@ -31,12 +31,13 @@ from bot.trade_manager import order_utils, server_common
 from bot.utils_loader import require_utils
 from bot.pydantic_compat import ValidationError
 from services.schemas import OpenPositionRequest
-from services.logging_utils import sanitize_log_value
+from services.logging_utils import configure_service_logging, sanitize_log_value
 
 _utils = require_utils("validate_host", "safe_int")
 validate_host = _utils.validate_host
 safe_int = _utils.safe_int
 
+configure_service_logging()
 server_common.load_environment()
 
 app = Flask(__name__)

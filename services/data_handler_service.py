@@ -13,7 +13,7 @@ from typing import Any, Iterator
 
 from bot.dotenv_utils import load_dotenv
 from bot.host_utils import validate_host
-from services.logging_utils import sanitize_log_value
+from services.logging_utils import configure_service_logging, sanitize_log_value
 from bot.utils_loader import require_utils
 from services.exchange_provider import ExchangeProvider
 
@@ -39,6 +39,7 @@ _KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
 )
 
 
+configure_service_logging()
 load_dotenv()
 
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"

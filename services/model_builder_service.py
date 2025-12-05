@@ -32,7 +32,7 @@ from model_builder.validation import (
     coerce_label_vector,
     coerce_float,
 )
-from services.logging_utils import sanitize_log_value
+from services.logging_utils import configure_service_logging, sanitize_log_value
 from security import (
     ArtifactDeserializationError,
     create_joblib_stub,
@@ -41,6 +41,8 @@ from security import (
     verify_model_state_signature,
     write_model_state_signature,
 )
+
+configure_service_logging()
 _utils = require_utils(
     "ensure_writable_directory",
     "safe_int",
