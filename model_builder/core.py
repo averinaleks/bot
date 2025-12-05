@@ -246,9 +246,8 @@ if IS_RAY_STUB:
 try:  # pragma: no cover - optional in tests
     from bot.utils import configure_logging
 except ImportError:  # pragma: no cover - stub for test environment
-    def configure_logging() -> None:  # type: ignore
-        """Stubbed logging configurator."""
-        pass
+    from services.logging_utils import configure_service_logging as configure_logging  # type: ignore
+from services.logging_utils import configure_service_logging
 try:  # pragma: no cover - optional dependency
     from sklearn.preprocessing import StandardScaler
     from sklearn.linear_model import LogisticRegression
