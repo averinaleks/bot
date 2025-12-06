@@ -1,3 +1,4 @@
+import asyncio
 import builtins
 import importlib.util
 import logging
@@ -89,15 +90,35 @@ async def test_maybe_load_initial_logs_expected_errors(caplog):
 
 
 @pytest.mark.asyncio
-async def test_maybe_load_initial_propagates_unexpected_errors():
+async def test_maybe_load_initial_logs_value_errors(caplog):
     class DummyHandler:
         def load_initial(self):
             raise ValueError("invalid state")
 
     handler = DummyHandler()
 
-    with pytest.raises(ValueError, match="invalid state"):
+    with caplog.at_level(logging.WARNING):
         await _maybe_load_initial(handler)
+
+    assert any(
+        record.message.startswith("Initial data load failed") for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_maybe_load_initial_logs_common_value_errors(caplog):
+    class DummyHandler:
+        def load_initial(self):
+            raise RuntimeError("legacy failure")
+
+    handler = DummyHandler()
+
+    with caplog.at_level(logging.WARNING):
+        await _maybe_load_initial(handler)
+
+    assert any(
+        record.message.startswith("Initial data load failed") for record in caplog.records
+    )
 
 
 def test_prepare_data_handler_without_pandas(monkeypatch, caplog):
@@ -139,6 +160,71 @@ def test_prepare_data_handler_without_pandas(monkeypatch, caplog):
 
     assert handler.funding_rates == {"BTCUSDT": 0.0}
     assert handler.open_interest == {"BTCUSDT": 0.0}
+
+
+def test_prepare_data_handler_with_pandas_stub(monkeypatch):
+    """Ensure a typed empty DataFrame is created when pandas is available."""
+
+    class _FakeDataFrame:
+        def __init__(self, data=None, columns=None):
+            self.data = data or {}
+            self.columns = columns or []
+
+    class _FakeSeries:
+        def __init__(self, dtype=None):  # noqa: D401 - simple stub
+            self.dtype = dtype
+
+    pandas_stub = SimpleNamespace(DataFrame=_FakeDataFrame, Series=_FakeSeries)
+    monkeypatch.setitem(sys.modules, "pandas", pandas_stub)
+
+    handler = SimpleNamespace()
+
+    class _Cfg:
+        def asdict(self):
+            return {}
+
+        def get(self, key, default=None):  # noqa: ARG002
+            return default
+
+    cfg = _Cfg()
+    prepare_data_handler(handler, cfg, symbols=["ETHUSDT", "BTCUSDT"])
+
+    assert handler.ohlcv.columns == (
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    )
+    assert set(handler.funding_rates) == {"ETHUSDT", "BTCUSDT"}
+    assert set(handler.indicators) == {"ETHUSDT", "BTCUSDT"}
+
+
+@pytest.mark.asyncio
+async def test_run_trading_cycle_cancels_long_running_loop(monkeypatch, caplog):
+    class _SlowManager:
+        def __init__(self):
+            self.cancelled = False
+            self.stopped = False
+
+        async def run(self):
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+        async def stop(self):
+            self.stopped = True
+
+    manager = _SlowManager()
+    with caplog.at_level(logging.INFO):
+        await run_trading_cycle(manager, runtime=0.01)
+
+    assert manager.cancelled is True
+    assert manager.stopped is True
+    assert any("Runtime limit reached" in record.message for record in caplog.records)
 
 
 def test_assert_project_layout_rejects_foreign_modules(monkeypatch, tmp_path):
@@ -186,3 +272,18 @@ def test_assert_project_layout_allows_partial_clone(monkeypatch, caplog):
         run_bot._assert_project_layout(allow_partial=True)
 
     assert any("деградированном" in record.message for record in caplog.records)
+
+
+def test_assert_project_layout_honors_env_root(monkeypatch, tmp_path, caplog):
+    import run_bot
+
+    root = tmp_path / "packed"
+    for name in ("services", "data_handler", "model_builder", "bot"):
+        (root / name).mkdir(parents=True)
+
+    monkeypatch.setenv("BOT_PROJECT_ROOT", str(root))
+
+    with caplog.at_level(logging.WARNING):
+        run_bot._assert_project_layout(allow_partial=True)
+
+    assert any(str(root) in record.message for record in caplog.records)
