@@ -22,8 +22,14 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 logger = logging.getLogger("TradingBot")
 
 
-def _assert_project_layout() -> None:
-    """Проверяет, что запущен полный проект, а не урезанная копия."""
+def _assert_project_layout(*, allow_partial: bool = False) -> None:
+    """Проверяет, что запущен полный проект, а не урезанная копия.
+
+    Параметр ``allow_partial`` полезен для отладки или запуска в деградированном
+    режиме (например, с оффлайн-заглушками), когда не все каталоги присутствуют
+    в рабочем дереве. В этом случае функция лишь логирует предупреждение и не
+    завершает процесс аварийно.
+    """
 
     required_modules = (
         "services",
@@ -66,14 +72,19 @@ def _assert_project_layout() -> None:
     if missing or foreign:
         problems = []
         if missing:
-            problems.append(
-                "отсутствуют: %s" % ", ".join(missing)
-            )
+            problems.append("отсутствуют: %s" % ", ".join(missing))
         if foreign:
             details = "; ".join(f"{name} -> {origin}" for name, origin in foreign)
             problems.append(
                 "найдены сторонние модули (ожидались из %s): %s" % (repo_root, details)
             )
+
+        if allow_partial:
+            logger.warning(
+                "Запуск в неполной копии репозитория: %s. Продолжаем в деградированном режиме.",
+                "; ".join(problems),
+            )
+            return
 
         raise SystemExit(
             "Отсутствуют необходимые модули проекта или найдено постороннее содержимое (%s).\n"
@@ -121,8 +132,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--auto-offline",
-        action="store_true",
-        help="Automatically enable offline mode when required secrets are missing",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Automatically enable offline mode when required secrets are missing "
+            "(enabled by default; use --no-auto-offline to disable)"
+        ),
     )
     parser.add_argument(
         "--runtime",
@@ -133,6 +148,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--symbols",
         help="Comma-separated list of symbols to monitor (defaults to BTCUSDT)",
+    )
+    parser.add_argument(
+        "--allow-partial-clone",
+        action="store_true",
+        help=(
+            "Skip the strict repository layout check. Useful when running only offline "
+            "stubs or a subset of the project."
+        ),
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -190,19 +213,19 @@ def configure_environment(args: argparse.Namespace) -> bool:
     missing = [key for key in required_keys if not (os.getenv(key) or env_file_values.get(key))]
 
     if missing and not offline_mode:
+        missing_msg = ", ".join(missing)
         if args.auto_offline:
             offline_mode = True
             os.environ["OFFLINE_MODE"] = "1"
             logger.warning(
                 "OFFLINE_MODE=1 включён автоматически (--auto-offline): отсутствуют обязательные переменные: %s",
-                ", ".join(missing),
+                missing_msg,
             )
         else:
-            missing_msg = ", ".join(missing)
             raise SystemExit(
                 "Отсутствуют обязательные переменные окружения: %s. "
-                "Укажите их в .env/окружении или запустите бота с флагом --offline "
-                "(или --auto-offline для автоматического перехода)." % missing_msg
+                "Добавьте их в .env/окружение, запустите с --offline или включите "
+                "--auto-offline (по умолчанию включён)." % missing_msg
             )
 
     if offline_mode:
@@ -619,38 +642,17 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
                 break
 
         if matched_attr is not None:
-            message = "Trading loop aborted after TradeManager error"
-            logger.error("%s: %s", message, exc, exc_info=True)
+            message = f"Trading loop aborted after TradeManager error: {exc}"
+            logger.error(message, exc_info=True)
 
-            original_args = getattr(exc, "args", ())
-            enriched_args = (f"{message}: {exc}",)
-            if original_args:
-                enriched_args += tuple(original_args[1:])
-
-            new_exc: BaseException | None = None
-            if matched_cls is not None:
-                try:
-                    new_exc = matched_cls(*original_args)
-                except Exception:  # pragma: no cover - defensive
-                    new_exc = None
-
-            if new_exc is None:
-                new_exc = matched_cls(enriched_args[0]) if matched_cls else RuntimeError(enriched_args[0])
-
-            if new_exc is None:  # pragma: no cover - defensive fallback
-                raise RuntimeError(enriched_args[0])
+            new_exc: BaseException
             try:
-                new_exc.args = enriched_args
-            except Exception as assignment_error:  # pragma: no cover - defensive
-                logger.debug(
-                    "Не удалось заменить аргументы для исключения %s: %s",
-                    type(new_exc).__name__,
-                    assignment_error,
-                )
-            if hasattr(exc, "__dict__") and hasattr(new_exc, "__dict__"):
-                new_exc.__dict__.update({k: v for k, v in exc.__dict__.items() if k not in new_exc.__dict__})
+                new_exc = matched_cls(message) if matched_cls is not None else RuntimeError(message)
+            except Exception:  # pragma: no cover - defensive
+                new_exc = RuntimeError(message)
 
             raise new_exc.with_traceback(exc.__traceback__) from exc
+
         logger.exception("Unexpected error during trading loop")
         raise
     finally:
@@ -710,8 +712,10 @@ async def _maybe_load_initial(data_handler: Any) -> None:
 
 
 async def main() -> None:
-    _assert_project_layout()
     args = parse_args()
+    _assert_project_layout(
+        allow_partial=args.allow_partial_clone or args.offline or args.auto_offline
+    )
     offline_mode = configure_environment(args)
 
     from bot.dotenv_utils import load_dotenv
