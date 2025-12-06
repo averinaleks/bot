@@ -3,11 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.gptoss
+    environment:
+      TRANSFORMERS_CACHE: /workspace
+      VLLM_LOGGING_LEVEL: DEBUG
     ports:
       - "8003:8000"
-    environment:
-      VLLM_LOGGING_LEVEL: DEBUG
     volumes:
+      - gptoss_workspace:/workspace
       - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
@@ -18,9 +20,7 @@ services:
     networks:
       - gptoss_net
   data_handler:
-    build:
-      context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+    image: ${APP_IMAGE:-trading_bot:latest}
     # Run the full data handler implementation
     command:
       - gunicorn
@@ -33,7 +33,6 @@ services:
       - --error-logfile
       - /app/logs/data_handler.error.log
       - bot.data_handler:api_app
-    runtime: ${RUNTIME:-runc}
     ports:
       - "8000:8000"
     env_file: .env
@@ -55,9 +54,7 @@ services:
     networks:
       - trading_bot_default
   model_builder:
-    build:
-      context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+    image: ${APP_IMAGE:-trading_bot:latest}
     # Run the full model builder implementation
     command:
       - gunicorn
@@ -70,7 +67,6 @@ services:
       - --error-logfile
       - /app/logs/model_builder.error.log
       - bot.model_builder:api_app
-    runtime: ${RUNTIME:-runc}
     ports:
       - "8001:8001"
     deploy:
@@ -80,6 +76,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [gpu]
     environment:
       - TF_CPP_MIN_LOG_LEVEL=3
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
@@ -99,9 +99,7 @@ services:
     networks:
       - trading_bot_default
   trade_manager:
-    build:
-      context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+    image: ${APP_IMAGE:-trading_bot:latest}
     # Use the ASGI wrapper exported by trade_manager so UvicornWorker can
     # serve the Flask app correctly.
     command:
@@ -117,7 +115,6 @@ services:
       - --error-logfile
       - /app/logs/trade_manager.error.log
       - bot.trade_manager:asgi_app
-    runtime: ${RUNTIME:-runc}
     ports:
       - "8002:8002"
     env_file: .env
@@ -128,6 +125,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [gpu]
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
@@ -146,12 +147,12 @@ services:
     networks:
       - trading_bot_default
   bot:
+    image: ${APP_IMAGE:-trading_bot:latest}
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
     # container_name: trading_bot
     command: python -m bot.trading_bot
-    runtime: ${RUNTIME:-runc}
     depends_on:
       # Wait for GPT-OSS to become healthy
       gptoss:
