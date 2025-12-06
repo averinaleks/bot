@@ -117,14 +117,14 @@ PY
       return
       ;;
     linux-pam-hardening.patch)
-      python3 - "$patch_file" <<'PY'
+  python3 - "$patch_file" <<'PY'
 import pathlib
 import sys
 
 cfg = pathlib.Path("configure.ac")
 bigcrypt = pathlib.Path("modules/pam_extrausers/bigcrypt.c")
 passverify = pathlib.Path("modules/pam_extrausers/passverify.c")
-lckpwdf = pathlib.Path("modules/pam_extrausers/lckpwdf.-c")
+lckpwdf = pathlib.Path("modules/pam_extrausers/lckpwdf.c")
 
 try:
     cfg_text = cfg.read_text(encoding="utf-8")

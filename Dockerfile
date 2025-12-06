@@ -126,6 +126,8 @@ RUN find /app/venv -type d -name '__pycache__' -exec rm -rf {} + && \
 FROM nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
 ARG PYTHON_VERSION=3.12.3-1ubuntu0.7
 ARG PYTHON_META=3.12.3-0ubuntu2
+ARG APP_UID=1000
+ARG APP_GID=1000
 ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -203,8 +205,8 @@ RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3 -c "import pytorch_lightning as pl; print('Lightning Version:', pl.__version__)" || echo "Lightning check failed" && \
     /app/venv/bin/python3 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
 
-# Use a dedicated non-root user at runtime
-RUN groupadd --system bot && useradd --system --gid bot --home-dir /home/bot --shell /bin/bash bot \
+# Use a dedicated non-root user at runtime aligned with typical host UID/GID
+RUN groupadd --system --gid ${APP_GID} bot && useradd --system --uid ${APP_UID} --gid bot --home-dir /home/bot --shell /bin/bash bot \
     && mkdir -p /home/bot \
     && chown -R bot:bot /app /home/bot
 
