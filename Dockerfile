@@ -13,7 +13,6 @@ ENV TZ=Etc/UTC
 COPY docker/patches/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10963.patch
 COPY docker/patches/linux-pam-CVE-2024-10041.patch /tmp/security/linux-pam-CVE-2024-10041.patch
 COPY docker/patches/linux-pam-hardening.patch /tmp/security/linux-pam-hardening.patch
-COPY docker/patches/linux-pam-doc-messaging.patch /tmp/security/linux-pam-doc-messaging.patch
 COPY docker/scripts/update_pam_changelog.py /tmp/security/update_pam_changelog.py
 COPY docker/scripts/setup_zlib_and_pam.sh /tmp/security/setup_zlib_and_pam.sh
 COPY docker/scripts/build_patched_pam.sh /tmp/security/build_patched_pam.sh
@@ -86,7 +85,7 @@ else
   cd /tmp/build
   rm -rf zlib.tar.gz zlib-src
   /tmp/security/build_patched_pam.sh \
-    "/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-doc-messaging.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
+    "/tmp/security/linux-pam-hardening.patch /tmp/security/linux-pam-CVE-2024-10963.patch /tmp/security/linux-pam-CVE-2024-10041.patch" \
     /tmp/security/update_pam_changelog.py noble /tmp/security/pam-build /tmp/pam-fixed
   ldconfig
   python3 --version
