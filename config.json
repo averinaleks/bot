@@ -115,5 +115,6 @@
         "exchange": "services.service_factories:build_exchange",
         "telegram_logger": "services.service_factories:build_telegram_logger",
         "gpt_client": "services.service_factories:build_gpt_client"
-    }
+    },
+    "strict_initial_load": false
 }

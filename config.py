@@ -30,6 +30,14 @@ DEFAULT_ENV_HINT = (
     "(Запустите `python run_bot.py --offline` или создайте файл .env с обязательными переменными.)"
 )
 
+_ALLOWED_FACTORY_PREFIXES = (
+    "bot.",
+    "services.",
+    "model_builder.",
+    "data_handler.",
+)
+_ALLOWED_FACTORY_ROOTS = frozenset({"bot", "services", "model_builder", "data_handler"})
+
 
 class MissingEnvError(Exception):
     """Raised when required environment variables are missing."""
@@ -97,6 +105,70 @@ def validate_env(required_keys: list[str], *, allow_missing: bool = False) -> No
             )
             return
         raise MissingEnvError(missing_keys)
+
+
+def _validate_identifier_path(path: str, *, what: str) -> tuple[str, ...]:
+    parts = tuple(part for part in path.split(".") if part)
+    if not parts:
+        raise ValueError(f"{what} must contain at least one identifier")
+    for part in parts:
+        if not part.isidentifier():
+            raise ValueError(f"{what} contains invalid identifier segment {part!r}")
+    return parts
+
+
+def _ensure_safe_factory_module(module_name: str) -> None:
+    if module_name in _ALLOWED_FACTORY_ROOTS:
+        return
+    if any(module_name.startswith(prefix) for prefix in _ALLOWED_FACTORY_PREFIXES):
+        return
+    raise ValueError(
+        "Factory modules must reside within the bot or services packages"
+    )
+
+
+def _validate_factory_path(path: str) -> str:
+    module_name, _, attr_path = path.partition(":")
+    if not module_name or not attr_path:
+        raise ValueError(f"Invalid factory path: {path!r}")
+
+    _validate_identifier_path(module_name, what="Module name")
+    _ensure_safe_factory_module(module_name)
+    _validate_identifier_path(attr_path, what="Attribute path")
+    return path
+
+
+def _validate_service_factories(mapping: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = {
+        "exchange",
+        "telegram_logger",
+        "gpt_client",
+        "model_builder",
+        "trade_manager",
+    }
+    validated: dict[str, Any] = {}
+    for raw_key, raw_value in mapping.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            raise ValueError("service_factories keys must be non-empty strings")
+        key = raw_key.strip()
+        if key not in allowed_keys:
+            logger.warning(
+                "Неизвестная фабрика %s в service_factories. Допустимые ключи: %s",
+                sanitize_log_value(key),
+                ", ".join(sorted(allowed_keys)),
+            )
+        if isinstance(raw_value, str):
+            validated[key] = _validate_factory_path(raw_value)
+            continue
+        if callable(raw_value):
+            validated[key] = raw_value
+            continue
+        raise ValueError(
+            "Service factory %r must be a string 'module:attr' or a callable"
+            % sanitize_log_value(key)
+        )
+
+    return validated
 
 
 OFFLINE_MODE = _get_bool_env("OFFLINE_MODE", False)
@@ -473,9 +545,10 @@ class BotConfig:
     enable_notifications: bool = _get_default("enable_notifications", True)
     save_unsent_telegram: bool = _get_default("save_unsent_telegram", False)
     unsent_telegram_path: str = _get_default("unsent_telegram_path", "unsent_telegram.log")
-    service_factories: dict[str, str] = field(
+    service_factories: dict[str, Any] = field(
         default_factory=lambda: dict(_get_default("service_factories", {}))
     )
+    strict_initial_load: bool = _get_default("strict_initial_load", False)
 
     def __post_init__(self) -> None:
         if self.ws_subscription_batch_size is None:
@@ -661,4 +734,14 @@ def load_config(path: str = CONFIG_PATH) -> BotConfig:
                     fdef.name.upper(),
                     expected_name,
                 )
+    if "service_factories" in cfg:
+        try:
+            cfg["service_factories"] = _validate_service_factories(
+                dict(cfg.get("service_factories") or {})
+            )
+        except Exception as exc:
+            raise ValueError(
+                "Invalid service_factories configuration: %s" % sanitize_log_value(str(exc))
+            ) from exc
+
     return BotConfig(**cfg)

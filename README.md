@@ -178,6 +178,15 @@ pytest tests/test_password_utils.py
    # С GPU-зависимостями
    INSTALL_GPU_DEPS=1 ./scripts/install-test-deps.sh
    ```
+   Если вам не нужны ML/torch зависимости, используйте облегчённые наборы:
+
+   ```bash
+   python -m pip install -r requirements-core.txt      # только сервисы и API-клиенты
+   python -m pip install -r requirements-ml.txt        # ML-надстройки поверх core
+   ```
+
+   Это ускоряет установку в офлайн-средах и уменьшает размер образов. При
+   необходимости можно добавить `requirements-gpu.txt` поверх базового core.
    Пакет `Flask` устанавливается из `requirements.txt` и необходим для работы HTTP‑сервисов.
    Если вы устанавливаете зависимости вручную, добавьте `pip install flask`.
    В CI применяются только стандартные колёса PyTorch без поддержки CUDA.
