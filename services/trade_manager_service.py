@@ -521,7 +521,7 @@ def _write_positions_locked() -> None:
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError as exc:  # pragma: no cover - disk errors
-        logging.warning(
+        logger.warning(
             'Failed to create positions cache directory %s: %s',
             sanitize_log_value(directory),
             sanitize_log_value(exc),
@@ -558,7 +558,7 @@ def _write_positions_locked() -> None:
             suffix='.tmp',
         )
     except OSError as exc:  # pragma: no cover - tmp creation failures
-        logging.warning(
+        logger.warning(
             'Failed to create temporary positions cache: %s',
             sanitize_log_value(exc),
         )
@@ -570,7 +570,7 @@ def _write_positions_locked() -> None:
             try:
                 os.fchmod(tmp_fd, 0o600)
             except OSError as exc:
-                logging.debug(
+                logger.debug(
                     'Failed to enforce permissions on temporary positions cache %s: %s',
                     sanitize_log_value(tmp_path),
                     sanitize_log_value(exc),
@@ -585,13 +585,13 @@ def _write_positions_locked() -> None:
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug(
+            logger.debug(
                 'Failed to remove temporary positions cache %s: %s',
                 sanitize_log_value(tmp_path),
                 sanitize_log_value(cleanup_exc),
             )
         if isinstance(exc, OSError):
-            logging.warning(
+            logger.warning(
                 'Failed to prepare temporary positions cache: %s',
                 sanitize_log_value(exc),
             )
@@ -618,12 +618,12 @@ def _write_positions_locked() -> None:
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug(
+            logger.debug(
                 'Failed to remove temporary positions cache %s: %s',
                 sanitize_log_value(tmp_path),
                 sanitize_log_value(cleanup_exc),
             )
-        logging.warning('Failed to serialise positions cache: %s', exc)
+        logger.warning('Failed to serialise positions cache: %s', exc)
         raise
 
     try:
@@ -639,13 +639,13 @@ def _write_positions_locked() -> None:
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug(
+            logger.debug(
                 'Failed to remove temporary positions cache %s: %s',
                 sanitize_log_value(tmp_path),
                 sanitize_log_value(cleanup_exc),
             )
         if isinstance(exc, OSError):
-            logging.warning(
+            logger.warning(
                 'Failed to write temporary positions cache: %s',
                 sanitize_log_value(exc),
             )
@@ -654,17 +654,17 @@ def _write_positions_locked() -> None:
         tmp_file.close()
 
     if tmp_path is None:
-        logging.warning('Failed to determine temporary positions cache path')
+        logger.warning('Failed to determine temporary positions cache path')
         return
 
     try:
         os.replace(tmp_path, POSITIONS_FILE)
     except OSError as exc:  # pragma: no cover - disk errors
-        logging.warning('Failed to save positions cache: %s', sanitize_log_value(exc))
+        logger.warning('Failed to save positions cache: %s', sanitize_log_value(exc))
         try:
             tmp_path.unlink()
         except OSError as cleanup_exc:
-            logging.debug(
+            logger.debug(
                 'Failed to remove temporary positions cache %s: %s',
                 sanitize_log_value(tmp_path),
                 sanitize_log_value(cleanup_exc),
@@ -691,10 +691,10 @@ def _sync_positions_with_exchange(exchange: Any | None = None) -> None:
     try:
         remote_positions = _call_exchange_method(exchange, 'fetch_positions')
     except TimeoutError as exc:
-        logging.warning('fetch_positions timed out: %s', sanitize_log_value(exc))
+        logger.warning('fetch_positions timed out: %s', sanitize_log_value(exc))
         return
     except Exception as exc:  # pragma: no cover - network/API issues
-        logging.warning('fetch_positions failed: %s', sanitize_log_value(exc))
+        logger.warning('fetch_positions failed: %s', sanitize_log_value(exc))
         return
 
     remote_positions = remote_positions or []
@@ -1051,7 +1051,6 @@ def open_position() -> ResponseReturnValue:
                     safe_symbol = sanitize_log_value(symbol)
                     warn_msg = f"не удалось создать stop loss ордер для {safe_symbol}"
                     app.logger.warning(warn_msg)
-                    logger.warning(warn_msg)
                     protective_failures.append({'type': 'stop_loss', 'message': warn_msg})
             if plan.take_profit_price is not None:
                 tp_order = order_utils.execute_with_retries_sync(

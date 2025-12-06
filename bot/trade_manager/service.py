@@ -613,7 +613,6 @@ def main() -> None:
         _load_env()
     except RuntimeError as exc:
         logger.critical("Ошибка инициализации окружения: %s", exc)
-        print(f"TradeManager service startup failed: {exc}", file=sys.stderr)
         sys.exit(1)
     try:
         host = _resolve_host()

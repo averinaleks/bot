@@ -336,6 +336,8 @@ def configure_logging() -> None:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+    logger.propagate = False
+
     logger.info(
         "Logging configured. File: %s, level: %s",
         log_file_path,
