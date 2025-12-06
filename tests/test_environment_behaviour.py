@@ -56,6 +56,30 @@ def test_configure_environment_auto_offline_switch(monkeypatch, caplog):
     assert any("--auto-offline" in msg for msg in caplog.messages)
 
 
+def test_configure_environment_tolerates_missing_offline(monkeypatch, caplog):
+    _clear_required_env(monkeypatch)
+
+    import dotenv
+
+    monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
+
+    def _boom():
+        raise ImportError("no stubs")
+
+    monkeypatch.setattr(run_bot, "_import_offline_module", _boom)
+
+    args = SimpleNamespace(offline=True, auto_offline=False)
+    caplog.set_level("WARNING", logger="TradingBot")
+
+    offline_mode = run_bot.configure_environment(
+        args, allow_missing_offline_stubs=True
+    )
+
+    assert offline_mode is True
+    assert run_bot.OFFLINE_STUBS_AVAILABLE is False
+    assert any("офлайн-заглушек" in message for message in caplog.messages)
+
+
 def test_offline_placeholders_are_stable(monkeypatch):
     import services.offline as offline
 

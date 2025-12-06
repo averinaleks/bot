@@ -20,6 +20,13 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 
 
 logger = logging.getLogger("TradingBot")
+OFFLINE_STUBS_AVAILABLE = True
+
+
+def _import_offline_module():
+    import importlib
+
+    return importlib.import_module("services.offline")
 
 
 def _resolve_repo_root(required_modules: tuple[str, ...]) -> Path:
@@ -214,8 +221,12 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def configure_environment(args: argparse.Namespace) -> bool:
+def configure_environment(
+    args: argparse.Namespace, *, allow_missing_offline_stubs: bool = False
+) -> bool:
     """Apply environment configuration and return the resulting offline flag."""
+
+    global OFFLINE_STUBS_AVAILABLE
 
     # Load .env early without importing project packages to avoid triggering
     # config validation before we can decide on a safe mode.
@@ -262,14 +273,23 @@ def configure_environment(args: argparse.Namespace) -> bool:
     if offline_mode:
         os.environ.setdefault("TEST_MODE", "1")
         try:
-            from services import offline as offline_env_module
+            offline_env_module = _import_offline_module()
         except ImportError as exc:
-            raise SystemExit(
+            OFFLINE_STUBS_AVAILABLE = False
+            message = (
                 "OFFLINE_MODE=1: не удалось импортировать services.offline. "
                 "Убедитесь, что каталог services/offline.py присутствует в проекте."
-            ) from exc
+            )
+            if allow_missing_offline_stubs:
+                logger.warning("%s Продолжаем без офлайн-заглушек.", message)
+                return offline_mode
+            raise SystemExit(message) from exc
 
+        OFFLINE_STUBS_AVAILABLE = True
         offline_env_module.ensure_offline_env()
+    if not offline_mode:
+        OFFLINE_STUBS_AVAILABLE = True
+
     return offline_mode
 
 
@@ -539,7 +559,14 @@ def _is_offline_override(candidate: Any) -> bool:
 
 def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None):
     service_factories = dict(getattr(cfg, "service_factories", {}) or {})
-    if offline:
+    offline_factories_available = offline and OFFLINE_STUBS_AVAILABLE
+    if offline and not offline_factories_available:
+        logger.warning(
+            "OFFLINE_MODE=1 запрошен, но офлайн-заглушки недоступны: "
+            "автоматическое подключение фабрик будет пропущено."
+        )
+
+    if offline_factories_available:
         from services.offline import OFFLINE_SERVICE_FACTORIES
 
         forced_offline_keys = {
@@ -563,7 +590,13 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
             factory = _resolve_factory(cfg, name)
         except (ImportError, AttributeError, ValueError) as exc:
             configured = service_factories.get(name)
-            hint = "; no offline fallback is available" if not offline else ""
+            offline_hint = "; no offline fallback is available"
+            if offline:
+                if offline_factories_available:
+                    offline_hint = ""
+                else:
+                    offline_hint = "; offline stubs are not available"
+            hint = offline_hint
             raise ValueError(
                 "Failed to load service factory %r from %r: %s%s"
                 % (name, configured, exc, hint)
@@ -572,7 +605,10 @@ def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None
             if optional:
                 return None
             if offline:
-                hint = "; add an entry to service_factories in config.json"
+                if offline_factories_available:
+                    hint = "; add an entry to service_factories in config.json"
+                else:
+                    hint = "; offline stubs are missing and no factory is configured"
             else:
                 hint = (
                     "; add an entry to service_factories in config.json or run this "
@@ -746,7 +782,7 @@ async def run_simulation_cycle(args: argparse.Namespace, data_handler, trade_man
     )
 
 
-async def _maybe_load_initial(data_handler: Any) -> None:
+async def _maybe_load_initial(data_handler: Any, *, strict: bool = False) -> None:
     """Attempt to invoke ``load_initial`` on the data handler with safe error handling."""
 
     load_initial = getattr(data_handler, "load_initial", None)
@@ -758,6 +794,8 @@ async def _maybe_load_initial(data_handler: Any) -> None:
         if asyncio.iscoroutine(result):
             await result
     except (OSError, IOError, RuntimeError, ValueError, TypeError) as exc:  # noqa: PERF203 - narrow defensive guard
+        if strict:
+            raise
         logger.warning("Initial data load failed: %s", exc, exc_info=True)
 
 
@@ -766,7 +804,9 @@ async def main() -> None:
     _assert_project_layout(
         allow_partial=args.allow_partial_clone or args.offline or args.auto_offline
     )
-    offline_mode = configure_environment(args)
+    offline_mode = configure_environment(
+        args, allow_missing_offline_stubs=args.allow_partial_clone
+    )
 
     from bot.dotenv_utils import load_dotenv
 
@@ -786,7 +826,9 @@ async def main() -> None:
 
     data_handler, _model_builder, trade_manager = _build_components(cfg, offline_mode, args.symbols)
 
-    await _maybe_load_initial(data_handler)
+    await _maybe_load_initial(
+        data_handler, strict=bool(getattr(cfg, "strict_initial_load", False))
+    )
 
     if args.command == "simulate":
         await run_simulation_cycle(args, data_handler, trade_manager)
