@@ -69,6 +69,7 @@ services:
       - bot.model_builder:api_app
     ports:
       - "8001:8001"
+    env_file: .env
     deploy:
       resources:
         reservations:
@@ -157,6 +158,7 @@ services:
         condition: service_healthy
       gptoss_check:
         condition: service_completed_successfully
+    env_file: .env
     environment:
       - DATA_HANDLER_URL=${DATA_HANDLER_URL}
       - MODEL_BUILDER_URL=${MODEL_BUILDER_URL}
