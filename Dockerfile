@@ -27,6 +27,17 @@ mkdir -p /opt/security-layer
 if [ -f /opt/security-layer/.ready ]; then
   echo "Security layer already provisioned, skipping zlib/PAM rebuild"
 else
+  mkdir -p /etc/apt/keyrings
+  curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub \
+    | gpg --dearmor -o /etc/apt/keyrings/cuda-archive-keyring.gpg
+  if [ -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list ]; then
+    sed -i 's#\\[signed-by=[^]]*\\]#[signed-by=/etc/apt/keyrings/cuda-archive-keyring.gpg]#g' \
+      /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
+    if ! grep -q 'signed-by' /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list; then
+      sed -i 's#^deb #deb [signed-by=/etc/apt/keyrings/cuda-archive-keyring.gpg] #' \
+        /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
+    fi
+  fi
   apt-get update \
     && apt-get install -y --no-install-recommends \
     tzdata \
