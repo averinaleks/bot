@@ -76,10 +76,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    device_requests:
-      - driver: nvidia
-        count: 1
-        capabilities: [gpu]
     environment:
       - TF_CPP_MIN_LOG_LEVEL=3
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
@@ -125,10 +121,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    device_requests:
-      - driver: nvidia
-        count: 1
-        capabilities: [gpu]
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
