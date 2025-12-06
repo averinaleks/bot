@@ -69,6 +69,10 @@ services:
       - bot.model_builder:api_app
     ports:
       - "8001:8001"
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [gpu]
     deploy:
       resources:
         reservations:
@@ -114,6 +118,10 @@ services:
     ports:
       - "8002:8002"
     env_file: .env
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [gpu]
     deploy:
       resources:
         reservations:
