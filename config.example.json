@@ -1,0 +1,15 @@
+{
+  "exchange": "bybit",
+  "timeframe": "2h",
+  "secondary_timeframe": "2h",
+  "cache_dir": "./cache",
+  "log_dir": "./logs",
+  "max_symbols": 5,
+  "check_interval": 60.0,
+  "service_factories": {
+    "exchange": "services.service_factories:build_exchange",
+    "telegram_logger": "services.service_factories:build_telegram_logger",
+    "gpt_client": "services.service_factories:build_gpt_client"
+  },
+  "strict_initial_load": false
+}

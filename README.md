@@ -242,6 +242,17 @@ pytest tests/test_password_utils.py
     TRADE_MANAGER_TOKEN=secret
     ```
 
+    В репозитории добавлены шаблоны `.env.example` и `config.example.json`,
+    которые можно скопировать перед первым запуском:
+
+    ```bash
+    cp .env.example .env
+    cp config.example.json config.json
+    ```
+
+    Они включают офлайн-плейсхолдеры и минимальные настройки, поэтому хорошо
+    подходят для проверки офлайн-режима без реальных секретов.
+
 #### Переопределение переменных через `.env`
 
 Скрипты и сервисы вызывают `load_dotenv()` из модуля `bot.dotenv_utils`. Если

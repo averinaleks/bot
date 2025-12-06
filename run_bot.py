@@ -96,6 +96,8 @@ def _assert_project_layout(*, allow_partial: bool = False) -> None:
             return True
         return False
 
+    offline_env = os.getenv("OFFLINE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
     missing = []
     foreign = []
     for name in required_modules:
@@ -116,11 +118,12 @@ def _assert_project_layout(*, allow_partial: bool = False) -> None:
                 "найдены сторонние модули (ожидались из %s): %s" % (repo_root, details)
             )
 
-        if allow_partial:
+        if allow_partial or offline_env:
             logger.warning(
-                "Запуск в неполной копии репозитория (%s): %s. Продолжаем в деградированном режиме.",
+                "Запуск в неполной копии репозитория (%s): %s. Продолжаем в деградированном режиме%s.",
                 repo_root,
                 "; ".join(problems),
+                " (OFFLINE_MODE=1)" if offline_env else "",
             )
             return
 
