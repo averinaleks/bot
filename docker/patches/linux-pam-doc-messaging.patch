@@ -38,7 +38,7 @@
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
 -@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
-+	@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@	echo "No FO-to-PDF processor installed; skipping PDF generation."
 
  @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
  @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml
@@ -49,7 +49,7 @@
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
 -@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
-+	@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@	echo "No FO-to-PDF processor installed; skipping PDF generation."
 
  @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
  @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml
@@ -60,7 +60,7 @@
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@pamdoc1.pdf: pamdoc1.fo
  @ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@ \
 -@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No fo2pdf processor installed, skip PDF generation"
-+	@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@echo "No FO-to-PDF processor installed; skipping PDF generation."
++@ENABLE_GENERATE_PDF_FALSE@@ENABLE_REGENERATE_MAN_TRUE@	echo "No FO-to-PDF processor installed; skipping PDF generation."
 
  @ENABLE_REGENERATE_MAN_FALSE@pamdoc1.fo: pamdoc1-manpages.sgml sgml.in/misc.xml sgml.in/compat.xml \
  @ENABLE_REGENERATE_MAN_FALSE@ sgml.in/maps.xml
