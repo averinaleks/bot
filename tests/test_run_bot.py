@@ -47,6 +47,7 @@ async def test_run_trading_cycle_reraises_domain_error(caplog):
     message = str(excinfo.value)
     assert message.startswith("Trading loop aborted after TradeManager error")
     assert message.endswith("domain failure")
+    assert excinfo.value.__cause__ is not None
 
     frames = traceback.extract_tb(excinfo.value.__traceback__)
     assert any(frame.name == "run" for frame in frames)
@@ -171,3 +172,17 @@ def test_assert_project_layout_rejects_foreign_modules(monkeypatch, tmp_path):
     assert "постороннее" in message
     assert "services" in message
     assert str(package_root) in message
+
+
+def test_assert_project_layout_allows_partial_clone(monkeypatch, caplog):
+    import run_bot
+
+    def _fake_find_spec(name):
+        return None
+
+    monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
+
+    with caplog.at_level(logging.WARNING):
+        run_bot._assert_project_layout(allow_partial=True)
+
+    assert any("деградированном" in record.message for record in caplog.records)
