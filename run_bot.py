@@ -22,6 +22,36 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 logger = logging.getLogger("TradingBot")
 
 
+def _resolve_repo_root(required_modules: tuple[str, ...]) -> Path:
+    """Return the best-effort project root directory.
+
+    ``Path(__file__).parent`` is sufficient for editable installs, but in
+    packaged or embedded environments (e.g., ``pyinstaller``) the executable
+    path may be a better approximation. An optional ``BOT_PROJECT_ROOT`` or
+    ``PROJECT_ROOT`` environment variable can also be used to override the
+    detection.
+    """
+
+    env_root = os.getenv("BOT_PROJECT_ROOT") or os.getenv("PROJECT_ROOT")
+    if env_root:
+        root = Path(env_root).expanduser().resolve()
+        if root.exists():
+            return root
+
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):  # pragma: no cover - frozen binaries
+        candidates.append(Path(sys.executable).resolve().parent)
+
+    here = Path(__file__).resolve().parent
+    candidates.extend([here, *here.parents])
+
+    for candidate in candidates:
+        if all((candidate / module).exists() for module in required_modules):
+            return candidate
+
+    return here
+
+
 def _assert_project_layout(*, allow_partial: bool = False) -> None:
     """Проверяет, что запущен полный проект, а не урезанная копия.
 
@@ -38,7 +68,7 @@ def _assert_project_layout(*, allow_partial: bool = False) -> None:
         "bot",
     )
 
-    repo_root = Path(__file__).resolve().parent
+    repo_root = _resolve_repo_root(required_modules)
 
     def _is_in_repo(module_name: str) -> bool:
         spec = importlib.util.find_spec(module_name)
@@ -81,7 +111,8 @@ def _assert_project_layout(*, allow_partial: bool = False) -> None:
 
         if allow_partial:
             logger.warning(
-                "Запуск в неполной копии репозитория: %s. Продолжаем в деградированном режиме.",
+                "Запуск в неполной копии репозитория (%s): %s. Продолжаем в деградированном режиме.",
+                repo_root,
                 "; ".join(problems),
             )
             return
@@ -263,6 +294,16 @@ def ensure_directories(cfg: "BotConfig") -> None:
 
 
 
+_EMPTY_OHLCV_COLUMNS = (
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+)
+
+
 def _resolve_dataset(handler: Any, primary: str, legacy: str) -> Any:
     value = getattr(handler, primary, None)
     if value is not None:
@@ -274,7 +315,10 @@ def _resolve_dataset(handler: Any, primary: str, legacy: str) -> Any:
         import pandas as pd  # type: ignore[import-not-found]
     except ImportError:
         return ()
-    return pd.DataFrame()
+
+    data = {column: pd.Series(dtype="float64") for column in _EMPTY_OHLCV_COLUMNS}
+    data["timestamp"] = pd.Series(dtype="datetime64[ns, UTC]")
+    return pd.DataFrame(data, columns=_EMPTY_OHLCV_COLUMNS)
 
 
 def prepare_data_handler(handler, cfg: "BotConfig", symbols: list[str] | None) -> None:
@@ -623,14 +667,20 @@ async def run_trading_cycle(trade_manager, runtime: float | None) -> None:
     if collected:
         domain_error_map = {cls: attr for cls, attr in collected}
 
+    task = asyncio.create_task(run_coro())
+
     try:
         if runtime is not None:
-            await asyncio.wait_for(run_coro(), timeout=runtime)
+            await asyncio.wait_for(asyncio.shield(task), timeout=runtime)
         else:
-            await run_coro()
+            await task
     except asyncio.TimeoutError:
         logger.info("Runtime limit reached; stopping trading loop")
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
     except asyncio.CancelledError:
+        task.cancel()
         raise
     except Exception as exc:
         matched_attr: str | None = None
@@ -707,7 +757,7 @@ async def _maybe_load_initial(data_handler: Any) -> None:
         result = load_initial()
         if asyncio.iscoroutine(result):
             await result
-    except (OSError, IOError, RuntimeError) as exc:  # noqa: PERF203 - narrow defensive guard
+    except (OSError, IOError, RuntimeError, ValueError, TypeError) as exc:  # noqa: PERF203 - narrow defensive guard
         logger.warning("Initial data load failed: %s", exc, exc_info=True)
 
 

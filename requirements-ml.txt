@@ -1,0 +1,10 @@
+# Heavy ML/RL dependencies kept separate from the minimal core.
+# Install alongside requirements.txt when training or running GPU-backed features.
+stable-baselines3>=2.7.0,<3
+gymnasium>=0.29.1
+pytorch-lightning>=2.5.2
+transformers>=4.57.0,<5
+shap>=0.49.1
+pyarrow>=16.1.0
+numba>=0.61.0
+scikit-learn>=1.5.1
