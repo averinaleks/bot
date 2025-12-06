@@ -72,6 +72,7 @@ from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
+offline_mode = os.getenv("OFFLINE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class ServerConfigurationError(RuntimeError):
@@ -112,21 +113,49 @@ except ImportError as exc:  # pragma: no cover - dependency required
 
 API_KEYS: set[str] = set()
 
+CSRF_ENABLED = True
 try:  # pragma: no cover - handled in tests
     from fastapi_csrf_protect import CsrfProtect  # type: ignore[attr-defined]
 except Exception as exc:  # pragma: no cover - dependency required
-    raise RuntimeError(
-        "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
-    ) from exc
-try:  # pragma: no cover - handled in tests
-    from fastapi_csrf_protect import CsrfProtectError  # type: ignore[attr-defined]
-except (ImportError, AttributeError):  # pragma: no cover - export varies by version
-    try:
-        from fastapi_csrf_protect.exceptions import CsrfProtectError  # type: ignore[attr-defined]
-    except Exception as exc:  # pragma: no cover - dependency required
+    if offline_mode:
+        CSRF_ENABLED = False
+
+        class CsrfProtect:  # type: ignore[no-redef]
+            """Lightweight CsrfProtect stub used when OFFLINE_MODE=1."""
+
+            _header_name = "X-CSRF-Token"
+            _cookie_key = "fastapi-csrf-token"
+
+            @classmethod
+            def load_config(cls, func):
+                return func
+
+            async def validate_csrf(self, _request):
+                return None
+
+        logger.warning(
+            "OFFLINE_MODE=1: fastapi-csrf-protect is not installed; CSRF middleware is disabled",
+        )
+    else:
         raise RuntimeError(
             "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
         ) from exc
+
+if CSRF_ENABLED:
+    try:  # pragma: no cover - handled in tests
+        from fastapi_csrf_protect import CsrfProtectError  # type: ignore[attr-defined]
+    except (ImportError, AttributeError):  # pragma: no cover - export varies by version
+        try:
+            from fastapi_csrf_protect.exceptions import CsrfProtectError  # type: ignore[attr-defined]
+        except Exception as exc:  # pragma: no cover - dependency required
+            raise RuntimeError(
+                "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+            ) from exc
+else:  # pragma: no cover - exercised in offline environments
+    class CsrfProtectError(Exception):
+        """Placeholder error used when CSRF enforcement is disabled."""
+
+        pass
 
 load_dotenv()
 
@@ -374,6 +403,8 @@ class CsrfSettings(BaseModel):
     secret_key: str
 
 def _resolve_csrf_secret() -> str:
+    if not CSRF_ENABLED:
+        return "offline-mode-secret"
     env_secret = os.getenv("CSRF_SECRET")
     if env_secret:
         return env_secret
@@ -386,11 +417,13 @@ def _resolve_csrf_secret() -> str:
 @CsrfProtect.load_config
 def get_csrf_config() -> CsrfSettings:
     """Return CSRF settings for FastAPI CsrfProtect."""
+
     return CsrfSettings(secret_key=_resolve_csrf_secret())
 
 
-# Validate configuration at import time so misconfigured deployments fail fast.
-_resolve_csrf_secret()
+if CSRF_ENABLED:
+    # Validate configuration at import time so misconfigured deployments fail fast.
+    _resolve_csrf_secret()
 
 
 csrf_protect = CsrfProtect()
@@ -432,6 +465,9 @@ MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MB
 
 @app.middleware("http")
 async def enforce_csrf(request: Request, call_next):
+    if not CSRF_ENABLED:
+        return await call_next(request)
+
     if request.method == "POST":
         safe_method = sanitize_log_value(request.method)
         safe_url = sanitize_log_value(str(request.url))
