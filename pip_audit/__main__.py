@@ -12,7 +12,9 @@ clear, actionable error explaining how to install the full tool.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import sys
+from pathlib import Path
 from typing import Iterable
 
 
@@ -26,13 +28,24 @@ def _load_upstream_main() -> callable:
     concerns flagged by security scanners.
     """
 
-    try:
-        upstream = importlib.import_module("pip_audit.__main__")
-    except ModuleNotFoundError as exc:
+    spec = importlib.util.find_spec("pip_audit.__main__")
+    if spec is None or spec.origin is None:
         raise ModuleNotFoundError(
             "pip-audit CLI components are not installed; "
             "run `pip install pip-audit` to enable security scans"
-        ) from exc
+        )
+
+    # When this stub is the only ``pip_audit`` module on the path the spec
+    # resolves to this file, which would cause ``main`` to call back into
+    # itself. Treat that as the same missing-dependency case to preserve the
+    # clear ModuleNotFoundError raised previously.
+    if Path(spec.origin).resolve() == Path(__file__).resolve():
+        raise ModuleNotFoundError(
+            "pip-audit CLI components are not installed; "
+            "run `pip install pip-audit` to enable security scans"
+        )
+
+    upstream = importlib.import_module("pip_audit.__main__")
 
     main = getattr(upstream, "main", None)
     if main is None:
