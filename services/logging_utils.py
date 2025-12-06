@@ -68,8 +68,12 @@ def configure_service_logging() -> None:
             handler.setLevel(level)
             try:
                 handler.setFormatter(formatter)
-            except Exception:
-                continue
+            except (ValueError, TypeError) as exc:
+                logger.warning(
+                    "Не удалось применить форматтер к обработчику %s: %s",
+                    handler,
+                    exc,
+                )
 
     if invalid_level:
         logger.warning(

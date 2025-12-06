@@ -5,38 +5,48 @@ not vendored here to keep optional security tooling light-weight. Without this
 module ``python -m pip_audit`` fails with ``ModuleNotFoundError``, which breaks
 local security workflows and CI jobs that expect a module entrypoint.
 
-When the upstream package is available in the environment we delegate to the
-``pip-audit`` executable. Otherwise we exit with a clear, actionable error
-explaining how to install the full tool.
+When the upstream package is available in the environment we call into its
+``pip_audit.__main__.main`` implementation directly. Otherwise we exit with a
+clear, actionable error explaining how to install the full tool.
 """
 from __future__ import annotations
 
-import shutil
-import subprocess
+import importlib
 import sys
 from typing import Iterable
 
 
-def _build_command(argv: Iterable[str] | None) -> list[str]:
-    executable = shutil.which("pip-audit")
-    if executable is None:
+def _load_upstream_main() -> callable:
+    """Resolve the upstream ``pip_audit`` entrypoint.
+
+    The helper ensures we only import the external dependency when available
+    and raises a clear error when the executable is missing from the
+    environment. Importing and delegating directly avoids spawning
+    subprocesses, which keeps invocation simple and removes command injection
+    concerns flagged by security scanners.
+    """
+
+    try:
+        upstream = importlib.import_module("pip_audit.__main__")
+    except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
             "pip-audit CLI components are not installed; "
             "run `pip install pip-audit` to enable security scans"
-        )
+        ) from exc
 
-    command = [executable]
-    if argv:
-        command.extend(argv)
-    return command
+    main = getattr(upstream, "main", None)
+    if main is None:
+        raise RuntimeError("pip-audit is installed but exposes no CLI entrypoint")
+    return main
 
 
 def main(argv: list[str] | None = None) -> int:
     """Invoke the external ``pip-audit`` CLI when available."""
 
-    command = _build_command(argv)
-    result = subprocess.run(command, check=False)
-    return int(result.returncode)
+    upstream_main = _load_upstream_main()
+    # Fall back to an empty argument list so the upstream implementation parses
+    # its defaults consistently.
+    return int(upstream_main(argv or []))
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via ``python -m``
