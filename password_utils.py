@@ -171,3 +171,11 @@ def _verify_with_pbkdf2(password: str, stored_hash: str) -> bool:
     )
     return hmac.compare_digest(recalculated, derived)
 
+import hashlib
+import hmac
+import logging
+import os
+import re
+
+logger = logging.getLogger(__name__)
+
