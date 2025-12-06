@@ -336,7 +336,9 @@ def configure_logging() -> None:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    logger.propagate = False
+    # Оставляем propagate включённым, чтобы caplog и внешние обработчики могли
+    # перехватывать сообщения (важно для юнит-тестов и сторонних интеграций).
+    logger.propagate = True
 
     logger.info(
         "Logging configured. File: %s, level: %s",
@@ -636,6 +638,13 @@ async def safe_api_call(
         # During unit tests we do not want to spend time in the retry loop.
         return await getattr(exchange, method)(*args, **kwargs)
 
+    retriable_exceptions: tuple[type[BaseException], ...] = (
+        httpx.HTTPError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    )
+
     for attempt in range(max_attempts):
         try:
             result = await getattr(exchange, method)(*args, **kwargs)
@@ -651,7 +660,7 @@ async def safe_api_call(
                     raise RuntimeError(f"retCode {ret_code}")
 
             return result
-        except (httpx.HTTPError, RuntimeError) as exc:
+        except retriable_exceptions as exc:
             logger.error("Bybit API error in %s: %s", method, exc)
             if "10002" in str(exc):
                 logger.error(
@@ -660,6 +669,11 @@ async def safe_api_call(
             if attempt == max_attempts - 1:
                 raise
             await asyncio.sleep(backoff_factor ** attempt)
+        except Exception as exc:  # noqa: BLE001 - deliberate broad guard for observability
+            logger.error(
+                "Unhandled exception in Bybit API call %s: %s", method, exc, exc_info=True
+            )
+            raise
 
 
 class BybitSDKAsync:
