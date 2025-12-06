@@ -220,44 +220,45 @@ async def send_telegram_alert(message: str) -> None:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     client = await get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
-    delay = 1
+    delay = safe_float("TELEGRAM_ALERT_DELAY", 1.0)
     payload = {"chat_id": chat_id, "text": message}
     redaction = "***"
     for attempt in range(1, max_attempts + 1):
         try:
-                try:
-                    resp = await client.post(url, json=payload, timeout=10)
-                except TypeError:
-                    resp = await client.post(url, data=payload, timeout=10)
-                raise_for_status = getattr(resp, "raise_for_status", None)
-                if callable(raise_for_status):
-                    raise_for_status()
-                return
-        except httpx.HTTPError as exc:  # pragma: no cover - network errors
-            req_url = getattr(getattr(exc, "request", None), "url", url)
-            redacted_url = sanitize_log_value(str(req_url).replace(token, redaction))
-            sanitized_error = sanitize_log_value(str(exc).replace(token, redaction))
-            logger.warning(
-                "Failed to send Telegram alert (attempt %s/%s): %s (%s) %s",
-                attempt,
+            try:
+                resp = await client.post(url, json=payload, timeout=10)
+            except TypeError:
+                resp = await client.post(url, data=payload, timeout=10)
+            raise_for_status = getattr(resp, "raise_for_status", None)
+            if callable(raise_for_status):
+                raise_for_status()
+            return
+        except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            reason = f"network error ({exc.__class__.__name__})"
+        except httpx.HTTPError as exc:  # pragma: no cover - other network errors
+            reason = sanitize_log_value(str(exc).replace(token, redaction))
+        if attempt == max_attempts:
+            logger.error(
+                "Failed to send Telegram alert after %s attempts (%s): %s",
                 max_attempts,
-                redacted_url,
-                exc.__class__.__name__,
-                sanitized_error,
+                reason,
+                log_message,
             )
-            if attempt == max_attempts:
-                logger.error(
-                    "Failed to send Telegram alert after %s attempts: %s",
-                    max_attempts,
-                    log_message,
-                )
-                if CFG.save_unsent_telegram and _UNSENT_FALLBACK_PATH is not None:
-                    _logger = type("_TL", (), {"unsent_path": _UNSENT_FALLBACK_PATH})()
-                    TelegramLogger._save_unsent(_logger, chat_id, message)
-                return
+            if CFG.save_unsent_telegram and _UNSENT_FALLBACK_PATH is not None:
+                _logger = type("_TL", (), {"unsent_path": _UNSENT_FALLBACK_PATH})()
+                TelegramLogger._save_unsent(_logger, chat_id, message)
+            return
+        req_url = sanitize_log_value(url.replace(token, redaction))
+        logger.warning(
+            "Failed to send Telegram alert (attempt %s/%s): %s (%s)",
+            attempt,
+            max_attempts,
+            req_url,
+            reason,
+        )
+        if delay > 0:
             await asyncio.sleep(delay)
-            delay *= 2
-
+        delay *= 2
 
 _TASKS: set[asyncio.Task[None]] = set()
 _TASKS_LOCK = asyncio.Lock()
