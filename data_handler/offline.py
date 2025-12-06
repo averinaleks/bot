@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -14,6 +15,28 @@ if len(_SYMBOL_PERSONALISATION) > _BLAKE2S_PERSON_SIZE:
     raise ValueError(
         "Offline data handler personalisation exceeds blake2s PERSON_SIZE"
     )
+
+
+def _derive_seed(raw_seed: Any = None) -> int:
+    """Return a deterministic integer seed for offline fixtures.
+
+    ``raw_seed`` may come from the ``OFFLINE_SEED`` environment variable or be
+    passed directly from tests.  The helper normalises strings, integers and
+    other objects into a positive ``int`` so repeated runs with the same seed
+    generate identical fixtures.
+    """
+
+    if raw_seed is None:
+        raw_seed = os.getenv("OFFLINE_SEED")
+
+    if raw_seed is None or raw_seed == "":
+        return 0
+
+    try:
+        return abs(int(str(raw_seed), 10))
+    except (TypeError, ValueError):
+        digest = hashlib.blake2s(str(raw_seed).encode("utf-8", "surrogatepass"), digest_size=8)
+        return int.from_bytes(digest.digest(), "big")
 
 logger = logging.getLogger(__name__)
 
@@ -106,12 +129,17 @@ class OfflineDataHandler:
         http_client: Any | None = None,
         optimizer: Any | None = None,
         exchange: Any | None = None,
+        *,
+        seed: Any | None = None,
     ) -> None:
         self.cfg = cfg
         self.config = self._wrap_config(cfg)
         self.http_client = http_client
         self.exchange = exchange
         self._optimizer = optimizer
+        self._seed = _derive_seed(seed)
+        base_time = 1_700_000_000_000  # 2023-11-14 UTC baseline for deterministic fixtures
+        self._base_time_ms = base_time + (self._seed % 1_000_000)
         self.usdt_pairs = self._resolve_pairs(self.config)
         self.indicators: dict[str, SimpleNamespace] = {}
         self.indicators_2h: dict[str, SimpleNamespace] = {}
@@ -123,6 +151,7 @@ class OfflineDataHandler:
         self.cache: Optional[Any] = None
         self.parameter_optimizer = self._ensure_optimizer()
         self._last_refresh = 0.0
+        self._refresh_count = 0
         self.refresh()
 
     @staticmethod
@@ -181,7 +210,8 @@ class OfflineDataHandler:
     def refresh(self) -> None:
         """Populate deterministic OHLC and indicator fixtures."""
 
-        now_ms = int(time.time() * 1000)
+        now_ms = self._base_time_ms + int(self._refresh_count * 60_000)
+        self._refresh_count += 1
         try:
             import pandas as pd
         except Exception:  # pragma: no cover - pandas not available
