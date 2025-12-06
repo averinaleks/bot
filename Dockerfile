@@ -27,6 +27,11 @@ mkdir -p /opt/security-layer
 if [ -f /opt/security-layer/.ready ]; then
   echo "Security layer already provisioned, skipping zlib/PAM rebuild"
 else
+  apt-get update \
+    && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg
   mkdir -p /etc/apt/keyrings
   curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub \
     | gpg --dearmor -o /etc/apt/keyrings/cuda-archive-keyring.gpg
