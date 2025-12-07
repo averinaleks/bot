@@ -164,6 +164,7 @@ COPY docker/scripts/harden_gnutar.sh /tmp/security/harden_gnutar.sh
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
+    python3.12-venv \
     coreutils \
     zlib1g \
     libpam0g \
