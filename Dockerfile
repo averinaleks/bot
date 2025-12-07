@@ -165,6 +165,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     libpython3.12-stdlib \
     python3.12-venv \
+    python3-pip \
     coreutils \
     zlib1g \
     libpam0g \
@@ -172,21 +173,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     openssl \
     ca-certificates \
-    && python3 -m ensurepip --upgrade \
     && python3 -m venv /tmp/runtime-packaging \
-    && /tmp/runtime-packaging/bin/pip install --no-cache-dir 'setuptools>=80.9.0,<81' \
+    && . /tmp/runtime-packaging/bin/activate \
+    && pip install --no-cache-dir 'setuptools>=80.9.0,<81' \
+    && deactivate \
     && apt-get install -y --no-install-recommends \
         /tmp/pam-fixed/libpam0g_* \
         /tmp/pam-fixed/libpam-runtime_* \
         /tmp/pam-fixed/libpam-modules-bin_* \
         /tmp/pam-fixed/libpam-modules_* \
     && /bin/bash /tmp/security/harden_gnutar.sh \
-    && if command -v python3.11 >/dev/null 2>&1; then \
-        python3.11 -m ensurepip --upgrade; \
-        python3.11 -m venv /tmp/runtime-packaging-py311; \
-        /tmp/runtime-packaging-py311/bin/pip install --no-cache-dir 'setuptools>=80.9.0,<81'; \
-    fi \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed /tmp/runtime-packaging /tmp/runtime-packaging-py311 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/pam-fixed /tmp/runtime-packaging \
     && ldconfig \
     && /app/venv/bin/python --version \
     && openssl version
