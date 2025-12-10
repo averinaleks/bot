@@ -39,10 +39,20 @@ class OfflineModelBuilder:
         self.last_update_at: float | None = None
         self.save_interval = 900
         self.last_save_time = time.time()
-        cache_dir = getattr(config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None))
+        cache_dir = getattr(
+            config,
+            "cache_dir",
+            getattr(config, "get", lambda k, d=None: d)("cache_dir", None),
+        )
         if cache_dir is None:
             cache_dir = "."
-        self.state_file_path = os.path.join(cache_dir, "model_builder_state.pkl")
+        # Use an offline-only filename to avoid overwriting the real joblib state
+        # used by :class:`model_builder.core.ModelBuilder`.
+        self.state_file_path = os.path.join(
+            cache_dir, "model_builder_state.offline.json"
+        )
+        # Backwards-compatible path for previously written offline JSON files.
+        self._legacy_state_file_path = os.path.join(cache_dir, "model_builder_state.pkl")
         logger.info(
             "OFFLINE_MODE=1 или отсутствуют зависимости: используется заглушка ModelBuilder"
         )
@@ -93,20 +103,33 @@ class OfflineModelBuilder:
     def load_state(self, *args: Any, **kwargs: Any) -> None:
         """Load thresholds persisted by :meth:`save_state`."""
 
-        try:
-            if os.path.exists(self.state_file_path):
-                with open(self.state_file_path, "r", encoding="utf-8") as handle:
+        candidates = [self.state_file_path]
+        if self._legacy_state_file_path not in candidates:
+            candidates.append(self._legacy_state_file_path)
+
+        for path in candidates:
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
                     loaded = json.load(handle)
-                if isinstance(loaded, dict):
-                    self.base_thresholds = {
-                        str(k): float(v) for k, v in loaded.items()
-                    }
-            logger.debug(
-                "OfflineModelBuilder.load_state восстановил %d символов", len(self.base_thresholds)
-            )
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            logger.error("Ошибка загрузки состояния ModelBuilder: %s", exc)
-            self.base_thresholds = {}
+            except json.JSONDecodeError:
+                logger.debug(
+                    "Пропущен неподдерживаемый файл состояния ModelBuilder: %s", path
+                )
+                continue
+            except (OSError, ValueError) as exc:
+                logger.error("Ошибка загрузки состояния ModelBuilder: %s", exc)
+                self.base_thresholds = {}
+                return
+
+            if isinstance(loaded, dict):
+                self.base_thresholds = {str(k): float(v) for k, v in loaded.items()}
+                break
+
+        logger.debug(
+            "OfflineModelBuilder.load_state восстановил %d символов", len(self.base_thresholds)
+        )
 
     def compute_prediction_metrics(self, symbol: str) -> None:  # noqa: D401
         """Вернуть ``None``, показывая отсутствие метрик в офлайн-режиме."""
