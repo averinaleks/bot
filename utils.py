@@ -1133,3 +1133,11 @@ except ImportError as exc:  # pragma: no cover - fallback when package missing
     HistoricalDataCache: Any | None = None
 else:
     HistoricalDataCache = cast(Any, _HistoricalDataCache)
+
+
+# Регистрация модуля под обоими путями облегчает перезагрузку в тестах,
+# которые оперируют ``utils`` и ``bot.utils`` напрямую.
+_self_module = sys.modules.get(__name__)
+if _self_module is not None:  # pragma: no cover - зависит от способа загрузки модуля
+    sys.modules.setdefault("utils", _self_module)
+    sys.modules.setdefault("bot.utils", _self_module)

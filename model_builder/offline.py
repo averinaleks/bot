@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -47,6 +49,31 @@ class OfflineModelBuilder:
             "OFFLINE_MODE=1 или отсутствуют зависимости: используется заглушка ModelBuilder"
         )
 
+    async def backtest_loop(self) -> None:
+        """Простейший цикл бэктеста для офлайн-режима."""
+
+        interval = getattr(self.config, "backtest_interval", 0) or 0
+        min_sharpe = getattr(self.config, "min_sharpe_ratio", 0.0) or 0.0
+        while True:
+            results = await self.backtest_all()
+            for symbol, sharpe in results.items():
+                logger.warning(
+                    "Sharpe ratio for %s: %.3f (offline stub)", symbol, sharpe
+                )
+                if sharpe < min_sharpe:
+                    try:
+                        telegram = getattr(self.data_handler, "telegram_logger", None)
+                        if telegram is not None:
+                            await telegram.send_telegram_message(
+                                f"Sharpe ratio warning for {symbol}: {sharpe}"
+                            )
+                    except Exception:  # pragma: no cover - best-effort notification
+                        logger.debug("Telegram stub failed", exc_info=True)
+            if interval <= 0:
+                await asyncio.sleep(0)
+                break
+            await asyncio.sleep(interval)
+
     # ------------------------------------------------------------------
     # Публичные методы, которые вызываются офлайн-сервисами.
     # ------------------------------------------------------------------
@@ -55,6 +82,12 @@ class OfflineModelBuilder:
 
         self.last_update_at = time.time()
         return {"updated": True, "timestamp": self.last_update_at}
+
+    async def backtest_all(self) -> dict[str, float]:
+        """Вернуть фиктивные значения Sharpe ratio по символам."""
+
+        pairs = getattr(self.data_handler, "usdt_pairs", []) or []
+        return {symbol: 0.0 for symbol in pairs}
 
     def predict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Вернуть детерминированный ответ с нейтральным сигналом."""
@@ -136,6 +169,13 @@ class OfflineModelBuilder:
         except Exception:
             return [[0.0] * 5 for _ in range(60)]
 
+    async def precompute_features(self, symbol: str) -> None:
+        """Сохранить рассчитанные признаки в кэш."""
+
+        indicators = getattr(self.data_handler, "indicators", {}).get(symbol)
+        features = await self.prepare_lstm_features(symbol, indicators)
+        self.feature_cache[symbol] = features
+
     async def adjust_thresholds(self, symbol: str, prediction: float) -> tuple[float, float]:
         """Вернуть фиксированные пороги для офлайн-режима."""
 
@@ -147,6 +187,21 @@ class OfflineModelBuilder:
 
         self.last_update_at = time.time()
         self.predictive_models[symbol] = {"retrained": True, "timestamp": self.last_update_at}
+
+    async def compute_shap_values(self, symbol: str, model: Any, data: Any) -> None:
+        """Сгенерировать фиктивные SHAP значения и записать их в файл."""
+
+        shap_dir = os.path.join(getattr(self.config, "cache_dir", "."), "shap")
+        os.makedirs(shap_dir, exist_ok=True)
+        filename = hashlib.sha256(symbol.encode("utf-8", "replace")).hexdigest()
+        path = os.path.join(shap_dir, f"shap_{filename}.pkl")
+        try:
+            import joblib
+
+            values = data
+            joblib.dump(values, path)
+        except Exception:  # pragma: no cover - best effort persistence
+            logger.debug("Failed to write SHAP cache", exc_info=True)
 
     async def prepare_dataset(self, *args: Any, **kwargs: Any) -> None:
         """Заглушка для совместимости с основным интерфейсом."""

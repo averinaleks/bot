@@ -264,6 +264,8 @@ def _resolve_expected_token() -> str:
 def _authentication_optional() -> bool:
     """Return ``True`` when the API token requirement may be skipped."""
 
+    if getattr(app, "testing", False):
+        return False
     # ``TEST_MODE`` is enabled for the pytest suite where we still want to
     # exercise the authentication branch.  Only explicit offline or stub modes
     # should bypass the token requirement to avoid accidentally exposing the

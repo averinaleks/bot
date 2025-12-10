@@ -218,6 +218,7 @@ async def send_telegram_alert(message: str) -> None:
         logger.warning("Telegram inactive, message not sent: %s", log_message)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    safe_url = sanitize_log_value(url.replace(token, redaction))
     client = await get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = safe_float("TELEGRAM_ALERT_DELAY", 1.0)
@@ -239,21 +240,21 @@ async def send_telegram_alert(message: str) -> None:
             reason = sanitize_log_value(str(exc).replace(token, redaction))
         if attempt == max_attempts:
             logger.error(
-                "Failed to send Telegram alert after %s attempts (%s): %s",
+                "Failed to send Telegram alert after %s attempts (%s via %s): %s",
                 max_attempts,
                 reason,
+                safe_url,
                 log_message,
             )
             if CFG.save_unsent_telegram and _UNSENT_FALLBACK_PATH is not None:
                 _logger = type("_TL", (), {"unsent_path": _UNSENT_FALLBACK_PATH})()
                 TelegramLogger._save_unsent(_logger, chat_id, message)
             return
-        req_url = sanitize_log_value(url.replace(token, redaction))
         logger.warning(
             "Failed to send Telegram alert (attempt %s/%s): %s (%s)",
             attempt,
             max_attempts,
-            req_url,
+            safe_url,
             reason,
         )
         if delay > 0:

@@ -141,6 +141,11 @@ except Exception as exc:  # pragma: no cover - dependency required
             "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
         ) from exc
 
+if CSRF_ENABLED and 'CsrfProtect' not in locals():
+    raise RuntimeError(
+        "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+    )
+
 if CSRF_ENABLED:
     try:  # pragma: no cover - handled in tests
         from fastapi_csrf_protect import CsrfProtectError  # type: ignore[attr-defined]
