@@ -8,6 +8,7 @@
 
 import importlib
 import os
+import sys
 from typing import TYPE_CHECKING, Any, List, cast
 
 from bot import config as bot_config
@@ -22,12 +23,21 @@ else:
 use_offline_stubs = bot_config.OFFLINE_MODE or os.getenv("TEST_MODE") == "1"
 
 if use_offline_stubs:
+    from bot.http_client import close_async_http_client, get_async_http_client
     from services.offline import OfflineTelegram, OfflineTradeManager
 
-    _trade_manager_impl = cast(type[TradeManagerType], OfflineTradeManager)
-    _telegram_logger_impl = cast(type[TelegramLoggerType], OfflineTelegram)
+    utils_module = sys.modules.get("utils") or sys.modules.get("bot.utils")
+    telegram_cls = getattr(utils_module, "TelegramLogger", None)
+    if telegram_cls is None:
+        telegram_cls = OfflineTelegram
 
-    __all__ = ["TradeManager", "TelegramLogger", "service"]
+    _trade_manager_impl = cast(type[TradeManagerType], OfflineTradeManager)
+    _telegram_logger_impl = cast(type[TelegramLoggerType], telegram_cls)
+
+    get_http_client = get_async_http_client
+    close_http_client = close_async_http_client
+
+    __all__ = ["TradeManager", "TelegramLogger", "service", "get_http_client", "close_http_client"]
 else:  # pragma: no cover - реальная инициализация
     from bot.http_client import close_async_http_client, get_async_http_client
     from bot.utils_loader import require_utils

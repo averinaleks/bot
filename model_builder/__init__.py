@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import tempfile
 import traceback
 import types
 
@@ -29,6 +30,8 @@ if not _OFFLINE_REQUESTED:
         _CORE_IMPORT_ERROR = exc
         _CORE_IMPORT_TRACEBACK = traceback.format_exc()
         _core_module = None
+        if os.getenv("ALLOW_GYM_STUB") == "0":
+            raise
         _OFFLINE_REQUESTED = True
     else:
         _CORE_AVAILABLE = True
@@ -121,9 +124,62 @@ else:
     DQN = _OfflineProxy("DQN")
     DummyVecEnv = _OfflineProxy("DummyVecEnv")
     PPO = _OfflineProxy("PPO")
-    RLAgent = _OfflineProxy("RLAgent")
+    class TradingEnv:
+        """Упрощённая среда для офлайн-тестов."""
+
+        def __init__(self, ohlcv, config):
+            self.ohlcv = ohlcv
+            self.config = config
+            self.balance = 0.0
+            self.max_balance = 0.0
+            self.position = "flat"
+
+        def reset(self):
+            self.balance = 0.0
+            self.max_balance = 0.0
+            self.position = "flat"
+            return None
+
+        def step(self, action: int):
+            drawdown_penalty = getattr(self.config, "drawdown_penalty", 0.0)
+            reward = 0.0
+            done = False
+            if action == 1:  # open/extend long
+                if self.position == "long":
+                    reward = -1.0 - drawdown_penalty * (self.max_balance - self.balance)
+                else:
+                    reward = 1.0
+                    self.position = "long"
+                self.balance += reward
+            elif action == 3:  # close position
+                reward = 1.0
+                self.balance += reward
+                done = True
+                self.position = "flat"
+            self.max_balance = max(self.max_balance, self.balance)
+            return None, reward, done, {}
+
+    class RLAgent:
+        """Лёгкая замена RLAgent, не требующая ML-зависимостей."""
+
+        def __init__(self, config, data_handler, model_builder):
+            self.config = config
+            self.data_handler = data_handler
+            self.model_builder = model_builder
+            self.models: dict[str, str] = {}
+
+        async def train_symbol(self, symbol: str):
+            self.models[symbol] = "trained"
+
+        async def _prepare_features(self, symbol: str, indicators):
+            import pandas as pd
+
+            return pd.DataFrame({"feature": [0.0]}, index=[0])
+
+        def predict(self, symbol: str, _features):
+            return "hold"
+
     SB3_AVAILABLE = False
-    TradingEnv = _OfflineProxy("TradingEnv")
     KERAS_FRAMEWORKS: tuple[str, ...] = ()
     _freeze_keras_base_layers = _offline_unavailable("_freeze_keras_base_layers")
     _freeze_torch_base_layers = _offline_unavailable("_freeze_torch_base_layers")
