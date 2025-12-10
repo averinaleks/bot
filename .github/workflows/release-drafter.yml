@@ -151,8 +151,8 @@ jobs:
               return 0
             fi
 
-            if [ "${status}" = "403" ]; then
-              echo "GitHub API returned 403 for ${endpoint}; retrying without authentication." >&2
+            if [ "${status}" = "403" ] || [ "${status}" = "404" ]; then
+              echo "GitHub API returned ${status} for ${endpoint}; retrying without authentication." >&2
               status="$(curl -sS -o /tmp/release_drafter_ref_check -w '%{http_code}' \
                 -H 'Accept: application/vnd.github+json' \
                 -H 'X-GitHub-Api-Version: 2022-11-28' \
