@@ -219,9 +219,30 @@ RUN echo "Checking library versions and CUDA availability..." && \
     /app/venv/bin/python3 -c "import mlflow; print('MLflow Version:', mlflow.__version__)" || echo "MLflow check failed"
 
 # Use a dedicated non-root user at runtime aligned with typical host UID/GID
-RUN groupadd --system --gid ${APP_GID} bot && useradd --system --uid ${APP_UID} --gid bot --home-dir /home/bot --shell /bin/bash bot \
-    && mkdir -p /home/bot \
-    && chown -R bot:bot /app /home/bot
+RUN set -eux; \
+    # If a user with the target UID already exists, rename it to "bot" and move its home.
+    if getent passwd "${APP_UID}" > /dev/null; then \
+        existing_user="$(getent passwd "${APP_UID}" | cut -d: -f1)"; \
+        if [ "${existing_user}" != "bot" ]; then \
+            usermod -l bot -d /home/bot -m "${existing_user}"; \
+        fi; \
+    fi; \
+    # If a group with the target GID already exists, rename it to "bot".
+    if getent group "${APP_GID}" > /dev/null; then \
+        existing_group="$(getent group "${APP_GID}" | cut -d: -f1)"; \
+        if [ "${existing_group}" != "bot" ]; then \
+            groupmod -n bot "${existing_group}"; \
+        fi; \
+    fi; \
+    # Create the group/user when they do not already exist.
+    if ! getent passwd "${APP_UID}" > /dev/null; then \
+        if ! getent group "${APP_GID}" > /dev/null; then \
+            groupadd --system --gid "${APP_GID}" bot; \
+        fi; \
+        useradd --system --uid "${APP_UID}" --gid bot --home-dir /home/bot --shell /bin/bash bot; \
+    fi; \
+    mkdir -p /home/bot; \
+    chown -R bot:bot /app /home/bot
 
 USER bot
 
