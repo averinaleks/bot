@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
 import math
 import os
@@ -12,6 +13,8 @@ import secrets
 import time
 from collections.abc import Callable, Mapping
 from typing import Final, SupportsFloat, SupportsIndex, SupportsInt, cast
+
+import pandas as pd
 
 from bot import config as bot_config
 from services.logging_utils import sanitize_log_value
@@ -300,6 +303,21 @@ class OfflineTradeManager:
         self._max_iterations = self._resolve_iterations(config)
         self._iteration_delay = self._resolve_delay(config)
 
+        self.positions = self._init_positions_frame()
+        pairs = getattr(data_handler, "usdt_pairs", [])
+        self.returns_by_symbol: dict[str, list[tuple[float, float]]] = {
+            symbol: [] for symbol in pairs
+        }
+        self.position_lock = asyncio.Lock()
+        self.save_interval = 900
+        self.last_save_time = time.time()
+        self.positions_changed = False
+        cache_dir = getattr(config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None))
+        if cache_dir is None:
+            cache_dir = "."
+        self.state_file = os.path.join(cache_dir, "trade_manager_state.json")
+        self.returns_file = os.path.join(cache_dir, "trade_manager_returns.json")
+
     @staticmethod
     def _resolve_iterations(config) -> int:
         raw = getattr(config, "offline_iterations", None)
@@ -322,6 +340,109 @@ class OfflineTradeManager:
         except (TypeError, ValueError):
             return 0.0
         return max(0.0, value)
+
+    def _init_positions_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "symbol",
+                "side",
+                "position",
+                "size",
+                "entry_price",
+                "tp_multiplier",
+                "sl_multiplier",
+                "stop_loss_price",
+                "highest_price",
+                "lowest_price",
+                "breakeven_triggered",
+                "last_checked_ts",
+                "last_trailing_ts",
+            ],
+            index=pd.MultiIndex.from_arrays(
+                [pd.Index([], dtype=object), pd.DatetimeIndex([], tz="UTC")],
+                names=["symbol", "timestamp"],
+            ),
+        )
+
+    def _has_position(self, symbol: str) -> bool:
+        return (
+            "symbol" in self.positions.index.names
+            and symbol in self.positions.index.get_level_values("symbol")
+        )
+
+    def _persist_state(self) -> None:
+        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+        tmp_state = f"{self.state_file}.tmp"
+        tmp_returns = f"{self.returns_file}.tmp"
+        try:
+            payload: dict[str, object] = {}
+            if not self.positions.empty:
+                df = self.positions
+                if "symbol" in df.columns:
+                    df = df.drop(columns="symbol")
+                df = df.reset_index()
+                if "timestamp" in df.columns:
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+                    df["timestamp"] = df["timestamp"].apply(
+                        lambda ts: ts.isoformat()
+                    )
+                payload["positions"] = df.to_dict(orient="records")
+            payload["returns"] = self.returns_by_symbol
+            with open(tmp_state, "w", encoding="utf-8") as handle:
+                json.dump(payload.get("positions", []), handle)
+            with open(tmp_returns, "w", encoding="utf-8") as handle:
+                json.dump(payload.get("returns", {}), handle)
+            os.replace(tmp_state, self.state_file)
+            os.replace(tmp_returns, self.returns_file)
+            self.last_save_time = time.time()
+            self.positions_changed = False
+            logger.info("Состояние TradeManager сохранено (offline)")
+        except (OSError, ValueError) as exc:
+            logger.error("Failed to save state (offline): %s", exc)
+            for path in (tmp_state, tmp_returns):
+                with contextlib.suppress(OSError):
+                    if os.path.exists(path):
+                        os.remove(path)
+            raise
+
+    def save_state(self) -> None:
+        if not self.positions_changed and time.time() - self.last_save_time < self.save_interval:
+            return
+        self._state_dirty_version = getattr(self, "_state_dirty_version", 0) + 1
+        try:
+            self._persist_state()
+        except Exception:
+            raise
+
+    def load_state(self) -> None:
+        try:
+            if os.path.exists(self.state_file):
+                with open(self.state_file, "r", encoding="utf-8") as handle:
+                    positions_data = json.load(handle)
+                if positions_data:
+                    df = pd.DataFrame(positions_data)
+                    if not df.empty:
+                        if "timestamp" in df.columns:
+                            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+                        if "symbol" not in df.columns:
+                            df["symbol"] = ""
+                        self.positions = df.set_index(["symbol", "timestamp"])
+                        if "last_trailing_ts" not in self.positions.columns:
+                            self.positions["last_trailing_ts"] = pd.NaT
+            if os.path.exists(self.returns_file):
+                with open(self.returns_file, "r", encoding="utf-8") as handle:
+                    loaded_returns = json.load(handle)
+                if isinstance(loaded_returns, dict):
+                    self.returns_by_symbol = loaded_returns
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning("Не удалось загрузить офлайн-состояние TradeManager: %s", exc)
+        pairs = getattr(self.data_handler, "usdt_pairs", [])
+        for symbol in pairs:
+            self.returns_by_symbol.setdefault(symbol, [])
+        if "timestamp" not in self.positions.index.names:
+            self.positions = self._init_positions_frame()
+        if "last_trailing_ts" not in self.positions.columns:
+            self.positions["last_trailing_ts"] = pd.NaT
 
     def _build_telegram_logger(self, factory, telegram_bot, chat_id):
         if factory is None:
@@ -401,6 +522,38 @@ class OfflineTradeManager:
                 await result
         except Exception as exc:  # pragma: no cover - defensive fallback
             logger.debug("Offline model update failed: %s", exc)
+
+    async def open_position(self, symbol, signal, price, params):
+        order_size = float(params.get("amount", 1.0)) if isinstance(params, dict) else 1.0
+        if self.exchange is not None:
+            create_order = getattr(self.exchange, "create_order", None)
+            if callable(create_order):
+                try:
+                    result = create_order(symbol, "market", signal, order_size, price, {})
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception:
+                    logger.debug("Offline create_order failed", exc_info=True)
+            tp_sl = getattr(self.exchange, "create_order_with_take_profit_and_stop_loss", None)
+            if callable(tp_sl):
+                take_profit = price * 1.01
+                stop_loss = price * 0.99
+                try:
+                    result = tp_sl(symbol, "market", signal, order_size, price, take_profit, stop_loss, {})
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception:
+                    logger.debug("Offline TP/SL order failed", exc_info=True)
+        self.positions_changed = True
+
+    async def check_trailing_stop(self, *_args, **_kwargs) -> None:
+        return None
+
+    async def check_stop_loss_take_profit(self, *_args, **_kwargs) -> None:
+        return None
+
+    async def check_exit_signal(self, *_args, **_kwargs) -> None:
+        return None
 
 
 class OfflineGPT:

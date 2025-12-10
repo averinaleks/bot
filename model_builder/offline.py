@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
+import os
 import time
 from typing import Any
 
@@ -34,6 +37,12 @@ class OfflineModelBuilder:
         self.threshold_offset: float = 0.0
         self.device = "cpu"
         self.last_update_at: float | None = None
+        self.save_interval = 900
+        self.last_save_time = time.time()
+        cache_dir = getattr(config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None))
+        if cache_dir is None:
+            cache_dir = "."
+        self.state_file_path = os.path.join(cache_dir, "model_builder_state.pkl")
         logger.info(
             "OFFLINE_MODE=1 или отсутствуют зависимости: используется заглушка ModelBuilder"
         )
@@ -62,14 +71,42 @@ class OfflineModelBuilder:
         return self.feature_cache.get(symbol)
 
     def save_state(self, *args: Any, **kwargs: Any) -> None:
-        """Сохранение состояния в офлайн-режиме опускается."""
+        """Persist thresholds to a lightweight JSON file."""
 
-        logger.debug("OfflineModelBuilder.save_state игнорирован")
+        if time.time() - self.last_save_time < self.save_interval:
+            return
+        tmp_path = f"{self.state_file_path}.tmp"
+        os.makedirs(os.path.dirname(self.state_file_path), exist_ok=True)
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as handle:
+                json.dump(self.base_thresholds, handle)
+            os.replace(tmp_path, self.state_file_path)
+            self.last_save_time = time.time()
+            logger.debug("OfflineModelBuilder.save_state завершен")
+        except (OSError, ValueError) as exc:
+            logger.error("Ошибка сохранения состояния ModelBuilder: %s", exc)
+            with contextlib.suppress(OSError):
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            raise
 
     def load_state(self, *args: Any, **kwargs: Any) -> None:
-        """Загрузка состояния в офлайн-режиме опускается."""
+        """Load thresholds persisted by :meth:`save_state`."""
 
-        logger.debug("OfflineModelBuilder.load_state игнорирован")
+        try:
+            if os.path.exists(self.state_file_path):
+                with open(self.state_file_path, "r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
+                if isinstance(loaded, dict):
+                    self.base_thresholds = {
+                        str(k): float(v) for k, v in loaded.items()
+                    }
+            logger.debug(
+                "OfflineModelBuilder.load_state восстановил %d символов", len(self.base_thresholds)
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            logger.error("Ошибка загрузки состояния ModelBuilder: %s", exc)
+            self.base_thresholds = {}
 
     def compute_prediction_metrics(self, symbol: str) -> None:  # noqa: D401
         """Вернуть ``None``, показывая отсутствие метрик в офлайн-режиме."""
