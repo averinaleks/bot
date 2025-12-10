@@ -6,7 +6,7 @@
 #
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-a2wsgi>=1.4
+a2wsgi==1.10.10
     # via -r requirements-core.in
 aiodns==3.5.0
     # via ccxt
@@ -28,11 +28,17 @@ anyio==4.11.0
     #   httpx
     #   openai
     #   starlette
+async-timeout==5.0.1
+    # via aiohttp
 attrs==25.4.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
+backports-asyncio-runner==1.2.0 ; python_version < "3.11"
+    # via
+    #   -r requirements-core.in
+    #   pytest-asyncio
 bcrypt==5.0.0
     # via -r requirements-core.in
 blinker==1.9.0
@@ -58,7 +64,7 @@ cloudpickle==3.1.1
     #   gymnasium
     #   shap
     #   stable-baselines3
-contourpy==1.3.3
+contourpy==1.3.2
     # via matplotlib
 cryptography==46.0.3
     # via
@@ -68,6 +74,10 @@ cycler==0.12.1
     # via matplotlib
 distro==1.9.0
     # via openai
+exceptiongroup==1.3.1
+    # via
+    #   anyio
+    #   pytest
 farama-notifications==0.0.4
     # via gymnasium
 fastapi==0.120.3
@@ -163,13 +173,13 @@ multidict==6.7.0
     # via
     #   aiohttp
     #   yarl
-networkx==3.5
+networkx==3.4.2
     # via torch
 numba==0.62.1
     # via
     #   -r requirements-core.in
     #   shap
-numpy==2.2.6; python_version < "3.11"
+numpy==2.2.6
     # via
     #   -r requirements-core.in
     #   contourpy
@@ -187,25 +197,7 @@ numpy==2.2.6; python_version < "3.11"
     #   ta
     #   torchmetrics
     #   transformers
-numpy==2.3.4; python_version >= "3.11"
-    # via
-    #   -r requirements-core.in
-    #   contourpy
-    #   gymnasium
-    #   imbalanced-learn
-    #   matplotlib
-    #   numba
-    #   pandas
-    #   patsy
-    #   scikit-learn
-    #   scipy
-    #   shap
-    #   stable-baselines3
-    #   statsmodels
-    #   ta
-    #   torchmetrics
-    #   transformers
-openai==2.6.1
+openai==2.9.0
     # via -r requirements-core.in
 packaging==25.0
     # via
@@ -312,7 +304,7 @@ scikit-learn==1.7.2
     #   -r requirements-core.in
     #   imbalanced-learn
     #   shap
-scipy==1.16.3
+scipy==1.15.3
     # via
     #   -r requirements-core.in
     #   imbalanced-learn
@@ -348,6 +340,8 @@ threadpoolctl==3.6.0
     #   scikit-learn
 tokenizers==0.22.1
     # via transformers
+tomli==2.3.0
+    # via pytest
 torch==2.9.0+cpu
     # via
     #   pytorch-lightning
@@ -366,13 +360,17 @@ transformers==4.57.1
     # via -r requirements-core.in
 typing-extensions==4.15.0
     # via
+    #   a2wsgi
     #   aiosignal
     #   anyio
     #   ccxt
+    #   cryptography
+    #   exceptiongroup
     #   fastapi
     #   gymnasium
     #   huggingface-hub
     #   lightning-utilities
+    #   multidict
     #   openai
     #   pydantic
     #   pydantic-core
