@@ -244,13 +244,13 @@ pycparser==2.23
     # via cffi
 pycryptodome==3.23.0
     # via pybit
-pydantic==2.12.3
+pydantic==2.12.5
     # via
     #   fastapi
     #   fastapi-csrf-protect
     #   openai
     #   pydantic-settings
-pydantic-core==2.41.4
+pydantic-core==2.41.5
     # via pydantic
 pydantic-settings==2.11.0
     # via fastapi-csrf-protect
