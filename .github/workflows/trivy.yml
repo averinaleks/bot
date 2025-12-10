@@ -109,7 +109,7 @@ jobs:
           path: .
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@17783bfb99b07f70fae080b654aed0c514057477 # codeql-bundle-v2.23.3
+        uses: github/codeql-action/upload-sarif@cf1bb45a277cb3c205638b2cd5c984db1c46a412 # codeql-bundle-v2.23.3
         with:
           category: trivy-fs
           sarif_file: trivy-results.sarif
