@@ -863,9 +863,20 @@ python scripts/disable_desktop_credential_helper.py
 со ссылкой на `desktop.exe`. После этого повторите `docker compose build --no-cache`
 или обычный `docker compose up --build`.
 
-Если не хотите использовать скрипт, откройте `~/.docker/config.json` и удалите ключи
-`"credsStore": "desktop.exe"` и записи `credHelpers`, содержащие `desktop`.
-Главное — оставить JSON корректным и не задавать несуществующих хелперов.
+Если не хотите менять глобальную конфигурацию, запустите сборку через оболочку,
+которая использует локальный конфиг без хелперов Windows:
+
+```bash
+scripts/docker_compose_wsl.sh build --no-cache
+scripts/docker_compose_wsl.sh up --build
+```
+
+Скрипт создаёт файл `docker/config-wsl/config.json` с пустыми полями `auths` и
+`credHelpers` (без `credsStore`), поэтому Docker не обращается к
+`docker-credential-desktop.exe`. Если же предпочитаете править глобальный
+`~/.docker/config.json`, удалите ключи `"credsStore": "desktop.exe"` и записи
+`credHelpers`, содержащие `desktop`. Главное — оставить JSON корректным и не
+задавать несуществующих хелперов.
 
 ## Telegram notifications
 
