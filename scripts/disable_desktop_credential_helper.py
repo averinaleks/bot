@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from json import JSONDecodeError
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -16,8 +17,11 @@ BACKUP_SUFFIX = "%Y%m%d-%H%M%S"
 def load_config(config_path: Path) -> Dict[str, Any]:
     if not config_path.exists():
         return {}
-    with config_path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
+    try:
+        with config_path.open("r", encoding="utf-8") as fp:
+            return json.load(fp)
+    except JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {config_path}: {exc}") from exc
 
 
 def save_config(config_path: Path, data: Dict[str, Any]) -> None:
@@ -61,7 +65,17 @@ def main() -> None:
     config_dir = Path(os.environ.get(DOCKER_CONFIG_ENV, DEFAULT_CONFIG_DIR))
     config_path = config_dir / CONFIG_FILENAME
 
-    config_data = load_config(config_path)
+    try:
+        config_data = load_config(config_path)
+    except ValueError as exc:
+        backup_path = backup_config(config_path)
+        save_config(config_path, {})
+        if backup_path:
+            print(f"Backed up invalid Docker config to {backup_path}.")
+        print(f"Invalid Docker config at {config_path}: {exc}")
+        print("Rewrote Docker config without credential helpers; rerun your compose command.")
+        return
+
     if not config_data:
         print(f"No existing Docker config found at {config_path}; nothing to update.")
         return
