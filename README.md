@@ -843,6 +843,30 @@ use these steps to diagnose the problem:
    `HTTP_CLIENT_TIMEOUT` in your environment (defaults to `5`
    seconds).
 
+## Ошибка `docker-credential-desktop.exe` в WSL
+
+В WSL Docker может пытаться вызвать Windows-бинарник `docker-credential-desktop.exe`,
+из-за чего `docker compose build` или `docker compose up --build` завершаются ошибкой:
+
+```
+error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.exe: exec format error, out: ``
+```
+
+Это признак того, что в `~/.docker/config.json` прописан помощник учётных данных
+от Docker Desktop, который недоступен в Linux-среде WSL. Удалите его одной командой:
+
+```bash
+python scripts/disable_desktop_credential_helper.py
+```
+
+Скрипт сохранит резервную копию конфигурации и удалит записи `credsStore`/`credHelpers`
+со ссылкой на `desktop.exe`. После этого повторите `docker compose build --no-cache`
+или обычный `docker compose up --build`.
+
+Если не хотите использовать скрипт, откройте `~/.docker/config.json` и удалите ключи
+`"credsStore": "desktop.exe"` и записи `credHelpers`, содержащие `desktop`.
+Главное — оставить JSON корректным и не задавать несуществующих хелперов.
+
 ## Telegram notifications
 
 Укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `.env`, чтобы включить
