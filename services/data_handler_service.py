@@ -40,7 +40,8 @@ _KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
 )
 
 
-configure_service_logging()
+if os.getenv("PYTEST_CURRENT_TEST") is None:
+    configure_service_logging()
 load_dotenv()
 
 API_KEY_ENV_VAR = "DATA_HANDLER_API_KEY"

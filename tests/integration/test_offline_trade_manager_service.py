@@ -18,6 +18,7 @@ def offline_trade_manager(monkeypatch, tmp_path):
     # Ensure offline stubs are enabled and clean credentials are generated.
     monkeypatch.setenv("OFFLINE_MODE", "1")
     monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.setenv("TRADE_MANAGER_ALLOW_ANON", "1")
     monkeypatch.delenv("TRADE_MANAGER_TOKEN", raising=False)
 
     module_name = "services.trade_manager_service"

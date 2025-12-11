@@ -18,6 +18,23 @@ from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from bot.host_utils import validate_host as _validate_host
+
+if __spec__ is not None:  # pragma: no cover - aligns reload() expectations
+    __spec__.name = "bot.utils"
+
+# Ensure the module is always accessible under both ``utils`` and ``bot.utils``
+# names before any runtime error can interrupt execution.
+current_module = sys.modules.get(__name__)
+if current_module is None:  # pragma: no cover - defensive fallback
+    current_module = sys.modules.setdefault(__name__, sys.modules.get(__name__))
+
+if current_module is not None:
+    # Normalise module registration for both top-level and package imports so
+    # ``importlib.reload`` can always resolve the module by its spec name.
+    if __spec__ is not None and __spec__.name:
+        sys.modules[__spec__.name] = current_module
+    sys.modules["utils"] = current_module
+    sys.modules.setdefault("bot.utils", current_module)
 from services.logging_utils import sanitize_log_value
 
 try:  # pragma: no cover - optional dependency for HTTP error handling

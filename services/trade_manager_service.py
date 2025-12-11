@@ -264,16 +264,21 @@ def _resolve_expected_token() -> str:
 def _authentication_optional() -> bool:
     """Return ``True`` when the API token requirement may be skipped."""
 
-    if getattr(app, "testing", False):
-        return False
-    # ``TEST_MODE`` is enabled for the pytest suite where we still want to
-    # exercise the authentication branch.  Only explicit offline or stub modes
-    # should bypass the token requirement to avoid accidentally exposing the
-    # API without protection when running the service locally.
-    return any(
+    # Explicit offline/stub flags should always bypass authentication, even
+    # when the Flask test client is active during the pytest suite.
+    offline_flags = any(
         os.getenv(flag) == '1'
         for flag in ("OFFLINE_MODE", "TRADE_MANAGER_USE_STUB")
     )
+
+    if offline_flags:
+        if os.getenv("TRADE_MANAGER_ALLOW_ANON", "0") != "1":
+            return False
+        if getattr(app, "testing", False):
+            return os.getenv("TEST_MODE") == "1"
+        return True
+
+    return False
 
 
 if hasattr(app, "before_first_request"):

@@ -117,6 +117,10 @@ CSRF_ENABLED = True
 try:  # pragma: no cover - handled in tests
     from fastapi_csrf_protect import CsrfProtect  # type: ignore[attr-defined]
 except Exception as exc:  # pragma: no cover - dependency required
+    if os.getenv("PYTEST_CURRENT_TEST") is not None:
+        raise RuntimeError(
+            "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
+        ) from exc
     if offline_mode:
         CSRF_ENABLED = False
 
