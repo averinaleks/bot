@@ -165,10 +165,18 @@ jobs:
           pr_number="${PR_NUMBER:-}"
           if [ -z "$pr_number" ]; then
             echo "::notice::Рабочий процесс запущен не для PR – пропускаю выполнение обзора."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::debug::Переменная GITHUB_OUTPUT не задана – пропускаю экспорт выходных данных validate_event."
+            fi
             exit 0
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::debug::Переменная GITHUB_OUTPUT не задана – пропускаю экспорт выходных данных validate_event."
+          fi
 
       - name: Checkout workflow helpers
         if: >-
@@ -607,7 +615,11 @@ jobs:
           script: |
             const fs = require('fs');
             const review = fs.readFileSync('review.md', 'utf8');
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const prNumber = parseInt(process.env.PR_NUMBER || '', 10);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.warning('PR_NUMBER is not set or invalid – skipping PR comment');
+              return;
+            }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
