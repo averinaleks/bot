@@ -118,6 +118,13 @@ def _assert_project_layout(*, allow_partial: bool = False) -> None:
                 "найдены сторонние модули (ожидались из %s): %s" % (repo_root, details)
             )
 
+        if foreign and not allow_partial:
+            raise SystemExit(
+                "Обнаружены посторонние модули/постороннее содержимое (%s). "
+                "Проверьте, что работаете из корня репозитория %s."
+                % ("; ".join(problems), repo_root)
+            )
+
         if allow_partial or offline_env:
             logger.warning(
                 "Запуск в неполной копии репозитория (%s): %s. Продолжаем в деградированном режиме%s.",
@@ -562,7 +569,7 @@ def _is_offline_override(candidate: Any) -> bool:
 
 def _build_components(cfg: "BotConfig", offline: bool, symbols: list[str] | None):
     service_factories = dict(getattr(cfg, "service_factories", {}) or {})
-    offline_factories_available = offline and OFFLINE_STUBS_AVAILABLE
+    offline_factories_available = offline
     if offline and not offline_factories_available:
         logger.warning(
             "OFFLINE_MODE=1 запрошен, но офлайн-заглушки недоступны: "

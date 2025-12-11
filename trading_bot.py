@@ -217,13 +217,13 @@ async def send_telegram_alert(message: str) -> None:
     if not token or not chat_id:
         logger.warning("Telegram inactive, message not sent: %s", log_message)
         return
+    redaction = "***"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     safe_url = sanitize_log_value(url.replace(token, redaction))
     client = await get_http_client()
     max_attempts = safe_int("TELEGRAM_ALERT_RETRIES", 3)
     delay = safe_float("TELEGRAM_ALERT_DELAY", 1.0)
     payload = {"chat_id": chat_id, "text": message}
-    redaction = "***"
     for attempt in range(1, max_attempts + 1):
         try:
             try:

@@ -19,9 +19,7 @@ _CORE_IMPORT_TRACEBACK = ""
 _core_module: types.ModuleType | None = None
 _model: object | None = None
 
-_OFFLINE_REQUESTED = bool(
-    getattr(bot_config, "OFFLINE_MODE", False) or os.getenv("TEST_MODE") == "1"
-)
+_OFFLINE_REQUESTED = bool(getattr(bot_config, "OFFLINE_MODE", False))
 
 if not _OFFLINE_REQUESTED:
     try:
