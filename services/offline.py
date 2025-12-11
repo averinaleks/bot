@@ -312,8 +312,10 @@ class OfflineTradeManager:
         self.save_interval = 900
         self.last_save_time = time.time()
         self.positions_changed = False
-        cache_dir = getattr(config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None))
-        if cache_dir is None:
+        cache_dir = getattr(
+            config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None)
+        )
+        if not cache_dir:
             cache_dir = "."
         self.state_file = os.path.join(cache_dir, "trade_manager_state.json")
         self.returns_file = os.path.join(cache_dir, "trade_manager_returns.json")

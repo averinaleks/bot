@@ -41,8 +41,10 @@ class OfflineModelBuilder:
         self.last_update_at: float | None = None
         self.save_interval = 900
         self.last_save_time = time.time()
-        cache_dir = getattr(config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None))
-        if cache_dir is None:
+        cache_dir = getattr(
+            config, "cache_dir", getattr(config, "get", lambda k, d=None: d)("cache_dir", None)
+        )
+        if not cache_dir:
             cache_dir = "."
         self.state_file_path = os.path.join(cache_dir, "model_builder_state.pkl")
         logger.info(
