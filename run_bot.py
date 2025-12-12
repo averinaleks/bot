@@ -812,7 +812,7 @@ async def _maybe_load_initial(data_handler: Any, *, strict: bool = False) -> Non
 async def main() -> None:
     args = parse_args()
     _assert_project_layout(
-        allow_partial=args.allow_partial_clone or args.offline or args.auto_offline
+        allow_partial=args.allow_partial_clone or args.offline
     )
     offline_mode = configure_environment(
         args, allow_missing_offline_stubs=args.allow_partial_clone
