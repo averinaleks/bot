@@ -55,6 +55,7 @@ sys.modules.setdefault('joblib', joblib_mod)
 def trade_manager_classes(monkeypatch):
     monkeypatch.delenv("OFFLINE_MODE", raising=False)
     monkeypatch.setenv("TEST_MODE", "1")
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
     sys.modules.pop('trade_manager', None)
     sys.modules.pop('bot.simulation', None)
     sys.modules.pop('bot.simulation.simulation', None)

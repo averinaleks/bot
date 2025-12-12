@@ -44,14 +44,12 @@ class HistoricalSimulator:
 
     @staticmethod
     def _is_offline_mode() -> bool:
-        env_value = os.getenv("OFFLINE_MODE", "0").strip().lower()
-        if env_value in {"1", "true", "yes", "on"}:
-            return True
-        try:
-            from bot import config as bot_config
-        except Exception:
+        env_value = os.getenv("OFFLINE_MODE")
+        if env_value is None:
             return False
-        return bool(getattr(bot_config, "OFFLINE_MODE", False))
+
+        normalized = env_value.strip().lower()
+        return normalized in {"1", "true", "yes", "on"}
 
     @staticmethod
     def _timeframe_delta(timeframe: str) -> pd.Timedelta:
@@ -127,7 +125,8 @@ class HistoricalSimulator:
         offline_mode = self._is_offline_mode()
         for symbol in self.data_handler.usdt_pairs:
             df = None
-            if hasattr(self.data_handler, "history"):
+            has_history_attr = hasattr(self.data_handler, "history")
+            if has_history_attr:
                 candidate = self.data_handler.history
                 if isinstance(candidate, pd.DataFrame):
                     df = candidate
@@ -137,11 +136,20 @@ class HistoricalSimulator:
                 cache = getattr(self.data_handler, "cache", None)
                 if cache:
                     df = cache.load_cached_data(symbol, timeframe)
-            if (df is None or (isinstance(df, pd.DataFrame) and df.empty)) and offline_mode:
-                df = self._generate_offline_history(symbol, start_ts, end_ts, timeframe)
-            if df is None:
-                if symbol not in missing_symbols:
-                    missing_symbols.append(symbol)
+            is_missing_data = df is None or (isinstance(df, pd.DataFrame) and df.empty)
+            missing_history_attr = (
+                not has_history_attr
+                or getattr(self.data_handler, "history", None) is None
+                or (isinstance(df, pd.DataFrame) and df.empty)
+            )
+            if is_missing_data:
+                if offline_mode and missing_history_attr:
+                    df = self._generate_offline_history(symbol, start_ts, end_ts, timeframe)
+                else:
+                    if symbol not in missing_symbols:
+                        missing_symbols.append(symbol)
+                    continue
+            if not isinstance(df, pd.DataFrame):
                 continue
             if isinstance(df.index, pd.MultiIndex):
                 ts_level = "timestamp" if "timestamp" in df.index.names else df.index.names[0]

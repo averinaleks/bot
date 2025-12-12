@@ -17,7 +17,7 @@ def configure_logging() -> None:
     if not token or not chat_id:
         return
     try:
-        from telegram import Bot
+        from telegram import Bot  # type: ignore[attr-defined]
 
         bot = Bot(token)
         handler = TelegramLogger(bot, chat_id, level=logging.ERROR)

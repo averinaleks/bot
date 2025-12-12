@@ -64,14 +64,14 @@ def configure_service_logging() -> None:
         stream_handler.setLevel(level)
         root_logger.addHandler(stream_handler)
     else:
-        for handler in root_logger.handlers:
-            handler.setLevel(level)
+        for existing_handler in root_logger.handlers:
+            existing_handler.setLevel(level)
             try:
-                handler.setFormatter(formatter)
+                existing_handler.setFormatter(formatter)
             except (ValueError, TypeError) as exc:
                 logger.warning(
                     "Не удалось применить форматтер к обработчику %s: %s",
-                    handler,
+                    existing_handler,
                     exc,
                 )
 

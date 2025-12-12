@@ -240,7 +240,7 @@ async def create_trade_manager() -> TradeManager | None:
     telegram_bot = None
     if token:
         try:
-            from telegram import Bot
+            from telegram import Bot  # type: ignore[attr-defined]
 
             telegram_bot = Bot(token)
             try:
