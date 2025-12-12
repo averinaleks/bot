@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import math
+import os
 import sys
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
@@ -39,6 +42,68 @@ class HistoricalSimulator:
         self.trade_manager = trade_manager
         self.history: Dict[str, pd.DataFrame] = {}
 
+    @staticmethod
+    def _is_offline_mode() -> bool:
+        env_value = os.getenv("OFFLINE_MODE", "0").strip().lower()
+        if env_value in {"1", "true", "yes", "on"}:
+            return True
+        try:
+            from bot import config as bot_config
+        except Exception:
+            return False
+        return bool(getattr(bot_config, "OFFLINE_MODE", False))
+
+    @staticmethod
+    def _timeframe_delta(timeframe: str) -> pd.Timedelta:
+        try:
+            delta = pd.to_timedelta(timeframe)
+        except (TypeError, ValueError):
+            if isinstance(timeframe, str) and timeframe.endswith("m"):
+                try:
+                    minutes = int(timeframe[:-1])
+                    return pd.to_timedelta(minutes, unit="m")
+                except ValueError:
+                    return pd.Timedelta(minutes=1)
+            return pd.Timedelta(minutes=1)
+        if delta <= pd.Timedelta(0):
+            return pd.Timedelta(minutes=1)
+        return delta
+
+    @staticmethod
+    def _symbol_seed(symbol: str) -> float:
+        digest = hashlib.blake2s(symbol.encode("utf-8", "surrogatepass"), digest_size=8).digest()
+        return float(int.from_bytes(digest, "big") % 10_000 + 10_000)
+
+    @classmethod
+    def _generate_offline_history(
+        cls, symbol: str, start_ts: pd.Timestamp, end_ts: pd.Timestamp, timeframe: str
+    ) -> pd.DataFrame:
+        freq = cls._timeframe_delta(timeframe)
+        index = pd.date_range(start_ts, end_ts, freq=freq, tz="UTC")
+        if index.empty:
+            index = pd.date_range(start_ts, periods=1, freq=freq, tz="UTC")
+
+        base_price = cls._symbol_seed(symbol)
+        series = []
+        for idx in range(len(index)):
+            delta = math.sin(idx / max(freq.total_seconds(), 1.0)) * 0.01 * base_price
+            open_price = base_price + delta
+            close_price = base_price - delta
+            high_price = max(open_price, close_price) * 1.01
+            low_price = min(open_price, close_price) * 0.99
+            volume = 1_000.0 + idx * 5.0
+            series.append((open_price, high_price, low_price, close_price, volume))
+
+        data = {
+            "open": [row[0] for row in series],
+            "high": [row[1] for row in series],
+            "low": [row[2] for row in series],
+            "close": [row[3] for row in series],
+            "volume": [row[4] for row in series],
+        }
+        index = pd.MultiIndex.from_arrays([[symbol] * len(index), index], names=["symbol", "timestamp"])
+        return pd.DataFrame(data, index=index)
+
     async def load(
         self, start_ts: pd.Timestamp, end_ts: pd.Timestamp
     ) -> Tuple[List[str], List[str]]:
@@ -59,6 +124,7 @@ class HistoricalSimulator:
                 timeframe = config.get("timeframe", timeframe)
             else:
                 timeframe = getattr(config, "timeframe", timeframe)
+        offline_mode = self._is_offline_mode()
         for symbol in self.data_handler.usdt_pairs:
             df = None
             if hasattr(self.data_handler, "history"):
@@ -71,6 +137,8 @@ class HistoricalSimulator:
                 cache = getattr(self.data_handler, "cache", None)
                 if cache:
                     df = cache.load_cached_data(symbol, timeframe)
+            if (df is None or (isinstance(df, pd.DataFrame) and df.empty)) and offline_mode:
+                df = self._generate_offline_history(symbol, start_ts, end_ts, timeframe)
             if df is None:
                 if symbol not in missing_symbols:
                     missing_symbols.append(symbol)

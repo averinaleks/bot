@@ -268,3 +268,54 @@ async def test_simulator_raises_when_no_data(trade_manager_classes, tmp_path):
     message = str(excinfo.value)
     assert "BTCUSDT" in message
     assert "ETHUSDT" in message
+
+
+@pytest.mark.asyncio
+async def test_simulator_generates_offline_data(monkeypatch, trade_manager_classes, tmp_path):
+    TradeManager, HistoricalSimulator, _ = trade_manager_classes
+    monkeypatch.setenv("OFFLINE_MODE", "1")
+
+    class EmptyDataHandler:
+        def __init__(self, cache_dir: str):
+            self.exchange = DummyExchange()
+            self.usdt_pairs = ["BTCUSDT", "ETHUSDT"]
+            self.history = None
+            self.cache = types.SimpleNamespace(load_cached_data=lambda *a, **k: None)
+            self.ohlcv = pd.DataFrame()
+            async def _opt(symbol):
+                return {}
+            self.parameter_optimizer = types.SimpleNamespace(optimize=_opt)
+            self.funding_rates = {symbol: 0.0 for symbol in self.usdt_pairs}
+            self.open_interest = {symbol: 0.0 for symbol in self.usdt_pairs}
+            self.config = BotConfig(cache_dir=cache_dir)
+
+        async def get_atr(self, symbol: str) -> float:
+            return 1.0
+
+        async def is_data_fresh(
+            self, symbol: str, timeframe: str = "primary", max_delay: float = 60
+        ) -> bool:
+            return True
+
+        async def synchronize_and_update(
+            self, symbol, df, fr, oi, ob, timeframe="primary"
+        ) -> None:
+            self.ohlcv = pd.concat([self.ohlcv, df], ignore_index=False).sort_index()
+
+    dh = EmptyDataHandler(str(tmp_path))
+    tm = TradeManager(BotConfig(cache_dir=str(tmp_path)), dh, None, None, None)
+
+    async def fake_eval(symbol):
+        return None
+
+    tm.evaluate_signal = fake_eval
+
+    sim = HistoricalSimulator(dh, tm)
+    start = pd.Timestamp("2020-01-01", tz="UTC")
+    end = pd.Timestamp("2020-01-01 00:05", tz="UTC")
+
+    result = await sim.run(start, end, speed=1000)
+
+    assert result.missing_symbols == []
+    assert result.total_iterations > 0
+    assert set(result.processed_symbols) == {"BTCUSDT", "ETHUSDT"}
