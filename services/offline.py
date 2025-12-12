@@ -525,6 +525,11 @@ class OfflineTradeManager:
         except Exception as exc:  # pragma: no cover - defensive fallback
             logger.debug("Offline model update failed: %s", exc)
 
+    async def evaluate_signal(self, _symbol: str, *_args, **_kwargs):
+        """Offline placeholder that never produces trading signals."""
+
+        return None
+
     async def open_position(self, symbol, signal, price, params):
         order_size = float(params.get("amount", 1.0)) if isinstance(params, dict) else 1.0
         if self.exchange is not None:
