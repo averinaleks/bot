@@ -125,6 +125,7 @@ services:
     environment:
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
+      - CSRF_SECRET=${CSRF_SECRET}
     healthcheck:
       test: ["CMD", "curl", "--netrc-file", "/dev/null", "-f", "http://localhost:8002/ready"]
       interval: 5s
