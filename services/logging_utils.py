@@ -59,10 +59,10 @@ def configure_service_logging() -> None:
     )
 
     if not root_logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(formatter)
-        handler.setLevel(level)
-        root_logger.addHandler(handler)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(level)
+        root_logger.addHandler(stream_handler)
     else:
         for handler in root_logger.handlers:
             handler.setLevel(level)

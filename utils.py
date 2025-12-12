@@ -25,8 +25,8 @@ if __spec__ is not None:  # pragma: no cover - aligns reload() expectations
 # Ensure the module is always accessible under both ``utils`` and ``bot.utils``
 # names before any runtime error can interrupt execution.
 current_module = sys.modules.get(__name__)
-if current_module is None:  # pragma: no cover - defensive fallback
-    current_module = sys.modules.setdefault(__name__, sys.modules.get(__name__))
+if not isinstance(current_module, ModuleType):  # pragma: no cover - defensive fallback
+    current_module = sys.modules.setdefault(__name__, ModuleType(__name__))
 
 if current_module is not None:
     # Normalise module registration for both top-level and package imports so
