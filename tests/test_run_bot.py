@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import builtins
 import importlib.util
@@ -287,3 +288,50 @@ def test_assert_project_layout_honors_env_root(monkeypatch, tmp_path, caplog):
         run_bot._assert_project_layout(allow_partial=True)
 
     assert any(str(root) in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_main_uses_strict_layout_check_by_default(monkeypatch, tmp_path):
+    import run_bot
+
+    called = {}
+
+    def _fake_assert(*, allow_partial):
+        called["allow_partial"] = allow_partial
+
+    dummy_cfg = SimpleNamespace(cache_dir=str(tmp_path / "cache"), log_dir=str(tmp_path / "logs"))
+
+    monkeypatch.setattr(run_bot, "_assert_project_layout", _fake_assert)
+    monkeypatch.setattr(run_bot, "configure_environment", lambda *_, **__: False)
+    monkeypatch.setattr(run_bot, "ensure_directories", lambda cfg: None)
+    monkeypatch.setattr(run_bot, "_build_components", lambda *_: (object(), object(), object()))
+
+    async def _fake_run_trading_cycle(*_, **__):
+        return None
+
+    monkeypatch.setattr(run_bot, "run_trading_cycle", _fake_run_trading_cycle)
+    monkeypatch.setattr(run_bot, "_log_mode", lambda *_: None)
+
+    import bot.config as config_module
+    import bot.dotenv_utils as dotenv_utils
+    import bot.utils as utils_module
+
+    monkeypatch.setattr(dotenv_utils, "load_dotenv", lambda: None)
+    monkeypatch.setattr(config_module, "load_config", lambda *_: dummy_cfg)
+    monkeypatch.setattr(utils_module, "configure_logging", lambda: None)
+
+    args = argparse.Namespace(
+        config=str(tmp_path / "config.json"),
+        offline=False,
+        auto_offline=True,
+        allow_partial_clone=False,
+        runtime=0,
+        symbols=None,
+        command="trade",
+    )
+
+    monkeypatch.setattr(run_bot, "parse_args", lambda: args)
+
+    await run_bot.main()
+
+    assert called["allow_partial"] is False
