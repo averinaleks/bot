@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import numpy as np
 import pandas as pd
@@ -20,9 +21,10 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     optuna = None  # type: ignore
 
-from bot.utils import logger
 from bot.config import BotConfig
 from bot.portfolio.portfolio_backtest import portfolio_backtest
+
+logger = logging.getLogger(__name__)
 
 
 def walk_forward_splits(n: int, n_splits: int, min_train: int, horizon: int):

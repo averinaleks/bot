@@ -320,6 +320,19 @@ class OfflineTradeManager:
         self.state_file = os.path.join(cache_dir, "trade_manager_state.json")
         self.returns_file = os.path.join(cache_dir, "trade_manager_returns.json")
 
+    async def evaluate_signal(self, symbol: str, return_prob: bool = False):
+        """Stub signal evaluator that always opts to hold a position.
+
+        The real trade manager performs indicator-driven analysis to decide
+        whether to enter or exit trades. The offline variant only needs to
+        satisfy the interface expected by the simulator and other callers,
+        so it simply returns ``None`` to indicate that no actionable signal
+        is present. The ``return_prob`` flag is accepted for API compatibility
+        but ignored.
+        """
+
+        return None if not return_prob else (None, 0.0)
+
     @staticmethod
     def _resolve_iterations(config) -> int:
         raw = getattr(config, "offline_iterations", None)

@@ -53,6 +53,7 @@ sys.modules.setdefault('joblib', joblib_mod)
 
 @pytest.fixture
 def trade_manager_classes(monkeypatch):
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
     monkeypatch.setenv("TEST_MODE", "1")
     sys.modules.pop('trade_manager', None)
     sys.modules.pop('bot.simulation', None)
