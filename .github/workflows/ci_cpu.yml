@@ -73,7 +73,7 @@ jobs:
           exit $code
       - name: Upload flake8 log
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: flake8-log-${{ matrix.python-version }}-${{ matrix.device }}
           path: flake8.log
@@ -90,7 +90,7 @@ jobs:
           exit $code
       - name: Upload pytest log
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: pytest-log-${{ matrix.python-version }}-${{ matrix.device }}
           path: pytest.log
