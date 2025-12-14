@@ -37,17 +37,9 @@ services:
     depends_on:
       log_prep:
         condition: service_completed_successfully
-    command:
-      - gunicorn
-      - -w
-      - "1"
-      - -b
-      - 0.0.0.0:8000
-      - --access-logfile
-      - -
-      - --error-logfile
-      - -
-      - bot.data_handler:api_app
+    command: >-
+      gunicorn -w 1 -b 0.0.0.0:8000 --access-logfile - --error-logfile -
+      bot.data_handler:api_app
     ports:
       - "8000:8000"
     env_file: .env
@@ -76,17 +68,9 @@ services:
     depends_on:
       log_prep:
         condition: service_completed_successfully
-    command:
-      - gunicorn
-      - -w
-      - "1"
-      - -b
-      - 0.0.0.0:8001
-      - --access-logfile
-      - -
-      - --error-logfile
-      - -
-      - bot.model_builder:api_app
+    command: >-
+      gunicorn -w 1 -b 0.0.0.0:8001 --access-logfile - --error-logfile -
+      bot.model_builder:api_app
     ports:
       - "8001:8001"
     env_file: .env
@@ -124,19 +108,9 @@ services:
     depends_on:
       log_prep:
         condition: service_completed_successfully
-    command:
-      - gunicorn
-      - -w
-      - "1"
-      - -k
-      - uvicorn.workers.UvicornWorker
-      - -b
-      - 0.0.0.0:8002
-      - --access-logfile
-      - -
-      - --error-logfile
-      - -
-      - bot.trade_manager:asgi_app
+    command: >-
+      gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002
+      --access-logfile - --error-logfile - bot.trade_manager:asgi_app
     ports:
       - "8002:8002"
     env_file: .env
