@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 import os
 import random
@@ -65,6 +66,25 @@ is_cuda_available = _utils.is_cuda_available
 logger = _utils.logger
 reset_tempdir_cache = _utils.reset_tempdir_cache
 validate_host = _utils.validate_host
+
+
+def _is_mlflow_enabled() -> bool:
+    env_value = os.getenv("MLFLOW_ENABLED")
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+
+    config_path = os.getenv("CONFIG_PATH", "config.json")
+    try:
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            config_data = json.load(config_file)
+    except FileNotFoundError:
+        logger.debug("CONFIG_PATH %s not found, treating mlflow as disabled", config_path)
+        return False
+    except Exception as error:  # pragma: no cover - defensive logging
+        logger.warning("Не удалось прочитать конфигурацию для mlflow: %s", error)
+        return False
+
+    return bool(config_data.get("mlflow_enabled", False))
 
 
 class _RayConfigStub:
@@ -280,13 +300,16 @@ except Exception as exc:  # pragma: no cover - missing sklearn
     def calibration_curve(y_true, y_prob, n_bins=10):  # pragma: no cover - simplified stub
         bins = np.linspace(0.0, 1.0, n_bins)
         return bins, bins
-try:
-    import mlflow
-except ImportError as e:  # pragma: no cover - optional dependency
-    mlflow = None  # type: ignore
-    logger.warning("Не удалось импортировать mlflow: %s", e)
+if _is_mlflow_enabled():
+    try:
+        import mlflow
+    except ImportError as e:  # pragma: no cover - optional dependency
+        mlflow = None  # type: ignore
+        logger.warning("Не удалось импортировать mlflow: %s", e)
+    else:
+        harden_mlflow(mlflow)
 else:
-    harden_mlflow(mlflow)
+    mlflow = None
 
 # Delay heavy SHAP import until needed to avoid CUDA warnings at startup
 shap = None
