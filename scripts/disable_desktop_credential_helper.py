@@ -41,11 +41,25 @@ def backup_config(config_path: Path) -> Path | None:
 
 
 def strip_desktop_helpers(data: Dict[str, Any]) -> bool:
+    """Remove Windows-only credential helpers from a Docker config.
+
+    The function returns True if the config was changed. It removes:
+    - credsStore entries that reference docker-credential-desktop
+    - credHelpers entries whose value points to a desktop helper
+    - a legacy "credStore" (singular) entry that some guides suggest as a
+      workaround; Docker CLI ignores it, but we remove it to avoid confusion.
+    """
+
     changed = False
 
     creds_store = data.get("credsStore")
     if isinstance(creds_store, str) and "desktop" in creds_store.lower():
         data.pop("credsStore", None)
+        changed = True
+
+    legacy_cred_store = data.get("credStore")
+    if isinstance(legacy_cred_store, str) and "desktop" in legacy_cred_store.lower():
+        data.pop("credStore", None)
         changed = True
 
     cred_helpers = data.get("credHelpers")
