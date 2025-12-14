@@ -1,4 +1,13 @@
 services:
+  log_prep:
+    image: alpine:3.20
+    command: ["/bin/sh", "-c", "mkdir -p /logs && chown -R ${APP_UID:-1000}:${APP_GID:-1000} /logs"]
+    volumes:
+      - ./logs:/logs
+    restart: "no"
+    networks:
+      - trading_bot_default
+
   gptoss:
     build:
       context: .
@@ -11,6 +20,9 @@ services:
     volumes:
       - gptoss_workspace:/workspace
       - ./logs:/app/logs
+    depends_on:
+      log_prep:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
@@ -22,6 +34,9 @@ services:
   data_handler:
     image: ${APP_IMAGE:-trading_bot:latest}
     # Run the full data handler implementation
+    depends_on:
+      log_prep:
+        condition: service_completed_successfully
     command:
       - gunicorn
       - -w
@@ -37,6 +52,8 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
+      - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
+      - TRADE_RISK_USD=${TRADE_RISK_USD}
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
@@ -56,6 +73,9 @@ services:
   model_builder:
     image: ${APP_IMAGE:-trading_bot:latest}
     # Run the full model builder implementation
+    depends_on:
+      log_prep:
+        condition: service_completed_successfully
     command:
       - gunicorn
       - -w
@@ -78,6 +98,8 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
+      - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
+      - TRADE_RISK_USD=${TRADE_RISK_USD}
       - TF_CPP_MIN_LOG_LEVEL=3
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
@@ -99,6 +121,9 @@ services:
     image: ${APP_IMAGE:-trading_bot:latest}
     # Use the ASGI wrapper exported by trade_manager so UvicornWorker can
     # serve the Flask app correctly.
+    depends_on:
+      log_prep:
+        condition: service_completed_successfully
     command:
       - gunicorn
       - -w
@@ -123,6 +148,8 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
+      - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
+      - TRADE_RISK_USD=${TRADE_RISK_USD}
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
       - CSRF_SECRET=${CSRF_SECRET}
@@ -148,6 +175,8 @@ services:
     # container_name: trading_bot
     command: python -m bot.trading_bot
     depends_on:
+      log_prep:
+        condition: service_completed_successfully
       # Wait for GPT-OSS to become healthy
       gptoss:
         condition: service_healthy
@@ -161,6 +190,8 @@ services:
         condition: service_completed_successfully
     env_file: .env
     environment:
+      - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
+      - TRADE_RISK_USD=${TRADE_RISK_USD}
       - DATA_HANDLER_URL=${DATA_HANDLER_URL}
       - MODEL_BUILDER_URL=${MODEL_BUILDER_URL}
       - TRADE_MANAGER_URL=${TRADE_MANAGER_URL}
@@ -206,13 +237,14 @@ services:
       - .:/workspace
     environment:
       PYTHONUNBUFFERED: "1"
-      BYBIT_API_KEY: ${BYBIT_API_KEY:-placeholder}
-      BYBIT_API_SECRET: ${BYBIT_API_SECRET:-placeholder}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-placeholder}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-placeholder}
-      TRADE_MANAGER_TOKEN: ${TRADE_MANAGER_TOKEN:-placeholder}
-      TRADE_RISK_USD: ${TRADE_RISK_USD:-placeholder}
+      BYBIT_API_KEY: ${BYBIT_API_KEY}
+      BYBIT_API_SECRET: ${BYBIT_API_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      TRADE_MANAGER_TOKEN: ${TRADE_MANAGER_TOKEN}
+      TRADE_RISK_USD: ${TRADE_RISK_USD}
       GPT_OSS_API: http://gptoss:8000
+      OFFLINE_MODE: "${OFFLINE_MODE:-0}"
     depends_on:
       gptoss:
         condition: service_healthy
