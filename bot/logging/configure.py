@@ -18,7 +18,13 @@ def configure_logging() -> None:
         return
     try:
         from telegram import Bot  # type: ignore[attr-defined]
+    except ImportError:  # pragma: no cover - optional dependency
+        logging.getLogger("TradingBot").warning(
+            "python-telegram-bot is not installed; Telegram logging disabled"
+        )
+        return
 
+    try:
         bot = Bot(token)
         handler = TelegramLogger(bot, chat_id, level=logging.ERROR)
         root = logging.getLogger()
