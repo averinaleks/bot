@@ -80,7 +80,7 @@ exceptiongroup==1.3.1
     #   pytest
 farama-notifications==0.0.4
     # via gymnasium
-fastapi==0.124.2
+fastapi==0.124.4
     # via -r requirements-core.in
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
@@ -173,13 +173,13 @@ multidict==6.7.0
     # via
     #   aiohttp
     #   yarl
-networkx==3.5
+networkx==3.4.2
     # via torch
 numba==0.62.1
     # via
     #   -r requirements-core.in
     #   shap
-numpy==2.3.4
+numpy==2.2.6
     # via
     #   -r requirements-core.in
     #   contourpy
