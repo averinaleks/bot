@@ -29,9 +29,9 @@ services:
       - -b
       - 0.0.0.0:8000
       - --access-logfile
-      - /app/logs/data_handler.access.log
+      - -
       - --error-logfile
-      - /app/logs/data_handler.error.log
+      - -
       - bot.data_handler:api_app
     ports:
       - "8000:8000"
@@ -63,9 +63,9 @@ services:
       - -b
       - 0.0.0.0:8001
       - --access-logfile
-      - /app/logs/model_builder.access.log
+      - -
       - --error-logfile
-      - /app/logs/model_builder.error.log
+      - -
       - bot.model_builder:api_app
     ports:
       - "8001:8001"
@@ -108,9 +108,9 @@ services:
       - -b
       - 0.0.0.0:8002
       - --access-logfile
-      - /app/logs/trade_manager.access.log
+      - -
       - --error-logfile
-      - /app/logs/trade_manager.error.log
+      - -
       - bot.trade_manager:asgi_app
     ports:
       - "8002:8002"
@@ -196,6 +196,7 @@ services:
         hard: 65536
   gptoss_check:
     image: python:3.12-slim
+    env_file: .env
     entrypoint:
       - python
       - -m
@@ -205,6 +206,12 @@ services:
       - .:/workspace
     environment:
       PYTHONUNBUFFERED: "1"
+      BYBIT_API_KEY: ${BYBIT_API_KEY:-placeholder}
+      BYBIT_API_SECRET: ${BYBIT_API_SECRET:-placeholder}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-placeholder}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-placeholder}
+      TRADE_MANAGER_TOKEN: ${TRADE_MANAGER_TOKEN:-placeholder}
+      TRADE_RISK_USD: ${TRADE_RISK_USD:-placeholder}
       GPT_OSS_API: http://gptoss:8000
     depends_on:
       gptoss:
