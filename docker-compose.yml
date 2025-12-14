@@ -219,7 +219,7 @@ services:
         soft: 65536
         hard: 65536
   gptoss_check:
-    image: python:3.12-slim
+    image: ${APP_IMAGE:-trading_bot:latest}
     env_file: .env
     entrypoint:
       - python

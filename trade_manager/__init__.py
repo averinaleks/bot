@@ -27,6 +27,11 @@ def _load_target() -> ModuleType:
     """Import and return the canonical trade manager package."""
 
     existing = sys.modules.get("bot.trade_manager")
+    # Avoid reloading this compatibility shim when it's mistakenly registered
+    # as ``bot.trade_manager`` in ``sys.modules``.
+    if existing is not None and existing is sys.modules.get(__name__):
+        existing = None
+
     if existing is not None:
         return importlib.reload(existing)
     return import_module("bot.trade_manager")
