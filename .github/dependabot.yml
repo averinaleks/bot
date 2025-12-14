@@ -16,6 +16,12 @@ updates:
     registries:
       - pytorch-cpu
     ignore:
+      # The openai SDK currently triggers the GitHub-managed
+      # dependabot/dependabot-updates workflow to fail when it tries to
+      # resolve upgrades (see workflow run 20163970215).  Skip automated
+      # bumps so scheduled runs complete successfully; we will refresh this
+      # dependency manually when needed.
+      - dependency-name: "openai"
       # Heavy ML packages routinely fail to resolve in Dependabot's
       # constrained execution environment.  Skip them so the scheduled
       # job stops erroring while manual updates continue to happen via
