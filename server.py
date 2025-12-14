@@ -99,6 +99,33 @@ def _describe_auth_header(auth_header: str | None) -> str:
         return "bearer-present"
     return "invalid-scheme"
 
+
+SENSITIVE_HEADERS = {
+    "authorization",
+    "cookie",
+    "x-api-key",
+    "x-csrf-token",
+    "fastapi-csrf-token",
+}
+
+
+def _sanitize_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    """Return a header mapping safe for logging.
+
+    Sensitive headers are redacted with ``"***"`` to prevent secret leakage. All
+    other values are passed through ``sanitize_log_value`` to strip control
+    characters.
+    """
+
+    sanitized: dict[str, str] = {}
+    for name, raw_value in headers.items():
+        value = raw_value if isinstance(raw_value, str) else str(raw_value)
+        if name.lower() in SENSITIVE_HEADERS:
+            sanitized[name] = "***"
+        else:
+            sanitized[name] = sanitize_log_value(value)
+    return sanitized
+
 if not DOTENV_AVAILABLE:
     logger.warning(
         "python-dotenv is not installed; continuing without loading .env files (%s)",
@@ -480,6 +507,7 @@ async def enforce_csrf(request: Request, call_next):
     if request.method == "POST":
         safe_method = sanitize_log_value(request.method)
         safe_url = sanitize_log_value(str(request.url))
+        safe_headers = _sanitize_headers(dict(request.headers or {}))
         forbidden_payload = json.dumps({"detail": "CSRF token missing or invalid"})
 
         def _csrf_error_response() -> Response:
@@ -503,11 +531,12 @@ async def enforce_csrf(request: Request, call_next):
             await csrf_protect.validate_csrf(request)
         except CsrfProtectError as exc:
             logging.warning(
-                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s",
+                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s headers=%s",
                 safe_method,
                 safe_url,
                 sanitize_log_value(csrf_state),
                 sanitize_log_value(str(exc)),
+                sanitize_log_value(safe_headers),
             )
             return _csrf_error_response()
         except Exception as exc:  # pragma: no cover - unexpected library failure
@@ -532,13 +561,14 @@ async def enforce_csrf(request: Request, call_next):
             if not header_token:
                 missing_parts.append("header")
             logging.warning(
-                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s",
+                "CSRF validation failed: method=%s url=%s csrf_state=%s error=%s headers=%s",
                 safe_method,
                 safe_url,
                 sanitize_log_value(csrf_state),
                 sanitize_log_value(
                     f"missing csrf {' and '.join(missing_parts)}"
                 ),
+                sanitize_log_value(safe_headers),
             )
             return _csrf_error_response()
     return await call_next(request)
@@ -548,23 +578,26 @@ async def enforce_csrf(request: Request, call_next):
 async def check_api_key(request: Request, call_next):
     safe_method = sanitize_log_value(request.method)
     safe_url = sanitize_log_value(str(request.url))
+    safe_headers = _sanitize_headers(dict(request.headers or {}))
     auth_header = request.headers.get("Authorization")
     auth_state = _describe_auth_header(auth_header)
     if not API_KEYS:
         logging.warning(
-            "Rejecting request: authentication configuration is missing. method=%s url=%s auth_header=%s",
+            "Rejecting request: authentication configuration is missing. method=%s url=%s auth_header=%s headers=%s",
             safe_method,
             safe_url,
             auth_state,
+            sanitize_log_value(safe_headers),
         )
         return Response(status_code=401)
     auth = auth_header
     if not auth or not auth.startswith("Bearer "):
         logging.warning(
-            "Unauthorized request: method=%s url=%s auth_header=%s",
+            "Unauthorized request: method=%s url=%s auth_header=%s headers=%s",
             safe_method,
             safe_url,
             auth_state,
+            sanitize_log_value(safe_headers),
         )
         return Response(status_code=401)
     token = auth[7:]
@@ -573,9 +606,10 @@ async def check_api_key(request: Request, call_next):
             break
     else:
         logging.warning(
-            "Unauthorized request: method=%s url=%s auth_header=token-rejected",
+            "Unauthorized request: method=%s url=%s auth_header=token-rejected headers=%s",
             safe_method,
             safe_url,
+            sanitize_log_value(safe_headers),
         )
         return Response(status_code=401)
     return await call_next(request)

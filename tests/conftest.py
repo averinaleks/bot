@@ -94,6 +94,11 @@ else:  # pragma: no cover - exercised when plugin missing on CI
 # from starting and avoids hanging the pytest run.
 os.environ.setdefault("MLFLOW_DISABLE_TELEMETRY", "1")
 
+# Ensure CSRF secret exists for tests that import ``server`` without explicitly
+# configuring it. Individual tests can still delete or override the variable
+# to validate error handling behaviour.
+os.environ.setdefault("CSRF_SECRET", secrets.token_hex(32))
+
 # Ensure the project root is on sys.path so tests can import modules like ``config``.
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
