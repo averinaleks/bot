@@ -39,7 +39,7 @@ hypothesis>=6.90.0
 # requires a newer numba release than is currently available, so cap the
 # version below 2.4 until upstream support lands.  NumPy 2.3.x dropped wheels
 # for Python 3.10, so stay on the last 2.2.x release for that interpreter.
-numpy==2.3.3; python_version < "3.11"
+numpy==2.2.6; python_version < "3.11"
 numpy==2.3.4; python_version >= "3.11"
 pip-audit==2.10.0
 pybit==5.13.0
