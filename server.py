@@ -258,6 +258,17 @@ class ModelManager:
         self.model = None
         self.device = None
         self.torch = None
+        self.state = "unloaded"
+
+    def _mark_offline(self) -> str:
+        """Record offline state and return marker string."""
+
+        self.tokenizer = None
+        self.model = None
+        self.device = None
+        self.torch = None
+        self.state = "offline"
+        return self.state
 
     def load_model(self) -> str:
         """Load the tokenizer and model into instance attributes.
@@ -266,9 +277,20 @@ class ModelManager:
         fallback model is loaded instead.
         """
 
+        if offline_mode:
+            logging.warning(
+                "OFFLINE_MODE=1: skipping model load; endpoints will respond with 503"
+            )
+            return self._mark_offline()
+
         try:
             import torch as torch_module
         except ImportError as exc:
+            if offline_mode:
+                logging.warning(
+                    "OFFLINE_MODE=1: torch is not installed; skipping model load"
+                )
+                return self._mark_offline()
             raise RuntimeError(
                 "torch is required to load the model. Install it with 'pip install torch'."
             ) from exc
@@ -278,6 +300,11 @@ class ModelManager:
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as exc:
+            if offline_mode:
+                logging.warning(
+                    "OFFLINE_MODE=1: transformers is not installed; skipping model load"
+                )
+                return self._mark_offline()
             raise RuntimeError(
                 "transformers is required to load the model. Install it with 'pip install transformers'."
             ) from exc
@@ -354,6 +381,7 @@ class ModelManager:
             self.model = model_local
             self.device = device_local
             self.torch = torch_module
+            self.state = "primary"
             return "primary"
 
         try:
@@ -396,6 +424,7 @@ class ModelManager:
             self.device = device_local
             self.torch = torch_module
             logging.info("Loaded fallback model '%s'", fallback_model)
+            self.state = "fallback"
             return "fallback"
 
     async def load_model_async(self) -> None:
@@ -417,12 +446,24 @@ async def lifespan(_: FastAPI):
     API_KEYS.update(
         {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
     )
-    if not API_KEYS:
+    if not API_KEYS and offline_mode:
+        logging.warning(
+            "OFFLINE_MODE=1: API_KEYS not set; using temporary offline key"
+        )
+        API_KEYS.add("offline-mode-key")
+    elif not API_KEYS:
         logging.error(
             "API_KEYS is empty; all requests will be rejected. Set the API_KEYS environment variable.",
         )
         raise RuntimeError("API_KEYS environment variable is required")
-    await model_manager.load_model_async()
+
+    if offline_mode:
+        model_manager._mark_offline()
+        logging.warning(
+            "OFFLINE_MODE=1: model loading skipped; inference endpoints will be unavailable"
+        )
+    else:
+        await model_manager.load_model_async()
     yield
 
 
@@ -433,6 +474,8 @@ class CsrfSettings(BaseModel):
     secret_key: str
 
 def _resolve_csrf_secret() -> str:
+    if offline_mode:
+        return "offline-mode-secret"
     if not CSRF_ENABLED:
         return "offline-mode-secret"
     env_secret = os.getenv("CSRF_SECRET")
