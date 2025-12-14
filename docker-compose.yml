@@ -44,8 +44,14 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
       - TRADE_RISK_USD=${TRADE_RISK_USD}
+      - BYBIT_API_KEY=${BYBIT_API_KEY}
+      - BYBIT_API_SECRET=${BYBIT_API_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GPT_OSS_API=${GPT_OSS_API}
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
@@ -82,8 +88,14 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
       - TRADE_RISK_USD=${TRADE_RISK_USD}
+      - BYBIT_API_KEY=${BYBIT_API_KEY}
+      - BYBIT_API_SECRET=${BYBIT_API_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GPT_OSS_API=${GPT_OSS_API}
       - TF_CPP_MIN_LOG_LEVEL=3
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
@@ -122,8 +134,14 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
       - TRADE_RISK_USD=${TRADE_RISK_USD}
+      - BYBIT_API_KEY=${BYBIT_API_KEY}
+      - BYBIT_API_SECRET=${BYBIT_API_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GPT_OSS_API=${GPT_OSS_API}
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
       - CSRF_SECRET=${CSRF_SECRET}
@@ -164,6 +182,8 @@ services:
         condition: service_completed_successfully
     env_file: .env
     environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - TRADE_MANAGER_TOKEN=${TRADE_MANAGER_TOKEN}
       - TRADE_RISK_USD=${TRADE_RISK_USD}
       - DATA_HANDLER_URL=${DATA_HANDLER_URL}
@@ -175,8 +195,6 @@ services:
       - PYTHONPATH=${PYTHONPATH}
       - BYBIT_API_KEY=${BYBIT_API_KEY}
       - BYBIT_API_SECRET=${BYBIT_API_SECRET}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - CACHE_DIR=${CACHE_DIR}
       - LOG_DIR=${LOG_DIR}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -184,6 +202,7 @@ services:
       - CONFIG_PATH=${CONFIG_PATH}
       - SERVICE_CHECK_RETRIES=${SERVICE_CHECK_RETRIES}
       - SERVICE_CHECK_DELAY=${SERVICE_CHECK_DELAY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GPT_OSS_API=${GPT_OSS_API}
     volumes:
       - ./logs:/app/logs
@@ -217,7 +236,8 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       TRADE_MANAGER_TOKEN: ${TRADE_MANAGER_TOKEN}
       TRADE_RISK_USD: ${TRADE_RISK_USD}
-      GPT_OSS_API: http://gptoss:8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GPT_OSS_API: ${GPT_OSS_API}
       OFFLINE_MODE: "${OFFLINE_MODE:-0}"
     depends_on:
       gptoss:

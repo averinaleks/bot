@@ -1,37 +1,22 @@
-"""Compatibility helpers for optional python-dotenv dependency."""
+"""Utilities for loading .env configuration.
+
+This module wraps :func:`dotenv.dotenv_values` to provide a resilient helper
+that mirrors the expectations in :mod:`config`.
+"""
+
 from __future__ import annotations
 
-from typing import Any, Dict
-import logging
+from typing import Dict
 
-logger = logging.getLogger(__name__)
+from dotenv import dotenv_values as _dotenv_values
 
-try:  # pragma: no cover - exercised indirectly in tests
-    from dotenv import load_dotenv as _load_dotenv
-    from dotenv import dotenv_values as _dotenv_values
-except Exception as exc:  # pragma: no cover - fallback when dependency missing
-    DOTENV_AVAILABLE = False
-    DOTENV_ERROR: Exception | None = exc
 
-    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
-        """Gracefully skip loading .env files when python-dotenv is absent."""
-        logger.debug("python-dotenv is not installed: %s", DOTENV_ERROR)
-        return False
+def dotenv_values() -> Dict[str, str]:
+    """Load variables from a ``.env`` file, filtering out ``None`` entries."""
 
-    def dotenv_values(*args: Any, **kwargs: Any) -> Dict[str, str | None]:
-        """Return an empty mapping when python-dotenv is not installed."""
-        logger.debug("python-dotenv is not installed: %s", DOTENV_ERROR)
+    try:
+        values = _dotenv_values()
+    except Exception:
         return {}
-else:  # pragma: no cover - exercised indirectly in tests
-    DOTENV_AVAILABLE = True
-    DOTENV_ERROR = None
 
-    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
-        """Proxy to :func:`dotenv.load_dotenv`."""
-        return bool(_load_dotenv(*args, **kwargs))
-
-    def dotenv_values(*args: Any, **kwargs: Any) -> Dict[str, str | None]:
-        """Proxy to :func:`dotenv.dotenv_values`."""
-        return dict(_dotenv_values(*args, **kwargs))
-
-__all__ = ["load_dotenv", "dotenv_values", "DOTENV_AVAILABLE", "DOTENV_ERROR"]
+    return {key: value for key, value in values.items() if value is not None}
