@@ -9,6 +9,10 @@ import secrets
 # где доступна облегчённая реализация ``bcrypt`` без необходимости установки
 # тяжелой зависимости.
 os.environ.setdefault("TEST_MODE", "1")
+# Базовый секрет для CSRF, чтобы импорт ``server`` не падал во время
+# раннего сбора тестов. Конкретные тесты могут переопределять его при
+# необходимости.
+os.environ.setdefault("CSRF_SECRET", "test-secret")
 
 import pytest
 
