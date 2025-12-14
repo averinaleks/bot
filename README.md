@@ -856,7 +856,8 @@ error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.ex
 ```
 
 Это признак того, что в `~/.docker/config.json` прописан помощник учётных данных
-от Docker Desktop, который недоступен в Linux-среде WSL. Удалите его одной командой:
+от Docker Desktop, который недоступен в Linux-среде WSL. Удалите его одной командой
+или вручную отредактируйте конфиг:
 
 ```bash
 python scripts/disable_desktop_credential_helper.py
@@ -865,6 +866,15 @@ python scripts/disable_desktop_credential_helper.py
 Скрипт сохранит резервную копию конфигурации и удалит записи `credsStore`/`credHelpers`
 со ссылкой на `desktop.exe`. После этого повторите `docker compose build --no-cache`
 или обычный `docker compose up --build`.
+
+Чтобы исправить конфигурацию вручную:
+
+1. Откройте `~/.docker/config.json` внутри WSL.
+2. Удалите ключ `"credsStore": "desktop"` или поменяйте его на неиспользуемый
+   `"credStore"`, чтобы Docker вернулся к стандартному хранению паролей.
+3. В секции `credHelpers` удалите записи, содержащие `desktop`.
+4. Если файл не нужен, удалите его (`rm -f ~/.docker/config.json`) — Docker создаст
+   новый, но сохранённые логины придется ввести заново через `docker login`.
 
 Если не хотите менять глобальную конфигурацию, запустите сборку через оболочку,
 которая использует локальный конфиг без хелперов Windows:
