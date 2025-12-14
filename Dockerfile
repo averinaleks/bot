@@ -188,8 +188,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && /app/venv/bin/python --version \
     && openssl version
 
-# Copy project source into /app/bot
-COPY . /app/bot
+# Copy project source into /app
+COPY . /app
 
 # Configure environment variables for the virtual environment
 ENV VIRTUAL_ENV=/app/venv
