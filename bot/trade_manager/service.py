@@ -288,8 +288,36 @@ async def create_trade_manager() -> TradeManager | None:
         logger.info("ModelBuilder успешно создан")
         asyncio.create_task(mb.train())
         asyncio.create_task(mb.backtest_loop())
-        await dh.load_initial()
-        asyncio.create_task(dh.subscribe_to_klines(dh.usdt_pairs))
+        load_initial = getattr(dh, "load_initial", None)
+        if callable(load_initial):
+            try:
+                await load_initial()
+            except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
+                logger.error("Не удалось загрузить исходные данные: %s", exc)
+                await dh.stop()
+                return None
+        subscribe_to_klines = getattr(dh, "subscribe_to_klines", None)
+        if callable(subscribe_to_klines):
+            try:
+                coro = subscribe_to_klines(dh.usdt_pairs)
+                if asyncio.iscoroutine(coro):
+                    asyncio.create_task(coro)
+                else:
+                    logger.warning(
+                        "subscribe_to_klines не вернул корутину, подписка пропущена"
+                    )
+            except AttributeError:
+                logger.warning(
+                    "Метод subscribe_to_klines не реализован для DataHandler – пропускаем"
+                )
+            except Exception as exc:
+                logger.error(
+                    "Ошибка при подписке на обновление котировок: %s", exc, exc_info=True
+                )
+        else:
+            logger.warning(
+                "Метод subscribe_to_klines не реализован для DataHandler – пропускаем"
+            )
     except RuntimeError as exc:
         logger.error("Не удалось загрузить исходные данные: %s", exc)
         await dh.stop()
