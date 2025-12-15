@@ -9,7 +9,38 @@ from __future__ import annotations
 import os
 from typing import Dict
 
-from dotenv import dotenv_values as _dotenv_values
+try:
+    from dotenv import dotenv_values as _dotenv_values
+except ModuleNotFoundError:
+    # Fallback parser for environments without ``python-dotenv`` installed.
+    # It supports simple ``KEY=VALUE`` pairs and ignores blank lines and
+    # comments starting with ``#``. Values retain surrounding whitespace to
+    # avoid surprising behaviour compared to the optional dependency.
+    def _dotenv_values(path: str = ".env") -> Dict[str, str]:
+        if not os.path.exists(path):
+            return {}
+
+        values: Dict[str, str] = {}
+        try:
+            with open(path, "r", encoding="utf-8") as env_file:
+                for line in env_file:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#"):
+                        continue
+
+                    if "=" not in stripped:
+                        continue
+
+                    key, value = stripped.split("=", 1)
+                    key = key.strip()
+                    if not key:
+                        continue
+
+                    values[key] = value
+        except OSError:
+            return {}
+
+        return values
 
 
 def dotenv_values() -> Dict[str, str]:
