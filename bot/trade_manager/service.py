@@ -231,10 +231,28 @@ async def create_trade_manager() -> TradeManager | None:
             )
             logger.info("Ray успешно инициализирован")
         except RuntimeError as exc:
-            logger.exception(
+            logger.warning(
                 "Ray initialization failed (%s): %s", type(exc).__name__, exc
             )
-            raise
+            logger.info("Пробуем инициализировать Ray без GPU")
+            try:
+                ray.init(
+                    **apply_ray_security_defaults(
+                        {
+                            "num_cpus": cfg["ray_num_cpus"],
+                            "num_gpus": 0,
+                            "ignore_reinit_error": True,
+                        }
+                    )
+                )
+                logger.info("Ray инициализирован в CPU-режиме")
+            except RuntimeError as cpu_exc:
+                logger.critical(
+                    "Ray initialization failed without GPU (%s): %s",
+                    type(cpu_exc).__name__,
+                    cpu_exc,
+                )
+                raise
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     telegram_bot = None
@@ -393,26 +411,33 @@ async def create_trade_manager() -> TradeManager | None:
 def _initialize_trade_manager() -> None:
     """Background initialization for the TradeManager."""
 
+    configure_logging()
+    logger.info("Запуск фоновой инициализации TradeManager")
+
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         manager = loop.run_until_complete(create_trade_manager())
-        if manager is not None:
-            trade_manager_factory.set(manager, loop=loop)
-            loop.create_task(manager.run())
-            _ready_event.set()
-            loop.run_forever()
-        else:
-            _ready_event.set()
-    except (RuntimeError, ValueError) as exc:
+        if manager is None:
+            trade_manager_factory.reset()
+            logger.critical(
+                "TradeManager initialization returned no manager; shutting down."
+            )
+            os._exit(1)
+
+        trade_manager_factory.set(manager, loop=loop)
+        loop.create_task(manager.run())
+        _ready_event.set()
+        logger.info("TradeManager готов, запускаем event loop")
+        loop.run_forever()
+    except Exception as exc:
         trade_manager_factory.reset()
         logger.exception(
             "TradeManager initialization failed (%s): %s",
             type(exc).__name__,
             exc,
         )
-        _ready_event.set()
-        raise
+        os._exit(1)
 
 
 # Set ready event immediately in test mode
