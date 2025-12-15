@@ -30,7 +30,7 @@ ccxt==4.5.27
 # Newer scikit-learn releases pull in SciPy builds incompatible with our
 # pinned numpy; keep everything aligned with the Docker images.
 scikit-learn==1.7.2; python_version<'3.12'
-joblib==1.5.2
+joblib==1.5.3
 setuptools>=80.9.0,<81
 types-requests
 mypy==1.19.1
