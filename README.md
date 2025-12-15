@@ -832,6 +832,43 @@ use these steps to diagnose the problem:
    RUNTIME= DOCKERFILE=Dockerfile.cpu docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build
    ```
 
+### Предупреждение «NVIDIA Driver was not detected»
+
+Если контейнер выводит предупреждение `WARNING: The NVIDIA Driver was not detected. GPU functionality will not be available.`,
+проверьте, что GPU доступна хосту и корректно проброшена в Docker.
+
+1. Убедитесь, что на хосте установлены драйверы NVIDIA и утилита `nvidia-smi` работает вне контейнера.
+   Без видимой GPU Docker не сможет передать устройство в контейнер.
+2. Установите NVIDIA Container Toolkit (бывший `nvidia-docker2`) и перезапустите Docker:
+
+   ```bash
+   distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
+   curl -s -L https://nvidia.github.io/libnvidia-container/gpgkey | sudo apt-key add -
+   curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+   sudo apt-get update
+   sudo apt-get install -y nvidia-container-toolkit nvidia-docker2
+   sudo systemctl restart docker
+   ```
+
+3. Запускайте контейнеры с GPU: для Compose добавьте `-f docker-compose.gpu.yml` и оставьте
+   `RUNTIME` пустым, чтобы использовался NVIDIA runtime по умолчанию:
+
+   ```bash
+   DOCKERFILE=Dockerfile docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+   ```
+
+   Файл `docker-compose.gpu.yml` пробрасывает `gpus: all` во все сервисы, поэтому CUDA-библиотеки
+   внутри контейнеров увидят доступные устройства и не будут печатать предупреждение о недоступной GPU.
+
+   Для одиночного запуска используйте флаг `--gpus all`:
+
+   ```bash
+   docker run --rm -it --gpus all <image> nvidia-smi
+   ```
+
+4. Если предупреждение остаётся, убедитесь, что версия драйвера на хосте совместима с CUDA-версией
+   контейнера и что Docker daemon после установки toolkit был перезапущен.
+
 3. If services require more time to initialize, increase
    `SERVICE_CHECK_RETRIES` or `SERVICE_CHECK_DELAY` in `.env`.
    By default, the bot performs 30 retries with a 2‑second delay.

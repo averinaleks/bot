@@ -3,3 +3,11 @@ services:
     gpus: all
   gptoss_check:
     gpus: all
+  data_handler:
+    gpus: all
+  model_builder:
+    gpus: all
+  trade_manager:
+    gpus: all
+  bot:
+    gpus: all
