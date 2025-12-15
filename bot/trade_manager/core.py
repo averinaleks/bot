@@ -513,6 +513,8 @@ class TradeManager:
         self.max_position_pct = config.get("max_position_pct", 0.1)
         self.min_risk_per_trade = config.get("min_risk_per_trade", 0.01)
         self.max_risk_per_trade = config.get("max_risk_per_trade", 0.05)
+        self.max_loss_streak = config.get("max_loss_streak", 0)
+        self.loss_cooldown_minutes = float(config.get("loss_cooldown_minutes", 0.0))
         self.check_interval = config.get("check_interval", 60.0)
         self.performance_window = config.get("performance_window", 86400)
         self.state_file = os.path.join(config["cache_dir"], "trade_manager_state.parquet")
@@ -632,6 +634,26 @@ class TradeManager:
             else:
                 break
         return count
+
+    async def is_in_loss_cooldown(self, symbol: str) -> bool:
+        """Return True if trading for *symbol* should pause after repeated losses."""
+
+        if self.max_loss_streak <= 0:
+            return False
+
+        streak = await self.get_loss_streak(symbol)
+        if streak < self.max_loss_streak:
+            return False
+
+        cooldown_minutes = max(self.loss_cooldown_minutes, 0.0)
+        if cooldown_minutes <= 0:
+            return True
+
+        cutoff = time.time() - cooldown_minutes * 60
+        async with self.returns_lock:
+            loss_times = [t for t, pnl in self.returns_by_symbol.get(symbol, []) if pnl < 0]
+
+        return bool(loss_times and loss_times[-1] >= cutoff)
 
     async def get_win_streak(self, symbol: str) -> int:
         async with self.returns_lock:
@@ -2209,14 +2231,29 @@ class TradeManager:
         """Collect and rank signals for all symbols."""
         signals = []
         async with self.position_lock:
+            open_count = len(self.positions)
             if "symbol" in self.positions.index.names:
                 open_symbols = set(
                     self.positions.index.get_level_values("symbol").unique()
                 )
             else:
                 open_symbols = set()
+        if open_count >= self.max_positions:
+            logger.debug(
+                "Maximum position count reached (%s); skipping signal collection",
+                self.max_positions,
+            )
+            return []
         for symbol in self.data_handler.usdt_pairs:
             if symbol in open_symbols:
+                continue
+            if await self.is_in_loss_cooldown(symbol):
+                logger.info(
+                    "Skipping %s because loss streak reached %s trades (cooldown %.1f min)",
+                    symbol,
+                    self.max_loss_streak,
+                    self.loss_cooldown_minutes,
+                )
                 continue
             result = await self.evaluate_signal(symbol, return_prob=True)
             if not result:

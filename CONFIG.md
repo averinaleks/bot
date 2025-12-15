@@ -50,6 +50,8 @@ to take‑profit and stop‑loss distances.
 | risk_vol_min | 0.5 | Lower bound for volatility based risk scaling. |
 | risk_vol_max | 2.0 | Upper bound for volatility based risk scaling. |
 | max_positions | 5 | Maximum simultaneous open positions. |
+| max_loss_streak | 0 | Number of consecutive losses before pausing new entries for a symbol (0 disables). |
+| loss_cooldown_minutes | 0.0 | Minutes to wait after hitting `max_loss_streak` before allowing new trades (0 waits indefinitely when enabled). |
 | top_signals | 5 | Number of top ranked signals to trade. |
 | check_interval | 60.0 | Seconds between trade evaluation cycles. |
 | data_cleanup_interval | 3600 | Interval for removing old cached data. |
