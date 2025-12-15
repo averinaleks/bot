@@ -394,7 +394,6 @@ tzdata==2025.2
     # via pandas
 urllib3==2.6.0
     # via requests
-uvicorn==0.38.0
     # via -r requirements-core.in
 websocket-client==1.9.0
     # via pybit
