@@ -39,7 +39,7 @@ services:
         condition: service_completed_successfully
     command: >-
       gunicorn -w 1 -b 0.0.0.0:8000 --access-logfile - --error-logfile -
-      bot.data_handler:api_app
+      services.data_handler_service:app
     ports:
       - "8000:8000"
     env_file: .env
@@ -52,6 +52,7 @@ services:
       - BYBIT_API_SECRET=${BYBIT_API_SECRET}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GPT_OSS_API=${GPT_OSS_API}
+      - DATA_HANDLER_ALLOW_ANONYMOUS=1
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/nvvm/lib64
       - PYTHONPATH=/app
     healthcheck:
@@ -59,7 +60,7 @@ services:
       interval: 5s
       timeout: 2s
       retries: 12
-      start_period: 5s
+      start_period: 30s
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
