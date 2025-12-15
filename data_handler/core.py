@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import types
 from typing import Any, Dict, Iterable, Tuple
@@ -50,6 +51,7 @@ class DataHandler:
         self.indicators: Dict[str, Any] = {}
         self._ohlcv: Any
         self._ohlcv_2h: Any
+        self.logger = logging.getLogger(__name__)
         if getattr(cfg, "use_polars", False) and pl is not None:
             self._ohlcv = pl.DataFrame()
             self._ohlcv_2h = pl.DataFrame()
@@ -157,3 +159,80 @@ class DataHandler:
                 history = getattr(self.cfg, "history_retention", 0)
                 if history > 0 and len(self._ohlcv_2h) > history:
                     self._ohlcv_2h = self._ohlcv_2h.groupby(level="symbol").tail(history)
+
+    async def fetch_ohlcv_history(self, symbol: str, timeframe: str, limit: int) -> Tuple[str, pd.DataFrame]:
+        """Fetch OHLCV history for ``symbol`` from the configured exchange."""
+
+        if not hasattr(self.exchange, "fetch_ohlcv"):
+            raise RuntimeError("exchange does not support fetch_ohlcv")
+
+        ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        df = pd.DataFrame(
+            ohlcv,
+            columns=["timestamp", "open", "high", "low", "close", "volume"],
+        )
+        if not df.empty:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            df["symbol"] = symbol
+            df = df.set_index(["symbol", "timestamp"])
+        return symbol, df
+
+    async def load_initial(self) -> None:
+        """Load initial OHLCV history and populate indicators."""
+
+        symbols = getattr(self, "usdt_pairs", None) or ["BTCUSDT"]
+        self.usdt_pairs = list(dict.fromkeys(symbols))
+        timeframe = getattr(self.cfg, "timeframe", "1m")
+        secondary_timeframe = getattr(self.cfg, "secondary_timeframe", "2h")
+        history_limit = int(getattr(self.cfg, "history_retention", 200))
+
+        frames: list[pd.DataFrame] = []
+        frames_secondary: list[pd.DataFrame] = []
+        for sym in self.usdt_pairs:
+            try:
+                _sym, df = await self.fetch_ohlcv_history(sym, timeframe, history_limit)
+            except Exception as exc:  # pragma: no cover - defensive guard for runtime issues
+                self.logger.warning("Не удалось загрузить историю %s: %s", sym, exc)
+                continue
+            if not df.empty:
+                frames.append(df)
+                await self.synchronize_and_update(sym, df.reset_index())
+
+            try:
+                _sym, df_secondary = await self.fetch_ohlcv_history(
+                    sym, secondary_timeframe, max(1, history_limit // 2)
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard for runtime issues
+                self.logger.debug("Пропускаем загрузку вторичного таймфрейма %s: %s", sym, exc)
+                df_secondary = pd.DataFrame()
+            if not df_secondary.empty:
+                frames_secondary.append(df_secondary)
+
+        if frames:
+            self._ohlcv = pd.concat(frames).sort_index()
+        if frames_secondary:
+            self._ohlcv_2h = pd.concat(frames_secondary).sort_index()
+
+    async def subscribe_to_klines(self, pairs: Iterable[str]) -> None:
+        """Poll exchange klines and enqueue updates into the websocket queue."""
+
+        if not hasattr(self.exchange, "fetch_ohlcv"):
+            raise AttributeError("exchange does not implement fetch_ohlcv")
+
+        timeframe = getattr(self.cfg, "timeframe", "1m")
+        sleep_interval = max(1.0, pd.Timedelta(timeframe).total_seconds())
+        try:
+            while True:
+                for sym in pairs:
+                    try:
+                        _, df = await self.fetch_ohlcv_history(sym, timeframe, 1)
+                    except Exception as exc:  # pragma: no cover - runtime protection
+                        self.logger.debug("Не удалось получить обновление свечи %s: %s", sym, exc)
+                        continue
+                    if df.empty:
+                        continue
+                    candle = df.reset_index().iloc[-1].to_dict()
+                    await self.ws_queue.put((0, ([sym], candle, "primary")))
+                await asyncio.sleep(sleep_interval)
+        except asyncio.CancelledError:  # pragma: no cover - cooperative cancellation
+            raise
