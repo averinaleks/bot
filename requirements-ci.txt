@@ -33,7 +33,7 @@ scikit-learn==1.7.2; python_version<'3.12'
 joblib==1.5.2
 setuptools>=80.9.0,<81
 types-requests
-mypy==1.19.0
+mypy==1.19.1
 hypothesis>=6.90.0
 # Keep numpy aligned with requirements-core.txt and Docker builds.  NumPy 2.4
 # requires a newer numba release than is currently available, so cap the
