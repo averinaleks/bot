@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from json import JSONDecodeError
@@ -75,37 +76,92 @@ def strip_desktop_helpers(data: Dict[str, Any]) -> bool:
     return changed
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Remove docker-credential-desktop entries from a Docker config. "
+            "Useful in WSL where the Windows helper is unavailable."
+        )
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the Docker config to rewrite. Defaults to "
+            "$DOCKER_CONFIG/config.json or ~/.docker/config.json."
+        ),
+    )
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help=(
+            "Optional source config to read from. If provided and different from "
+            "--config, the sanitized data will be written to --config without "
+            "modifying the source file."
+        ),
+    )
+    parser.add_argument(
+        "--create-empty",
+        action="store_true",
+        help=(
+            "Create a minimal config when the source file is missing. This is "
+            "useful for wrapper scripts that want a clean DOCKER_CONFIG directory."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    config_dir = Path(os.environ.get(DOCKER_CONFIG_ENV, DEFAULT_CONFIG_DIR))
-    config_path = config_dir / CONFIG_FILENAME
+    args = parse_args()
+
+    env_config_dir = Path(os.environ.get(DOCKER_CONFIG_ENV, DEFAULT_CONFIG_DIR))
+    config_path = args.config if args.config else env_config_dir / CONFIG_FILENAME
+    source_path = args.source if args.source else config_path
 
     try:
-        config_data = load_config(config_path)
+        config_data = load_config(source_path)
     except ValueError as exc:
-        backup_path = backup_config(config_path)
+        backup_path = backup_config(source_path)
         save_config(config_path, {})
         if backup_path:
             print(f"Backed up invalid Docker config to {backup_path}.")
-        print(f"Invalid Docker config at {config_path}: {exc}")
+        print(f"Invalid Docker config at {source_path}: {exc}")
         print("Rewrote Docker config without credential helpers; rerun your compose command.")
         return
 
-    if not config_data:
-        print(f"No existing Docker config found at {config_path}; nothing to update.")
+    if not config_data and not args.create_empty:
+        print(f"No existing Docker config found at {source_path}; nothing to update.")
         return
 
     changed = strip_desktop_helpers(config_data)
+
+    if not config_data and args.create_empty:
+        config_data = {"auths": {}, "credHelpers": {}}
+        changed = True
+
     if not changed:
-        print(f"No desktop credential helper entries found in {config_path}; no changes made.")
+        print(f"No desktop credential helper entries found in {source_path}; no changes made.")
+        if config_path != source_path and not config_path.exists():
+            print(f"Copying existing config from {source_path} to {config_path} without changes.")
+            save_config(config_path, config_data)
         return
 
-    backup_path = backup_config(config_path)
+    if config_path.exists():
+        backup_path = backup_config(config_path)
+    else:
+        backup_path = None
+
     save_config(config_path, config_data)
 
     if backup_path:
         print(f"Updated {config_path} and created backup at {backup_path}.")
     else:
         print(f"Updated {config_path} (no previous file to back up).")
+
+    if config_path != source_path and source_path.exists():
+        print(f"Source config {source_path} left untouched; sanitized copy written to {config_path}.")
 
     print("Removed docker-credential-desktop entries; try rerunning your docker compose commands.")
 
