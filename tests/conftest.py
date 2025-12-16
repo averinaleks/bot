@@ -16,6 +16,17 @@ os.environ.setdefault("CSRF_SECRET", "test-secret")
 
 import pytest
 
+@pytest.fixture(autouse=True)
+def _reset_offline_mode(monkeypatch):
+    """Ensure ``OFFLINE_MODE`` does not leak between tests.
+
+    Individual tests that need offline behaviour still set the variable
+    explicitly; this fixture simply clears any stray values from previous
+    tests or the developer environment.
+    """
+
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+
 # ``sitecustomize`` готовит окружение (устанавливает опциональные зависимости)
 # и включает защитные патчи, необходимые для тестов.  На GitHub Actions модуль
 # автоматически подхватывается интерпретатором, но в изолированной среде

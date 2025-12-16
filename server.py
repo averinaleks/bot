@@ -72,7 +72,15 @@ from bot.dotenv_utils import DOTENV_AVAILABLE, DOTENV_ERROR, load_dotenv
 from services.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
-offline_mode = os.getenv("OFFLINE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _offline_mode_enabled() -> bool:
+    return os.getenv("OFFLINE_MODE", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 class ServerConfigurationError(RuntimeError):
@@ -142,7 +150,7 @@ except Exception as exc:  # pragma: no cover - dependency required
         raise RuntimeError(
             "fastapi-csrf-protect is required. Install it with 'pip install fastapi-csrf-protect'."
         ) from exc
-    if offline_mode:
+    if _offline_mode_enabled():
         CSRF_ENABLED = False
 
         class CsrfProtect:  # type: ignore[no-redef]
@@ -276,6 +284,8 @@ class ModelManager:
         Returns "primary" if the main model is loaded, "fallback" if the
         fallback model is loaded instead.
         """
+
+        offline_mode = _offline_mode_enabled()
 
         if offline_mode:
             logging.warning(
@@ -442,6 +452,7 @@ model_lock = asyncio.Lock()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    offline_mode = _offline_mode_enabled()
     API_KEYS.clear()
     API_KEYS.update(
         {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
@@ -474,7 +485,7 @@ class CsrfSettings(BaseModel):
     secret_key: str
 
 def _resolve_csrf_secret() -> str:
-    if offline_mode:
+    if _offline_mode_enabled():
         return "offline-mode-secret"
     if not CSRF_ENABLED:
         return "offline-mode-secret"
