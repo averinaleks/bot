@@ -9,7 +9,7 @@ python run_bot.py --offline
 Команда выше полезна для быстрого ознакомления: она не требует реальных API‑ключей и демонстрирует работу сервисов на локальных заглушках. Для production‑запуска по‑прежнему нужен `config.json` и заполненный `.env`.
 
 > ⚠️ **WSL и Docker Desktop**. Если при `docker compose build --no-cache` или `docker compose up --build` появляется ошибка
-> `docker-credential-desktop.exe`, запустите `python scripts/disable_desktop_credential_helper.py`. Скрипт удалит недоступный в Linux помощник учётных данных из `~/.docker/config.json` и сохранит резервную копию. Альтернатива — выполнять команды через `scripts/docker_compose_wsl.sh ...`, который автоматически подставляет чистый `DOCKER_CONFIG` без Windows‑хелперов.
+> `docker-credential-desktop.exe`, запустите `python scripts/disable_desktop_credential_helper.py`. Скрипт удалит недоступный в Linux помощник учётных данных из `~/.docker/config.json` и сохранит резервную копию. Альтернатива — выполнять команды через `scripts/docker_compose_wsl.sh ...`, который теперь сам создаёт локальный `docker/config-wsl/config.json` и копирует в него очищенную от `desktop`‑хелпера версию вашего `~/.docker/config.json`, сохранив авторизации Docker Hub.
 
 Флаг `--auto-offline` теперь включён по умолчанию: если обязательные переменные окружения отсутствуют, бот сам переходит в
 офлайн‑режим и подставляет фиктивные креды, чтобы не прерывать запуск. При необходимости запретить такое поведение добавьте
@@ -902,6 +902,10 @@ error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.ex
 ```bash
 python scripts/disable_desktop_credential_helper.py
 ```
+
+Скрипт принимает флаг `--source` для чтения исходной конфигурации и `--config` для записи результата в другой файл — эти опции
+используются в `scripts/docker_compose_wsl.sh`, чтобы создать локальный `docker/config-wsl/config.json` без правки глобального
+`~/.docker/config.json`.
 
 Скрипт сохранит резервную копию конфигурации и удалит записи `credsStore`/`credHelpers`
 со ссылкой на `desktop.exe`. После этого повторите `docker compose build --no-cache`

@@ -10,15 +10,11 @@ ROOT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 export DOCKER_CONFIG="$ROOT_DIR/docker/config-wsl"
 
 CONFIG_FILE="$DOCKER_CONFIG/config.json"
+SOURCE_CONFIG="$HOME/.docker/config.json"
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  mkdir -p "$DOCKER_CONFIG"
-  cat >"$CONFIG_FILE" <<'EOF'
-{
-  "auths": {},
-  "credHelpers": {}
-}
-EOF
-fi
+python "$ROOT_DIR/scripts/disable_desktop_credential_helper.py" \
+  --config "$CONFIG_FILE" \
+  --source "$SOURCE_CONFIG" \
+  --create-empty
 
 exec docker compose "$@"
