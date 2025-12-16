@@ -935,6 +935,36 @@ scripts/docker_compose_wsl.sh up --build
 `credHelpers`, содержащие `desktop`. Главное — оставить JSON корректным и не
 задавать несуществующих хелперов.
 
+## Ошибка `Permission denied` при удалении `__pycache__`
+
+Если при удалении репозитория (`rm -rf ~/trading_bot`) выводятся ошибки вида
+```
+rm: cannot remove 'telegram/__pycache__/error.cpython-312.pyc': Permission denied
+```
+значит, файлы `.pyc` были созданы от имени другого пользователя (например,
+`root`). Чтобы очистить каталог, измените владельца текущему пользователю и
+повторите удаление:
+
+```bash
+sudo chown -R "$(whoami)":"$(whoami)" ~/trading_bot
+sudo rm -rf ~/trading_bot
+```
+
+Чтобы избежать появления таких файлов в будущем:
+
+- Создайте директории, которые монтируются в контейнер (`logs/`, `cache/`,
+  `models/`), заранее и выдайте на них права `1000:1000` либо сделайте их
+  доступными для записи всеми пользователями (`chmod 777 logs`). Сервис
+  `log_prep` уже выставляет владельца `1000:1000` для `logs`, при желании можно
+  аналогично применить `chown` к `cache` и `models`.
+- Собирайте образ с UID/GID, совпадающими с вашим пользователем в WSL: добавьте
+  `--build-arg APP_UID=$(id -u) --build-arg APP_GID=$(id -g)` к
+  `docker compose build` или `scripts/docker_compose_wsl.sh build`. Тогда новые
+  файлы в монтируемых каталогах будут принадлежать вам.
+- Клонируйте репозиторий непосредственно в файловой системе WSL (не с
+  Windows-диска) или копируйте с флагом `--no-preserve=ownership`, чтобы
+  избежать смешения владельцев.
+
 ## Telegram notifications
 
 Укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `.env`, чтобы включить
