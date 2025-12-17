@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from json import JSONDecodeError
 from datetime import datetime
 from pathlib import Path
@@ -76,7 +77,7 @@ def strip_desktop_helpers(data: Dict[str, Any]) -> bool:
     return changed
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Remove docker-credential-desktop entries from a Docker config. "
@@ -110,11 +111,11 @@ def parse_args() -> argparse.Namespace:
             "useful for wrapper scripts that want a clean DOCKER_CONFIG directory."
         ),
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv or [])
 
     env_config_dir = Path(os.environ.get(DOCKER_CONFIG_ENV, DEFAULT_CONFIG_DIR))
     config_path = args.config if args.config else env_config_dir / CONFIG_FILENAME
@@ -167,4 +168,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
