@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import importlib
 import sys
+from pathlib import Path
 from typing import Iterable
+
+from importlib import metadata
 
 
 def _load_upstream_main() -> callable:
@@ -27,12 +30,36 @@ def _load_upstream_main() -> callable:
     """
 
     try:
-        upstream = importlib.import_module("pip_audit.__main__")
-    except ModuleNotFoundError as exc:
+        metadata.version("pip-audit")
+    except metadata.PackageNotFoundError as exc:
         raise ModuleNotFoundError(
             "pip-audit CLI components are not installed; "
             "run `pip install pip-audit` to enable security scans"
         ) from exc
+
+    # Remove this stub's package directory from the search path so that imports
+    # resolve to the real installation rather than recursing into the shim.
+    package_root = Path(__file__).resolve().parents[1]
+    search_path = [
+        entry for entry in sys.path if Path(entry).resolve() != package_root
+    ]
+
+    original_sys_path = sys.path
+    removed_modules: dict[str, object] = {}
+    try:
+        for name in list(sys.modules):
+            if name == "pip_audit" or name.startswith("pip_audit."):
+                removed_modules[name] = sys.modules.pop(name)
+
+        sys.path = search_path
+        upstream = importlib.import_module("pip_audit.__main__")
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "pip-audit is installed but its CLI entrypoint cannot be located"
+        ) from exc
+    finally:
+        sys.modules.update(removed_modules)
+        sys.path = original_sys_path
 
     main = getattr(upstream, "main", None)
     if main is None:
