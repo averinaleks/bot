@@ -36,34 +36,75 @@ jobs:
           python-version: ${{ matrix.python-version }}
           device: ${{ matrix.device }}
       - name: Show tool versions
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 3
-          timeout_minutes: 5
-          command: |
-            python --version
-            python -m ruff --version
-            python -m mypy --version
-            python -m bandit --version
-            python -m flake8 --version
+        shell: bash
+        run: |
+          attempts=3
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
+            if timeout 5m bash -c '
+              python --version
+              python -m ruff --version
+              python -m mypy --version
+              python -m bandit --version
+              python -m flake8 --version
+            '; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Lint with ruff
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 2
-          timeout_minutes: 15
-          command: python -m ruff check bot tests --output-format=github
+        shell: bash
+        run: |
+          attempts=2
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
+            if timeout 15m python -m ruff check bot tests --output-format=github; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Type-check with mypy
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 2
-          timeout_minutes: 20
-          command: python -m mypy bot
+        shell: bash
+        run: |
+          attempts=2
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
+            if timeout 20m python -m mypy bot; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Security scan with bandit
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 2
-          timeout_minutes: 10
-          command: python -m bandit -r bot -x tests -ll
+        shell: bash
+        run: |
+          attempts=2
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
+            if timeout 10m python -m bandit -r bot -x tests -ll; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Audit dependencies
         id: audit
         working-directory: /mnt
@@ -79,14 +120,22 @@ jobs:
           path: /mnt/pip-audit.json
           if-no-files-found: ignore
       - name: Run flake8
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 2
-          timeout_minutes: 15
-          command: |
+        shell: bash
+        run: |
+          attempts=2
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
             set -o pipefail
-            python -m flake8 . | tee flake8.log || code=$?
-            exit $code
+            if timeout 15m bash -c 'python -m flake8 . | tee flake8.log'; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Upload flake8 log
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
@@ -98,13 +147,22 @@ jobs:
         uses: ./.github/actions/clear-test-caches
       - name: Run unit tests
         if: always()
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 2
-          timeout_minutes: 20
-          command: |
+        shell: bash
+        run: |
+          attempts=2
+          for attempt in $(seq 1 $attempts); do
+            echo "Attempt $attempt/$attempts"
             set -o pipefail
-            timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log
+            if timeout 20m bash -c 'timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log'; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
       - name: Upload unit test log
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
