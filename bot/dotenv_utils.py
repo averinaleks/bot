@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Dict
+from os import PathLike
+from typing import IO, Dict
 
 try:  # pragma: no cover - exercised indirectly via tests
     from dotenv import dotenv_values as _dotenv_values
@@ -24,11 +25,18 @@ except Exception as exc:  # pragma: no cover - handled via fallback
     # It supports simple ``KEY=VALUE`` pairs and ignores blank lines and
     # comments starting with ``#``. Values retain surrounding whitespace to
     # avoid surprising behaviour compared to the optional dependency.
-    def _dotenv_values(path: str = ".env") -> Dict[str, str]:
+    def _dotenv_values(
+        dotenv_path: str | PathLike[str] | None = None,
+        stream: IO[str] | None = None,
+        verbose: bool = False,
+        interpolate: bool = True,
+        encoding: str | None = "utf-8",
+    ) -> Dict[str, str | None]:
+        path = dotenv_path or ".env"
         if not os.path.exists(path):
             return {}
 
-        values: Dict[str, str] = {}
+        values: Dict[str, str | None] = {}
         try:
             with open(path, "r", encoding="utf-8") as env_file:
                 for line in env_file:
@@ -50,7 +58,14 @@ except Exception as exc:  # pragma: no cover - handled via fallback
 
         return values
 
-    def _load_dotenv(*_args, **_kwargs) -> bool:
+    def _load_dotenv(
+        dotenv_path: str | PathLike[str] | None = None,
+        stream: IO[str] | None = None,
+        verbose: bool = False,
+        override: bool = False,
+        interpolate: bool = True,
+        encoding: str | None = "utf-8",
+    ) -> bool:
         """Fallback no-op when :mod:`python-dotenv` is unavailable."""
 
         return False
@@ -64,7 +79,12 @@ def dotenv_values() -> Dict[str, str]:
     except Exception:
         return {}
 
-    return {key: value for key, value in values.items() if value is not None}
+    filtered: Dict[str, str] = {}
+    for key, value in values.items():
+        if value is not None:
+            filtered[key] = value
+
+    return filtered
 
 
 def load_dotenv() -> None:
