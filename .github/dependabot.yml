@@ -68,6 +68,20 @@ updates:
       # limits; it is safer to upgrade it manually together with the
       # matching back-end services.
       - dependency-name: "ccxtpro"
+      # Heavy model stacks regularly exhaust Dependabot's solver budget or
+      # require system dependencies that are unavailable in the managed
+      # runner.  Skip them in automated checks to keep the scheduled job
+      # green; we will refresh them manually alongside the GPU images.
+      - dependency-name: "langchain"
+      - dependency-name: "llama-index"
+      - dependency-name: "chromadb"
+      - dependency-name: "sentence-transformers"
+      - dependency-name: "onnxruntime"
+      - dependency-name: "onnxruntime-gpu"
+      - dependency-name: "faiss-cpu"
+      - dependency-name: "faiss-gpu"
+      - dependency-name: "xgboost"
+      - dependency-name: "lightgbm"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
