@@ -38,6 +38,7 @@ jobs:
       - name: Show tool versions
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=3
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -60,6 +61,7 @@ jobs:
       - name: Lint with ruff
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -76,6 +78,7 @@ jobs:
       - name: Type-check with mypy
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -92,6 +95,7 @@ jobs:
       - name: Security scan with bandit
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -110,6 +114,7 @@ jobs:
         working-directory: /mnt
         continue-on-error: true
         run: |
+          source /mnt/venv/bin/activate
           python "$GITHUB_WORKSPACE/scripts/run_pip_audit.py" \
             --strict --output pip-audit.json
       - name: Upload pip-audit report
@@ -122,6 +127,7 @@ jobs:
       - name: Run flake8
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -149,6 +155,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          source /mnt/venv/bin/activate
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -196,6 +203,7 @@ jobs:
       - name: Run integration tests
         if: always()
         run: |
+          source /mnt/venv/bin/activate
           set -o pipefail
           timeout 15m pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
       - name: Upload integration test log
