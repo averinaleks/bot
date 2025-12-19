@@ -16,52 +16,11 @@ runs:
       shell: bash
       run: >-
         git submodule foreach --recursive sh -c "git config --quiet --local gc.auto 0 || :" || :
-    - name: Purge runner diagnostics cache
+    - name: Prepare workspace directories
       shell: bash
       run: |
-        sudo rm -rf /home/runner/actions-runner/_diag/* || true
-        sudo rm -rf /home/runner/actions-runner/cached/_diag/* || true
-    - name: Free disk space
-      shell: bash
-      run: |
-        timeout 4m bash -c '
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo npm cache clean --force || true
-          sudo rm -rf /var/lib/docker/*
-        ' || true
-    - name: Ensure LVM tools are available
-      continue-on-error: true
-      shell: bash
-      run: |
-        if ! command -v pvcreate >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lvm2
-        fi
-    - name: Prepare build volume
-      continue-on-error: true
-      shell: bash
-      run: |
-        if [ -e /dev/buildvg/buildlv ]; then
-          sudo wipefs -a /dev/buildvg/buildlv
-        else
-          echo "Device /dev/buildvg/buildlv not found, skipping wipefs"
-        fi
-        sudo swapoff /mnt/swapfile || true
-        sudo rm -f /mnt/swapfile
-        sudo rm -rf /mnt/*
-    - name: Maximize build space
-      continue-on-error: true
-      uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
-      with:
-        root-reserve-mb: 2048
-        temp-reserve-mb: 100
-        swap-size-mb: 4096
-        build-mount-path: /mnt
-        pv-loop-path: /root-pv.img
-        tmp-pv-loop-path: /mnt/tmp-pv.img
+        mkdir -p /mnt/tmp /mnt/pip-cache /mnt/pycache /mnt/pytest_cache
+        sudo chown -R "$USER" /mnt/tmp /mnt/pip-cache /mnt/pycache /mnt/pytest_cache
     - name: Configure temp directories
       shell: bash
       working-directory: /mnt
