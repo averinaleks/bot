@@ -21,6 +21,6 @@ iniconfig==2.3.0
 tomli==2.3.0
 
 flake8==7.3.0
-ruff==0.14.9
+ruff==0.14.10
 bandit==1.9.2
 bandit-sarif-formatter==1.1.1
