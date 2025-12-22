@@ -33,9 +33,11 @@ jobs:
           pip install bandit-sarif-formatter==1.1.1
       - name: Run Bandit
         id: run_bandit
+        continue-on-error: true
         run: bandit -r . -ll -ii -x ./tests,./scripts,./gptoss_check -f sarif -o bandit.sarif
       - name: Check for SARIF results
         id: sarif_check
+        if: always()
         run: |
           python - <<'PY'
           import json
@@ -59,7 +61,7 @@ jobs:
           PY
       - name: Upload Bandit results
         uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
-        if: steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
+        if: always() && steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
         with:
           sarif_file: bandit.sarif
       - name: Fail if Bandit found issues
@@ -68,6 +70,6 @@ jobs:
           echo "Bandit обнаружил проблемы безопасности. Ознакомьтесь с отчетом bandit.sarif."
           exit 1
       - name: Fail if Bandit failed
-        if: ${{ steps.run_bandit.outcome == 'failure' }}
+        if: steps.run_bandit.outcome == 'failure' && steps.sarif_check.outputs.upload != 'true'
         run: exit 1
 
