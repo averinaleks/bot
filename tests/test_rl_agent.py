@@ -56,8 +56,23 @@ if "gymnasium" not in sys.modules:
         def __init__(self, low, high, shape, dtype):
             self.shape = shape
 
+    class DummyEnv:
+        action_space = DummyDiscrete(2)
+        observation_space = DummyBox(-1, 1, (4,), float)
+
+        def reset(self, seed=None, options=None):
+            return np.zeros(self.observation_space.shape), {}
+
+        def step(self, action):
+            obs = np.zeros(self.observation_space.shape)
+            reward = 1.0
+            terminated = False
+            truncated = False
+            return obs, reward, terminated, truncated, {}
+
     gym_stub.Env = object
     gym_stub.spaces = types.SimpleNamespace(Discrete=DummyDiscrete, Box=DummyBox)
+    gym_stub.make = lambda env_id: DummyEnv()
     sys.modules["gymnasium"] = gym_stub
 
 from bot import model_builder  # noqa: E402

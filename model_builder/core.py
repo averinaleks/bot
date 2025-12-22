@@ -172,18 +172,20 @@ def _load_gym() -> tuple[Any, Any]:
 
         gym_mod = sys.modules.get("gymnasium")
         spaces_mod = sys.modules.get("gymnasium.spaces")
-        if gym_mod is not None and spaces_mod is not None:
-            return gym_mod, spaces_mod
 
-        gym_mod = types.ModuleType("gymnasium")
+        gym_mod = gym_mod or types.ModuleType("gymnasium")
         setattr(gym_mod, "_BOT_GYM_STUB", True)
 
         class _Env:  # pragma: no cover - simple placeholder
             metadata: dict[str, object] = {}
 
+            def close(self) -> None:
+                """Shut down the environment."""
+                return None
+
         setattr(gym_mod, "Env", _Env)
 
-        spaces_mod = types.ModuleType("gymnasium.spaces")
+        spaces_mod = spaces_mod or types.ModuleType("gymnasium.spaces")
 
         class _Discrete:  # pragma: no cover - simple placeholder
             def __init__(self, n: int):
@@ -204,9 +206,32 @@ def _load_gym() -> tuple[Any, Any]:
                     return np.array(self.low, dtype=self.dtype)
                 return np.full(self.shape, self.low, dtype=self.dtype)
 
-        setattr(spaces_mod, "Discrete", _Discrete)
-        setattr(spaces_mod, "Box", _Box)
+        setattr(spaces_mod, "Discrete", getattr(spaces_mod, "Discrete", _Discrete))
+        setattr(spaces_mod, "Box", getattr(spaces_mod, "Box", _Box))
         setattr(gym_mod, "spaces", spaces_mod)
+        
+        class _CartPoleStubEnv(_Env):  # pragma: no cover - simple placeholder
+            observation_space = _Box(low=-4.8, high=4.8, shape=(4,), dtype=float)
+            action_space = _Discrete(2)
+
+            def reset(self, seed: int | None = None, options=None):  # type: ignore[override]
+                return np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype), {}
+
+            def step(self, action):  # type: ignore[override]
+                obs = np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype)
+                reward = 1.0
+                terminated = False
+                truncated = False
+                return obs, reward, terminated, truncated, {}
+
+        def _make(env_id: str):
+            if env_id == "CartPole-v1":
+                return _CartPoleStubEnv()
+            msg = f"Unknown environment id: {env_id}"
+            raise ValueError(msg)
+
+        if not hasattr(gym_mod, "make"):
+            setattr(gym_mod, "make", _make)
         gym_mod.__dict__["__model_builder_stub__"] = True
         spaces_mod.__dict__["__model_builder_stub__"] = True
         sys.modules.setdefault("gymnasium", gym_mod)
