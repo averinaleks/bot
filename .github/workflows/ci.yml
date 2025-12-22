@@ -14,17 +14,16 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
-  PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
-  TEST_MODE: "1"
-  CSRF_SECRET: testsecret
-
 jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+      PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
+      TEST_MODE: "1"
+      CSRF_SECRET: testsecret
     strategy:
       fail-fast: false
       matrix:
@@ -187,6 +186,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: unit
+    env:
+      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+      PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
+      TEST_MODE: "1"
+      CSRF_SECRET: testsecret
     strategy:
       fail-fast: false
       matrix:
