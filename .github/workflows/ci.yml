@@ -15,7 +15,8 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHONPYCACHEPREFIX: /mnt/pycache
+  PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+  PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
   TEST_MODE: "1"
   CSRF_SECRET: testsecret
 
@@ -38,7 +39,7 @@ jobs:
       - name: Show tool versions
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=3
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -61,7 +62,7 @@ jobs:
       - name: Lint with ruff
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -78,7 +79,7 @@ jobs:
       - name: Type-check with mypy
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -95,7 +96,7 @@ jobs:
       - name: Security scan with bandit
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -111,10 +112,10 @@ jobs:
           done
       - name: Audit dependencies
         id: audit
-        working-directory: /mnt
+        working-directory: ${{ runner.temp }}
         continue-on-error: true
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           python "$GITHUB_WORKSPACE/scripts/run_pip_audit.py" \
             --strict --output pip-audit.json
       - name: Upload pip-audit report
@@ -122,12 +123,12 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: pip-audit-report-${{ matrix.python-version }}
-          path: /mnt/pip-audit.json
+          path: ${{ runner.temp }}/pip-audit.json
           if-no-files-found: ignore
       - name: Run flake8
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
@@ -155,12 +156,12 @@ jobs:
         if: always()
         shell: bash
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           attempts=2
           for attempt in $(seq 1 $attempts); do
             echo "Attempt $attempt/$attempts"
             set -o pipefail
-            if timeout 20m bash -c 'timeout 15m pytest -m "not integration" -o cache_dir=/mnt/pytest_cache | tee pytest.log'; then
+            if timeout 20m bash -c 'timeout 15m pytest -m "not integration" -o cache_dir="$PYTEST_CACHE_DIR" | tee pytest.log'; then
               break
             fi
 
@@ -203,9 +204,9 @@ jobs:
       - name: Run integration tests
         if: always()
         run: |
-          source /mnt/venv/bin/activate
+          source "$VIRTUAL_ENV/bin/activate"
           set -o pipefail
-          timeout 15m pytest -m integration -o cache_dir=/mnt/pytest_cache | tee pytest.log
+          timeout 15m pytest -m integration -o cache_dir="$PYTEST_CACHE_DIR" | tee pytest.log
       - name: Upload integration test log
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
