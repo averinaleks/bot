@@ -19,15 +19,13 @@ runs:
     - name: Prepare workspace directories
       shell: bash
       run: |
-        mkdir -p /mnt/tmp /mnt/pip-cache /mnt/pycache /mnt/pytest_cache
-        sudo chown -R "$USER" /mnt/tmp /mnt/pip-cache /mnt/pycache /mnt/pytest_cache
+        mkdir -p "$RUNNER_TEMP/tmp" "$RUNNER_TEMP/pip-cache" "$RUNNER_TEMP/pycache" "$RUNNER_TEMP/pytest_cache" "$RUNNER_TEMP/venv"
     - name: Configure temp directories
       shell: bash
-      working-directory: /mnt
       run: |
-        mkdir -p /mnt/tmp /mnt/pip-cache
-        echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-        echo "PIP_CACHE_DIR=/mnt/pip-cache" >> $GITHUB_ENV
+        mkdir -p "$RUNNER_TEMP/tmp" "$RUNNER_TEMP/pip-cache"
+        echo "TMPDIR=$RUNNER_TEMP/tmp" >> $GITHUB_ENV
+        echo "PIP_CACHE_DIR=$RUNNER_TEMP/pip-cache" >> $GITHUB_ENV
     - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: ${{ inputs.python-version }}
@@ -47,22 +45,24 @@ runs:
       id: cache-venv
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: /mnt/venv
+        path: ${{ runner.temp }}/venv
         key: >-
           ${{ runner.os }}-venv-${{ inputs.device }}-py${{ inputs.python-version }}-${{ hashFiles('requirements-ci.txt', 'requirements-cpu.txt') }}
     - name: Set up virtual environment
       shell: bash
       run: |
-        if [ ! -f /mnt/venv/bin/activate ]; then
-          python -m venv /mnt/venv
+        attempts=3
+        VENV_PATH="$RUNNER_TEMP/venv"
+
+        if [ ! -f "$VENV_PATH/bin/activate" ]; then
+          python -m venv "$VENV_PATH"
         fi
-        source /mnt/venv/bin/activate
-        mkdir -p /mnt/tmp /mnt/pip-cache
-        export TMPDIR=/mnt/tmp
-        export PIP_CACHE_DIR=/mnt/pip-cache
+        source "$VENV_PATH/bin/activate"
+        mkdir -p "$RUNNER_TEMP/tmp" "$RUNNER_TEMP/pip-cache"
+        export TMPDIR="$RUNNER_TEMP/tmp"
+        export PIP_CACHE_DIR="$RUNNER_TEMP/pip-cache"
         export PIP_DEFAULT_TIMEOUT=60
 
-        attempts=3
         for attempt in $(seq 1 "$attempts"); do
           echo "[setup-env] Upgrading pip and build tools (attempt $attempt/$attempts)"
           if python -m pip install --upgrade 'pip>=24.0' 'setuptools>=80.9.0,<81' wheel; then
@@ -91,6 +91,6 @@ runs:
           sleep 10
         done
 
-        echo "/mnt/venv/bin" >> $GITHUB_PATH
-        printf 'VIRTUAL_ENV=%s\n' "/mnt/venv" >> "$GITHUB_ENV"
-        printf 'PATH=%s:%s\n' "/mnt/venv/bin" "$PATH" >> "$GITHUB_ENV"
+        echo "$VENV_PATH/bin" >> $GITHUB_PATH
+        printf 'VIRTUAL_ENV=%s\n' "$VENV_PATH" >> "$GITHUB_ENV"
+        printf 'PATH=%s:%s\n' "$VENV_PATH/bin" "$PATH" >> "$GITHUB_ENV"

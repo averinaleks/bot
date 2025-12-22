@@ -6,6 +6,8 @@ runs:
     - name: Remove caches
       shell: bash
       run: |
-        rm -rf /mnt/pytest_cache .pytest_cache .cache
+        cache_dir="${PYTEST_CACHE_DIR:-${RUNNER_TEMP:-/tmp}/pytest_cache}"
+
+        rm -rf "$cache_dir" .pytest_cache .cache
         find . -type d -name '__pycache__' -exec rm -rf {} +
         find . -name '*.pyc' -delete
