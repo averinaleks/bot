@@ -368,7 +368,11 @@ jobs:
             shift 2
             local tags=("$@")
 
-            local args=(--progress plain --file "${DOCKERFILE_PATH}")
+            # Always refresh base layers to avoid intermittent build failures
+            # when upstream images are removed or replaced. Without ``--pull``
+            # BuildKit can occasionally stop early with obscure resolver
+            # errors, which then aborts the whole publish job.
+            local args=(--progress plain --file "${DOCKERFILE_PATH}" --pull)
             if [ -n "${BUILDER_NAME}" ]; then
               args+=(--builder "${BUILDER_NAME}")
             fi
