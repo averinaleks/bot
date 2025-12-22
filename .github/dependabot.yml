@@ -67,6 +67,14 @@ updates:
       - dependency-name: "pyarrow"
       - dependency-name: "polars"
       - dependency-name: "grpcio"
+      # Additional compiled stacks that routinely exceed the solver budget in
+      # the managed dependabot/dependabot-updates workflow.  Skipping them keeps
+      # the scheduled job green while we refresh these dependencies manually
+      # alongside the Docker images.
+      - dependency-name: "ccxt"
+      - dependency-name: "polars-runtime-32"
+      - dependency-name: "psutil"
+      - dependency-name: "scipy"
       # NumPy 2.4+ currently conflicts with the pinned numba runtime.
       - dependency-name: "numpy"
         versions:
