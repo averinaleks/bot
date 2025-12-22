@@ -4,6 +4,7 @@ import asyncio
 import hmac
 import json
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from collections.abc import Mapping
 from pathlib import Path
@@ -141,6 +142,9 @@ except ImportError as exc:  # pragma: no cover - dependency required
     ) from exc
 
 API_KEYS: set[str] = set()
+
+_OFFLINE_API_KEY = secrets.token_urlsafe(32)
+_OFFLINE_CSRF_SECRET = secrets.token_urlsafe(32)
 
 CSRF_ENABLED = True
 try:  # pragma: no cover - handled in tests
@@ -461,7 +465,7 @@ async def lifespan(_: FastAPI):
         logging.warning(
             "OFFLINE_MODE=1: API_KEYS not set; using temporary offline key"
         )
-        API_KEYS.add("offline-mode-key")
+        API_KEYS.add(_OFFLINE_API_KEY)
     elif not API_KEYS:
         logging.error(
             "API_KEYS is empty; all requests will be rejected. Set the API_KEYS environment variable.",
@@ -486,9 +490,9 @@ class CsrfSettings(BaseModel):
 
 def _resolve_csrf_secret() -> str:
     if _offline_mode_enabled():
-        return "offline-mode-secret"
+        return _OFFLINE_CSRF_SECRET
     if not CSRF_ENABLED:
-        return "offline-mode-secret"
+        return _OFFLINE_CSRF_SECRET
     env_secret = os.getenv("CSRF_SECRET")
     if env_secret:
         return env_secret
@@ -775,3 +779,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("server:app", host=host, port=port)
+
