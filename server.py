@@ -462,10 +462,17 @@ async def lifespan(_: FastAPI):
         {k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()}
     )
     if not API_KEYS and offline_mode:
-        logging.warning(
-            "OFFLINE_MODE=1: API_KEYS not set; using temporary offline key"
-        )
-        API_KEYS.add(_OFFLINE_API_KEY)
+        offline_api_key = os.getenv("OFFLINE_API_KEY") or _OFFLINE_API_KEY
+        if os.getenv("OFFLINE_API_KEY"):
+            logging.warning(
+                "OFFLINE_MODE=1: API_KEYS not set; using OFFLINE_API_KEY from environment"
+            )
+        else:
+            logging.warning(
+                "OFFLINE_MODE=1: API_KEYS not set; using generated temporary offline key=%s",
+                offline_api_key,
+            )
+        API_KEYS.add(offline_api_key)
     elif not API_KEYS:
         logging.error(
             "API_KEYS is empty; all requests will be rejected. Set the API_KEYS environment variable.",
