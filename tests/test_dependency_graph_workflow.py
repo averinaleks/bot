@@ -174,7 +174,16 @@ def test_dependency_graph_auto_retry_targets_custom_workflow() -> None:
     targets = _extract_workflow_run_targets(workflow)
 
     assert "dependency-submission" in targets
+    assert "dependency-submission-auto" in targets
     assert "Automatic Dependency Submission (Python)" in targets
+
+
+def test_dependency_graph_auto_retry_allows_repository_dispatch_events() -> None:
+    workflow = _load_dependency_graph_auto_retry_workflow()
+
+    assert "workflow_run.event == 'dynamic'" in workflow
+    assert "workflow_run.event == 'repository_dispatch'" in workflow
+    assert "workflow_run.event == 'workflow_dispatch'" in workflow
 
 
 def test_dependency_graph_detect_step_handles_nested_manifests() -> None:
