@@ -20,8 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
-      PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
+      TEMP_DIR: ${{ github.workspace }}/.tmp
+      PYTHONPYCACHEPREFIX: ${{ github.workspace }}/.tmp/pycache
+      PYTEST_CACHE_DIR: ${{ github.workspace }}/.tmp/pytest_cache
       TEST_MODE: "1"
       CSRF_SECRET: testsecret
     strategy:
@@ -31,6 +32,8 @@ jobs:
         device: [cpu]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v5
+      - name: Prepare temp directories
+        run: mkdir -p "${{ env.TEMP_DIR }}"
       - uses: ./.github/actions/setup-env
         with:
           python-version: ${{ matrix.python-version }}
@@ -111,7 +114,7 @@ jobs:
           done
       - name: Audit dependencies
         id: audit
-        working-directory: ${{ runner.temp }}
+        working-directory: ${{ env.TEMP_DIR }}
         continue-on-error: true
         run: |
           source "$VIRTUAL_ENV/bin/activate"
@@ -122,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: pip-audit-report-${{ matrix.python-version }}
-          path: ${{ runner.temp }}/pip-audit.json
+          path: ${{ env.TEMP_DIR }}/pip-audit.json
           if-no-files-found: ignore
       - name: Run flake8
         shell: bash
@@ -187,8 +190,9 @@ jobs:
     timeout-minutes: 45
     needs: unit
     env:
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
-      PYTEST_CACHE_DIR: ${{ runner.temp }}/pytest_cache
+      TEMP_DIR: ${{ github.workspace }}/.tmp
+      PYTHONPYCACHEPREFIX: ${{ github.workspace }}/.tmp/pycache
+      PYTEST_CACHE_DIR: ${{ github.workspace }}/.tmp/pytest_cache
       TEST_MODE: "1"
       CSRF_SECRET: testsecret
     strategy:
@@ -198,6 +202,8 @@ jobs:
         device: [cpu]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v5
+      - name: Prepare temp directories
+        run: mkdir -p "${{ env.TEMP_DIR }}"
       - uses: ./.github/actions/setup-env
         with:
           python-version: ${{ matrix.python-version }}
