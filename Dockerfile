@@ -32,8 +32,20 @@ else
     ca-certificates \
     gnupg
   mkdir -p /etc/apt/keyrings
-  curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub \
-    | gpg --dearmor -o /etc/apt/keyrings/cuda-archive-keyring.gpg
+  if [ ! -f /etc/apt/keyrings/cuda-archive-keyring.gpg ]; then
+    for attempt in 1 2 3; do
+      if curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub \
+        | gpg --dearmor -o /etc/apt/keyrings/cuda-archive-keyring.gpg; then
+        break
+      fi
+      echo "WARNING: CUDA key download failed (attempt ${attempt}/3); retrying in 10s" >&2
+      sleep 10
+    done
+    if [ ! -f /etc/apt/keyrings/cuda-archive-keyring.gpg ]; then
+      echo "ERROR: CUDA repository key is required but could not be downloaded; ensure network access to developer.download.nvidia.com" >&2
+      exit 1
+    fi
+  fi
   if [ -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list ]; then
     sed -i 's#\\[signed-by=[^]]*\\]#[signed-by=/etc/apt/keyrings/cuda-archive-keyring.gpg]#g' \
       /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
