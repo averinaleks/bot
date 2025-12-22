@@ -60,6 +60,13 @@ updates:
       - dependency-name: "gymnasium"
       - dependency-name: "lightning-utilities"
       - dependency-name: "ray"
+      # Heavily compiled data-processing runtimes frequently time out in the
+      # GitHub-hosted Dependabot environment.  Skipping them keeps the
+      # managed dependabot/dependabot-updates workflow green while we update
+      # them manually alongside our image builds.
+      - dependency-name: "pyarrow"
+      - dependency-name: "polars"
+      - dependency-name: "grpcio"
       # NumPy 2.4+ currently conflicts with the pinned numba runtime.
       - dependency-name: "numpy"
         versions:
