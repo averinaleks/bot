@@ -22,8 +22,8 @@ from types import SimpleNamespace
 from typing import Any, Optional, cast
 
 if "_TELEGRAM_IMPORT_LOGGED" not in globals():
-_TELEGRAM_IMPORT_LOGGED = False
-_PLACEHOLDER_WARNING_LOGGED = False
+    _TELEGRAM_IMPORT_LOGGED = False
+    _PLACEHOLDER_WARNING_LOGGED = False
 
 try:  # pragma: no cover - optional dependency in lightweight environments
     import httpx
@@ -573,4 +573,3 @@ def _shutdown_all() -> None:
 
 
 atexit.register(_shutdown_all)
-
