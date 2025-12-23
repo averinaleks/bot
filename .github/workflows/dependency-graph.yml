@@ -61,7 +61,7 @@ jobs:
           {
               echo "run-workflow=${run_workflow}"
           } >> "${GITHUB_OUTPUT}"
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@0b93645e9fea7318a24e0cbcbe849ea533ba3af2 # v5.3.0
         if: steps.execution-guard.outputs.run-workflow == 'true'
         with:
           python-version: '3.11'
@@ -535,7 +535,7 @@ jobs:
           if after:
               print(f"Resolved 'after' commit: {after}")
           PY
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@11bd716f3e669eca25f684de1b4f1530c3293fa0 # v4.2.2
         id: checkout
         if: steps.execution-guard.outputs.run-workflow == 'true'
         continue-on-error: true
