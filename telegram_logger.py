@@ -22,7 +22,8 @@ from types import SimpleNamespace
 from typing import Any, Optional, cast
 
 if "_TELEGRAM_IMPORT_LOGGED" not in globals():
-    _TELEGRAM_IMPORT_LOGGED = False
+_TELEGRAM_IMPORT_LOGGED = False
+_PLACEHOLDER_WARNING_LOGGED = False
 
 try:  # pragma: no cover - optional dependency in lightweight environments
     import httpx
@@ -517,7 +518,35 @@ def _should_use_offline_logger() -> bool:
         return False
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    return not (token and chat_id)
+    if not (token and chat_id):
+        return True
+
+    if _has_placeholder_credentials(token, chat_id):
+        global _PLACEHOLDER_WARNING_LOGGED
+        if not _PLACEHOLDER_WARNING_LOGGED:
+            logger.warning(
+                "Обнаружены тестовые или заглушечные учётные данные Telegram; используется OfflineTelegram"
+            )
+            _PLACEHOLDER_WARNING_LOGGED = True
+        return True
+
+    return False
+
+
+def _has_placeholder_credentials(token: str, chat_id: str) -> bool:
+    placeholder_markers = (
+        "...",
+        "CHANGE_ME",
+        "YOUR_TELEGRAM_BOT_TOKEN",
+        "YOUR_TELEGRAM_CHAT_ID",
+        "TOKEN_HERE",
+        "CHAT_ID_HERE",
+    )
+    token_upper = token.upper()
+    chat_upper = chat_id.upper()
+    return any(marker in token_upper for marker in placeholder_markers) or any(
+        marker in chat_upper for marker in placeholder_markers
+    )
 
 
 def _shutdown_all() -> None:
