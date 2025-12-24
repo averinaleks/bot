@@ -21,9 +21,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, cast
 
-if "_TELEGRAM_IMPORT_LOGGED" not in globals():
-    _TELEGRAM_IMPORT_LOGGED = False
-    _PLACEHOLDER_WARNING_LOGGED = False
+# Initialise import guard flags explicitly to avoid syntax issues when the file
+# is modified or partially generated. Keeping the assignment outside a
+# conditional ensures the variables are always defined on import while still
+# defaulting to the intended False values.
+_TELEGRAM_IMPORT_LOGGED = globals().get("_TELEGRAM_IMPORT_LOGGED", False)
+_PLACEHOLDER_WARNING_LOGGED = globals().get("_PLACEHOLDER_WARNING_LOGGED", False)
 
 try:  # pragma: no cover - optional dependency in lightweight environments
     import httpx
