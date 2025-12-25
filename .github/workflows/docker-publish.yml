@@ -259,10 +259,19 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          normalize_name() {
+            # Docker/OCI реестры требуют имена в нижнем регистре; GHCR и Docker Hub
+            # завершаются с ``invalid reference format`` при наличии заглавных букв.
+            printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+          }
+
+          owner_normalized="$(normalize_name "${OWNER}")"
+          dockerhub_user_normalized="$(normalize_name "${DOCKERHUB_USERNAME:-}")"
+
           if [[ "${PUBLISH_IMAGES}" == "true" ]]; then
-            tags="ghcr.io/${OWNER}/${MATRIX_IMAGE}:latest"
-            if [[ -n "${DOCKERHUB_USERNAME}" && -n "${DOCKERHUB_TOKEN}" ]]; then
-              tags="${tags}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/${MATRIX_IMAGE}:latest"
+            tags="ghcr.io/${owner_normalized}/${MATRIX_IMAGE}:latest"
+            if [[ -n "${dockerhub_user_normalized}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
+              tags="${tags}"$'\n'"docker.io/${dockerhub_user_normalized}/${MATRIX_IMAGE}:latest"
             fi
           else
             tags="local/${MATRIX_IMAGE}:ci-${GITHUB_RUN_ID}"
