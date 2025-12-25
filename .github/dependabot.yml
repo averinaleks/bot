@@ -75,6 +75,20 @@ updates:
       - dependency-name: "polars-runtime-32"
       - dependency-name: "psutil"
       - dependency-name: "scipy"
+      # The shap / scikit-learn stack repeatedly fails to resolve in the
+      # managed Dependabot updater because the new releases want newer numba
+      # and numpy builds than we allow.  Ignoring them keeps the scheduled run
+      # green while we refresh the ML images manually.
+      - dependency-name: "scikit-learn"
+      - dependency-name: "shap"
+      - dependency-name: "statsmodels"
+      - dependency-name: "imbalanced-learn"
+      # Hugging Face runtimes rely on Rust wheels and large metadata that
+      # regularly exhaust the hosted runner’s timeout window.  Skip them in
+      # automated runs and refresh together with the torch stack manually.
+      - dependency-name: "huggingface-hub"
+      - dependency-name: "tokenizers"
+      - dependency-name: "safetensors"
       # NumPy 2.4+ currently conflicts with the pinned numba runtime.
       - dependency-name: "numpy"
         versions:
