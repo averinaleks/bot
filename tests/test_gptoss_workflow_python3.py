@@ -27,6 +27,13 @@ def test_gptoss_workflow_uses_python3() -> None:
     assert 'path: ${{ env.HELPERS_DIR }}' in workflow_text
 
 
+def test_pr_head_checkout_uses_commit_sha() -> None:
+    workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
+
+    assert "- name: Checkout PR head" in workflow_text
+    assert 'ref: ${{ steps.ensure_pr_ready.outputs.head_sha }}' in workflow_text
+
+
 def test_pr_status_step_has_missing_script_guard() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding='utf-8')
 
@@ -50,7 +57,7 @@ def test_pr_status_step_sets_outputs_on_failure() -> None:
     ]
     marker = next((candidate for candidate in marker_options if candidate in workflow_text), None)
     assert marker is not None, 'missing PR status failure handler'
-    next_step = '      - name: Checkout trusted baseline'
+    next_step = '      - name: Checkout PR head'
 
     start = workflow_text.index(marker)
     end = workflow_text.index(next_step, start)
