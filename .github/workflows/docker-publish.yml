@@ -174,6 +174,33 @@ jobs:
           mount | grep '/mnt' || true
           df -h /mnt
 
+      - name: Normalize registry names
+        id: normalize
+        env:
+          OWNER: ${{ github.repository_owner }}
+          DOCKERHUB_USER: ${{ env.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          normalize_name() {
+            printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+          }
+
+          owner_normalized="$(normalize_name "${OWNER}")"
+          dockerhub_normalized=""
+          if [ -n "${DOCKERHUB_USER}" ]; then
+            dockerhub_normalized="$(normalize_name "${DOCKERHUB_USER}")"
+          fi
+
+          {
+            echo "REGISTRY_OWNER_NORMALIZED=${owner_normalized}"
+            echo "DOCKERHUB_USERNAME_NORMALIZED=${dockerhub_normalized}"
+          } >>"$GITHUB_ENV"
+
+          {
+            echo "owner=${owner_normalized}"
+            echo "dockerhub=${dockerhub_normalized}"
+          } >>"$GITHUB_OUTPUT"
+
       - name: Purge stale BuildKit cache
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
         env:
@@ -241,7 +268,7 @@ jobs:
         if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef  # v3
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME_NORMALIZED }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Login to GHCR
@@ -255,8 +282,10 @@ jobs:
       - name: Prepare image tags
         id: tags
         env:
+          OWNER_FALLBACK: ${{ github.repository_owner }}
+          OWNER_NORMALIZED: ${{ env.REGISTRY_OWNER_NORMALIZED }}
+          DOCKERHUB_USER_NORMALIZED: ${{ env.DOCKERHUB_USERNAME_NORMALIZED }}
           MATRIX_IMAGE: ${{ matrix.image }}
-          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
           normalize_name() {
@@ -265,16 +294,21 @@ jobs:
             printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
           }
 
-          owner_normalized="$(normalize_name "${OWNER}")"
-          dockerhub_user_normalized="$(normalize_name "${DOCKERHUB_USERNAME:-}")"
+          owner_normalized="${OWNER_NORMALIZED:-}"
+          dockerhub_user_normalized="${DOCKERHUB_USER_NORMALIZED:-}"
+          if [[ -z "${owner_normalized}" ]]; then
+            owner_normalized="$(normalize_name "${OWNER_FALLBACK}")"
+          fi
+
+          image_name_normalized="$(normalize_name "${MATRIX_IMAGE}")"
 
           if [[ "${PUBLISH_IMAGES}" == "true" ]]; then
-            tags="ghcr.io/${owner_normalized}/${MATRIX_IMAGE}:latest"
+            tags="ghcr.io/${owner_normalized}/${image_name_normalized}:latest"
             if [[ -n "${dockerhub_user_normalized}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
-              tags="${tags}"$'\n'"docker.io/${dockerhub_user_normalized}/${MATRIX_IMAGE}:latest"
+              tags="${tags}"$'\n'"docker.io/${dockerhub_user_normalized}/${image_name_normalized}:latest"
             fi
           else
-            tags="local/${MATRIX_IMAGE}:ci-${GITHUB_RUN_ID}"
+            tags="local/${image_name_normalized}:ci-${GITHUB_RUN_ID}"
           fi
           {
             echo "list<<EOF"
