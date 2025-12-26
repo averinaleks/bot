@@ -106,7 +106,7 @@ jobs:
             test ! -f server.pid
           fi
       - name: Restore Docker BuildKit cache
-        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           path: /mnt/buildkit-cache
           key: ${{ runner.os }}-buildkit-ci-${{ hashFiles('Dockerfile', 'Dockerfile.cpu', 'Dockerfile.gptoss', 'docker/patches/**', 'docker/scripts/**', 'requirements-core.txt', 'requirements-gpu.txt') }}
