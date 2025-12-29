@@ -130,15 +130,36 @@ jobs:
           remote="https://github.com/${repo}.git"
           export GIT_TERMINAL_PROMPT=0
 
+          is_full_sha() {
+            [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+          }
+
           for attempt in {1..5}; do
             rm -f /tmp/release_drafter_ref_check
 
-            if output="$(git ls-remote "${remote}" "${ref}" 2>/tmp/release_drafter_ref_check)"; then
+            if is_full_sha "${ref}"; then
+              query_args=()
+            else
+              query_args=("${ref}")
+            fi
+
+            if output="$(git ls-remote "${remote}" "${query_args[@]}" 2>/tmp/release_drafter_ref_check)"; then
               if [ -n "${output}" ]; then
-                echo "Release Drafter ref ${ref} is reachable upstream."
-                exit 0
+                if is_full_sha "${ref}"; then
+                  if echo "${output}" | awk -v sha="${ref}" '$1 == sha {found=1} END {exit !found}'; then
+                    echo "Release Drafter commit ${ref} is reachable upstream."
+                    exit 0
+                  fi
+                  echo "Commit ${ref} not advertised in ${remote} (attempt ${attempt}/5)." >&2
+                else
+                  echo "Release Drafter ref ${ref} is reachable upstream."
+                  exit 0
+                fi
+              elif is_full_sha "${ref}"; then
+                echo "Commit ${ref} not advertised in ${remote} (attempt ${attempt}/5)." >&2
+              else
+                echo "Ref ${ref} not found in ${remote} (attempt ${attempt}/5)." >&2
               fi
-              echo "Ref ${ref} not found in ${remote} (attempt ${attempt}/5)." >&2
             else
               rc=$?
               echo "git ls-remote failed when checking ${ref} (rc=${rc}, attempt ${attempt}/5)." >&2
