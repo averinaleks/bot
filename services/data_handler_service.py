@@ -444,13 +444,22 @@ def _load_initial_history(exchange: Any) -> None:
 def _allow_compact_symbol_format() -> bool:
     """Return ``True`` when compact symbols like ``BTCUSDT`` are allowed."""
 
+    override = os.getenv("DATA_HANDLER_ALLOW_COMPACT_SYMBOLS")
+    if override is not None:
+        return override.strip().lower() in {"1", "true", "yes", "on"}
+
     flask_app: Any = app
     if current_app is not None:
         try:
             flask_app = current_app._get_current_object()
         except Exception:  # pragma: no cover - fall back to global app
             flask_app = app
-    return bool(getattr(flask_app, "testing", False))
+    if getattr(flask_app, "testing", False):  # type: ignore[arg-type]
+        return True
+
+    # Разрешаем компактный формат по умолчанию для внутренних сервисов,
+    # чтобы запросы вида ``/price/BTCUSDT`` не возвращали 400.
+    return True
 
 
 def _close_exchange_instance(instance: Any) -> None:

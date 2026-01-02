@@ -297,7 +297,10 @@ class DataHandler:
         """Poll exchange klines and enqueue updates into the websocket queue."""
 
         if not hasattr(self.exchange, "fetch_ohlcv"):
-            raise AttributeError("exchange does not implement fetch_ohlcv")
+            self.logger.warning(
+                "Биржа не поддерживает fetch_ohlcv; подписка на свечи пропущена"
+            )
+            return
 
         timeframe = getattr(self.cfg, "timeframe", "1m")
         sleep_interval = max(1.0, pd.Timedelta(timeframe).total_seconds())
