@@ -1836,8 +1836,21 @@ class ModelBuilder:
         try:
             model = self.predictive_models.get(symbol)
             indicators = self.data_handler.indicators.get(symbol)
-            ohlcv = self.data_handler.ohlcv
+            ohlcv = getattr(self.data_handler, "ohlcv", None)
             if not model or not indicators:
+                return None
+            if ohlcv is None:
+                logger.warning("Отсутствуют OHLCV данные для %s – бектест пропущен", symbol)
+                return None
+            if hasattr(ohlcv, "empty") and getattr(ohlcv, "empty"):
+                return None
+            if hasattr(ohlcv, "height") and getattr(ohlcv, "height") == 0:
+                return None
+            if not hasattr(ohlcv, "index"):
+                logger.warning(
+                    "OHLCV данные для %s не содержат индекса – бектест пропущен",
+                    symbol,
+                )
                 return None
             if (
                 "symbol" not in ohlcv.index.names
@@ -2179,5 +2192,4 @@ def fit_scaler(features: np.ndarray, labels: np.ndarray):
     )
     pipeline.fit(features, labels)
     return pipeline
-
 
