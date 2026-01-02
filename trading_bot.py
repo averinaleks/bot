@@ -75,6 +75,20 @@ CFG = bot_config.BotConfig()
 
 logger = logging.getLogger("TradingBot")
 
+_KNOWN_QUOTE_SUFFIXES: tuple[str, ...] = (
+    "USDT",
+    "USDC",
+    "BTC",
+    "ETH",
+    "BUSD",
+    "DAI",
+    "EUR",
+    "USD",
+    "TRY",
+    "GBP",
+    "JPY",
+)
+
 if CFG.save_unsent_telegram:
     try:
         _UNSENT_FALLBACK_PATH: Path | None = resolve_unsent_path(
@@ -192,10 +206,28 @@ def _http_client_timeout() -> float:
     return safe_float("HTTP_CLIENT_TIMEOUT", 5.0)
 
 
+def _normalize_symbol_for_request(symbol: str) -> str:
+    """Return ``symbol`` formatted with a quote asset separator for HTTP requests."""
+
+    cleaned = symbol.strip().upper()
+    if not cleaned or "/" in cleaned or ":" in cleaned:
+        return cleaned
+
+    for quote_suffix in _KNOWN_QUOTE_SUFFIXES:
+        if cleaned.endswith(quote_suffix) and len(cleaned) > len(quote_suffix):
+            return f"{cleaned[:-len(quote_suffix)]}/{quote_suffix}"
+
+    default_quote = os.getenv("DATA_HANDLER_DEFAULT_QUOTE", "USDT").strip().upper()
+    if not default_quote:
+        default_quote = "USDT"
+    return f"{cleaned}/{default_quote}"
+
+
 def _encode_symbol(symbol: str) -> str:
     """Percent-encode a trading symbol for inclusion in URLs."""
 
-    return quote(symbol, safe="/")
+    normalized = _normalize_symbol_for_request(symbol)
+    return quote(normalized, safe="/:")
 
 
 GPT_ADVICE_MAX_ATTEMPTS = safe_int("GPT_ADVICE_MAX_ATTEMPTS", 3)

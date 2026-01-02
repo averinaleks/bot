@@ -21,6 +21,12 @@ def test_safe_float_rejects_non_finite(monkeypatch: pytest.MonkeyPatch, raw_valu
     assert trading_bot.safe_float("SAFE_FLOAT_TEST", 3.5) == 3.5
 
 
+def test_encode_symbol_normalizes_compact_pair(monkeypatch):
+    monkeypatch.delenv("DATA_HANDLER_DEFAULT_QUOTE", raising=False)
+    assert trading_bot._encode_symbol("btcusdt") == "BTC/USDT"
+    assert trading_bot._encode_symbol("BTC/USDT:USDT") == "BTC/USDT:USDT"
+
+
 @pytest.mark.asyncio
 async def test_get_http_client_timeout_env(monkeypatch):
     monkeypatch.delenv("HTTP_CLIENT_TIMEOUT", raising=False)
