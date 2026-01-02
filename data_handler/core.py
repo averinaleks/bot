@@ -63,6 +63,26 @@ class DataHandler:
             self._ohlcv = pd.DataFrame()
             self._ohlcv_2h = pd.DataFrame()
 
+    @property
+    def ohlcv(self) -> Any:
+        """Return the primary OHLCV history."""
+
+        return self._ohlcv
+
+    @ohlcv.setter
+    def ohlcv(self, value: Any) -> None:
+        self._ohlcv = value
+
+    @property
+    def ohlcv_2h(self) -> Any:
+        """Return the secondary timeframe OHLCV history."""
+
+        return self._ohlcv_2h
+
+    @ohlcv_2h.setter
+    def ohlcv_2h(self, value: Any) -> None:
+        self._ohlcv_2h = value
+
     def _resolve_configured_pairs(self) -> list[str]:
         symbols = getattr(self.cfg, "symbols", None)
         if symbols is None:
