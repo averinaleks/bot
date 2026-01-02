@@ -49,6 +49,10 @@ class DataHandler:
         self.ws_min_process_rate = expected_ws_rate(cfg.timeframe)
         self.disk_buffer: Dict[int, list] = {}
         self.indicators: Dict[str, Any] = {}
+        configured_pairs = self._resolve_configured_pairs()
+        self._pairs_from_config = bool(configured_pairs)
+        self._pairs_discovered = False
+        self.usdt_pairs = configured_pairs or ["BTCUSDT"]
         self._ohlcv: Any
         self._ohlcv_2h: Any
         self.logger = logging.getLogger(__name__)
@@ -58,6 +62,61 @@ class DataHandler:
         else:
             self._ohlcv = pd.DataFrame()
             self._ohlcv_2h = pd.DataFrame()
+
+    def _resolve_configured_pairs(self) -> list[str]:
+        symbols = getattr(self.cfg, "symbols", None)
+        if symbols is None:
+            return []
+        if isinstance(symbols, (str, bytes)):
+            symbols = [symbols]
+        elif not isinstance(symbols, Iterable):
+            return []
+        pairs = [
+            str(symbol).strip().upper()
+            for symbol in symbols
+            if str(symbol).strip()
+        ]
+        # Preserve order while removing duplicates
+        return list(dict.fromkeys(pairs))
+
+    async def _load_markets(self) -> Dict[str, Dict[str, Any]]:
+        if self.exchange is None:
+            return {}
+        loader = getattr(self.exchange, "load_markets", None)
+        if loader is None:
+            return {}
+        try:
+            markets = loader()
+            if asyncio.iscoroutine(markets):
+                markets = await markets
+            if markets is None:
+                return {}
+            if isinstance(markets, dict):
+                return markets
+            return dict(markets)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            self.logger.debug("Не удалось загрузить рынки: %s", exc)
+            return {}
+
+    async def _discover_usdt_pairs(self) -> None:
+        if self._pairs_from_config or self._pairs_discovered:
+            return
+        if self.exchange is None or not hasattr(self.exchange, "fetch_ticker"):
+            self._pairs_discovered = True
+            return
+        markets = await self._load_markets()
+        if not markets:
+            self._pairs_discovered = True
+            return
+        try:
+            discovered = await self.select_liquid_pairs(markets)
+        except Exception as exc:  # pragma: no cover - runtime protection
+            self.logger.warning("Не удалось определить ликвидные пары: %s", exc)
+            self._pairs_discovered = True
+            return
+        if discovered:
+            self.usdt_pairs = list(dict.fromkeys(discovered))
+        self._pairs_discovered = True
 
     async def select_liquid_pairs(self, markets: Dict[str, Dict[str, Any]]) -> list[str]:
         results: Dict[str, Tuple[str, float]] = {}
@@ -180,6 +239,7 @@ class DataHandler:
     async def load_initial(self) -> None:
         """Load initial OHLCV history and populate indicators."""
 
+        await self._discover_usdt_pairs()
         symbols = getattr(self, "usdt_pairs", None) or ["BTCUSDT"]
         self.usdt_pairs = list(dict.fromkeys(symbols))
         timeframe = getattr(self.cfg, "timeframe", "1m")
