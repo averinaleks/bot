@@ -132,9 +132,10 @@ jobs:
 
           for attempt in {1..5}; do
             rm -f /tmp/release_drafter_ref_check
-
-            if output="$(git ls-remote "${remote}" "${ref}" 2>/tmp/release_drafter_ref_check)"; then
-              if [ -n "${output}" ]; then
+            if mapfile -t remote_refs < <(
+              git ls-remote --refs --tags --heads "${remote}" 2>/tmp/release_drafter_ref_check | awk '{print $1}'
+            ); then
+              if printf '%s\n' "${remote_refs[@]}" | grep -Fxq "${ref}"; then
                 echo "Release Drafter ref ${ref} is reachable upstream."
                 exit 0
               fi
