@@ -127,25 +127,36 @@ jobs:
           set -euo pipefail
           repo="${RELEASE_DRAFTER_REPO}"
           ref="${RELEASE_DRAFTER_ACTION_REF}"
-          remote="https://github.com/${repo}.git"
-          export GIT_TERMINAL_PROMPT=0
+          api_base="https://api.github.com/repos/${repo}"
+
+          check_ref_with_api() {
+            local endpoint="$1"
+            local description="$2"
+            http_code=$(curl -sS -o /tmp/release_drafter_ref_check \
+              -w '%{http_code}' \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              "${endpoint}" || true)
+
+            if [[ "${http_code}" == "200" ]]; then
+              echo "Release Drafter ${description} ${ref} is reachable upstream."
+              return 0
+            fi
+
+            echo "Received HTTP ${http_code} while checking ${description} ${ref}." >&2
+            if [ -s /tmp/release_drafter_ref_check ]; then
+              sed 's/^/  /' /tmp/release_drafter_ref_check >&2
+            fi
+            return 1
+          }
 
           for attempt in {1..5}; do
-            rm -f /tmp/release_drafter_ref_check
-            if mapfile -t remote_refs < <(
-              git ls-remote --refs --tags --heads "${remote}" 2>/tmp/release_drafter_ref_check | awk '{print $1}'
-            ); then
-              if printf '%s\n' "${remote_refs[@]}" | grep -Fxq "${ref}"; then
-                echo "Release Drafter ref ${ref} is reachable upstream."
-                exit 0
-              fi
-              echo "Ref ${ref} not found in ${remote} (attempt ${attempt}/5)." >&2
-            else
-              rc=$?
-              echo "git ls-remote failed when checking ${ref} (rc=${rc}, attempt ${attempt}/5)." >&2
-              if [ -s /tmp/release_drafter_ref_check ]; then
-                sed 's/^/  /' /tmp/release_drafter_ref_check >&2
-              fi
+            if check_ref_with_api "${api_base}/commits/${ref}" "commit"; then
+              exit 0
+            fi
+
+            if check_ref_with_api "${api_base}/git/ref/tags/${ref}" "tag"; then
+              exit 0
             fi
 
             if [ "${attempt}" -lt 5 ]; then
@@ -156,9 +167,6 @@ jobs:
           done
 
           echo "Release Drafter ref ${ref} not found upstream after retries." >&2
-          if [ -s /tmp/release_drafter_ref_check ]; then
-            sed 's/^/  /' /tmp/release_drafter_ref_check >&2
-          fi
           exit 1
 
   update_release_draft:
