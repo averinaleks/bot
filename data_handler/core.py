@@ -53,6 +53,8 @@ class DataHandler:
         self._pairs_from_config = bool(configured_pairs)
         self._pairs_discovered = False
         self.usdt_pairs = configured_pairs or ["BTCUSDT"]
+        self._pair_discovery_task: asyncio.Task[None] | None = None
+        self._schedule_pair_discovery()
         self._ohlcv: Any
         self._ohlcv_2h: Any
         self.logger = logging.getLogger(__name__)
@@ -62,6 +64,18 @@ class DataHandler:
         else:
             self._ohlcv = pd.DataFrame()
             self._ohlcv_2h = pd.DataFrame()
+
+    def _schedule_pair_discovery(self) -> None:
+        if self._pairs_from_config or self.exchange is None:
+            return
+        if not hasattr(self.exchange, "fetch_ticker"):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if loop.is_running():
+            self._pair_discovery_task = loop.create_task(self._discover_usdt_pairs())
 
     @property
     def ohlcv(self) -> Any:

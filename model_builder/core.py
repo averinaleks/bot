@@ -942,6 +942,8 @@ class ModelBuilder:
             raise ValueError("state file path escapes cache_dir")
         # Backwards compatibility for tests and consumers accessing ``state_file``
         self.state_file = self.state_file_path
+        symbols = getattr(data_handler, "usdt_pairs", None) or ["BTCUSDT"]
+        data_handler.usdt_pairs = list(dict.fromkeys(symbols))
         self.last_retrain_time = {symbol: 0 for symbol in data_handler.usdt_pairs}
         self.last_save_time = time.time()
         self.save_interval = 900
@@ -2192,4 +2194,3 @@ def fit_scaler(features: np.ndarray, labels: np.ndarray):
     )
     pipeline.fit(features, labels)
     return pipeline
-
