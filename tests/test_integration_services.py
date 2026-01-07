@@ -29,7 +29,7 @@ host = "127.0.0.1"
 # Minimal stubs for services to avoid heavy dependencies
 dh_app = Flask('data_handler')
 
-@dh_app.route('/price/<symbol>')
+@dh_app.route('/price/<path:symbol>')
 def price(symbol: str):
     return jsonify({'price': 100.0})
 
