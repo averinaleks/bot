@@ -2,7 +2,7 @@
 # NOTE: The real ``bcrypt`` wheel is intentionally omitted here. The test
 # suite relies on the lightweight ``bcrypt.py`` stub shipped in the repo so
 # that CI jobs do not have to compile the Rust extension.
-aiohttp==3.13.2
+aiohttp==3.13.3
 flake8==7.3.0
 ruff==0.14.10
 bandit==1.9.2
