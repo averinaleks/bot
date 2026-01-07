@@ -231,6 +231,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          output_file="${GITHUB_OUTPUT:-}"
+          if [ -n "$output_file" ]; then
+            {
+              echo "skip=true"
+              echo "head_sha="
+              echo "trusted_repo=false"
+              echo "head_repo="
+            } >>"$output_file"
+          fi
+
           if [ "${GITHUB_EVENT_NAME:-}" = "pull_request_target" ]; then
             echo "::notice::Workflow triggered for pull_request_target – пропускаю проверку PR"
             if [ -n "${GITHUB_OUTPUT:-}" ]; then
