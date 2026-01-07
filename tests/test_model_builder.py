@@ -152,8 +152,9 @@ def test_prepare_lstm_features_short_history_returns_empty():
 
 @pytest.mark.parametrize("model_type", ["mlp", "tft"])
 def test_train_model_remote_returns_state_and_predictions(model_type):
-    X = np.random.rand(20, 3, 2).astype(np.float32)
-    y = (np.random.rand(20) > 0.5).astype(np.float32)
+    rng = np.random.default_rng(0)
+    X = rng.random((20, 3, 2)).astype(np.float32)
+    y = (rng.random(20) > 0.5).astype(np.float32)
     func = getattr(_train_model_remote, "_function", _train_model_remote)
     state, preds, labels = func(X, y, batch_size=2, model_type=model_type)
     assert isinstance(state, dict)
@@ -163,8 +164,9 @@ def test_train_model_remote_returns_state_and_predictions(model_type):
 
 
 def test_train_model_remote_tft_predictions():
-    X = np.random.rand(12, 3, 2).astype(np.float32)
-    y = (np.random.rand(12) > 0.5).astype(np.float32)
+    rng = np.random.default_rng(0)
+    X = rng.random((12, 3, 2)).astype(np.float32)
+    y = (rng.random(12) > 0.5).astype(np.float32)
     func = getattr(_train_model_remote, "_function", _train_model_remote)
     state, preds, labels = func(X, y, batch_size=2, model_type="tft")
     assert isinstance(state, dict)
@@ -334,7 +336,8 @@ def test_save_and_load_state_transformer(tmp_path):
     torch = torch_mods["torch"]
     model = TFT(15)
     mb.predictive_models["BTCUSDT"] = model
-    scaler = StandardScaler().fit(np.random.rand(3, 15))
+    rng = np.random.default_rng(0)
+    scaler = StandardScaler().fit(rng.random((3, 15)))
     mb.scalers["BTCUSDT"] = scaler
     mb.last_save_time = 0
     mb.save_state()
@@ -465,8 +468,9 @@ def test_freeze_torch_base_layers():
 
 
 def test_train_model_remote_freezes_layers():
-    X = np.random.rand(10, 3, 2).astype(np.float32)
-    y = (np.random.rand(10) > 0.5).astype(np.float32)
+    rng = np.random.default_rng(0)
+    X = rng.random((10, 3, 2)).astype(np.float32)
+    y = (rng.random(10) > 0.5).astype(np.float32)
     torch_mods = model_builder._get_torch_modules()
     CNNGRU = torch_mods["CNNGRU"]
     torch = torch_mods["torch"]
@@ -605,9 +609,9 @@ async def test_compute_shap_values_creates_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(model_builder, "shap", shap_stub)
 
     model = DummyTorch.nn.Linear(1, 1)
-    X = np.random.rand(5, 1, 1).astype(np.float32)
+    rng = np.random.default_rng(0)
+    X = rng.random((5, 1, 1)).astype(np.float32)
     symbol = "BTCUSDT"
     await mb.compute_shap_values(symbol, model, X)
     expected_name = hashlib.sha256(symbol.encode("utf-8", "replace")).hexdigest()
     assert (tmp_path / "shap" / f"shap_{expected_name}.pkl").exists()
-

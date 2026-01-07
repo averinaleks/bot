@@ -86,7 +86,8 @@ async def test_shap_cache_file_safe_symbol(tmp_path, monkeypatch):
     mb = model_builder.ModelBuilder(cfg, DummyDH(), DummyTM())
     torch = model_builder._get_torch_modules()["torch"]
     model = torch.nn.Linear(1, 1)
-    X = np.random.rand(5, 1, 1).astype(np.float32)
+    rng = np.random.default_rng(0)
+    X = rng.random((5, 1, 1)).astype(np.float32)
     shap_stub = types.SimpleNamespace(GradientExplainer=DummyExplainer)
     monkeypatch.setattr(model_builder, "shap", shap_stub)
     symbol = "BTC/USDT:PERP"
