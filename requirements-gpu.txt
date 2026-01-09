@@ -140,7 +140,7 @@ typing-extensions==4.15.0
     #   torch
 urllib3==2.6.3
     # via requests
-werkzeug==3.1.4
+werkzeug==3.1.5
     # via tensorboard
 wheel==0.45.1
     # via astunparse
