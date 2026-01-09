@@ -379,7 +379,7 @@ websocket-client==1.9.0
     # via pybit
 websockets==15.0.1
     # via -r requirements-core.in
-werkzeug==3.1.4
+werkzeug==3.1.5
     # via flask
 yarl==1.22.0
     # via
