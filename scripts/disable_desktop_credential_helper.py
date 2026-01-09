@@ -9,6 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent.parent
+    package_root_str = str(package_root)
+    if package_root_str not in sys.path:
+        sys.path.insert(0, package_root_str)
+
+from scripts._filesystem import write_secure_text
+
 
 DOCKER_CONFIG_ENV = "DOCKER_CONFIG"
 DEFAULT_CONFIG_DIR = Path.home() / ".docker"
@@ -26,11 +34,14 @@ def load_config(config_path: Path) -> Dict[str, Any]:
         raise ValueError(f"Invalid JSON in {config_path}: {exc}") from exc
 
 
+def _serialize_config(data: Dict[str, Any]) -> str:
+    payload = json.dumps(data, indent=2)
+    return f"{payload}\n"
+
+
 def save_config(config_path: Path, data: Dict[str, Any]) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as fp:
-        json.dump(data, fp, indent=2)
-        fp.write("\n")
+    write_secure_text(config_path, _serialize_config(data))
 
 
 def backup_config(config_path: Path) -> Path | None:
@@ -38,7 +49,8 @@ def backup_config(config_path: Path) -> Path | None:
         return None
     timestamp = datetime.now().strftime(BACKUP_SUFFIX)
     backup_path = config_path.with_suffix(config_path.suffix + f".backup-{timestamp}")
-    backup_path.write_bytes(config_path.read_bytes())
+    payload = config_path.read_text(encoding="utf-8", errors="replace")
+    write_secure_text(backup_path, payload)
     return backup_path
 
 
