@@ -86,7 +86,7 @@ fastapi==0.128.0
     # via -r requirements-core.in
 fastapi-csrf-protect==1.0.7
     # via -r requirements-core.in
-filelock==3.20.1
+filelock==3.20.3
     # via
     #   huggingface-hub
     #   torch
