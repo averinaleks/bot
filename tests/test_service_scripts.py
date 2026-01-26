@@ -35,9 +35,9 @@ def _run_dh(port: int):
 
 @pytest.mark.integration
 def test_data_handler_service_price(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_dh, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.get(
             f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
         )
@@ -47,9 +47,9 @@ def test_data_handler_service_price(ctx):
 
 @pytest.mark.integration
 def test_data_handler_service_history(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_dh, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.get(
             f'http://127.0.0.1:{port}/history/BTC/USDT', timeout=5, trust_env=False
         )
@@ -95,9 +95,9 @@ def _run_dh_token(port: int):
 
 @pytest.mark.integration
 def test_data_handler_service_price_error(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_dh_fail, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.get(
             f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
         )
@@ -128,9 +128,9 @@ def test_data_handler_service_rejects_non_local_host(monkeypatch):
 
 @pytest.mark.integration
 def test_data_handler_service_requires_api_key(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_dh_token, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.get(
             f'http://127.0.0.1:{port}/price/BTC/USDT', timeout=5, trust_env=False
         )
@@ -191,9 +191,9 @@ def _run_mb(model_dir: str, port: int):
 
 @pytest.mark.integration
 def test_model_builder_service_train_predict(tmp_path, ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1]], 'labels': [0, 1]},
@@ -211,9 +211,9 @@ def test_model_builder_service_train_predict(tmp_path, ctx):
 
 @pytest.mark.integration
 def test_model_builder_service_train_predict_multi_class(tmp_path, ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'symbol': 'SYM', 'features': [[0], [1], [2]], 'labels': [0, 1, 2]},
@@ -231,9 +231,9 @@ def test_model_builder_service_train_predict_multi_class(tmp_path, ctx):
 
 @pytest.mark.integration
 def test_model_builder_service_rejects_single_class_labels(tmp_path, ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_mb, args=(str(tmp_path), port))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/train',
             json={'features': [[0], [1]], 'labels': [0, 0]},
@@ -278,11 +278,11 @@ def _run_mb_fail(model_file: str, port: int):
 
 @pytest.mark.integration
 def test_model_builder_service_load_failure(tmp_path, ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     bad_file = tmp_path / 'model.pkl'
     bad_file.write_text('broken')
     p = ctx.Process(target=_run_mb_fail, args=(str(bad_file), port))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping') as resp:
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket) as resp:
         assert resp.status_code == 200
 
 
@@ -347,9 +347,9 @@ def _run_tm(
 
 @pytest.mark.integration
 def test_trade_manager_service_endpoints(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'trailing_stop': 1},
@@ -378,9 +378,9 @@ def test_trade_manager_service_endpoints(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_service_partial_close(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1},
@@ -418,9 +418,9 @@ def test_trade_manager_service_partial_close(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_service_price_only(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'price': 5},
@@ -436,9 +436,9 @@ def test_trade_manager_service_price_only(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_service_fallback_orders(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port, False, False, False))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5, 'price': 100, 'trailing_stop': 1},
@@ -455,9 +455,9 @@ def test_trade_manager_service_fallback_orders(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_service_fallback_failure(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port, False, True))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             json={'symbol': 'BTCUSDT', 'side': 'buy', 'amount': 1, 'tp': 10, 'sl': 5},
@@ -473,9 +473,9 @@ def test_trade_manager_service_fallback_failure(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_service_invalid_json(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ping'):
+    with service_process(p, url=f'http://127.0.0.1:{port}/ping', reserve_socket=port_socket):
         resp = httpx.post(
             f'http://127.0.0.1:{port}/open_position',
             content='{',
@@ -489,7 +489,11 @@ def test_trade_manager_service_invalid_json(ctx):
 
 @pytest.mark.integration
 def test_trade_manager_ready_route(ctx):
-    port = get_free_port()
+    port, port_socket = get_free_port(reserve=True)
     p = ctx.Process(target=_run_tm, args=(port,))
-    with service_process(p, url=f'http://127.0.0.1:{port}/ready') as resp:
+    with service_process(
+        p,
+        url=f'http://127.0.0.1:{port}/ready',
+        reserve_socket=port_socket,
+    ) as resp:
         assert resp.status_code == 200
