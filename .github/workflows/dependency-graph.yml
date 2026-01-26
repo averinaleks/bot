@@ -689,7 +689,7 @@ jobs:
           BEFORE: ${{ steps.event-metadata.outputs.before }}
           AFTER: ${{ steps.event-metadata.outputs.after }}
         run: |
-          python <<'PY'
+          python3 <<'PY'
           from __future__ import annotations
 
           import fnmatch
@@ -866,11 +866,11 @@ jobs:
             github.event_name == 'repository_dispatch'
           )
         run: |
-          python -m pip install --upgrade pip \
-            || python -m pip install --upgrade pip --break-system-packages \
+          python3 -m pip install --upgrade pip \
+            || python3 -m pip install --upgrade pip --break-system-packages \
             || echo '::warning::Unable to upgrade pip; proceeding with the preinstalled version.'
-          python -m pip install requests \
-            || python -m pip install requests --break-system-packages \
+          python3 -m pip install requests \
+            || python3 -m pip install requests --break-system-packages \
             || echo '::warning::Unable to install requests; dependency snapshot submission may fail.'
       - name: Prepare requirements
         if: >-
@@ -881,7 +881,7 @@ jobs:
             github.event_name == 'repository_dispatch'
           )
         run: |
-          python <<'PY'
+          python3 <<'PY'
           from __future__ import annotations
 
           import fnmatch
@@ -974,4 +974,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_SHA: ${{ steps.event-metadata.outputs.after || github.sha }}
           GITHUB_REF: ${{ steps.event-metadata.outputs.checkout_ref || github.ref }}
-        run: python scripts/submit_dependency_snapshot.py
+        run: python3 scripts/submit_dependency_snapshot.py
