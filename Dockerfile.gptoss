@@ -17,8 +17,9 @@ RUN apt-get update \
     && mkdir -p /home/bot \
     && chown -R bot:bot /home/bot
 
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# Для mock-сервера не нужны зависимости проекта: он использует только stdlib.
+# Установка полного requirements.txt в Python 3.12 часто падает из‑за
+# отсутствующих колёс, поэтому оставляем образ максимально лёгким.
 
 COPY scripts/gptoss_mock_server.py /usr/local/bin/gptoss_mock_server.py
 RUN chown bot:bot /usr/local/bin/gptoss_mock_server.py
@@ -28,5 +29,4 @@ USER bot
 EXPOSE 8000
 
 CMD ["python", "/usr/local/bin/gptoss_mock_server.py", "--host", "0.0.0.0", "--port", "8000"]
-
 
