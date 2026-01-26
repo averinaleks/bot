@@ -323,7 +323,9 @@ jobs:
       - name: Generate diff
         if: >-
           ${{ steps.validate_event.outputs.skip != 'true'
-              && steps.ensure_pr_ready.outputs.skip != 'true' }}
+              && steps.ensure_pr_ready.outputs.skip != 'true'
+              && steps.ensure_pr_ready.outputs.trusted_repo == 'true'
+              && steps.ensure_pr_ready.outputs.head_sha != '' }}
         id: generate_diff
         env:
           GITHUB_TOKEN: ${{ github.token }}
