@@ -99,18 +99,18 @@ def _run_tm(port: int):
 @pytest.mark.integration
 def test_services_communicate(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
-    dh_port = get_free_port()
-    mb_port = get_free_port()
-    tm_port = get_free_port()
+    dh_port, dh_socket = get_free_port(reserve=True)
+    mb_port, mb_socket = get_free_port(reserve=True)
+    tm_port, tm_socket = get_free_port(reserve=True)
     with ExitStack() as stack:
         stack.enter_context(
-            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping', reserve_socket=dh_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping', reserve_socket=mb_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready', reserve_socket=tm_socket)
         )
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
@@ -123,18 +123,18 @@ def test_services_communicate(monkeypatch, ctx):
 
 @pytest.mark.integration
 def test_service_availability_check(monkeypatch, ctx):
-    dh_port = get_free_port()
-    mb_port = get_free_port()
-    tm_port = get_free_port()
+    dh_port, dh_socket = get_free_port(reserve=True)
+    mb_port, mb_socket = get_free_port(reserve=True)
+    tm_port, tm_socket = get_free_port(reserve=True)
     with ExitStack() as stack:
         stack.enter_context(
-            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping', reserve_socket=dh_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping', reserve_socket=mb_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready', reserve_socket=tm_socket)
         )
         resp = httpx.get(f'http://localhost:{dh_port}/ping', timeout=5, trust_env=False)
         assert resp.status_code == 200
@@ -147,18 +147,18 @@ def test_service_availability_check(monkeypatch, ctx):
 @pytest.mark.integration
 def test_check_services_success(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
-    dh_port = get_free_port()
-    mb_port = get_free_port()
-    tm_port = get_free_port()
+    dh_port, dh_socket = get_free_port(reserve=True)
+    mb_port, mb_socket = get_free_port(reserve=True)
+    tm_port, tm_socket = get_free_port(reserve=True)
     with ExitStack() as stack:
         stack.enter_context(
-            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping', reserve_socket=dh_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping', reserve_socket=mb_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready', reserve_socket=tm_socket)
         )
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
@@ -172,15 +172,15 @@ def test_check_services_success(monkeypatch, ctx):
 @pytest.mark.integration
 def test_check_services_failure(monkeypatch, ctx):
     from bot import trading_bot  # noqa: E402
-    dh_port = get_free_port()
-    mb_port = get_free_port()
-    tm_port = get_free_port()
+    dh_port, dh_socket = get_free_port(reserve=True)
+    mb_port, mb_socket = get_free_port(reserve=True)
+    tm_port, tm_socket = get_free_port(reserve=True)
     with ExitStack() as stack:
         stack.enter_context(
-            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping', reserve_socket=dh_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping', reserve_socket=mb_socket)
         )
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')
@@ -198,18 +198,18 @@ def test_check_services_host_only(monkeypatch, ctx):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv('SERVICE_CHECK_RETRIES', '2')
     monkeypatch.setenv('SERVICE_CHECK_DELAY', '0.1')
-    dh_port = get_free_port()
-    mb_port = get_free_port()
-    tm_port = get_free_port()
+    dh_port, dh_socket = get_free_port(reserve=True)
+    mb_port, mb_socket = get_free_port(reserve=True)
+    tm_port, tm_socket = get_free_port(reserve=True)
     with ExitStack() as stack:
         stack.enter_context(
-            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping')
+            service_process(ctx.Process(target=_run_dh, args=(dh_port,)), url=f'http://localhost:{dh_port}/ping', reserve_socket=dh_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping')
+            service_process(ctx.Process(target=_run_mb, args=(mb_port,)), url=f'http://localhost:{mb_port}/ping', reserve_socket=mb_socket)
         )
         stack.enter_context(
-            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready')
+            service_process(ctx.Process(target=_run_tm, args=(tm_port,)), url=f'http://localhost:{tm_port}/ready', reserve_socket=tm_socket)
         )
         monkeypatch.setenv('DATA_HANDLER_URL', f'http://localhost:{dh_port}')
         monkeypatch.setenv('MODEL_BUILDER_URL', f'http://localhost:{mb_port}')

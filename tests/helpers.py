@@ -71,6 +71,7 @@ def service_process(
     url: str,
     start_timeout: float = 5.0,
     join_timeout: float = 0.2,
+    reserve_socket: socket.socket | None = None,
 ):
     """Start a service ``proc`` and ensure cleanup.
 
@@ -78,6 +79,8 @@ def service_process(
     On exit, the process is terminated and joined with ``join_timeout`` to prevent
     hanging tests.
     """
+    if reserve_socket is not None:
+        reserve_socket.close()
     proc.start()
     try:
         resp = wait_for_service(url, timeout=start_timeout)
