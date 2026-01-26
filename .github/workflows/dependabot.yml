@@ -48,7 +48,7 @@ jobs:
       - name: Dependabot metadata
         id: metadata
         # v2.5.0
-        uses: dependabot/fetch-metadata@7d590d1f6c6419e97a707c1d273efcef1242c5ec
+        uses: dependabot/fetch-metadata@51d7679cc74eaca941d9b749649d65ae23d98e2b
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Detect GPU-only manifests
