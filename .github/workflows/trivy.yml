@@ -47,6 +47,7 @@ jobs:
           TRIVY_FILE_PATTERNS: "pip:requirements.*\\.txt"
         with:
           scan-type: fs
+          scan-ref: .
           scanners: vuln,secret  # disable misconfig scans that crash on AWS policy bundle
           ignore-unfixed: true
           severity: HIGH,CRITICAL
