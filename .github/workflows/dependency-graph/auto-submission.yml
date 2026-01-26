@@ -14,7 +14,8 @@ on:
       # Some integrations use underscores instead of hyphens.
       - "dependency_graph_auto_submission"
 # NOTE: GitHub does not yet accept the experimental ``dependency_graph`` event
-# key in workflow files for public repositories. Auto-submission payloads should
+# key in workflow files for public repositories. Adding it here currently causes
+# the run to be rejected before any jobs start. Auto-submission payloads should
 # therefore be forwarded via the repository dispatch hook declared above.
 
 permissions:
@@ -53,7 +54,7 @@ jobs:
           {
               echo "run-workflow=${run_workflow}"
           } >> "${GITHUB_OUTPUT}"
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         if: steps.execution-guard.outputs.run-workflow == 'true'
         with:
           python-version: '3.11'
@@ -461,7 +462,6 @@ jobs:
               github.event.commitOid
               github.event.commit_sha
               github.event.sha
-              github.sha
               github.event.dependency_graph.sha
               github.event.dependency_graph.commit_oid
               github.event.dependency_graph.commitOid
@@ -528,7 +528,7 @@ jobs:
           if after:
               print(f"Resolved 'after' commit: {after}")
           PY
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         id: checkout
         if: steps.execution-guard.outputs.run-workflow == 'true'
         continue-on-error: true
@@ -537,7 +537,9 @@ jobs:
           ref: ${{ steps.event-metadata.outputs.checkout_ref }}
       - name: Recover checkout when branch references are stale
         id: recover
-        if: steps.execution-guard.outputs.run-workflow == 'true'
+        if: >-
+          steps.execution-guard.outputs.run-workflow == 'true' &&
+          steps.checkout.outcome == 'failure'
         env:
           CHECKOUT_REF: ${{ steps.event-metadata.outputs.checkout_ref }}
           CHECKOUT_AFTER: ${{ steps.event-metadata.outputs.after }}
@@ -557,7 +559,13 @@ jobs:
           mark_recovery "false"
 
           if [ -z "${GITHUB_REPOSITORY:-}" ]; then
-              echo "::error::GITHUB_REPOSITORY is not set; cannot recover repository checkout." >&2
+              echo "::warning::GITHUB_REPOSITORY is not set; skipping repository recovery." >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  {
+                      echo "## Dependency snapshot skipped"
+                      echo "Не удалось восстановить репозиторий: переменная \`GITHUB_REPOSITORY\` отсутствует."
+                  } >> "${GITHUB_STEP_SUMMARY}" || true
+              fi
               exit 0
           fi
 
@@ -625,11 +633,17 @@ jobs:
               exit 0
           fi
 
-          echo "::warning::Unable to recover repository checkout for dependency submission." >&2
+          echo "::warning::Unable to recover repository checkout for dependency submission. Skipping snapshot run." >&2
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+              {
+                  echo "## Dependency snapshot skipped"
+                  echo "Не удалось восстановить репозиторий из origin; пропускаем отправку snapshot."
+              } >> "${GITHUB_STEP_SUMMARY}" || true
+          fi
           exit 0
       - name: Determine repository availability
         id: repository-ready
-        if: steps.execution-guard.outputs.run-workflow == 'true' && always()
+        if: steps.execution-guard.outputs.run-workflow == 'true'
         env:
           CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
           RECOVER_OUTCOME: ${{ steps.recover.outcome }}
@@ -641,16 +655,26 @@ jobs:
               ready="true"
           elif [ "${RECOVER_OUTCOME:-}" = "success" ] && [ "${RECOVERED:-}" = "true" ]; then
               ready="true"
+          elif git rev-parse HEAD >/dev/null 2>&1; then
+              ready="true"
           fi
           if [ -n "${GITHUB_OUTPUT:-}" ]; then
               echo "ready=${ready}" >>"${GITHUB_OUTPUT}"
           fi
           if [ "${ready}" != "true" ]; then
               echo "::notice::Skipping dependency submission because the repository checkout is unavailable." >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  {
+                      echo "## Dependency snapshot skipped"
+                      echo "Репозиторий недоступен для отправки dependency snapshot."
+                  } >> "${GITHUB_STEP_SUMMARY}" || true
+              fi
           fi
       - name: Detect dependency manifest changes
         id: detect
-        if: steps.execution-guard.outputs.run-workflow == 'true' && steps.repository-ready.outputs.ready == 'true'
+        if: >-
+          steps.execution-guard.outputs.run-workflow == 'true' &&
+          steps.repository-ready.outputs.ready == 'true'
         env:
           BEFORE: ${{ steps.event-metadata.outputs.before }}
           AFTER: ${{ steps.event-metadata.outputs.after }}
@@ -825,11 +849,12 @@ jobs:
           PY
       - name: Install dependency snapshot dependencies
         if: >-
-            steps.execution-guard.outputs.run-workflow == 'true' &&
-            steps.repository-ready.outputs.ready == 'true' &&
-            (steps.detect.outputs.changed == 'true' ||
+          steps.execution-guard.outputs.run-workflow == 'true' &&
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
-            github.event_name == 'repository_dispatch')
+            github.event_name == 'repository_dispatch'
+          )
         run: |
           python3 -m pip install --upgrade pip \
             || python3 -m pip install --upgrade pip --break-system-packages \
@@ -839,11 +864,12 @@ jobs:
             || echo '::warning::Unable to install requests; dependency snapshot submission may fail.'
       - name: Prepare requirements
         if: >-
-            steps.execution-guard.outputs.run-workflow == 'true' &&
-            steps.repository-ready.outputs.ready == 'true' &&
-            (steps.detect.outputs.changed == 'true' ||
+          steps.execution-guard.outputs.run-workflow == 'true' &&
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
-            github.event_name == 'repository_dispatch')
+            github.event_name == 'repository_dispatch'
+          )
         run: |
           python3 <<'PY'
           from __future__ import annotations
@@ -928,11 +954,12 @@ jobs:
           PY
       - name: Submit dependency snapshot
         if: >-
-            steps.execution-guard.outputs.run-workflow == 'true' &&
-            steps.repository-ready.outputs.ready == 'true' &&
-            (steps.detect.outputs.changed == 'true' ||
+          steps.execution-guard.outputs.run-workflow == 'true' &&
+          steps.repository-ready.outputs.ready == 'true' && (
+            steps.detect.outputs.changed == 'true' ||
             github.event_name == 'workflow_dispatch' ||
-            github.event_name == 'repository_dispatch')
+            github.event_name == 'repository_dispatch'
+          )
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_SHA: ${{ steps.event-metadata.outputs.after || github.sha }}
