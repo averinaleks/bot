@@ -156,15 +156,15 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
         with:
           driver: docker-container
-          # Обновляем buildx до актуальной версии, поддерживающей экспериментальный
+          # Обновляем buildx до стабильной версии, поддерживающей экспериментальный
           # фронтенд Dockerfile ``docker/dockerfile:1.7-labs`` и исправляющей
           # парсер, который ранее падал с "dockerfile parse error" на первом
           # шаге сборки. Одновременно обновляем buildkit до последнего стабильного
           # образа, чтобы сохранить совместимость с OCI-манифестами и кэшированием
           # через GitHub Actions.
-          version: v0.31.0
+          version: v0.12.1
           driver-opts: |
-            image=moby/buildkit:v0.25.1
+            image=moby/buildkit:v0.12.5
 
       - name: Show Buildx version
         run: docker buildx version
