@@ -272,7 +272,7 @@ python-dotenv==1.2.1
     # via
     #   -r requirements-core.in
     #   pydantic-settings
-python-telegram-bot==22.5
+python-telegram-bot==22.6
     # via -r requirements-core.in
 pytorch-lightning==2.5.5
     # via -r requirements-core.in
