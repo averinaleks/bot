@@ -1918,36 +1918,8 @@ class TradeManager:
                 )
                 return False
             ema30 = indicators_2h.ema30
-            ema100 = indicators_2h.ema100
             close = df_2h["close"]
             timestamps = df_2h.index.get_level_values("timestamp")
-            lookback_period = pd.Timedelta(
-                seconds=self.config["ema_crossover_lookback"]
-            )
-            recent_data = df_2h[timestamps >= timestamps[-1] - lookback_period]
-            if len(recent_data) < 2:
-                logger.debug(
-                    "Not enough data to check EMA crossover for %s",
-                    symbol,
-                )
-                return False
-            ema30_recent = ema30[-len(recent_data) :]
-            ema100_recent = ema100[-len(recent_data) :]
-            crossover_long = (ema30_recent.iloc[-2] <= ema100_recent.iloc[-2]) and (
-                ema30_recent.iloc[-1] > ema100_recent.iloc[-1]
-            )
-            crossover_short = (ema30_recent.iloc[-2] >= ema100_recent.iloc[-2]) and (
-                ema30_recent.iloc[-1] < ema100_recent.iloc[-1]
-            )
-            if (signal == "buy" and not crossover_long) or (
-                signal == "sell" and not crossover_short
-            ):
-                logger.debug(
-                    "EMA crossover not confirmed for %s, signal=%s",
-                    symbol,
-                    signal,
-                )
-                return False
             pullback_period = pd.Timedelta(seconds=self.config["pullback_period"])
             pullback_data = df_2h[timestamps >= timestamps[-1] - pullback_period]
             volatility = close.pct_change().std() if not close.empty else 0.02
@@ -2484,5 +2456,4 @@ _package = sys.modules.get("bot.trade_manager")
 if _package is not None:  # pragma: no cover - simple assignment
     setattr(_package, "TradeManager", TradeManager)
     setattr(_package, "TradeManagerTaskError", TradeManagerTaskError)
-
 
