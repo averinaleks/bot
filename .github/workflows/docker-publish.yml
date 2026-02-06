@@ -76,8 +76,16 @@ jobs:
             /opt/ghc \
             /opt/hostedtoolcache || true
 
+          # actions/tool-cache (используется setup-buildx-action) ожидает, что
+          # $RUNNER_TOOL_CACHE доступен для записи текущему пользователю.
+          # После очистки каталога пересоздаём его с правильными правами.
+          sudo mkdir -p /opt/hostedtoolcache
+          sudo chown "$(id -u):$(id -g)" /opt/hostedtoolcache
+
           if [[ -n "${AGENT_TOOLSDIRECTORY:-}" && -d "${AGENT_TOOLSDIRECTORY}" ]]; then
             sudo rm -rf "${AGENT_TOOLSDIRECTORY}" || true
+            sudo mkdir -p "${AGENT_TOOLSDIRECTORY}"
+            sudo chown "$(id -u):$(id -g)" "${AGENT_TOOLSDIRECTORY}"
           fi
 
           # Убираем остатки кэшей APT и докера. Эти команды не являются
