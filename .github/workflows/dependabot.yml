@@ -150,8 +150,18 @@ jobs:
           fi
 
           case "${MANIFEST_NAME}" in
-            requirements*.txt|requirements*.in|*.txt|*.in)
+            *.in)
+              write_summary "Skipping ${MANIFEST_NAME}: input manifests are resolved via requirements-ci.txt plus explicit Dependabot installs."
+              exit 0
+              ;;
+          esac
+
+          case "${MANIFEST_NAME}" in
+            requirements-ci.txt|requirements-minimal.txt|requirements-healthcheck.txt|requirements-cpu.txt)
               python -m pip install --upgrade -r "${manifest_path}"
+              ;;
+            *.txt)
+              write_summary "Skipping ${MANIFEST_NAME}: not part of the lightweight CI dependency set."
               ;;
             *)
               echo "Manifest ${manifest_path} is not a requirements file; skipping install."
