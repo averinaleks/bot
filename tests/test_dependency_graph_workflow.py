@@ -9,13 +9,13 @@ def _load_dependency_graph_workflow() -> str:
 
 def _load_dependency_graph_auto_submission_workflow() -> str:
     return Path(
-        ".github/workflows/dependency-graph/auto-submission.yml"
+        ".github/workflows/dependency-graph-auto-submission.yml"
     ).read_text(encoding="utf-8")
 
 
 def _load_dependency_graph_auto_retry_workflow() -> str:
     return Path(
-        ".github/workflows/dependency-graph/auto-submission-retry.yml"
+        ".github/workflows/dependency-graph-auto-submission-retry.yml"
     ).read_text(encoding="utf-8")
 
 
