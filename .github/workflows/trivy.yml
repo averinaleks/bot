@@ -21,7 +21,7 @@ jobs:
       count: ${{ steps.summarize.outputs.count }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@v4
 
       - name: Define Trivy cache directory
         run: echo "TRIVY_CACHE_DIR=$RUNNER_TEMP/trivy-cache" >> "$GITHUB_ENV"
@@ -32,7 +32,7 @@ jobs:
       - name: Cache Trivy vulnerability database
         id: cache-trivy
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@v4
         with:
           path: ${{ env.TRIVY_CACHE_DIR }}
           key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'requirements*.in', 'Dockerfile*') }}
@@ -42,7 +42,7 @@ jobs:
       - name: Run Trivy scan
         id: trivy
         continue-on-error: true
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         env:
           TRIVY_FILE_PATTERNS: "pip:requirements.*\\.txt"
         with:
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload Trivy report artifact
         if: ${{ always() && steps.summarize.outputs.sarif == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-results
           path: trivy-results.sarif
@@ -104,13 +104,13 @@ jobs:
       security-events: write
     steps:
       - name: Download Trivy report artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@v4
         with:
           name: trivy-results
           path: .
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v3.26.9
+        uses: github/codeql-action/upload-sarif@v3
         with:
           category: trivy-fs
           sarif_file: trivy-results.sarif
