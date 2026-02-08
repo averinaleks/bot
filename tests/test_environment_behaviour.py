@@ -1,5 +1,6 @@
 import os
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -24,10 +25,22 @@ def _clear_required_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
+def _get_dotenv_module(monkeypatch):
+    try:
+        import dotenv  # type: ignore
+
+        return dotenv
+    except ModuleNotFoundError:
+        stub = ModuleType("dotenv")
+        stub.dotenv_values = lambda *_, **__: {}
+        monkeypatch.setitem(sys.modules, "dotenv", stub)
+        return stub
+
+
 def test_configure_environment_requires_explicit_offline(monkeypatch):
     _clear_required_env(monkeypatch)
 
-    import dotenv
+    dotenv = _get_dotenv_module(monkeypatch)
 
     monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
 
@@ -42,7 +55,7 @@ def test_configure_environment_requires_explicit_offline(monkeypatch):
 def test_configure_environment_auto_offline_switch(monkeypatch, caplog):
     _clear_required_env(monkeypatch)
 
-    import dotenv
+    dotenv = _get_dotenv_module(monkeypatch)
 
     monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
 
@@ -59,7 +72,7 @@ def test_configure_environment_auto_offline_switch(monkeypatch, caplog):
 def test_configure_environment_tolerates_missing_offline(monkeypatch, caplog):
     _clear_required_env(monkeypatch)
 
-    import dotenv
+    dotenv = _get_dotenv_module(monkeypatch)
 
     monkeypatch.setattr(dotenv, "dotenv_values", lambda *_, **__: {})
 
