@@ -159,29 +159,6 @@ jobs:
           done
           docker info
 
-      - name: Set up Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-        with:
-          driver: docker-container
-          # Обновляем buildx до стабильной версии, поддерживающей экспериментальный
-          # фронтенд Dockerfile ``docker/dockerfile:1.7-labs`` и исправляющей
-          # парсер, который ранее падал с "dockerfile parse error" на первом
-          # шаге сборки. Одновременно обновляем buildkit до последнего стабильного
-          # образа, чтобы сохранить совместимость с OCI-манифестами и кэшированием
-          # через GitHub Actions.
-          version: v0.12.1
-          driver-opts: |
-            image=moby/buildkit:v0.12.5
-
-      - name: Show Buildx version
-        run: docker buildx version
-
-      - name: Verify /mnt mount
-        run: |
-          mount | grep '/mnt' || true
-          df -h /mnt
-
       - name: Normalize registry names
         id: normalize
         env:
@@ -208,6 +185,71 @@ jobs:
             echo "owner=${owner_normalized}"
             echo "dockerhub=${dockerhub_normalized}"
           } >>"$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME_NORMALIZED }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Prepare BuildKit image
+        id: buildkit-image
+        run: |
+          set -euo pipefail
+
+          primary_image="moby/buildkit:v0.12.5"
+          fallback_image="ghcr.io/moby/buildkit:v0.12.5"
+
+          pull_with_retry() {
+            local image="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              echo "Pulling ${image} (attempt ${attempt})"
+              if docker pull "${image}"; then
+                return 0
+              fi
+              sleep $((attempt * 2))
+            done
+            return 1
+          }
+
+          if pull_with_retry "${primary_image}"; then
+            echo "image=${primary_image}" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "::warning::Failed to pull ${primary_image}; retrying with ${fallback_image}"
+          if pull_with_retry "${fallback_image}"; then
+            echo "image=${fallback_image}" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "::error::Unable to pull BuildKit image from Docker Hub or GHCR"
+          exit 1
+
+      - name: Set up Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+        with:
+          driver: docker-container
+          # Обновляем buildx до стабильной версии, поддерживающей экспериментальный
+          # фронтенд Dockerfile ``docker/dockerfile:1.7-labs`` и исправляющей
+          # парсер, который ранее падал с "dockerfile parse error" на первом
+          # шаге сборки. Одновременно обновляем buildkit до последнего стабильного
+          # образа, чтобы сохранить совместимость с OCI-манифестами и кэшированием
+          # через GitHub Actions.
+          version: v0.12.1
+          driver-opts: |
+            image=${{ steps.buildkit-image.outputs.image }}
+
+      - name: Show Buildx version
+        run: docker buildx version
+
+      - name: Verify /mnt mount
+        run: |
+          mount | grep '/mnt' || true
+          df -h /mnt
 
       - name: Purge stale BuildKit cache
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
@@ -271,13 +313,6 @@ jobs:
           else
             echo "::warning::Failed to delete cache scope ${CACHE_SCOPE} (status ${delete_code})"
           fi
-
-      - name: Login to Docker Hub
-        if: ${{ env.PUBLISH_DOCKERHUB == 'true' }}
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME_NORMALIZED }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Login to GHCR
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
