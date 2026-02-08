@@ -143,6 +143,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          write_summary() {
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              mkdir -p "$(dirname "$GITHUB_STEP_SUMMARY")"
+              printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' "$1"
+            fi
+          }
+
           manifest_path="${MANIFEST_PATH}"
           if [[ ! -f "${manifest_path}" ]]; then
             echo "Manifest ${manifest_path} not found; skipping install."
