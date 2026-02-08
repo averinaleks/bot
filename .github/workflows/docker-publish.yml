@@ -25,7 +25,9 @@ jobs:
       PUBLISH_IMAGES: >-
         ${{ github.repository == 'averinaleks/bot'
            && github.event_name != 'pull_request'
-           && github.event_name != 'pull_request_target' }}
+           && github.event_name != 'pull_request_target'
+           && 'true'
+           || 'false' }}
       PUBLISH_DOCKERHUB: >-
         ${{ github.repository == 'averinaleks/bot'
            && github.event_name != 'pull_request'
@@ -33,7 +35,9 @@ jobs:
            && secrets.DOCKERHUB_USERNAME != ''
            && secrets.DOCKERHUB_USERNAME != null
            && secrets.DOCKERHUB_TOKEN != ''
-           && secrets.DOCKERHUB_TOKEN != null }}
+           && secrets.DOCKERHUB_TOKEN != null
+           && 'true'
+           || 'false' }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
