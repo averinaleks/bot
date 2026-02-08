@@ -278,10 +278,17 @@ def _evaluate_payload(payload: Any, repository: str) -> PRStatus:
     )
 
 
+def _github_api_base_url() -> str:
+    raw = os.getenv("GITHUB_API_URL", "https://api.github.com")
+    base = raw.strip().rstrip("/")
+    return base or "https://api.github.com"
+
+
 def _build_api_url(repo: str, pr_number: str) -> str:
     if not repo or not pr_number:
         raise RuntimeError("Не указан номер PR или репозиторий")
-    return f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    base = _github_api_base_url()
+    return f"{base}/repos/{repo}/pulls/{pr_number}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -379,4 +386,3 @@ def cli(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(cli())
-

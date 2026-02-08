@@ -98,7 +98,24 @@ _INVALID_PATH_CHARS = {"\x00", "\n", "\r"}
 _SAFE_PATH_CHARS_RE = re.compile(r"^[A-Za-z0-9_./*?\[\]-]+$")
 _ALLOWED_PATHSPEC_PREFIXES = ("", ":(glob)")
 _ALLOWED_GIT_OPTIONS = {"--no-tags"}
+_DEFAULT_GITHUB_API_URL = "https://api.github.com"
 _ALLOWED_GITHUB_API_HOSTS = {"api.github.com"}
+
+
+def _github_api_base_url() -> str:
+    raw = os.getenv("GITHUB_API_URL", _DEFAULT_GITHUB_API_URL)
+    base = raw.strip().rstrip("/")
+    return base or _DEFAULT_GITHUB_API_URL
+
+
+def _allowed_github_api_hosts() -> set[str]:
+    allowed = set(_ALLOWED_GITHUB_API_HOSTS)
+    base = _github_api_base_url()
+    parsed = urlparse(base)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme == "https" and host:
+        allowed.add(host)
+    return allowed
 
 
 @dataclass
@@ -251,9 +268,10 @@ def _perform_https_request(
 
     sanitised = parsed._replace(path=parsed.path or "/", fragment="")
     hostname = (sanitised.hostname or "").lower()
-    if hostname not in _ALLOWED_GITHUB_API_HOSTS:
+    allowed_hosts = _allowed_github_api_hosts()
+    if hostname not in allowed_hosts:
         raise RuntimeError(
-            "Разрешены только запросы к api.github.com"
+            "Разрешены только запросы к GitHub API в доверенных доменах"
         )
 
     port = sanitised.port or 443
@@ -319,7 +337,8 @@ def _fetch_pull_request(
     if not repo or not pr_number:
         raise RuntimeError("Не указан номер PR или репозиторий")
 
-    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    base = _github_api_base_url()
+    url = f"{base}/repos/{repo}/pulls/{pr_number}"
     payload = _api_request(url, token, timeout=timeout)
 
     base = payload.get("base") or {}
