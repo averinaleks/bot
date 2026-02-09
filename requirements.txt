@@ -410,7 +410,7 @@ yarl==1.22.0
     #   ccxt
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools==80.10.2
+setuptools==82.0.0
     # via
     #   -r requirements-core.in
     #   ccxt
