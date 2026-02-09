@@ -43,4 +43,4 @@ hypothesis>=6.90.0
 numpy==2.2.6; python_version < "3.11"
 numpy==2.3.5; python_version >= "3.11"
 pip-audit==2.10.0
-pybit==5.13.0
+pybit==5.14.0
