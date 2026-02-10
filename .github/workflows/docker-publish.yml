@@ -232,9 +232,10 @@ jobs:
           echo "::error::Unable to pull BuildKit image from Docker Hub or GHCR"
           exit 1
 
-      - name: Set up Buildx
-        id: buildx
+      - name: Set up Buildx (primary)
+        id: buildx_primary
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+        continue-on-error: true
         with:
           driver: docker-container
           # Обновляем buildx до стабильной версии, поддерживающей экспериментальный
@@ -246,6 +247,37 @@ jobs:
           version: v0.12.1
           driver-opts: |
             image=${{ steps.buildkit-image.outputs.image }}
+
+      - name: Set up Buildx (fallback)
+        id: buildx_fallback
+        if: ${{ steps.buildx_primary.outcome == 'failure' }}
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+        with:
+          driver: docker-container
+          # Fallback: используем встроенную в action версию buildx, если
+          # закреплённая версия временно недоступна из-за сетевой ошибки.
+          driver-opts: |
+            image=${{ steps.buildkit-image.outputs.image }}
+
+      - name: Validate Buildx setup
+        if: ${{ steps.buildx_primary.outcome == 'failure' && steps.buildx_fallback.outcome != 'success' }}
+        run: |
+          echo "::error::Failed to initialize Buildx with both primary and fallback configuration"
+          exit 1
+
+      - name: Select active Buildx builder
+        id: buildx
+        run: |
+          set -euo pipefail
+          builder_name="${{ steps.buildx_primary.outputs.name }}"
+          if [ -z "${builder_name}" ]; then
+            builder_name="${{ steps.buildx_fallback.outputs.name }}"
+          fi
+          if [ -z "${builder_name}" ]; then
+            echo "::error::Buildx builder name is empty"
+            exit 1
+          fi
+          echo "name=${builder_name}" >>"${GITHUB_OUTPUT}"
 
       - name: Show Buildx version
         run: docker buildx version
