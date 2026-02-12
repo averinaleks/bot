@@ -222,7 +222,7 @@ pandas==2.3.3
     #   ta
 patsy==1.0.2
     # via statsmodels
-pillow==12.0.0
+pillow==12.1.1
     # via matplotlib
 pluggy==1.6.0
     # via pytest
