@@ -42,7 +42,7 @@ jobs:
       - name: Run Trivy scan
         id: trivy
         continue-on-error: true
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         env:
           TRIVY_FILE_PATTERNS: "pip:requirements.*\\.txt"
         with:
