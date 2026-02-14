@@ -21,7 +21,7 @@ jobs:
       count: ${{ steps.summarize.outputs.count }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Define Trivy cache directory
         run: echo "TRIVY_CACHE_DIR=$RUNNER_TEMP/trivy-cache" >> "$GITHUB_ENV"
