@@ -32,7 +32,7 @@ jobs:
       - name: Cache Trivy vulnerability database
         id: cache-trivy
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.TRIVY_CACHE_DIR }}
           key: ${{ runner.os }}-trivy-db-${{ hashFiles('requirements*.txt', 'requirements*.in', 'Dockerfile*') }}
