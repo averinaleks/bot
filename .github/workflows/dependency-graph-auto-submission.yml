@@ -528,7 +528,7 @@ jobs:
           if after:
               print(f"Resolved 'after' commit: {after}")
           PY
-      - uses: actions/checkout@v4 # v4
+      - uses: actions/checkout@v6 # v4
         id: checkout
         if: steps.execution-guard.outputs.run-workflow == 'true'
         continue-on-error: true
