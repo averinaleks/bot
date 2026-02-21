@@ -279,7 +279,7 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]) -> Callable[[Fu
                     except Exception:
                         if attempt >= max_attempts:
                             raise
-                        delay = delay_fn(2 ** (attempt - 1))
+                        delay = delay_fn(float(2 ** (attempt - 1)))
                         await asyncio.sleep(delay)
                         attempt += 1
 
@@ -296,7 +296,7 @@ def retry(max_attempts: int, delay_fn: Callable[[float], float]) -> Callable[[Fu
                 except Exception:
                     if attempt >= max_attempts:
                         raise
-                    delay = delay_fn(2 ** (attempt - 1))
+                    delay = delay_fn(float(2 ** (attempt - 1)))
                     time.sleep(delay)
                     attempt += 1
 

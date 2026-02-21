@@ -1540,8 +1540,6 @@ async def main_async() -> None:
     if bot_config.OFFLINE_MODE:
         logger.info("Offline mode enabled, trading loop not started")
         return
-    train_task = None
-    monitor_task = None
     gpt_task = None
     try:
         await check_services()
@@ -1580,14 +1578,6 @@ async def main_async() -> None:
     except KeyboardInterrupt:
         logger.info('Stopping trading bot')
     finally:
-        if monitor_task:
-            monitor_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await monitor_task
-        if train_task:
-            train_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await train_task
         if gpt_task:
             gpt_task.cancel()
             with suppress(asyncio.CancelledError):
