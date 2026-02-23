@@ -102,7 +102,7 @@ fsspec==2025.9.0
     #   huggingface-hub
     #   pytorch-lightning
     #   torch
-gunicorn==23.0.0
+gunicorn==25.1.0
     # via -r requirements-core.in
 gymnasium==1.2.1
     # via
