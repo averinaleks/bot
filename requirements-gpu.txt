@@ -96,7 +96,7 @@ packaging==25.0
     #   wheel
 pillow==12.1.1
     # via tensorboard
-protobuf==6.33.5
+protobuf==7.34.0
     # via
     #   -r requirements-gpu.in
     #   tensorboard
