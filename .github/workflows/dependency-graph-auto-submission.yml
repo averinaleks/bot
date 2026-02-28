@@ -54,7 +54,7 @@ jobs:
           {
               echo "run-workflow=${run_workflow}"
           } >> "${GITHUB_OUTPUT}"
-      - uses: actions/setup-python@v5 # v5
+      - uses: actions/setup-python@v6 # v5
         if: steps.execution-guard.outputs.run-workflow == 'true'
         with:
           python-version: '3.11'
