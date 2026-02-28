@@ -763,7 +763,7 @@ jobs:
 
       - name: Upload Docker build logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v4
         with:
           name: docker-build-logs-${{ matrix.image }}
           path: ${{ runner.temp }}/docker-build-logs/${{ matrix.image }}
@@ -823,7 +823,7 @@ jobs:
         if: >-
           ${{ env.PUBLISH_DOCKERHUB == 'true' && steps.build.outputs.status == 'success'
               && (steps.trivy.outcome == 'success' || steps.trivy.outcome == 'failure') }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.txt
