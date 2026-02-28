@@ -60,7 +60,7 @@ jobs:
             output.write(f"upload={upload}\n")
           PY
       - name: Upload Bandit results
-        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4.32.2
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
         if: always() && steps.sarif_check.outputs.upload == 'true' && github.event_name != 'pull_request'
         with:
           sarif_file: bandit.sarif
